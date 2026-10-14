@@ -49,6 +49,11 @@ de resiliência da interface (indicadores disponíveis preservados quando uma
 API falha) chegou com o Painel por papel (#192) e só vale em produção depois
 da implantação.
 
+A PR #250 complementa essa resiliência na leitura inicial: uma falha no resumo
+de pedidos preserva a fila disponível e exibe “—” em vendas e entregas, sem
+inferir valores zerados ou ausência de urgência. O retry continua por teclado.
+Rastreabilidade: FIN-02, PNL-03 e T130 (Pedidos MVP); isso não comprova deploy.
+
 Para uma nova ocorrência, antes de aplicar migrations, verificar backup, espaço
 livre, estado dos serviços e plano de rollback. No container `silmer-api` do
 release correto,

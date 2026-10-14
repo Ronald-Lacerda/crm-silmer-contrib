@@ -15,7 +15,7 @@ const QUEUE_SUMMARY = Object.freeze({
 
 /**
  * @param {import('@playwright/test').Page} page
- * @param {{failFirst?: boolean}} [options]
+ * @param {{failFirstInbox?: boolean, failSummaryReads?: number}} [options]
  */
 async function mockDashboard(page, options = {}) {
   let summaryReads = 0;
@@ -53,12 +53,16 @@ async function mockDashboard(page, options = {}) {
       });
     }
     if (path === '/api/v1/inbox/summary') {
+      if (options.failFirstInbox) {
+        options.failFirstInbox = false;
+        return json({ code: 'UNAVAILABLE' }, 503);
+      }
       return json(QUEUE_SUMMARY);
     }
     if (path === '/api/v1/orders/delivery-tasks') return json({ items: [] });
     if (path === '/api/v1/orders/summary') {
       summaryReads += 1;
-      if ((summaryReads === 1 && options.failFirst) || failNext) {
+      if (summaryReads <= (options.failSummaryReads ?? 0) || failNext) {
         failNext = false;
         return json({ code: 'UNAVAILABLE' }, 503);
       }
@@ -118,7 +122,7 @@ test('keeps loaded sales visible after a live refresh fails and retries on deman
 test('shows a clear initial error and recovers with retry', async ({
   page,
 }) => {
-  await mockDashboard(page, { failFirst: true });
+  await mockDashboard(page, { failFirstInbox: true, failSummaryReads: 1 });
   await page.goto('/dashboard');
 
   await expect(
@@ -126,4 +130,95 @@ test('shows a clear initial error and recovers with retry', async ({
   ).toBeVisible();
   await page.getByRole('button', { name: 'Tentar novamente' }).click();
   await expect(page.getByText('R$ 2.500,00')).toBeVisible();
+});
+
+test('keeps sales visible when the queue read fails and recovers', async ({
+  page,
+}) => {
+  await mockDashboard(page, { failFirstInbox: true });
+  await page.goto('/dashboard');
+
+  await expect(page.getByText('R$ 2.500,00')).toBeVisible();
+  const attendance = page.getByRole('region', {
+    name: 'Atendimento',
+    exact: true,
+  });
+  await expect(attendance).toBeVisible();
+  await expect(attendance.getByRole('alert')).toContainText(
+    'Não foi possível consultar a fila agora.',
+  );
+  await expect(attendance.locator('.metric-value')).toHaveText(['—', '—', '—']);
+  await attendance.getByRole('button', { name: 'Tentar novamente' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(attendance.getByRole('heading')).toBeFocused();
+  await expect(attendance.locator('.metric-value')).toHaveText([
+    '0',
+    'Respondendo',
+    '0',
+  ]);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('keeps the queue visible without inventing sales when orders fail and recovers by keyboard', async ({
+  page,
+}) => {
+  await mockDashboard(page, { failSummaryReads: 1 });
+  await page.goto('/dashboard');
+
+  const attendance = page.getByRole('region', {
+    name: 'Atendimento',
+    exact: true,
+  });
+  await expect(attendance).toBeVisible();
+  await expect(attendance.locator('.metric-value')).toHaveText([
+    '0',
+    'Respondendo',
+    '0',
+  ]);
+  await expect(page.getByRole('alert')).toContainText(
+    'Não foi possível carregar os indicadores.',
+  );
+  const orders = page.getByRole('region', { name: 'Vendas e entregas' });
+  await expect(orders.locator('.metric-value')).toHaveText([
+    '—',
+    '—',
+    '—',
+    '—',
+  ]);
+  await expect(page.locator('.next-step')).toContainText(
+    'Os pedidos não responderam',
+  );
+  await expect(page.locator('.next-step a')).toHaveCount(0);
+  await expect(page.getByText('R$ 0,00')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Tentar novamente' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('R$ 2.500,00')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Dashboard', exact: true }),
+  ).toBeFocused();
+});
+
+test('keeps retry focused when only the queue recovers after a total failure', async ({
+  page,
+}) => {
+  await mockDashboard(page, { failFirstInbox: true, failSummaryReads: 2 });
+  await page.goto('/dashboard');
+  await expect(
+    page.getByRole('heading', { name: 'Dashboard indisponível' }),
+  ).toBeVisible();
+
+  const retry = page.getByRole('button', { name: 'Tentar novamente' });
+  await retry.focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByRole('region', { name: 'Atendimento', exact: true }),
+  ).toBeVisible();
+  await expect(retry).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByText('R$ 4.500,00')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Dashboard', exact: true }),
+  ).toBeFocused();
 });

@@ -36,6 +36,7 @@ import { storeNoticeText } from '../lib/order-format.js';
 const ADMIN_CAPABILITY = 'COMMERCIAL_ADMIN';
 
 const heading = ref(null);
+const ordersRetry = ref(null);
 const liveEvent = inject('liveEvent', ref(null));
 const sessionUser = inject(
   'sessionUser',
@@ -45,7 +46,8 @@ const sessionUser = inject(
 // while the Dashboard is open.
 const menuStoreCount = inject('storeNewCount', ref(0));
 const loading = ref(true);
-const hasLoaded = ref(false);
+const summaryLoaded = ref(false);
+const hasLoaded = computed(() => summaryLoaded.value || Boolean(queue.value));
 const error = ref('');
 const queueError = ref('');
 const period = ref('hoje');
@@ -84,12 +86,17 @@ const soldLabel = computed(
 
 // PNL-01: one next step for the reader's role, from the same summaries.
 const step = computed(() =>
-  nextStep({
-    isManager: isManager.value,
-    queue: queue.value,
-    queueError: queueError.value,
-    summary: summary.value,
-  }),
+  error.value
+    ? {
+        label: 'Os pedidos não responderam; tente de novo mais abaixo.',
+        to: null,
+      }
+    : nextStep({
+        isManager: isManager.value,
+        queue: queue.value,
+        queueError: queueError.value,
+        summary: summary.value,
+      }),
 );
 
 const now = computed(() => queue.value?.generatedAt);
@@ -98,6 +105,15 @@ const now = computed(() => queue.value?.generatedAt);
 /** @param {() => import('../lib/dashboard-format.js').Indicator} indicator */
 const fromQueue = (indicator) =>
   queue.value ? indicator() : unavailableIndicator();
+// FIN-02 / T130: a failed first sales read must not look like zero sales.
+/** @param {() => import('../lib/dashboard-format.js').Indicator} indicator */
+const fromSummary = (indicator) =>
+  summaryLoaded.value
+    ? indicator()
+    : {
+        ...unavailableIndicator(),
+        detail: 'Sem dados de vendas e entregas agora',
+      };
 const cards = computed(() => ({
   assistant: {
     ...fromQueue(() => assistantIndicator(queue.value?.assistant, now.value)),
@@ -105,7 +121,7 @@ const cards = computed(() => ({
     to: { path: '/inbox', query: { situacao: 'agente' } },
   },
   dueSoon: {
-    ...dueSoonIndicator(summary.value.deliveries),
+    ...fromSummary(() => dueSoonIndicator(summary.value.deliveries)),
     label: 'Próximas entregas',
     to: { path: '/pedidos', query: { entrega: 'proxima' } },
   },
@@ -125,17 +141,17 @@ const cards = computed(() => ({
     to: { path: '/inbox', query: { fila: 'minhas' } },
   },
   overdue: {
-    ...overdueIndicator(summary.value.deliveries),
+    ...fromSummary(() => overdueIndicator(summary.value.deliveries)),
     label: 'Entregas atrasadas',
     to: { path: '/pedidos', query: { entrega: 'atrasada' } },
   },
   pending: {
-    ...pendingIndicator(summary.value.pendingCount),
+    ...fromSummary(() => pendingIndicator(summary.value.pendingCount)),
     label: 'Pedidos a confirmar',
     to: { path: '/pedidos', query: { status: 'pendente' } },
   },
   sold: {
-    ...soldIndicator(summary.value.period),
+    ...fromSummary(() => soldIndicator(summary.value.period)),
     label: soldLabel.value,
     to: { path: '/pedidos', query: { status: 'confirmado' } },
   },
@@ -201,11 +217,11 @@ async function loadDashboard({ announce = false } = {}) {
     const storeCount = Number(summary.value.storeNewCount ?? 0);
     menuStoreCount.value =
       Number.isSafeInteger(storeCount) && storeCount > 0 ? storeCount : 0;
-    hasLoaded.value = true;
+    summaryLoaded.value = true;
     error.value = '';
     if (announce) periodAnnouncement.value = `${soldLabel.value} atualizado.`;
   } else if (orders.reason?.name !== 'AbortError') {
-    error.value = hasLoaded.value
+    error.value = summaryLoaded.value
       ? 'Não foi possível atualizar os indicadores. Os dados exibidos podem estar desatualizados.'
       : 'Não foi possível carregar os indicadores.';
   }
@@ -234,6 +250,14 @@ async function retryQueue() {
   if (queueError.value) return;
   await nextTick();
   queueHeading?.focus();
+}
+
+async function retryOrders() {
+  if (loading.value) return;
+  await loadDashboard();
+  await nextTick();
+  if (error.value) ordersRetry.value?.focus();
+  else heading.value?.focus();
 }
 
 /** @param {string} key */
@@ -312,13 +336,24 @@ onBeforeUnmount(() => {
       </RouterLink>
     </div>
 
-    <div v-if="loading && !hasLoaded" class="loading-state" role="status">
+    <div
+      v-if="loading && !hasLoaded && !error"
+      class="loading-state"
+      role="status"
+    >
       Carregando indicadores…
     </div>
     <div v-else-if="error && !hasLoaded" class="empty-state" role="alert">
       <h2>Dashboard indisponível</h2>
       <p>{{ error }}</p>
-      <button type="button" @click="loadDashboard()">Tentar novamente</button>
+      <button
+        ref="ordersRetry"
+        type="button"
+        :aria-disabled="loading ? 'true' : undefined"
+        @click="retryOrders()"
+      >
+        {{ loading ? 'Consultando…' : 'Tentar novamente' }}
+      </button>
     </div>
     <template v-else>
       <!-- PNL-01: one next step for the role, no heading of its own (the
@@ -336,7 +371,12 @@ onBeforeUnmount(() => {
 
       <div v-if="error" class="audit-note" role="alert">
         <p>{{ error }}</p>
-        <button type="button" :disabled="loading" @click="loadDashboard()">
+        <button
+          ref="ordersRetry"
+          type="button"
+          :aria-disabled="loading ? 'true' : undefined"
+          @click="retryOrders()"
+        >
           {{ loading ? 'Consultando…' : 'Tentar novamente' }}
         </button>
       </div>
