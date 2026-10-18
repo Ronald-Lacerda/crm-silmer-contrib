@@ -19,6 +19,7 @@ import OrderMilestonesSection from '../components/order/OrderMilestonesSection.v
 import OrderObservationsSection from '../components/order/OrderObservationsSection.vue';
 import OrderProgress from '../components/order/OrderProgress.vue';
 import OrderStoreDetails from '../components/order/OrderStoreDetails.vue';
+import OrderStoreCorrection from '../components/order/OrderStoreCorrection.vue';
 import OrderSummarySection from '../components/order/OrderSummarySection.vue';
 import { commandKey, request } from '../lib/api-client.js';
 import { usePhone } from '../lib/media-query.js';
@@ -737,6 +738,19 @@ onBeforeUnmount(() => {
       <div v-if="isStore" class="op-layout">
         <div class="op-main">
           <OrderStoreDetails :order="order" />
+          <OrderStoreCorrection
+            v-if="
+              isAdmin &&
+              !order.isTest &&
+              [
+                'bloquinho-22',
+                'bloquinho-22-colorido',
+                'bloquinho-22-completa',
+              ].includes(order.ficha?.loja?.produto?.slug)
+            "
+            :order="order"
+            @saved="order = $event"
+          />
         </div>
         <aside class="op-rail" aria-label="Fechamento e pagamento">
           <OrderClosingSection ref="closingSection" :order="order" />

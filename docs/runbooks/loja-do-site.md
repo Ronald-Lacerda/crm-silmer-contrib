@@ -99,6 +99,37 @@ voltar o `test/print-csp.test.js` para seis hashes.
 
 ## Smoke depois do deploy
 
+### Correção administrativa de quantidade (ADR 038, T135)
+
+Use somente após confirmação explícita da quantidade com o cliente. Confira
+primeiro quantidade, subtotal das peças, frete e total da linha original do
+checkout: pagamento maior que o subtotal não comprova mais peças. O comando
+não cobra diferença nem altera o frete; confira a entrega separadamente.
+
+1. Acesse o pedido na sessão de um administrador ativo e abra “Correção
+   administrativa de quantidade”. Informe a quantidade confirmada. O CRM
+   calcula o novo valor das peças pelo catálogo e exige cobertura pelo Pix
+   existente. Produtos de kit fixo e pedidos de teste não usam este comando.
+2. Registre a correção uma única vez. Em falha de rede, o formulário repete
+   a mesma chave e o mesmo corpo. Versão desatualizada exige atualizar a
+   página e conferir o pedido antes de outro comando.
+3. Confira quantidade, fechamento e totais do Dashboard. Gere novamente a
+   ficha: a primeira impressão anterior é preservada como histórico, e um
+   PDF já baixado não muda sozinho.
+4. Confira `store.order.quantity_corrected` na auditoria e
+   `order.store_corrected` no stream, sem dados pessoais. O registro
+   original da Data Table e `record_sha256` permanecem como lastro. Não
+   reescreva a compra original nem reenvie um corpo diferente pelo n8n. O
+   replay original retorna o pedido corrigido e não desfaz a ação humana.
+
+Contrato: `POST /api/v1/orders/{orderId}/store-correction`, sessão humana,
+origem válida, CSRF e `Idempotency-Key`; corpo fechado com `expectedVersion`,
+`expectedQuantity`, `expectedAmountCents`, `quantity` e
+`reason: "USER_CONFIRMED_QUANTITY"`. Somente administrador; autorização
+revalidada na transação. Falha de auditoria/evento reverte toda a alteração.
+Reversão operacional é outra correção autorizada, com versão atual e outra
+chave; nunca restauração do banco ou outro pedido para o mesmo Pix.
+
 Uma chamada sintética de teste (gere um UUID v4 novo; `numero_loja` é `LJ-` e
 os 8 primeiros caracteres dele em maiúsculas; `pago_em` é agora, em UTC).
 Primeira vez `201`; repetida, `200` com o mesmo `numero`:

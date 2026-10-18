@@ -104,6 +104,12 @@ site" no aviso do Dashboard e no menu; o status continua Confirmado
 
 ## Baseline técnica
 
+A [ADR 038](docs/adr/038-correcao-administrativa-quantidade-loja.md) acrescenta
+uma correção administrativa de quantidade de produto unitário da loja,
+somente por humano administrador, pela API autorizada e idempotente.
+Preserva o checkout e o pagamento originais; quantidade e valor das peças
+mudam com auditoria e evento transacionais, sem reabrir o pedido.
+
 | Fronteira    | Implementação                                                                                                       |
 | ------------ | ------------------------------------------------------------------------------------------------------------------- |
 | Frontend     | Vue 3, Vue Router, JavaScript ESM, CSS e Vite; sem store global                                                     |

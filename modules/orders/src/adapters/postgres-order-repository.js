@@ -612,6 +612,76 @@ export class PostgresOrderRepository {
     });
   }
 
+  /** @param {import('../ports/contracts.js').CorrectStoreOrderInput} input */
+  async correctStoreOrder(input) {
+    return this.#database.transaction(async (transaction) => {
+      if (
+        input.actor?.kind !== 'human' ||
+        !(input.actor.capabilities ?? []).includes('COMMERCIAL_ADMIN')
+      )
+        throw new OrderForbiddenError();
+      const admin = await transaction.query(
+        `SELECT 1 FROM crm.users AS users JOIN crm.user_capabilities AS capability ON capability.user_id = users.id
+         WHERE users.id = $1 AND users.disabled_at IS NULL AND capability.capability = 'COMMERCIAL_ADMIN'
+         FOR SHARE OF users, capability`,
+        [input.actor.id],
+      );
+      if (!admin.rows[0]) throw new OrderForbiddenError();
+      const locked = await transaction.query(
+        `SELECT ${ORDER_COLUMNS} FROM crm.orders
+         JOIN crm.store_order_receipts ON order_id = id
+         WHERE id = $1 FOR UPDATE OF orders, store_order_receipts`,
+        [input.orderId],
+      );
+      if (!locked.rows[0]) throw new OrderNotFoundError();
+      const current = this.#map(locked.rows[0]);
+      const reason = `USER_CONFIRMED_QUANTITY:${input.marker}`;
+      const done = await transaction.query(
+        "SELECT 1 FROM crm.audit_events WHERE target_id = $1 AND action = 'store.order.quantity_corrected' AND reason = $2",
+        [current.id, reason],
+      );
+      if (done.rows[0]) return current;
+      if (current.version !== input.expectedVersion)
+        throw new OrderConflictError('The order version changed');
+      if (
+        current.origin !== 'loja' ||
+        current.status !== 'confirmado' ||
+        current.totalPieces !== input.expectedQuantity ||
+        current.finalAmountCents !== input.expectedAmountCents
+      )
+        throw new StoreOrderError(409, 'STORE_ORDER_CONFLICT');
+      const ficha = structuredClone(current.ficha);
+      ficha.items[0].grade[0].quantidade = input.quantity;
+      const updated = await transaction.query(
+        `UPDATE crm.orders SET ficha_envelope = $2::jsonb, total_pieces = $3,
+         final_amount_cents = $4, version = version + 1, updated_at = $5
+         WHERE id = $1 RETURNING ${ORDER_COLUMNS}`,
+        [
+          current.id,
+          JSON.stringify(
+            encryptJson(ficha, fichaAad(current.id), this.#envelopeKey),
+          ),
+          input.quantity,
+          input.amountCents,
+          input.now.toISOString(),
+        ],
+      );
+      const saved = this.#map(updated.rows[0]);
+      await appendOrderEvent(
+        transaction,
+        saved,
+        'order.store_corrected',
+        input.correlationId,
+      );
+      await appendStoreAudit(transaction, saved, {
+        action: 'store.order.quantity_corrected',
+        reason,
+        audit: { actor: input.actor.id, correlationId: input.correlationId },
+      });
+      return saved;
+    });
+  }
+
   /** @param {string} orderId */
   async findById(orderId) {
     const result = await this.#database.query(

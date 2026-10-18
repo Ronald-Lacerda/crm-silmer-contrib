@@ -1526,6 +1526,57 @@ paths:
         '404': { $ref: '#/components/responses/OrderNotFound' }
         '409': { $ref: '#/components/responses/OrderConflict' }
         '422': { $ref: '#/components/responses/OrderUnprocessable' }
+  /orders/{orderId}/store-correction:
+    post:
+      operationId: correctStoreOrderQuantity
+      summary: Corrige quantidade confirmada pelo usuario num pedido da loja
+      description: >-
+        LOJ-39/40/41. Sessao humana com COMMERCIAL_ADMIN, CSRF, Origin e
+        Idempotency-Key; guarda order.edit e administrador validado na transacao.
+        Somente produto unitario, um item e uma grade, sem teste. Exige versao
+        e valores anteriores exatos. Calcula subtotal pelo catalogo, recusa
+        pagamento insuficiente (422 AMOUNT_BELOW_PRICE). Preserva IDs, pagamento,
+        confirmacao, primeira impressao e fingerprint original. Audita sem PII.
+        Mesma chave/corpo retorna o resultado. Outra chave com snapshot obsoleto
+        retorna 409 VERSION_CONFLICT ou STORE_ORDER_CONFLICT. Chave reutilizada
+        com outro corpo retorna 409 IDEMPOTENCY_KEY_REUSED. Campos invalidos
+        retornam 400 INVALID_REQUEST, INVALID_EXPECTED_VERSION ou INVALID_CORRECTION_REASON.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                [
+                  expectedVersion,
+                  expectedQuantity,
+                  expectedAmountCents,
+                  quantity,
+                  reason,
+                ]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+                expectedQuantity: { type: integer, minimum: 1 }
+                expectedAmountCents: { type: integer, minimum: 1 }
+                quantity: { type: integer, minimum: 1, maximum: 10 }
+                reason: { type: string, const: USER_CONFIRMED_QUANTITY }
+      responses:
+        '200':
+          description: Pedido corrigido ou replay idempotente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResponse' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/OrderNotFound' }
+        '409': { $ref: '#/components/responses/OrderConflict' }
+        '422': { $ref: '#/components/responses/OrderUnprocessable' }
   /orders/{orderId}/confirm:
     post:
       operationId: confirmOrder
@@ -1681,8 +1732,7 @@ paths:
           headers:
             Cache-Control:
               { schema: { type: string, const: 'private, no-store' } }
-            Content-Disposition:
-              { schema: { type: string } }
+            Content-Disposition: { schema: { type: string } }
           content:
             application/pdf:
               schema: { type: string, format: binary }

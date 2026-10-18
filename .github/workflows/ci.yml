@@ -23,10 +23,9 @@ jobs:
       contents: read
     services:
       postgres:
-        # The official image through AWS's public mirror: anonymous pulls
-        # from Docker Hub hit its rate limit on shared runners. The digest
-        # pins the same bytes, so a different image would fail the pull.
-        image: public.ecr.aws/docker/library/postgres:17-alpine@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+        # Official PostgreSQL 17 image, verified by pull and pinned by digest.
+        # The public ECR mirror rejected CI pulls with "Data limit exceeded".
+        image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
         env:
           POSTGRES_DB: crm_silmer_test
           POSTGRES_PASSWORD: issue12-ci-only

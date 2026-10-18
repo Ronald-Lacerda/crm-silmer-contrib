@@ -29,6 +29,7 @@ export {
   ORDER_SECTIONS,
   createOrderService,
 } from './application/order-service.js';
+export { createStoreOrderCorrectionService } from './application/store-order-correction-service.js';
 export { createStoreOrderService } from './application/store-order-service.js';
 export {
   STORE_ACTOR_ID,

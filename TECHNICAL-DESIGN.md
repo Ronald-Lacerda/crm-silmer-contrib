@@ -298,3 +298,21 @@ Tarefas: [CRM](.specs/features/crm-mvp/tasks.md) e
 [Pedidos](.specs/features/pedidos-mvp/tasks.md). Entrega de 05/10:
 OPS-DOC-01, OPS-CI-01, OPS-CHK-01 e OPS-AI-01. Relatórios distinguem checks
 concluídos de lacunas externas; documentação não autoriza go-live.
+
+## Correção administrativa de quantidade da loja (ADR 038)
+
+`POST /api/v1/orders/:orderId/store-correction` usa a sessão humana de
+`order.edit` e exige adicionalmente `COMMERCIAL_ADMIN`. O comando contém
+versão, quantidade e valor anteriores esperados, nova quantidade e motivo
+técnico fechado. Não aceita cliente, produto ou dados de pagamento.
+
+O serviço limita a produtos unitários de catálogo com um item e uma grade;
+recalcula o subtotal e exige Pix InfinitePay inteiro suficiente. O repositório
+revalida administrador ativo sob lock, bloqueia pedido/recibo, compara a
+versão e grava envelope, peças, subtotal, evento e auditoria juntos. Um
+marcador técnico derivado do comando reconhece repetição após commit com
+resposta perdida. O executor mantém a proteção de mesma chave/outro corpo.
+O fingerprint original não muda, e o replay n8n lê o pedido já corrigido.
+Confirmação, pagamento, primeira impressão e número ficam preservados.
+Contrato detalhado no OpenAPI e operação no runbook da loja; LOJ-39–LOJ-41,
+T135 e [RFC 026](docs/rfc/026-correcao-administrativa-quantidade-loja.md).

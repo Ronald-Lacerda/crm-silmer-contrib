@@ -19,6 +19,8 @@ const DELIVERY_FILTERS = new Set(['overdue', 'due_soon']);
  * and identifiers never reach the client.
  */
 const PUBLIC_CODES = new Set([
+  'STORE_ORDER_CONFLICT',
+  'AMOUNT_BELOW_PRICE',
   'CONTACT_NOT_FOUND',
   'CONVERSATION_NOT_FOUND',
   'EMPTY_FILE',
@@ -320,6 +322,41 @@ export function registerOrderRoutes(
         });
         return reply.code(200).send({ order });
       }),
+  );
+
+  api.post('/api/v1/orders/:orderId/store-correction', async (request, reply) =>
+    respond(reply, async () => {
+      const params = requireObject(request.params);
+      const orderId = requireIdentifier(params.orderId, 'ORDER_ID');
+      const body = requireObject(request.body);
+      rejectUnknownKeys(body, [
+        'expectedVersion',
+        'expectedQuantity',
+        'expectedAmountCents',
+        'quantity',
+        'reason',
+      ]);
+      const expectedVersion = requireVersion(body.expectedVersion);
+      const command = await authorizeCommand(
+        request,
+        orders,
+        contextFor,
+        'order.edit',
+      );
+      const order = await orders.correctStoreOrder({
+        ...command,
+        orderId,
+        expectedVersion,
+        expectedQuantity: body.expectedQuantity,
+        expectedAmountCents: body.expectedAmountCents,
+        quantity: body.quantity,
+        reason: body.reason,
+      });
+      return reply
+        .header('cache-control', 'no-store')
+        .code(200)
+        .send({ order });
+    }),
   );
 
   api.post('/api/v1/orders/:orderId/confirm', async (request, reply) =>

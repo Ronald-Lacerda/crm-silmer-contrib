@@ -26,6 +26,15 @@
 
 ## Regras técnicas já impostas
 
+Exceção restrita à regra de produto 21 (ADR 038, LOJ-39–LOJ-41): administrador
+humano ativo pode corrigir somente quantidade e valor das peças de produto
+unitário da loja, após confirmação com o cliente, pelo comando dedicado da
+API com sessão, CSRF, origem, idempotência e versão. O catálogo determina o
+valor e o pagamento existente deve cobri-lo. O registro original do checkout,
+pagamento, número, confirmação e primeira impressão são preservados; evento
+e auditoria acompanham a correção na mesma transação. As demais operações
+da loja continuam bloqueadas.
+
 1. Frontend em Vue 3, Vue Router e Vite (ADR 001); nova biblioteca de estado ou framework exige autorização explícita.
 2. Não manter estado de domínio em `window`; usar módulos isolados.
 3. Toda interface opera por teclado, gerencia foco e anuncia mudanças com ARIA quando aplicável.

@@ -62,3 +62,4 @@ canônicos; ele registra o contexto e o motivo da escolha.
 - [035 — Fundação visual whitelabel e mobile-first](035-fundacao-visual-whitelabel-mobile-first.md); tokens de marca em três camadas, logotipo por configuração e barra inferior no celular.
 - [036 — Padrões de jornada: próximo passo único, filtros em folha e progresso real](036-padroes-de-jornada.md); decidido no RFC 024, com o valor final no diálogo de gerar e o destino do login por papel adiado.
 - [037 — Gerar PDF da ficha para uso no celular](037-gerar-pdf-da-ficha-para-uso-mobile.md); renderiza o template vigente em PDF privado e permite compartilhamento manual no aparelho.
+- [038 — Correção administrativa de quantidade da loja](038-correcao-administrativa-quantidade-loja.md); exceção restrita por administrador, com pagamento e checkout original preservados.

@@ -9,6 +9,7 @@ import {
 import {
   createOrderFileService,
   createOrderService,
+  createStoreOrderCorrectionService,
   ORDER_FILE_LIMITS,
   OrderConflictError,
   OrderForbiddenError,
@@ -17,6 +18,7 @@ import {
   PostgresOrderConversationPort,
   PostgresOrderFileRepository,
   PostgresOrderRepository,
+  StoreOrderError,
   STORE_ACTOR_ID,
   STORE_ACTOR_NAME,
 } from '@crm-silmer/orders';
@@ -133,6 +135,11 @@ export function createOrderRuntime(options) {
     idFactory: options.idFactory,
     phoneDigestsFor: options.phoneDigestsFor,
     repository: options.repository,
+  });
+
+  const storeCorrection = createStoreOrderCorrectionService({
+    repository: options.repository,
+    clock: options.clock,
   });
 
   // ADR 023: without object storage the art files stay off and their routes
@@ -316,6 +323,42 @@ export function createOrderRuntime(options) {
   }
 
   return Object.freeze({
+    /** @param {OrderCommand & {orderId: string, expectedVersion: number, expectedQuantity: number, expectedAmountCents: number, quantity: number, reason: string}} input */
+    async correctStoreOrder(input) {
+      if (
+        input.actor?.kind !== 'human' ||
+        !(input.actor.capabilities ?? []).includes(
+          CAPABILITIES.COMMERCIAL_ADMIN,
+        )
+      )
+        throw new OrderForbiddenError();
+      if (input.reason !== 'USER_CONFIRMED_QUANTITY')
+        throw new StoreOrderError(400, 'INVALID_CORRECTION_REASON');
+      for (const value of [
+        input.expectedQuantity,
+        input.expectedAmountCents,
+        input.quantity,
+      ]) {
+        if (!Number.isSafeInteger(value) || value < 1)
+          throw new StoreOrderError(400, 'INVALID_REQUEST');
+      }
+      const expectedVersion = requireVersion(input.expectedVersion);
+      return run(
+        input,
+        {
+          action: 'order.store.correct',
+          command: {
+            expectedQuantity: input.expectedQuantity,
+            expectedAmountCents: input.expectedAmountCents,
+            quantity: input.quantity,
+            reason: input.reason,
+          },
+          expectedVersion,
+          target: { type: 'order', id: input.orderId },
+        },
+        async () => presentOne(await storeCorrection.correct(input)),
+      );
+    },
     authorizeRead: access.authorizeRead,
     authorizeWrite: access.authorizeWrite,
     ensurePendingFromIntent: service.ensurePendingFromIntent,

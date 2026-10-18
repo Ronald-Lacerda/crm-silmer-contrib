@@ -48,6 +48,13 @@ import { ORDER_ORIGINS } from '../domain/store-order.js';
  * @typedef {{
  *   orderId: string, receiptUrl: string, audit: StoreAuditContext, now: Date,
  * }} AttachStoreReceiptInput
+ * @typedef {{
+ *   orderId: string, expectedVersion: number, expectedQuantity: number,
+ *   expectedAmountCents: number, quantity: number, amountCents: number,
+ *   marker: string,
+ *   actor: {id: string, kind: string, capabilities?: readonly string[]},
+ *   correlationId: string, now: Date,
+ * }} CorrectStoreOrderInput
  * @typedef {{order: Order, recordSha256: string}} StoredStoreOrder
  *
  * - `findStoreOrder` reads the order of a `pedido_id`, with its hash.

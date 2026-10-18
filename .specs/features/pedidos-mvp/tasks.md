@@ -2122,3 +2122,15 @@ revisão.
   permissão não recebem o PDF; primeira geração da loja registra uma única vez.
 - **Gate:** `npm run validate`, E2E de pedidos e loja, PDF sintético inspecionado,
   `git diff --check`, commit e push.
+
+### T135: Correção administrativa emergencial de quantidade da loja
+
+- **Requisitos:** LOJ-39–LOJ-41; ADR 038 e RFC 026; preserva LOJ-17/19/21/27/37.
+- **Arquivos:** comando dedicado de orders, API humana, repositórios,
+  formulário administrativo do pedido, OpenAPI, testes e runbook da loja.
+- **Aceite:** administrador corrige somente quantidade/valor das peças pelo
+  catálogo e dentro do pagamento existente; pagamento e lastro original não
+  mudam; evento e auditoria na mesma transação, repetição sem segundo efeito;
+  pedidos continuam confirmados e bloqueados nas outras operações.
+- **Gate:** validate, E2E da loja/correção, testes transacionais, diff check,
+  commit e push; verificar deploy e pedido reparado pela API antes do fechamento.

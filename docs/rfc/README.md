@@ -53,6 +53,7 @@ entre os documentos.
 - [022 — Fundação visual whitelabel do CRM](022-fundacao-visual-whitelabel.md), decidida na ADR 035.
 - [024 — Jornadas com menos botões](024-jornadas-com-menos-botoes.md), aprovada pelo PO e decidida na ADR 036; o destino do login por papel (D3) ficou adiado.
 - [025 — Ficha em PDF para uso no celular](025-ficha-em-pdf-para-uso-mobile.md), decidida na ADR 037.
+- [026 — Correção administrativa de quantidade da loja](026-correcao-administrativa-quantidade-loja.md), decidida na ADR 038; LOJ-39–LOJ-41 e T135.
 
 ## Proposta de 14/10/2026
 

@@ -1,4 +1,8 @@
-import { OrderConflictError, OrderNotFoundError } from '../domain/errors.js';
+import {
+  OrderConflictError,
+  OrderForbiddenError,
+  OrderNotFoundError,
+} from '../domain/errors.js';
 import { formatOrderNumber } from '../domain/order.js';
 import {
   StoreOrderDuplicateError,
@@ -266,6 +270,58 @@ export class InMemoryOrderRepository {
         input.audit,
       );
       return { attached: true, order: clone(next) };
+    });
+  }
+
+  /** @param {import('../ports/contracts.js').CorrectStoreOrderInput} input */
+  async correctStoreOrder(input) {
+    return this.#exclusive(() => {
+      if (
+        input.actor?.kind !== 'human' ||
+        !(input.actor.capabilities ?? []).includes('COMMERCIAL_ADMIN')
+      )
+        throw new OrderForbiddenError();
+      const current = this.#orders.get(input.orderId);
+      const receipt = this.#receipts.find(
+        (entry) => entry.orderId === input.orderId,
+      );
+      if (!current || !receipt) throw new OrderNotFoundError();
+      if (
+        this.#audits.some(
+          (entry) =>
+            entry.target.id === input.orderId &&
+            entry.reason === `USER_CONFIRMED_QUANTITY:${input.marker}`,
+        )
+      )
+        return clone(current);
+      if (current.version !== input.expectedVersion)
+        throw new OrderConflictError('The order version changed');
+      if (
+        current.origin !== 'loja' ||
+        current.status !== 'confirmado' ||
+        current.totalPieces !== input.expectedQuantity ||
+        current.finalAmountCents !== input.expectedAmountCents
+      )
+        throw new StoreOrderError(409, 'STORE_ORDER_CONFLICT');
+      const next = clone(current);
+      next.ficha.items[0].grade[0].quantidade = input.quantity;
+      next.totalPieces = input.quantity;
+      next.finalAmountCents = input.amountCents;
+      next.version += 1;
+      next.updatedAt = input.now.toISOString();
+      this.#orders.set(next.id, next);
+      const audit = {
+        actor: input.actor.id,
+        correlationId: input.correlationId,
+      };
+      this.#record(next, 'order.store_corrected', input.correlationId);
+      this.#audit(
+        next,
+        'store.order.quantity_corrected',
+        `USER_CONFIRMED_QUANTITY:${input.marker}`,
+        audit,
+      );
+      return clone(next);
     });
   }
 
