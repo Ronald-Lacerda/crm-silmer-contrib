@@ -76,7 +76,7 @@ test('pins the approved runtime and toolchain versions exactly', async () => {
     'eslint-plugin-vue': '10.11.0',
     prettier: '3.9.6',
     typescript: '7.0.2',
-    vite: '8.2.2',
+    vite: '8.3.5',
     vue: '3.5.42',
     'vue-router': '4.6.4',
   });
@@ -93,7 +93,7 @@ test('pins the approved Vue client stack without runtime workspace packages', as
   assert.deepEqual(packageJson.dependencies ?? {}, {});
   assert.equal(rootPackage.devDependencies.vue, '3.5.42');
   assert.equal(rootPackage.devDependencies['vue-router'], '4.6.4');
-  assert.equal(rootPackage.devDependencies.vite, '8.2.2');
+  assert.equal(rootPackage.devDependencies.vite, '8.3.5');
   assert.match(source, /createApp\(App\)\.use\(router\)\.mount/u);
   assert.doesNotMatch(source, /\b(?:React|Angular|Svelte)\b/u);
   assert.doesNotMatch(source, /\bwindow\s*(?:\.|\[)/u);
