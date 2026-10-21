@@ -80,6 +80,30 @@ test('groups orders by status with counts, columns and actions', async ({
   expect(results.violations).toEqual([]);
 });
 
+test('keeps every desktop order cell on the same row line', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 900, height: 700 });
+  await mockOrders(page);
+  await page.goto('/pedidos');
+
+  for (const group of ['Pedidos pendentes', 'Pedidos confirmados']) {
+    const row = page.getByRole('region', { name: group }).locator('tbody tr');
+    await expect(row).toBeVisible();
+    const cells = await row.locator('td').evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        bottom: node.getBoundingClientRect().bottom,
+        display: globalThis.getComputedStyle(node).display,
+      })),
+    );
+    expect(cells.every((cell) => cell.display === 'table-cell')).toBe(true);
+    expect(
+      Math.max(...cells.map((cell) => cell.bottom)) -
+        Math.min(...cells.map((cell) => cell.bottom)),
+    ).toBeLessThan(1);
+  }
+});
+
 test('recovers the order list after an initial server failure without showing an empty wallet', async ({
   page,
 }) => {

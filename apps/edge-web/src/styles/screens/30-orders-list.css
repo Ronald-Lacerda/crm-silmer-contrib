@@ -291,6 +291,10 @@
     border-block-end: 1px solid var(--color-border-subtle);
   }
 
+  .data-table.order-table td.order-cell-number {
+    display: table-cell;
+  }
+
   .data-table.order-table td.num {
     text-align: end;
   }
