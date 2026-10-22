@@ -1,5 +1,26 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## Evolução aprovada — Financeiro (21/10/2026)
+
+Requisitos [FINQ-01–15](../financeiro/spec.md), decisão
+[ADR 040](../../../docs/adr/040-financeiro-com-fila-e-check-manual.md) /
+[RFC 028](../../../docs/rfc/028-financeiro-com-fila-e-check-manual.md).
+
+- [x] **FINQ-PLAN-01:** registrar Fila e detalhe, perfil restrito, pedido
+      confirmado e integralmente pago, check manual e design vigente.
+- [ ] **FINQ-T01:** identidade, gestão da conta e autorização mínima.
+- [ ] **FINQ-T02:** elegibilidade, semântica/legado de pagamento, persistência,
+      consultas e comandos financeiros auditáveis.
+- [ ] **FINQ-T03:** login, navegação e Fila e detalhe nos componentes atuais.
+- [ ] **FINQ-T04:** conclusão, correção, teclado, foco e recuperação de falhas.
+- [ ] **FINQ-T05:** QA, segurança, regressão e gates completos da implementação.
+- [ ] **FINQ-T06:** homologação, operação e ativação da conta real.
+
+O [plano da fatia](../financeiro/tasks.md) define dependências, fronteiras e
+verificações. Todas as tarefas de código permanecem abertas: nesta solicitação
+o PO autorizou somente documentação, sem mudar o design do CRM. Integração
+Olist é fase posterior e não faz parte da implementação planejada acima.
+
 > **Atualizado em:** 05/10/2026\
 > **Baseline:** PR 142 integrada, Pedido v5, OpenAI e deploy automático GitHub → EasyPanel.\
 > **Design:** `TECHNICAL-DESIGN.md`; **topologia:** `EASYPANEL-TOPOLOGY.md`.

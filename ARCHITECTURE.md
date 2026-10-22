@@ -1,5 +1,21 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Evolução aprovada, ainda não implementada — Financeiro
+
+Em 21/10/2026 o PO aprovou [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md)
+e [RFC 028](docs/rfc/028-financeiro-com-fila-e-check-manual.md): perfil Financeiro
+com autorização própria, consulta mínima aos pedidos confirmados, integralmente
+pagos e não teste de todos os vendedores/origens e conclusão manual “Nota criada”.
+Conclusão/reversão ficam separadas do estado comercial, com auditoria; Pedido
+mantém dois status e a loja permanece travada. O perfil não herda Vendedor,
+não recebe handoffs e não acessa atendimento ou administração comercial.
+
+Fila e detalhe será composta no shell Vue e no design vigente, sem redesign,
+novas dependências ou infraestrutura. Integração Olist fica diferida. O runtime
+descrito abaixo permanece vigente; [FINQ-T01–T06](.specs/features/financeiro/tasks.md)
+estão abertas. [FINQ-01–15](.specs/features/financeiro/spec.md) definem o aceite;
+esta entrega registra apenas o planejamento FINQ-PLAN-01.
+
 Reconciliada com a master em 10/10/2026; ficha v6, arte no RustFS, loja paga, chat do site e mídia do vendedor. Detalhes em
 [TECHNICAL-DESIGN.md](TECHNICAL-DESIGN.md) e
 [EASYPANEL-TOPOLOGY.md](EASYPANEL-TOPOLOGY.md).

@@ -1,5 +1,21 @@
 # Gestão de Usuários pelo Administrador — Requisitos Rastreáveis
 
+## Emenda planejada — Financeiro (21/10/2026)
+
+A [ADR 040](../../../docs/adr/040-financeiro-com-fila-e-check-manual.md) aprova
+[FINQ-01–03](../financeiro/spec.md), sem implementar o perfil nesta entrega.
+Na futura [FINQ-T01](../financeiro/tasks.md), ROLE-01/02/04 e USR-02 passam a
+admitir Financeiro com autorização própria, sem herdar Vendedor nem conceder
+`COMMERCIAL_ADMIN`. Admin continuará criando e mantendo contas; histórico
+financeiro impedirá exclusão destrutiva. ROLE-03 não muda: somente Vendedor é
+alvo ou participante elegível de handoff. Não reintroduzir Atendimento ou
+capacidades de privacidade aposentadas.
+
+Até essa implementação, as constraints e a política executáveis continuam
+com a função única Vendedor descrita abaixo. O registro desta evolução não
+concede acesso nem cria conta real, e não autoriza redesenhar a gestão de
+usuários: usar o design e os componentes vigentes.
+
 ## Problema
 
 O acesso ao CRM hoje depende de um fluxo de convite em duas etapas: o administrador emite um convite e a pessoa convidada resgata o token para criar a própria senha. Para a operação atual da Silmer isso é cerimônia sem contrapartida — não há e-mail transacional para entregar o token, o convite expira, e o administrador não tem visibilidade de quem existe no sistema. O modelo de papéis também carrega funções que a operação não usa (`Atendimento`) e capacidades de privacidade que nenhum código chama.

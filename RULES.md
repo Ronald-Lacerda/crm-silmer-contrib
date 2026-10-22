@@ -1,5 +1,23 @@
 # Regras do CRM Silmer
 
+## Evolução aprovada — Financeiro (21/10/2026, ainda sem implementação)
+
+A [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md) aprova
+o perfil restrito Financeiro e os [requisitos FINQ-01–15](.specs/features/financeiro/spec.md).
+Na implementação futura, somente pedidos confirmados, integralmente pagos e
+não teste entram no universo financeiro; “Pago em” significa quitação integral,
+com revisão do uso legado antes de ativar. “Nota criada” é conclusão humana
+da rotina, separada do status comercial, com autoria, horário e reversão auditada.
+Não altera a ficha ou as travas da loja, não implementa recebimentos/saldo e
+não integra Olist/Sefaz. O Financeiro não herda permissões de Vendedor.
+As regras de edição comercial e handoff abaixo continuam válidas.
+
+O design existente é obrigatório: Fila e detalhe descreve composição e
+interação, sem autorizar novo shell, tema, marca, tipografia ou componentes
+paralelos. Usar [design.md](design.md), ADRs 035/036 e tokens do CRM.
+Somente [FINQ-PLAN-01](.specs/features/financeiro/tasks.md) é documental;
+FINQ-T01–T06 ficam abertas, sem código ou conta criada nesta etapa.
+
 ## Regras de produto
 
 1. Toda mensagem válida entra na Caixa de Entrada e dispara automaticamente o n8n; a UI não inicia a automação.

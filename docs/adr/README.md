@@ -1,5 +1,9 @@
 # Architecture Decision Records
 
+- [040 — Financeiro com fila e check manual](040-financeiro-com-fila-e-check-manual.md),
+  aceita em 21/10/2026; requisitos e tarefas registrados, implementação futura,
+  composição Fila e detalhe no design vigente e integração Olist diferida.
+
 Esta pasta contém as decisões arquiteturais já tomadas no CRM Silmer.
 
 ## Convenção

@@ -1,5 +1,28 @@
 # CRM Silmer — Especificação de Produto do MVP
 
+## Evolução aprovada — Financeiro, Fila e detalhe (21/10/2026)
+
+Definição do PO registrada na [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md)
+e no [RFC 028](docs/rfc/028-financeiro-com-fila-e-check-manual.md), ainda sem
+implementação. [FINQ-01–15](.specs/features/financeiro/spec.md) e
+[FINQ-T01–T06](.specs/features/financeiro/tasks.md) detalham a entrega futura.
+
+Financeiro é perfil restrito; entra diretamente no painel com Financeiro e
+Minha conta no shell vigente. Consulta pedidos de todos os vendedores e
+origens, exclusivamente confirmados, integralmente pagos e não teste, em
+Aguardando/Concluídos. Sinal não qualifica; “Pago em” representa quitação
+integral, com revisão dos registros legados antes da ativação. Consulta dados
+do pedido e marca “Nota criada” ao terminar sua rotina manual no Olist.
+Conclusão e correção preservam autoria, horário e histórico, sem mudar
+status, ficha, preço, datas ou travas da loja e sem certificar autorização Sefaz.
+
+Não acessa atendimento, cadastro geral de clientes, Dashboard comercial,
+administração ou edição comercial. O novo perfil não herda Vendedor. A
+composição aprovada é Fila e detalhe; usar design, componentes, tokens, temas,
+marca e navegação responsiva existentes, sem redesign. Integração Olist fica
+para fase separada. Esta seção define evolução futura; a baseline abaixo não
+é evidência de que o Financeiro já exista no runtime.
+
 > **Versão:** v8 — 05/10/2026\
 > **Baseline:** ADRs 004, 006, 008, 009, 015–020; PR 142 integrada.\
 > **Status:** atendimento e Pedidos implementados; produção depende de homologação, privacidade e operação.

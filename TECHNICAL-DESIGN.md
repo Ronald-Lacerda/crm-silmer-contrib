@@ -1,5 +1,31 @@
 # TDD — CRM Silmer MVP
 
+## Evolução aprovada — Financeiro (planejamento, sem implementação)
+
+A [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md) e o
+[RFC 028](docs/rfc/028-financeiro-com-fila-e-check-manual.md), de 21/10/2026,
+definem o perfil Financeiro sem permissões herdadas de Vendedor. A futura
+política central e as constraints de identidade devem permitir o novo perfil
+sem abrir as ações comerciais ou alterar o handoff exclusivo de Vendedor.
+Admin mantém a gestão de contas. Requisitos [FINQ-01–15](.specs/features/financeiro/spec.md);
+execução futura em [FINQ-T01–T06](.specs/features/financeiro/tasks.md).
+
+O servidor filtra listagem, contagens e detalhe por confirmado, pagamento
+integral registrado e não teste, abrangendo todas as origens/responsáveis.
+“Pago em” (`paidOn`) representa quitação integral; revisar registros legados
+antes da ativação. Conclusão e reversão financeiras são estado próprio e
+auditável, sem alterar snapshot, status, preço, datas ou travas da loja. Os
+comandos devem usar sessão/CSRF, versão, idempotência, transação e revalidação
+de elegibilidade. Rotas, schema e migration serão detalhados na FINQ-T02;
+nenhum contrato OpenAPI ou código é alterado por este planejamento.
+
+O login futuro do Financeiro abre sua fila, com navegação restrita e composição
+Fila e detalhe no shell existente. Reutilizar componentes, tokens semânticos,
+marca, tipografia, temas e padrões de acessibilidade de [design.md](design.md)
+e ADRs 035/036. A referência da conversa não autoriza copiar seu CSS ou
+redesenhar o CRM. Olist permanece manual e sem credenciais, chamadas ou jobs.
+As seções seguintes descrevem a implementação vigente, sem o perfil Financeiro.
+
 Baseline técnica atualizada em 05/10/2026 após a PR #142. Esta síntese
 substitui o desenho anterior que ainda tratava Kanban, Negócio e pagamentos
 como runtime do lançamento. Decisões e aprovações históricas permanecem nos

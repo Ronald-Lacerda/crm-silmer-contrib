@@ -1,5 +1,9 @@
 # Request for Comments
 
+- [028 — Financeiro com fila e check manual](028-financeiro-com-fila-e-check-manual.md),
+  decidida em 21/10/2026 na ADR 040; somente planejamento, sem implementação
+  ou alteração do design do CRM.
+
 Esta pasta contém propostas de mudanças significativas que ainda precisam de
 avaliação e decisão.
 
