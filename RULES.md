@@ -18,6 +18,14 @@ paralelos. Usar [design.md](design.md), ADRs 035/036 e tokens do CRM.
 Somente [FINQ-PLAN-01](.specs/features/financeiro/tasks.md) é documental;
 FINQ-T01–T06 ficam abertas, sem código ou conta criada nesta etapa.
 
+Complemento [ADR 041](docs/adr/041-consulta-administrativa-do-financeiro.md):
+FINQ-16 autoriza consulta do Admin ativo às filas, contagens, detalhes e
+histórico, preservando menu completo, login e permissões anteriores. Essa
+consulta não concede concluir/desfazer a rotina financeira. O visual do print
+foi rejeitado pelo PO e não é referência de aparência; usar o design real do
+CRM. [FINQ-PLAN-02](.specs/features/financeiro/tasks.md) registra o complemento,
+ainda sem implementação.
+
 ## Regras de produto
 
 1. Toda mensagem válida entra na Caixa de Entrada e dispara automaticamente o n8n; a UI não inicia a automação.

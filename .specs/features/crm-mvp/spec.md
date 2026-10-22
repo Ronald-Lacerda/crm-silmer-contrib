@@ -7,7 +7,7 @@ somente com fila e check manual, exigindo o design existente do CRM. Decisão
 na [ADR 040](../../../docs/adr/040-financeiro-com-fila-e-check-manual.md), com
 [RFC 028](../../../docs/rfc/028-financeiro-com-fila-e-check-manual.md).
 
-Os [requisitos FINQ-01–15](../financeiro/spec.md) são o refinamento rastreável
+Os [requisitos FINQ-01–16](../financeiro/spec.md) são o refinamento rastreável
 desta evolução: acesso mínimo, entrada no painel, pedidos confirmados e
 integralmente pagos (sinal não qualifica), não teste, de todos os vendedores e
 origens; Aguardando/Concluídos; consulta mínima; “Nota criada” e correção
@@ -15,7 +15,13 @@ humanas, com auditoria, idempotência e preservação do estado comercial.
 Design, componentes e tokens atuais são obrigatórios. Integração Olist fica
 diferida; não reabre PAY-01–05 nem transforma FIN-01–03 em conciliação financeira.
 
-**Estado:** apenas FINQ-PLAN-01 registrado. [FINQ-T01–T06](../financeiro/tasks.md)
+A [ADR 041](../../../docs/adr/041-consulta-administrativa-do-financeiro.md)
+complementa a decisão: Admin ativo consulta filas, contagens, detalhes e
+histórico, mantendo menu completo e login atual, sem receber comandos
+financeiros por essa autorização. FINQ-12 descarta o print como referência
+visual; a aparência seguirá as telas e componentes reais do CRM.
+
+**Estado:** FINQ-PLAN-01/02 registrados. [FINQ-T01–T06](../financeiro/tasks.md)
 permanecem abertas; não há implementação, migração ou conta Financeiro nesta
 entrega. PNL-04 continua adiado para os vendedores; a nova entrada se aplica
 somente ao futuro perfil Financeiro. O restante deste documento descreve a

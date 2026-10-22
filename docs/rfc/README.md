@@ -1,5 +1,9 @@
 # Request for Comments
 
+- [029 — Consulta administrativa do Financeiro](029-consulta-administrativa-do-financeiro.md),
+  decidida na ADR 041: consulta do Admin com menu completo e rejeição do print
+  como referência visual, sem implementação.
+
 - [028 — Financeiro com fila e check manual](028-financeiro-com-fila-e-check-manual.md),
   decidida em 21/10/2026 na ADR 040; somente planejamento, sem implementação
   ou alteração do design do CRM.

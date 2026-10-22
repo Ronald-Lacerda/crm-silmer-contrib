@@ -5,7 +5,10 @@
 não iniciadas. O PO solicitou somente o registro do planejamento.
 **Decisão:** [ADR 040](../../../docs/adr/040-financeiro-com-fila-e-check-manual.md),
 a partir do [RFC 028](../../../docs/rfc/028-financeiro-com-fila-e-check-manual.md).
-**Tarefas:** [FINQ-PLAN-01 e FINQ-T01–T06](tasks.md).
+**Complemento aprovado:** [ADR 041](../../../docs/adr/041-consulta-administrativa-do-financeiro.md)
+e [RFC 029](../../../docs/rfc/029-consulta-administrativa-do-financeiro.md):
+consulta administrativa e descarte do print como referência visual.
+**Tarefas:** [FINQ-PLAN-01/02 e FINQ-T01–T06](tasks.md).
 **Fontes:** [CRM MVP](../crm-mvp/spec.md), [RULES](../../../RULES.md),
 [design vigente](../../../design.md), ADRs 006, 035 e 036.
 
@@ -19,7 +22,10 @@ ou administração comercial.
 A composição escolhida é **Fila e detalhe**: fila à esquerda e consulta do
 pedido à direita no desktop; adaptação no celular conforme o design vigente.
 O desenho apresentado na conversa é referência de organização e interação,
-não uma nova identidade visual nem fonte de CSS, cores, tipografia ou shell.
+mas o PO rejeitou explicitamente o visual do print: ele está descartado como
+referência de aparência e não aprova CSS, cores, tipografia, shell, cards ou
+botões. Somente a composição Fila e detalhe permanece aprovada, a ser montada
+com os padrões e componentes já estabelecidos no CRM.
 A alternativa “Conferência ampla” não faz parte da entrega.
 
 ## Requisitos rastreáveis
@@ -111,6 +117,9 @@ A alternativa “Conferência ampla” não faz parte da entrega.
     as telas existentes, criar tema do Financeiro ou copiar o estilo do mockup.
     Desktop mantém a composição Fila e detalhe; tablet e celular seguem o shell
     responsivo atual, com acesso ao detalhe e retorno à fila sem perda da seleção.
+    O print da conversa foi rejeitado como referência visual: não reproduzir sua
+    aparência. A revisão futura deve comparar a tela às telas reais do CRM e
+    aos seus componentes/tokens vigentes, nunca à imagem apresentada.
 13. **FINQ-13 — Teclado e foco:** WHEN a pessoa percorre a fila, troca a lista,
     consulta detalhes, conclui ou desfaz THEN todas as ações SHALL funcionar por
     teclado, com rótulos e seleção anunciados. Remover a linha selecionada SHALL
@@ -128,6 +137,22 @@ A alternativa “Conferência ampla” não faz parte da entrega.
     sem API, OAuth, webhook, sincronização, emissão automática, credenciais ou
     nova infraestrutura. Integração futura exige outra definição e tarefas próprias.
 
+### Consulta pelo administrador
+
+16. **FINQ-16 — Admin consulta com menu completo:** WHEN uma pessoa ativa
+    com `COMMERCIAL_ADMIN` acessa Financeiro THEN a interface e a API SHALL
+    permitir consultar Aguardando, Concluídos, contagens, detalhes e histórico
+    financeiro no mesmo universo de pedidos de FINQ-04–07, sem exigir o perfil
+    Financeiro ou troca de perfil. A entrada Financeiro SHALL integrar seu menu
+    completo existente, preservando as demais áreas, permissões e destino de
+    login do administrador. A restrição a Financeiro/Minha conta de FINQ-02
+    aplica-se somente ao perfil Financeiro. A autorização de consulta não concede
+    concluir/desfazer a rotina: na tela administrativa essas ações SHALL ficar
+    ausentes e a API SHALL negá-las para o Admin apenas por essa capacidade.
+    O histórico é consultável, sem edição. Conta desativada e Vendedor sem
+    `COMMERCIAL_ADMIN` SHALL NOT obter esse acesso adicional. As permissões
+    comerciais administrativas já existentes continuam válidas nas demais áreas.
+
 ## Critérios de verificação futura
 
 - Matriz: confirmado + pagamento integral + não teste entra; pendente pago,
@@ -136,10 +161,15 @@ A alternativa “Conferência ampla” não faz parte da entrega.
   silenciosa de quitação, lançamento bancário ou backfill financeiro automático.
 - Financeiro consulta pedidos de vendedores diferentes e conclui/desfaz;
   vendedor, ator n8n, conta desativada e acesso direto indevido são recusados.
+- Admin consulta as duas filas, contagens, detalhes e histórico sem trocar de
+  perfil; mantém menu completo e login atual. Não vê ações de concluir/desfazer,
+  e tentativas diretas desses comandos são negadas. Cobrir também Admin desativado
+  e Vendedor sem capacidade administrativa.
 - Repetir, concorrer e mudar elegibilidade durante a ação; comprovar um efeito,
   conflito visível, preservação comercial e auditoria de conclusão e correção.
 - Conferir desktop Fila e detalhe, celular 390×844, temas claro/escuro,
   teclado, foco, leitor de tela, falha de leitura e ausência de overflow.
+  Comparar com o design real vigente do CRM; não usar o print rejeitado como aceite.
 - Verificar que nenhuma chamada ao Olist é feita e que nenhum dado pessoal,
   conversa ou arquivo fora do contrato aparece nas respostas ou logs.
 

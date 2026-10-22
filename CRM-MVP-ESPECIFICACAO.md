@@ -23,6 +23,13 @@ marca e navegação responsiva existentes, sem redesign. Integração Olist fica
 para fase separada. Esta seção define evolução futura; a baseline abaixo não
 é evidência de que o Financeiro já exista no runtime.
 
+A [ADR 041](docs/adr/041-consulta-administrativa-do-financeiro.md) acrescenta
+FINQ-16: Admin ativo consulta as duas filas, contagens, detalhes e histórico,
+mantendo menu completo e login atual. Consulta não concede conclusão/reversão
+financeira. O PO rejeitou o visual do print; FINQ-12 exige usar a aparência
+das telas e componentes reais do CRM. FINQ-PLAN-02 registra o complemento;
+as tarefas de implementação continuam abertas.
+
 > **Versão:** v8 — 05/10/2026\
 > **Baseline:** ADRs 004, 006, 008, 009, 015–020; PR 142 integrada.\
 > **Status:** atendimento e Pedidos implementados; produção depende de homologação, privacidade e operação.

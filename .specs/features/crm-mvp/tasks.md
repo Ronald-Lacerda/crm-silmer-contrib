@@ -2,16 +2,21 @@
 
 ## Evolução aprovada — Financeiro (21/10/2026)
 
-Requisitos [FINQ-01–15](../financeiro/spec.md), decisão
+Requisitos [FINQ-01–16](../financeiro/spec.md), decisão
 [ADR 040](../../../docs/adr/040-financeiro-com-fila-e-check-manual.md) /
 [RFC 028](../../../docs/rfc/028-financeiro-com-fila-e-check-manual.md).
 
 - [x] **FINQ-PLAN-01:** registrar Fila e detalhe, perfil restrito, pedido
       confirmado e integralmente pago, check manual e design vigente.
+- [x] **FINQ-PLAN-02:** registrar consulta administrativa com menu completo e
+      login preservados (FINQ-16), sem comandos financeiros, e descartar o print
+      como referência visual (FINQ-12), conforme
+      [ADR 041](../../../docs/adr/041-consulta-administrativa-do-financeiro.md).
 - [ ] **FINQ-T01:** identidade, gestão da conta e autorização mínima.
 - [ ] **FINQ-T02:** elegibilidade, semântica/legado de pagamento, persistência,
       consultas e comandos financeiros auditáveis.
-- [ ] **FINQ-T03:** login, navegação e Fila e detalhe nos componentes atuais.
+- [ ] **FINQ-T03:** login, navegação e Fila e detalhe nos componentes atuais;
+      Admin mantém menu completo e acessa a tela em consulta.
 - [ ] **FINQ-T04:** conclusão, correção, teclado, foco e recuperação de falhas.
 - [ ] **FINQ-T05:** QA, segurança, regressão e gates completos da implementação.
 - [ ] **FINQ-T06:** homologação, operação e ativação da conta real.

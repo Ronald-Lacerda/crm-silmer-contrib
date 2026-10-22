@@ -1,5 +1,9 @@
 # Architecture Decision Records
 
+- [041 — Consulta administrativa do Financeiro](041-consulta-administrativa-do-financeiro.md),
+  complemento documental à ADR 040: Admin consulta com menu completo; print
+  descartado como referência visual e design real do CRM preservado.
+
 - [040 — Financeiro com fila e check manual](040-financeiro-com-fila-e-check-manual.md),
   aceita em 21/10/2026; requisitos e tarefas registrados, implementação futura,
   composição Fila e detalhe no design vigente e integração Olist diferida.

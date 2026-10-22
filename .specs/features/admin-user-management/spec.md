@@ -16,6 +16,12 @@ com a função única Vendedor descrita abaixo. O registro desta evolução não
 concede acesso nem cria conta real, e não autoriza redesenhar a gestão de
 usuários: usar o design e os componentes vigentes.
 
+Complemento [ADR 041](../../../docs/adr/041-consulta-administrativa-do-financeiro.md):
+[FINQ-16](../financeiro/spec.md) permite ao Admin ativo consultar Financeiro
+com menu completo e login atual, sem trocar perfil ou ganhar comandos de
+conclusão/reversão. FINQ-12 rejeita o print como referência visual e exige
+os padrões reais do CRM. Implementação e testes continuam nas tarefas abertas.
+
 ## Problema
 
 O acesso ao CRM hoje depende de um fluxo de convite em duas etapas: o administrador emite um convite e a pessoa convidada resgata o token para criar a própria senha. Para a operação atual da Silmer isso é cerimônia sem contrapartida — não há e-mail transacional para entregar o token, o convite expira, e o administrador não tem visibilidade de quem existe no sistema. O modelo de papéis também carrega funções que a operação não usa (`Atendimento`) e capacidades de privacidade que nenhum código chama.

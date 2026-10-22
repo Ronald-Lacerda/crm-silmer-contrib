@@ -10,6 +10,12 @@ A tarefa permanece aberta; as tarefas AUM e evidências históricas abaixo não
 comprovam a existência do novo perfil. Preservar ROLE-03 e o handoff Vendedor,
 os controles administrativos e o design já estabelecido.
 
+[FINQ-PLAN-02 e FINQ-T01/T03/T05](../financeiro/tasks.md) registram e planejam
+a consulta administrativa (FINQ-16), mantendo menu completo e login atual,
+sem comandos financeiros por `COMMERCIAL_ADMIN`, conforme
+[ADR 041](../../../docs/adr/041-consulta-administrativa-do-financeiro.md).
+O print foi rejeitado como referência visual; implementar no design real do CRM.
+
 > **Branch:** `feat/admin-user-management`
 > **Spec:** [spec.md](spec.md) · **Design:** [design.md](design.md)
 > **Atualizado em:** 09/09/2026

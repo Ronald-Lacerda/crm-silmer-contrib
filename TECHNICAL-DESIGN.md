@@ -26,6 +26,16 @@ e ADRs 035/036. A referência da conversa não autoriza copiar seu CSS ou
 redesenhar o CRM. Olist permanece manual e sem credenciais, chamadas ou jobs.
 As seções seguintes descrevem a implementação vigente, sem o perfil Financeiro.
 
+Complemento [ADR 041](docs/adr/041-consulta-administrativa-do-financeiro.md),
+[RFC 029](docs/rfc/029-consulta-administrativa-do-financeiro.md) e FINQ-16:
+leituras do painel aceitam Financeiro ou Admin ativo (`COMMERCIAL_ADMIN`),
+com o mesmo universo de pedidos elegíveis. Admin mantém menu completo,
+login e permissões atuais, sem trocar perfil. A capacidade administrativa
+não concede os comandos financeiros; a UI de consulta omite essas ações e
+a API deve negá-las. FINQ-T01/T03/T05 cobrem essa distinção. O print foi
+rejeitado como referência visual: FINQ-12 exige comparar com as telas e
+componentes reais do CRM, sem copiar sua aparência. Apenas documentação.
+
 Baseline técnica atualizada em 05/10/2026 após a PR #142. Esta síntese
 substitui o desenho anterior que ainda tratava Kanban, Negócio e pagamentos
 como runtime do lançamento. Decisões e aprovações históricas permanecem nos

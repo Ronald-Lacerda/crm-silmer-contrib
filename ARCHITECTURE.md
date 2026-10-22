@@ -16,6 +16,12 @@ descrito abaixo permanece vigente; [FINQ-T01–T06](.specs/features/financeiro/t
 estão abertas. [FINQ-01–15](.specs/features/financeiro/spec.md) definem o aceite;
 esta entrega registra apenas o planejamento FINQ-PLAN-01.
 
+A [ADR 041](docs/adr/041-consulta-administrativa-do-financeiro.md) complementa
+o planejamento com FINQ-16: Admin ativo consulta o mesmo painel/universo,
+mantendo menu completo e login atual, sem comandos financeiros por essa
+capacidade. FINQ-12 descarta o print como referência visual e exige os
+componentes e padrões reais do CRM. FINQ-PLAN-02 é documental; não há código.
+
 Reconciliada com a master em 10/10/2026; ficha v6, arte no RustFS, loja paga, chat do site e mídia do vendedor. Detalhes em
 [TECHNICAL-DESIGN.md](TECHNICAL-DESIGN.md) e
 [EASYPANEL-TOPOLOGY.md](EASYPANEL-TOPOLOGY.md).

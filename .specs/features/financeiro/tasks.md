@@ -1,8 +1,10 @@
 # Financeiro — Plano de entrega
 
-**Requisitos:** [FINQ-01–FINQ-15](spec.md).
+**Requisitos:** [FINQ-01–FINQ-16](spec.md).
 **Decisão:** [ADR 040](../../../docs/adr/040-financeiro-com-fila-e-check-manual.md)
 e [RFC 028](../../../docs/rfc/028-financeiro-com-fila-e-check-manual.md).
+**Complemento:** [ADR 041](../../../docs/adr/041-consulta-administrativa-do-financeiro.md)
+e [RFC 029](../../../docs/rfc/029-consulta-administrativa-do-financeiro.md).
 **Atualização:** 21/10/2026. Somente planejamento autorizado nesta etapa;
 não executar as tarefas de implementação abaixo por este registro.
 
@@ -15,6 +17,17 @@ não executar as tarefas de implementação abaixo por este registro.
 - Evidência: estes documentos e a decisão do PO nesta conversa em 21/10/2026.
   Checks e commit/push constam do fechamento da entrega documental.
 
+## Complemento documental aprovado
+
+### FINQ-PLAN-02 — Consulta administrativa e design preservado
+
+- [x] Registrar FINQ-16: Admin consulta o painel com menu completo e login
+      preservados, sem herdar os comandos de conclusão/correção do Financeiro.
+- [x] Registrar a rejeição explícita do visual do print. Somente a organização
+      Fila e detalhe permanece; a aparência deve seguir as telas e componentes do CRM.
+- Evidência: complemento do PO nesta conversa em 21/10/2026. Entrega somente
+  documental; as tarefas FINQ-T01–T06 abaixo continuam abertas.
+
 ## Implementação futura — todas as tarefas permanecem abertas
 
 ### FINQ-T01 — Perfil Financeiro e acesso mínimo
@@ -24,7 +37,10 @@ não executar as tarefas de implementação abaixo por este registro.
 - [ ] Preservar handoff exclusivo de Vendedor, login dos papéis existentes,
       capacidades administrativas e bloqueio de conta desativada. Histórico
       financeiro deve impedir exclusão destrutiva da conta.
-- Requisitos: FINQ-01–03, FINQ-11; emenda planejada de ROLE-01/02/04 e USR-02.
+- [ ] Autorizar leitura de Financeiro para Admin ativo (`COMMERCIAL_ADMIN`),
+      sem trocar o perfil e sem conceder os comandos de concluir/desfazer por
+      essa capacidade. Cobrir autorização da tela, contagens, detalhes e histórico.
+- Requisitos: FINQ-01–03, FINQ-11, FINQ-16; emenda planejada de ROLE-01/02/04 e USR-02.
 - Fronteira futura: identity-access, migrations, identity API, contrato OpenAPI,
   gestão de usuários e testes de autorização/schema. Não editar dados reais.
 - Verificação: testes positivos/negativos por papel e URL/API direta;
@@ -54,13 +70,17 @@ não executar as tarefas de implementação abaixo por este registro.
 
 - [ ] Abrir Financeiro no login desse perfil e restringir o shell existente
       a Financeiro/Minha conta; preservar os destinos dos demais papéis.
+- [ ] Acrescentar Financeiro ao menu completo do Admin, mantendo seu login
+      atual e todas as áreas existentes; exibir somente consulta nesse contexto.
 - [ ] Montar Aguardando e Concluídos, seleção de pedido e consulta lateral no
       desktop; adaptar navegação entre fila e detalhe no celular conforme os
       componentes e shell já usados pelo CRM.
 - [ ] Reutilizar tokens, marca configurável, seleção neutra, Poppins, temas,
       espaçamento e padrões de jornada vigentes. Não copiar CSS do mockup,
       mudar identidade, redesenhar outras telas ou introduzir framework/store.
-- Requisitos: FINQ-02–03, FINQ-06–07, FINQ-12–14. Depende de FINQ-T01/T02.
+- [ ] Usar as telas reais, componentes e tokens atuais como referência e aceite
+      visual. O print da conversa foi rejeitado e não deve ser reproduzido.
+- Requisitos: FINQ-02–03, FINQ-06–07, FINQ-12–14, FINQ-16. Depende de FINQ-T01/T02.
 - Fronteira futura: router, shell, views/componentes locais e camada cliente.
 - Verificação: build, `check:design-tokens`, lint e E2E responsivo em temas
   claro/escuro, desktop e 390×844, usando as regras de design atuais.
@@ -83,7 +103,12 @@ não executar as tarefas de implementação abaixo por este registro.
 - [ ] Comprovar que o Financeiro não muda pedido, pagamento ou dados da loja,
       não recebe handoffs e não chama o Olist. Validar regressão de vendedores,
       Admin, login, pedidos, impressão e loja.
-- Requisitos: FINQ-01–15. Depende de FINQ-T01–T04.
+- [ ] Validar consulta administrativa às duas filas, contagens, detalhes e
+      histórico, menu completo e login preservados; provar ausência das ações
+      financeiras na UI e negação dos comandos pela API para Admin sem esse perfil.
+- [ ] Conferir aderência às telas reais e ao design vigente do CRM, sem usar
+      a aparência do print rejeitado como referência ou resultado esperado.
+- Requisitos: FINQ-01–16. Depende de FINQ-T01–T04.
 - Evidência: testes e achados priorizados; não converter simulação em aceite real.
 - Gates: `git diff --check`, `npm run validate`, `npm run test:e2e`,
   `npm audit --audit-level=high` e suites live afetadas, proporcionais à implementação.
