@@ -3,9 +3,11 @@
 ## Evolução aprovada — Financeiro, Fila e detalhe (21/10/2026)
 
 Definição do PO registrada na [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md)
-e no [RFC 028](docs/rfc/028-financeiro-com-fila-e-check-manual.md), ainda sem
-implementação. [FINQ-01–15](.specs/features/financeiro/spec.md) e
-[FINQ-T01–T06](.specs/features/financeiro/tasks.md) detalham a entrega futura.
+e no [RFC 028](docs/rfc/028-financeiro-com-fila-e-check-manual.md).
+Implementação autorizada em 22/10/2026, com complemento na
+[ADR 042](docs/adr/042-perfis-e-requitacao-do-financeiro.md).
+[FINQ-01–19](.specs/features/financeiro/spec.md) e
+[FINQ-T01–T06](.specs/features/financeiro/tasks.md) detalham entrega e prontidão.
 
 Financeiro é perfil restrito; entra diretamente no painel com Financeiro e
 Minha conta no shell vigente. Consulta pedidos de todos os vendedores e
@@ -20,15 +22,18 @@ Não acessa atendimento, cadastro geral de clientes, Dashboard comercial,
 administração ou edição comercial. O novo perfil não herda Vendedor. A
 composição aprovada é Fila e detalhe; usar design, componentes, tokens, temas,
 marca e navegação responsiva existentes, sem redesign. Integração Olist fica
-para fase separada. Esta seção define evolução futura; a baseline abaixo não
-é evidência de que o Financeiro já exista no runtime.
+para fase separada. Homologação com a pessoa do Financeiro e criação da conta
+real continuam pendentes na FINQ-T06.
 
 A [ADR 041](docs/adr/041-consulta-administrativa-do-financeiro.md) acrescenta
 FINQ-16: Admin ativo consulta as duas filas, contagens, detalhes e histórico,
 mantendo menu completo e login atual. Consulta não concede conclusão/reversão
 financeira. O PO rejeitou o visual do print; FINQ-12 exige usar a aparência
 das telas e componentes reais do CRM. FINQ-PLAN-02 registra o complemento;
-as tarefas de implementação continuam abertas.
+e as evidências de implementação estão no plano da fatia. Usuários substitui
+Vendedores com seleção dos três perfis. Reconfirmar outro valor exige nova
+quitação e novo check; datas manuais legadas exigem declaração explícita antes
+de qualificarem a fila (FINQ-17–19).
 
 > **Versão:** v8 — 05/10/2026\
 > **Baseline:** ADRs 004, 006, 008, 009, 015–020; PR 142 integrada.\

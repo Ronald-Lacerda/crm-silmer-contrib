@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import AccountView from './views/AccountView.vue';
 import ClientsView from './views/ClientsView.vue';
 import DashboardView from './views/DashboardView.vue';
+import FinanceView from './views/FinanceView.vue';
 import InboxView from './views/InboxView.vue';
 import OrdersView from './views/OrdersView.vue';
 import OrderView from './views/OrderView.vue';
@@ -57,9 +58,14 @@ export const router = createRouter({
       meta: { title: 'Clientes' },
     },
     {
+      path: '/financeiro',
+      component: FinanceView,
+      meta: { requiresFinance: true, title: 'Financeiro' },
+    },
+    {
       path: '/usuarios',
       component: UsersView,
-      meta: { requiresAdmin: true, title: 'Vendedores' },
+      meta: { requiresAdmin: true, title: 'Usuários' },
     },
     { path: '/conta', component: AccountView, meta: { title: 'Conta' } },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' },

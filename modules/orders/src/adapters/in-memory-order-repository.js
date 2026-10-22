@@ -588,6 +588,9 @@ export class InMemoryOrderRepository {
           confirmedBy: order.confirmedBy,
           ficha: clone(order.ficha),
           finalAmountCents: order.finalAmountCents,
+          paidOn: order.paidOn,
+          paymentReviewRequired:
+            order.paymentReviewRequired ?? current.paymentReviewRequired,
           missingFields: [...order.missingFields],
           orderDate: order.orderDate,
           paymentCondition: order.paymentCondition,
@@ -610,6 +613,10 @@ export class InMemoryOrderRepository {
         ...current,
         deliveredOn: order.deliveredOn,
         paidOn: order.paidOn,
+        paymentReviewRequired:
+          options.paymentReviewed === true
+            ? false
+            : current.paymentReviewRequired,
         updatedAt: order.updatedAt,
       }),
     );

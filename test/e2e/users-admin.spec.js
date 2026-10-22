@@ -83,12 +83,12 @@ async function mockUsers(page, options = {}) {
       commands.push({ body, method, path });
       expect(request.headers()['idempotency-key']).toBeTruthy();
       const created = {
-        capabilities: [],
-        canDelete: true,
+        capabilities: body.accessType === 'admin' ? ['COMMERCIAL_ADMIN'] : [],
+        canDelete: body.accessType !== 'admin',
         createdAt: '2026-09-09T12:00:00.000Z',
         disabledAt: null,
         email: body.email,
-        functionName: 'Vendedor',
+        functionName: body.accessType === 'finance' ? 'Financeiro' : 'Vendedor',
         id: 'seller-2',
         name: body.name,
       };
@@ -101,6 +101,12 @@ async function mockUsers(page, options = {}) {
       expect(request.headers()['idempotency-key']).toBeTruthy();
       const target = users.find((user) => path.endsWith(user.id));
       if (target && body.name) target.name = body.name;
+      if (target && body.accessType) {
+        target.functionName =
+          body.accessType === 'finance' ? 'Financeiro' : 'Vendedor';
+        target.capabilities =
+          body.accessType === 'admin' ? ['COMMERCIAL_ADMIN'] : [];
+      }
       return json({ user: target });
     }
     if (path.startsWith('/api/v1/users/') && method === 'DELETE') {
@@ -148,6 +154,59 @@ async function openActions(page, name) {
   await page.getByLabel(`Mais ações para ${name}`).click();
 }
 
+for (const profile of [
+  { value: 'seller', label: 'Vendedor' },
+  { value: 'finance', label: 'Financeiro' },
+  { value: 'admin', label: 'Administrador' },
+]) {
+  test(`creates a user with the ${profile.label} access profile`, async ({
+    page,
+  }) => {
+    const mock = await mockUsers(page);
+    await page.goto('/usuarios');
+    await page.getByLabel('Nome', { exact: true }).fill('Conta de exemplo');
+    await page.getByLabel('E-mail', { exact: true }).fill('conta@example.test');
+    await page
+      .getByLabel('Perfil de acesso', { exact: true })
+      .selectOption(profile.value);
+    await page.getByLabel('Senha', { exact: true }).fill('senha-de-teste');
+    await page
+      .getByRole('button', { name: 'Criar usuário', exact: true })
+      .click();
+    await expect(
+      page.getByRole('row', { name: /Conta de exemplo/u }),
+    ).toContainText(profile.label);
+    expect(mock.commands[0].body.accessType).toBe(profile.value);
+  });
+}
+
+test('edits another access profile while keeping the current administrator profile protected', async ({
+  page,
+}) => {
+  const mock = await mockUsers(page);
+  await page.goto('/usuarios');
+  await openActions(page, 'Marina Duarte');
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog
+    .getByLabel('Perfil de acesso', { exact: true })
+    .selectOption('finance');
+  await dialog
+    .getByRole('button', { name: 'Salvar alterações', exact: true })
+    .click();
+  await expect(page.getByRole('row', { name: /Marina Duarte/u })).toContainText(
+    'Financeiro',
+  );
+  expect(mock.commands[0].body).toMatchObject({ accessType: 'finance' });
+  expect(mock.commands[0].body.name).toBeUndefined();
+  await openActions(page, ADMIN.name);
+  await page.getByRole('button', { name: 'Editar', exact: true }).click();
+  await expect(
+    dialog.getByLabel('Perfil de acesso', { exact: true }),
+  ).toBeDisabled();
+  await expect(dialog.getByLabel('Nome', { exact: true })).toBeEnabled();
+});
+
 test('lists accounts and hands over the created credentials as markdown', async ({
   page,
 }) => {
@@ -155,11 +214,11 @@ test('lists accounts and hands over the created credentials as markdown', async 
   await page.goto('/usuarios');
 
   await expect(
-    page.getByRole('heading', { exact: true, name: 'Vendedores' }),
+    page.getByRole('heading', { exact: true, name: 'Usuários' }),
   ).toBeFocused();
   await expect(
     page
-      .getByLabel('Vendedores do CRM')
+      .getByLabel('Usuários do CRM')
       .getByText('Administrador', { exact: true }),
   ).toBeVisible();
   await expect(page.getByRole('row')).toHaveCount(3);
@@ -170,7 +229,7 @@ test('lists accounts and hands over the created credentials as markdown', async 
   await page.getByLabel('Nome').fill('Helena Nogueira');
   await page.getByLabel('E-mail').fill('helena.nogueira@silmer.com.br');
   await page.getByLabel('Senha', { exact: true }).fill('x');
-  await page.getByRole('button', { name: 'Criar vendedor' }).click();
+  await page.getByRole('button', { name: 'Criar usuário' }).click();
 
   const block = page.locator('.markdown-block');
   await expect(block).toContainText('- Nome: Helena Nogueira');
@@ -378,7 +437,7 @@ test('redirects a non-admin away from the users screen and hides its navigation 
   await page.goto('/usuarios');
 
   await expect(page).toHaveURL(/\/dashboard$/u);
-  await expect(page.getByRole('link', { name: 'Vendedores' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Usuários' })).toHaveCount(0);
   await expect(page.getByText('Vendedor')).toBeVisible();
   await expect(
     page.getByRole('heading', { exact: true, name: 'Dashboard' }),
@@ -391,16 +450,16 @@ test('removes own admin navigation and route after a named SSE role change', asy
   const mock = await mockUsers(page, { revokeSelfOnEvent: true });
   await page.goto('/usuarios');
   await expect(
-    page.getByRole('heading', { exact: true, name: 'Vendedores' }),
+    page.getByRole('heading', { exact: true, name: 'Usuários' }),
   ).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Vendedores' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Usuários' })).toBeVisible();
   expect(mock.sessionReads()).toBe(1);
 
   mock.revokeSelf();
 
   await expect.poll(mock.sessionReads).toBeGreaterThan(1);
   await expect(page).toHaveURL(/\/dashboard$/u);
-  await expect(page.getByRole('link', { name: 'Vendedores' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Usuários' })).toHaveCount(0);
   await expect(
     page.getByRole('heading', { exact: true, name: 'Dashboard' }),
   ).toBeVisible();

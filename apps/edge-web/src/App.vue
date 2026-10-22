@@ -34,6 +34,7 @@ const moreOpen = ref(false);
 const logoutBusy = ref(false);
 let lastAnnouncement = '';
 let sessionRefreshInFlight = false;
+let financeSessionTimer = 0;
 
 const user = computed(() => session.value?.user ?? session.value ?? {});
 const sidebarUserName = computed(() => user.value.name || 'Conta autenticada');
@@ -59,30 +60,65 @@ const pageTitle = computed(() => String(route.meta.title ?? 'CRM'));
 const isAdmin = computed(() =>
   (user.value.capabilities ?? []).includes('COMMERCIAL_ADMIN'),
 );
-const canAccessCurrentRoute = computed(
-  () => route.meta.requiresAdmin !== true || isAdmin.value,
+const isFinance = computed(() => user.value.functionName === 'Financeiro');
+const homePath = computed(() =>
+  isFinance.value ? '/financeiro' : '/dashboard',
 );
+const canAccessCurrentRoute = computed(() => {
+  if (isFinance.value) return ['/financeiro', '/conta'].includes(route.path);
+  if (route.meta.requiresFinance) return isAdmin.value;
+  return route.meta.requiresAdmin !== true || isAdmin.value;
+});
 // One list feeds the sidebar and the mobile menu, so both always offer the
-// same places (Vendedores and Sair included on a phone).
-const navItems = computed(() => [
-  { to: '/dashboard', label: 'Dashboard', short: 'Início', icon: 'dashboard' },
-  { to: '/inbox', label: 'Caixa de Entrada', short: 'Caixa', icon: 'inbox' },
-  { to: '/pedidos', label: 'Pedidos', icon: 'orders', count: storeNewCount },
-  { to: '/clientes', label: 'Clientes', icon: 'clients' },
-  ...(isAdmin.value
-    ? [{ to: '/usuarios', label: 'Vendedores', icon: 'team' }]
-    : []),
-  { to: '/conta', label: 'Conta', icon: 'account' },
-]);
+// same places (Usuários and Sair included on a phone).
+const navItems = computed(() =>
+  isFinance.value
+    ? [
+        { to: '/financeiro', label: 'Financeiro', icon: 'orders' },
+        { to: '/conta', label: 'Minha conta', icon: 'account' },
+      ]
+    : [
+        {
+          to: '/dashboard',
+          label: 'Dashboard',
+          short: 'Início',
+          icon: 'dashboard',
+        },
+        {
+          to: '/inbox',
+          label: 'Caixa de Entrada',
+          short: 'Caixa',
+          icon: 'inbox',
+        },
+        {
+          to: '/pedidos',
+          label: 'Pedidos',
+          icon: 'orders',
+          count: storeNewCount,
+        },
+        { to: '/clientes', label: 'Clientes', icon: 'clients' },
+        ...(isAdmin.value
+          ? [
+              { to: '/financeiro', label: 'Financeiro', icon: 'orders' },
+              { to: '/usuarios', label: 'Usuários', icon: 'team' },
+            ]
+          : []),
+        { to: '/conta', label: 'Conta', icon: 'account' },
+      ],
+);
 
 // Mobile-first: sellers live on the phone. The four daily places sit in a
 // bottom bar under the thumb; the rest opens from "Mais".
 const MOBILE_TABS = new Set(['/dashboard', '/inbox', '/pedidos', '/clientes']);
 const mobileTabs = computed(() =>
-  navItems.value.filter((item) => MOBILE_TABS.has(item.to)),
+  isFinance.value
+    ? navItems.value
+    : navItems.value.filter((item) => MOBILE_TABS.has(item.to)),
 );
 const mobileMore = computed(() =>
-  navItems.value.filter((item) => !MOBILE_TABS.has(item.to)),
+  isFinance.value
+    ? []
+    : navItems.value.filter((item) => !MOBILE_TABS.has(item.to)),
 );
 const moreActive = computed(() =>
   mobileMore.value.some((item) => sectionCurrent(item.to)),
@@ -107,6 +143,7 @@ function sectionCurrent(to) {
     : undefined;
 }
 const connectionLabel = computed(() => {
+  if (isFinance.value) return 'Atualização manual';
   if (connection.value === 'conectado') return 'Atualizado agora';
   if (connection.value === 'reconectando') return 'Reconectando…';
   if (connection.value === 'indisponível')
@@ -114,16 +151,18 @@ const connectionLabel = computed(() => {
   return 'Preparando atualização…';
 });
 const connectionDetail = computed(() =>
-  connection.value === 'conectado'
-    ? 'Atualização automática ativa'
-    : 'Tentando manter os dados atualizados',
+  isFinance.value
+    ? 'Use Atualizar para conferir a fila financeira'
+    : connection.value === 'conectado'
+      ? 'Atualização automática ativa'
+      : 'Tentando manter os dados atualizados',
 );
 
 // One live connection per session: the topic follows the route, because the
 // server caps concurrent SSE streams and a second connection per user would
 // halve how many people can stay online.
 const liveEvent = ref(null);
-const liveTopic = computed(() => 'inbox');
+const liveTopic = computed(() => (isFinance.value ? null : 'inbox'));
 const stream = new LiveEventStream({
   onChange(event) {
     if (
@@ -186,7 +225,12 @@ const storeCountLabel = computed(() =>
 provide('storeNewCount', storeNewCount);
 
 async function refreshStoreCount() {
-  if (phase.value !== 'authenticated' || route.path === '/dashboard') return;
+  if (
+    phase.value !== 'authenticated' ||
+    isFinance.value ||
+    route.path === '/dashboard'
+  )
+    return;
   try {
     const response = await request('/api/v1/orders/summary');
     const count = Number(response.data?.storeNewCount ?? 0);
@@ -211,7 +255,19 @@ watch(liveEvent, (event) => {
 });
 
 watch(liveTopic, (topic) => {
-  if (phase.value === 'authenticated') stream.start(topic);
+  if (phase.value !== 'authenticated') return;
+  if (topic) stream.start(topic);
+  else stream.close();
+});
+
+watch(isFinance, (finance) => {
+  if (financeSessionTimer) globalThis.clearInterval(financeSessionTimer);
+  financeSessionTimer = finance
+    ? globalThis.setInterval(() => {
+        if (globalThis.document.visibilityState === 'visible')
+          void refreshShellSession();
+      }, 30_000)
+    : 0;
 });
 
 watch(
@@ -227,6 +283,7 @@ void restoreSession();
 onBeforeUnmount(() => {
   stream.close();
   if (storeCountTimer) globalThis.clearTimeout(storeCountTimer);
+  if (financeSessionTimer) globalThis.clearInterval(financeSessionTimer);
 });
 
 async function restoreSession() {
@@ -275,25 +332,24 @@ async function showSession(value, announceLogin = true) {
   // LOJ-24: a link opened without a session comes back to its page.
   if (route.path === '/') {
     await router.replace(
-      safeReturnPath(route.query[RETURN_QUERY]) ?? '/dashboard',
+      isFinance.value
+        ? homePath.value
+        : (safeReturnPath(route.query[RETURN_QUERY]) ?? homePath.value),
     );
   }
   await redirectUnauthorizedAdminRoute();
-  stream.start(liveTopic.value);
+  if (liveTopic.value) stream.start(liveTopic.value);
+  else stream.close();
   void refreshStoreCount();
   if (announceLogin) announce('Sessão iniciada com segurança.');
 }
 
 async function redirectUnauthorizedAdminRoute() {
-  if (
-    phase.value !== 'authenticated' ||
-    route.meta.requiresAdmin !== true ||
-    isAdmin.value
-  ) {
+  if (phase.value !== 'authenticated' || canAccessCurrentRoute.value) {
     return;
   }
-  await router.replace('/dashboard');
-  announce('Você não tem acesso à área de vendedores.');
+  await router.replace(homePath.value);
+  announce('Você não tem acesso a essa área.');
 }
 
 /**
@@ -422,8 +478,8 @@ function onCursor(cursor) {
     <aside class="app-sidebar">
       <RouterLink
         class="brand app-brand"
-        to="/dashboard"
-        :aria-label="`${brand.productName}, Dashboard`"
+        :to="homePath"
+        :aria-label="`${brand.productName}, ${isFinance ? 'Financeiro' : 'Dashboard'}`"
       >
         <BrandMark class="brand-logo" />
         <BrandMark class="brand-monogram" variant="monogram" />
@@ -482,8 +538,8 @@ function onCursor(cursor) {
       <header class="app-topbar">
         <RouterLink
           class="topbar-brand"
-          to="/dashboard"
-          :aria-label="`${brand.productName}, Dashboard`"
+          :to="homePath"
+          :aria-label="`${brand.productName}, ${isFinance ? 'Financeiro' : 'Dashboard'}`"
         >
           <BrandMark class="topbar-logo" />
         </RouterLink>
@@ -496,7 +552,7 @@ function onCursor(cursor) {
           <span class="topbar-role">{{ sessionSummary }}</span>
           <span
             class="connection-state"
-            :data-state="connection"
+            :data-state="isFinance ? 'manual' : connection"
             :data-updated-at="lastUpdatedAt"
             :title="connectionDetail"
             :aria-label="`${connectionLabel}. ${connectionDetail}`"
@@ -521,7 +577,11 @@ function onCursor(cursor) {
           />
         </RouterView>
       </main>
-      <nav class="mobile-nav" aria-label="Navegação móvel">
+      <nav
+        class="mobile-nav"
+        :data-finance="isFinance || undefined"
+        aria-label="Navegação móvel"
+      >
         <RouterLink
           v-for="item in mobileTabs"
           :key="item.to"
@@ -549,6 +609,7 @@ function onCursor(cursor) {
           </a>
         </RouterLink>
         <button
+          v-if="mobileMore.length"
           id="more-toggle"
           class="mobile-tab"
           type="button"

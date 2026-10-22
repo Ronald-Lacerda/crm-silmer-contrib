@@ -259,6 +259,77 @@ if (connectionString) {
         `UPDATE crm.users SET disabled_at = NULL WHERE id = $1`,
         [adminId],
       );
+
+      // FINQ-T01: the database preserves the three access choices and rejects
+      // the forbidden Financeiro + administrative capability combination.
+      await transaction((repository) =>
+        repository.createUser({
+          id: 'finance-live',
+          name: 'Financeiro Sintetico',
+          email: 'finance@example.test',
+          functionName: 'Financeiro',
+          capabilities: [],
+          passwordHash: '$argon2id$v=19$synthetic',
+        }),
+      );
+      assert.equal(
+        (await reader.findUserById('finance-live'))?.functionName,
+        'Financeiro',
+      );
+      await assert.rejects(
+        pool.query(
+          `INSERT INTO crm.user_capabilities (user_id, capability, granted_by) VALUES ('finance-live', 'COMMERCIAL_ADMIN', $1)`,
+          [adminId],
+        ),
+        { code: '23514' },
+      );
+      await transaction((repository) =>
+        repository.updateUser('finance-live', {
+          functionName: 'Vendedor',
+          capabilities: ['COMMERCIAL_ADMIN'],
+          capabilityGrantedBy: adminId,
+          revokeSessionsAt: '2026-10-22T12:00:00.000Z',
+        }),
+      );
+      assert.deepEqual(
+        (await reader.findUserById('finance-live'))?.capabilities,
+        ['COMMERCIAL_ADMIN'],
+      );
+      await transaction((repository) =>
+        repository.createSession({
+          tokenHash: hash('1'),
+          userId: 'finance-live',
+          csrfHash: hash('2'),
+          createdAt: '2026-10-22T12:00:00.000Z',
+          lastSeenAt: '2026-10-22T12:00:00.000Z',
+          absoluteExpiresAt: '2026-10-22T23:00:00.000Z',
+          revokedAt: null,
+        }),
+      );
+      const financeAgain = await transaction((repository) =>
+        repository.updateUser('finance-live', {
+          functionName: 'Financeiro',
+          capabilities: [],
+          capabilityGrantedBy: adminId,
+          revokeSessionsAt: '2026-10-22T12:01:00.000Z',
+        }),
+      );
+      assert.equal(financeAgain?.functionName, 'Financeiro');
+      assert.deepEqual(financeAgain?.capabilities, []);
+      assert.equal(
+        (await reader.findSession(hash('1')))?.revokedAt,
+        '2026-10-22T12:01:00.000Z',
+      );
+      assert.equal(
+        await transaction((repository) =>
+          repository.authenticateSession(
+            hash('1'),
+            '2026-10-22T12:02:00.000Z',
+            '2026-10-22T11:32:00.000Z',
+          ),
+        ),
+        null,
+      );
     } finally {
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');

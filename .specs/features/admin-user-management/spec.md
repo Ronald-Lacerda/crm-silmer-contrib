@@ -1,26 +1,27 @@
 # Gestão de Usuários pelo Administrador — Requisitos Rastreáveis
 
-## Emenda planejada — Financeiro (21/10/2026)
+## Emenda — Financeiro e Usuários (22/10/2026)
 
 A [ADR 040](../../../docs/adr/040-financeiro-com-fila-e-check-manual.md) aprova
-[FINQ-01–03](../financeiro/spec.md), sem implementar o perfil nesta entrega.
-Na futura [FINQ-T01](../financeiro/tasks.md), ROLE-01/02/04 e USR-02 passam a
+[FINQ-01–03/17](../financeiro/spec.md).
+Na [FINQ-T01](../financeiro/tasks.md), ROLE-01/02/04 e USR-02 passam a
 admitir Financeiro com autorização própria, sem herdar Vendedor nem conceder
 `COMMERCIAL_ADMIN`. Admin continuará criando e mantendo contas; histórico
 financeiro impedirá exclusão destrutiva. ROLE-03 não muda: somente Vendedor é
 alvo ou participante elegível de handoff. Não reintroduzir Atendimento ou
 capacidades de privacidade aposentadas.
 
-Até essa implementação, as constraints e a política executáveis continuam
-com a função única Vendedor descrita abaixo. O registro desta evolução não
-concede acesso nem cria conta real, e não autoriza redesenhar a gestão de
-usuários: usar o design e os componentes vigentes.
+Usuários substitui Vendedores com seletor Vendedor/Financeiro/Administrador.
+Administrador é Vendedor + COMMERCIAL_ADMIN; mudança de perfil revoga sessões,
+remove capacidade anterior e audita a troca. Autoalteração administrativa é
+bloqueada. Vínculos anteriores permanecem para redistribuição pelo Admin.
+Usar o design e componentes vigentes; nenhuma conta real é criada pelo patch.
 
 Complemento [ADR 041](../../../docs/adr/041-consulta-administrativa-do-financeiro.md):
 [FINQ-16](../financeiro/spec.md) permite ao Admin ativo consultar Financeiro
 com menu completo e login atual, sem trocar perfil ou ganhar comandos de
 conclusão/reversão. FINQ-12 rejeita o print como referência visual e exige
-os padrões reais do CRM. Implementação e testes continuam nas tarefas abertas.
+os padrões reais do CRM. Complemento na ADR 042 e evidências em FINQ-T01/T05.
 
 ## Problema
 
@@ -31,7 +32,7 @@ O que a operação precisa é direto: um administrador criado fora da aplicaçã
 ## Objetivos
 
 - Substituir o convite por criação direta de conta pelo administrador.
-- Reduzir o modelo de papéis a dois: administrador (`COMMERCIAL_ADMIN`) e vendedor (`Vendedor`).
+- Oferecer três perfis: vendedor (`Vendedor`), Financeiro (`Financeiro`) e administrador (`Vendedor` + `COMMERCIAL_ADMIN`), com autorização própria por ação.
 - Dar ao administrador visão geral e edição de todas as contas, a qualquer momento.
 - Permitir exclusão permanente apenas de vendedores sem histórico operacional;
   contas com histórico permanecem disponíveis para desativação.
@@ -46,16 +47,16 @@ Registrados explicitamente para não voltarem como suposição durante a impleme
 - Revogação de sessões ao trocar a senha — ver **USR-10**.
 - Convite ou auto-cadastro em qualquer forma.
 
-## P1.0 Papel único de operação
+## P1.0 Função comercial e função Financeiro
 
-**User story:** Como operação, quero que exista uma única função operacional para que autorização, handoff e fila de trabalho não dependam de uma distinção que a Silmer não pratica.
+**User story:** Como operação, quero separar o acesso comercial da rotina do Financeiro, mantendo o handoff exclusivo de Vendedor e a administração como capacidade própria.
 
 **Critérios de aceite:**
 
-1. **ROLE-01:** WHEN um usuário humano é criado por qualquer caminho THEN o sistema SHALL atribuir a função `Vendedor`, única função operacional aceita.
-2. **ROLE-02:** WHEN uma linha de `crm.user_functions` é gravada com função diferente de `Vendedor` THEN o banco SHALL rejeitar a escrita por constraint.
+1. **ROLE-01:** WHEN um usuário humano é criado THEN o sistema SHALL atribuir `Vendedor` ou `Financeiro` conforme perfil; omissão mantém Vendedor por compatibilidade. Administrador é Vendedor + COMMERCIAL_ADMIN (FINQ-17).
+2. **ROLE-02:** WHEN uma linha de `crm.user_functions` é gravada com função diferente de `Vendedor` ou `Financeiro` THEN o banco SHALL rejeitar a escrita; Financeiro + COMMERCIAL_ADMIN também é rejeitado.
 3. **ROLE-03:** WHEN um handoff é criado pelo n8n ou por uma pessoa THEN seu `target_role` SHALL ser `Vendedor`, e `crm.handoffs` e `crm.handoff_history` SHALL rejeitar qualquer outro valor.
-4. **ROLE-04:** WHEN a autorização operacional avalia um ator humano THEN ela SHALL exigir `functionName === 'Vendedor'`, sem aceitar `Atendimento`.
+4. **ROLE-04:** WHEN a autorização comercial avalia um ator humano THEN ela SHALL exigir `functionName === 'Vendedor'`; Financeiro recebe somente ações financeiras próprias. Admin só consulta Financeiro (FINQ-16).
 5. **ROLE-05:** WHEN o mapa de capacidades é consultado THEN ele SHALL conter somente `COMMERCIAL_ADMIN`; `PRIVACY_OFFICER`, `TECHNICAL_PRIVACY_EXECUTOR` e as ações `privacy.legal-hold.authorize` e `privacy.retention.execute` SHALL ter sido removidos do domínio, do schema e do contrato.
 
 **Teste independente:** aplicar as migrations em um banco com dados de `Atendimento` e capacidades de privacidade, confirmar que as linhas existentes migraram para `Vendedor`, que as capacidades de privacidade sumiram e que uma tentativa de gravar `Atendimento` é rejeitada pelo banco.
@@ -80,7 +81,7 @@ Registrados explicitamente para não voltarem como suposição durante a impleme
 **Critérios de aceite:**
 
 1. **USR-01:** WHEN um administrador abre a tela de usuários THEN o sistema SHALL listar todas as contas com nome, e-mail, tipo de acesso, situação e data de criação, incluindo as desativadas.
-2. **USR-02:** WHEN um administrador submete nome, e-mail e senha THEN o sistema SHALL criar uma conta com função `Vendedor` e sem capacidades.
+2. **USR-02:** WHEN um administrador submete nome, e-mail, senha e perfil THEN o sistema SHALL criar a conta Vendedor, Financeiro ou Administrador, conforme FINQ-17; omissão mantém Vendedor sem capacidades.
 3. **USR-03:** WHEN a conta é criada THEN a interface SHALL apresentar um bloco markdown com nome, e-mail, senha e endereço de acesso, montado no cliente a partir dos dados digitados, e a senha em claro SHALL NOT constar do corpo de nenhuma resposta da API.
 4. **USR-04:** WHEN um administrador edita uma conta THEN ele SHALL poder alterar nome, e-mail e senha isoladamente ou em conjunto, a qualquer momento, e um campo de senha vazio SHALL manter a senha atual.
 5. **USR-05:** WHEN uma senha é definida ou alterada THEN o sistema SHALL aceitar qualquer valor não vazio, sem regra de comprimento mínimo, complexidade ou histórico.

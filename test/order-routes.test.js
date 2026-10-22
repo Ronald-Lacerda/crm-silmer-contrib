@@ -54,6 +54,7 @@ const ORDER_KEYS = [
   'origin',
   'paidOn',
   'paymentCondition',
+  'paymentReviewRequired',
   'reopenedAt',
   'reopenedBy',
   'seller',

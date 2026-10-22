@@ -236,6 +236,7 @@ export function createOrderRuntime(options) {
       orderDate: order.orderDate,
       origin: order.origin ?? 'atendimento',
       paidOn: order.paidOn,
+      paymentReviewRequired: order.paymentReviewRequired ?? false,
       paymentCondition: order.paymentCondition,
       reopenedAt: order.reopenedAt,
       reopenedBy: person(order.reopenedBy),
@@ -461,7 +462,7 @@ export function createOrderRuntime(options) {
       );
     },
 
-    /** @param {OrderCommand & {orderId: string, paidOn: unknown, deliveredOn?: unknown, expectedVersion: number}} input */
+    /** @param {OrderCommand & {orderId: string, paidOn: unknown, deliveredOn?: unknown, paymentReviewed?:boolean, expectedVersion: number}} input */
     async recordMilestones(input) {
       return run(
         input,
@@ -472,6 +473,7 @@ export function createOrderRuntime(options) {
               ? { deliveredOn: input.deliveredOn }
               : {}),
             paidOn: input.paidOn,
+            paymentReviewed: input.paymentReviewed === true,
           },
           expectedVersion: input.expectedVersion,
           target: { id: input.orderId, type: 'order' },

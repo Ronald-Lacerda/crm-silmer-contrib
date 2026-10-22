@@ -825,7 +825,7 @@ export function createOrderService(options) {
      * when the order was delivered, in either status; both days travel in one
      * write and null clears one.
      *
-     * @param {{orderId: string, paidOn: unknown, deliveredOn?: unknown, expectedVersion: number, actor: OrderActor, correlationId: string}} input
+     * @param {{orderId: string, paidOn: unknown, deliveredOn?: unknown, paymentReviewed?:boolean, expectedVersion: number, actor: OrderActor, correlationId: string}} input
      */
     async recordMilestones(input) {
       const order = await loadForCommand(input);
@@ -841,6 +841,7 @@ export function createOrderService(options) {
             paidOn: input.paidOn,
           }),
           {
+            paymentReviewed: input.paymentReviewed === true,
             actor: input.actor,
             correlationId: input.correlationId,
             expectedVersion: order.version,

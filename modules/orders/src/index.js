@@ -1,4 +1,10 @@
 // Orders module (ADR 006): the Pedido aggregate, its ficha and persistence.
+export {
+  FinanceError,
+  financeQuery,
+  financeVersions,
+} from './domain/finance.js';
+export { PostgresFinanceRepository } from './adapters/postgres-finance-repository.js';
 export { InMemoryOrderRepository } from './adapters/in-memory-order-repository.js';
 export { PostgresOrderConversationPort } from './adapters/postgres-order-conversation-port.js';
 export { PostgresOrderRepository } from './adapters/postgres-order-repository.js';

@@ -4,10 +4,12 @@ import { AccessControlError } from './authorization.js';
 
 /**
  * @typedef {'COMMERCIAL_ADMIN'} IdentityCapability
- * @typedef {'Vendedor'} OperationalFunction
+ * @typedef {'Vendedor'|'Financeiro'} OperationalFunction
+ * @typedef {'seller'|'finance'|'admin'} AccessType
  * @typedef {{ memory: number, parallelism: number, passes: number, tagLength?: number }} PasswordParameters
  * @typedef {{
  *   capabilities: IdentityCapability[],
+ *   capabilityGrantedBy?: string,
  *   canDelete?: boolean,
  *   createdAt?: string | null,
  *   disabledAt?: string | null,
@@ -19,8 +21,12 @@ import { AccessControlError } from './authorization.js';
  * }} IdentityUser
  * @typedef {{
  *   email?: string,
+ *   capabilities?: IdentityCapability[],
+ *   functionName?: OperationalFunction,
+ *   capabilityGrantedBy?: string,
  *   name?: string,
  *   passwordHash?: string,
+ *   revokeSessionsAt?: string,
  * }} IdentityUserPatch
  * @typedef {{
  *   absoluteExpiresAt: string,
@@ -78,6 +84,17 @@ const UNKNOWN_USER_PASSWORD_HASH =
 const FUNCTIONS = new Set(['Vendedor']);
 /** @type {OperationalFunction} */
 const DEFAULT_FUNCTION = 'Vendedor';
+
+/** @param {unknown} value @returns {{functionName: OperationalFunction, capabilities: IdentityCapability[]}} */
+function accessProfile(value) {
+  if (!['seller', 'finance', 'admin'].includes(/** @type {string} */ (value))) {
+    throw new AccessControlError(400, 'INVALID_REQUEST', 'Unknown access type');
+  }
+  return {
+    functionName: value === 'finance' ? 'Financeiro' : 'Vendedor',
+    capabilities: value === 'admin' ? ['COMMERCIAL_ADMIN'] : [],
+  };
+}
 
 /** @param {string | Uint8Array} value */
 function digest(value) {
@@ -298,6 +315,16 @@ export function createInMemoryIdentityRepository() {
         user.email = patch.email;
       }
       if (patch.name !== undefined) user.name = patch.name;
+      if (patch.functionName !== undefined)
+        user.functionName = patch.functionName;
+      if (patch.capabilities !== undefined)
+        user.capabilities = [...patch.capabilities];
+      if (patch.revokeSessionsAt !== undefined) {
+        for (const session of sessions.values()) {
+          if (session.userId === id && session.revokedAt === null)
+            session.revokedAt = patch.revokeSessionsAt;
+        }
+      }
       if (patch.passwordHash !== undefined) {
         user.passwordHash = patch.passwordHash;
       }
@@ -402,7 +429,12 @@ export function createIdentityAccessService({
   async function requireAdmin(actorId) {
     requireNonEmptyString(actorId, 'actorId');
     const actor = await repository.findUserById(actorId);
-    if (!actor?.capabilities.includes('COMMERCIAL_ADMIN')) {
+    if (
+      !actor ||
+      actor.disabledAt ||
+      actor.functionName !== 'Vendedor' ||
+      !actor.capabilities.includes('COMMERCIAL_ADMIN')
+    ) {
       throw new AccessControlError(
         403,
         'FORBIDDEN',
@@ -418,6 +450,7 @@ export function createIdentityAccessService({
   }
 
   /** @param {{
+   *   accessType?: AccessType,
    *   actorId: string,
    *   correlationId: string,
    *   email: string,
@@ -431,12 +464,14 @@ export function createIdentityAccessService({
     requireNonEmptyString(input.reason, 'reason');
     requireNonEmptyString(input.correlationId, 'correlationId');
     const actor = await requireAdmin(input.actorId);
+    const profile = accessProfile(input.accessType ?? 'seller');
     const passwordHash = await hashPassword(input.password, passwordParameters);
     /** @type {IdentityUser} */
     const user = {
-      capabilities: [],
+      capabilities: profile.capabilities,
+      capabilityGrantedBy: actor.id,
       email: input.email,
-      functionName: DEFAULT_FUNCTION,
+      functionName: profile.functionName,
       id: idFactory('user'),
       name: input.name.trim(),
       passwordHash,
@@ -454,6 +489,16 @@ export function createIdentityAccessService({
       target: { id: user.id, type: 'user' },
       version: 1,
     });
+    if (input.accessType !== undefined) {
+      await record({
+        action: 'identity.user.access.assigned',
+        actor: actor.id,
+        correlationId: input.correlationId,
+        reason: input.reason,
+        target: { id: user.id, type: 'user' },
+        version: input.accessType,
+      });
+    }
     return Object.freeze({ user: freezeUser(user) });
   }
 
@@ -548,6 +593,7 @@ export function createIdentityAccessService({
    *   actorId: string,
    *   correlationId: string,
    *   email?: string,
+   *   accessType?: AccessType,
    *   name?: string,
    *   password?: string,
    *   reason: string,
@@ -560,6 +606,29 @@ export function createIdentityAccessService({
     const actor = await requireAdmin(input.actorId);
     /** @type {IdentityUserPatch} */
     const patch = {};
+    let profileChanged = false;
+    if (input.accessType !== undefined) {
+      const target = await repository.findUserById(input.targetId);
+      if (!target) throw userNotFound(input.targetId);
+      const profile = accessProfile(input.accessType);
+      profileChanged =
+        target.functionName !== profile.functionName ||
+        target.capabilities.includes('COMMERCIAL_ADMIN') !==
+          profile.capabilities.includes('COMMERCIAL_ADMIN');
+      if (profileChanged && actor.id === target.id) {
+        throw new AccessControlError(
+          403,
+          'FORBIDDEN',
+          'An administrator cannot change their own access type',
+        );
+      }
+      if (profileChanged) {
+        patch.functionName = profile.functionName;
+        patch.capabilities = profile.capabilities;
+        patch.capabilityGrantedBy = actor.id;
+        patch.revokeSessionsAt = clock().toISOString();
+      }
+    }
     if (input.email !== undefined) {
       requireNonEmptyString(input.email, 'email');
       patch.email = input.email;
@@ -574,7 +643,7 @@ export function createIdentityAccessService({
         passwordParameters,
       );
     }
-    if (Object.keys(patch).length === 0) {
+    if (Object.keys(patch).length === 0 && input.accessType === undefined) {
       throw new Error('Update requires at least one field');
     }
     let updated;
@@ -584,6 +653,16 @@ export function createIdentityAccessService({
       throw asDuplicateEmail(error);
     }
     if (!updated) throw userNotFound(input.targetId);
+    if (profileChanged) {
+      await record({
+        action: 'identity.user.access.changed',
+        actor: actor.id,
+        correlationId: input.correlationId,
+        reason: input.reason,
+        target: { id: updated.id, type: 'user' },
+        version: /** @type {AccessType} */ (input.accessType),
+      });
+    }
     await record({
       action: 'identity.user.updated',
       actor: actor.id,
@@ -747,6 +826,7 @@ export {
   AUTOMATION_ORDER_ACTIONS,
   AUTOMATION_STORE_ACTIONS,
   CAPABILITIES,
+  FINANCE_ACTIONS,
   OPERATIONAL_ACTIONS,
   authorize,
   createAccessControlService,

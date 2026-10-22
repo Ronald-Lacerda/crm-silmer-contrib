@@ -427,7 +427,8 @@ test('keeps Pedidos in the menu after Caixa de Entrada, active across its pages'
     'Caixa de Entrada',
     'Pedidos',
     'Clientes',
-    'Vendedores',
+    'Financeiro',
+    'Usuários',
     'Conta',
   ]);
   await expect(sidebar.getByRole('link', { name: 'Pedidos' })).toHaveAttribute(
@@ -450,7 +451,11 @@ test('keeps Pedidos in the menu after Caixa de Entrada, active across its pages'
   await expect(more).toHaveAttribute('aria-expanded', 'false');
   await more.click();
   const sheet = page.getByRole('region', { name: 'Mais opções' });
-  await expect(sheet.getByRole('link')).toHaveText(['Vendedores', 'Conta']);
+  await expect(sheet.getByRole('link')).toHaveText([
+    'Financeiro',
+    'Usuários',
+    'Conta',
+  ]);
   await expect(sheet.getByRole('button', { name: 'Sair' })).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Escuro' })).toBeVisible();
   await page.keyboard.press('Escape');

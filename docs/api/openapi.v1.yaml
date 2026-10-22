@@ -52,7 +52,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: createUser
-      summary: Cria uma conta de Vendedor por Admin autenticado
+      summary: Cria uma conta com perfil Vendedor, Financeiro ou Administrador
       description: >-
         A senha em claro nunca retorna no corpo da resposta; o bloco de
         entrega é montado no cliente a partir do que foi digitado.
@@ -124,10 +124,12 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
     patch:
       operationId: updateUser
-      summary: Altera nome, e-mail ou senha de uma conta
+      summary: Altera nome, e-mail, senha ou perfil de uma conta
       description: >-
         Todo campo é opcional e pelo menos um deve vir. Um campo ausente
         permanece inalterado. Trocar a senha não revoga sessões abertas.
+        Trocar accessType remove capacidades anteriores e revoga sessões.
+        Admin não pode trocar seu próprio perfil; histórico é preservado.
       security:
         - sessionCookie: []
           csrfHeader: []
@@ -1922,6 +1924,114 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/OrderNotFound' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /finance/orders:
+    get:
+      operationId: listFinanceOrders
+      summary: Lista confirmados integralmente pagos e não teste (FINQ-04–06)
+      description: >-
+        Financeiro ou Admin ativo. Legados manuais não revisados ficam fora.
+        Aguardando ordena paidOn ascendente; concluídos completedAt descendente,
+        com número e id como desempate. Contagens usam o mesmo universo.
+        Respostas privadas no-store; nenhuma conversa, arte ou dado fiscal.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/HumanReadOrigin'
+        - in: query
+          name: status
+          schema: { type: string, enum: [waiting, completed], default: waiting }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - in: query
+          name: cursor
+          schema: { type: string, maxLength: 1024 }
+      responses:
+        '200':
+          description: Página da fila financeira
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FinancePage' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /finance/orders/{orderId}:
+    get:
+      operationId: getFinanceOrder
+      summary: Consulta mínima e histórico financeiro de pedido elegível
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/HumanReadOrigin'
+      responses:
+        '200':
+          description: Consulta; canManage false para Admin
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FinanceResponse' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /finance/orders/{orderId}/complete:
+    post:
+      operationId: completeFinanceOrder
+      summary: Declara rotina concluída (Nota criada); exclusivo Financeiro
+      description: >-
+        Não comprova autorização Sefaz. Revalida ator, elegibilidade e versões
+        sob lock; estado, histórico, auditoria e idempotência na mesma transação.
+        Limite 30 comandos/minuto. Admin não recebe esta ação.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FinanceCommand' }
+      responses:
+        '200':
+          description: Conclusão ou replay do mesmo comando
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FinanceResponse' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { description: Limite de comandos excedido }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /finance/orders/{orderId}/reopen:
+    post:
+      operationId: reopenFinanceOrder
+      summary: Desfaz check preservando histórico; exclusivo Financeiro
+      description: >-
+        Usa as mesmas garantias transacionais de complete. Não reabre o
+        pedido comercial. Conflito ou resposta incerta exige releitura.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FinanceCommand' }
+      responses:
+        '200':
+          description: Correção ou replay do mesmo comando
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FinanceResponse' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { description: Limite de comandos excedido }
+        '503': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
     automationBasic:
@@ -2023,6 +2133,112 @@ components:
       required: true
       schema: { type: string, minLength: 1, maxLength: 128 }
   schemas:
+    FinanceCommand:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, expectedFinanceVersion]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        expectedFinanceVersion: { type: integer, minimum: 0 }
+    FinancePage:
+      type: object
+      additionalProperties: false
+      required: [items, counts, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            allOf: [{ $ref: '#/components/schemas/FinanceOrder' }]
+            unevaluatedProperties: false
+        counts:
+          type: object
+          additionalProperties: false
+          required: [waiting, completed]
+          properties:
+            waiting: { type: integer, minimum: 0 }
+            completed: { type: integer, minimum: 0 }
+        nextCursor: { type: [string, 'null'] }
+    FinanceOrder:
+      type: object
+      required:
+        [
+          id,
+          number,
+          clientName,
+          origin,
+          isManual,
+          ownerName,
+          totalPieces,
+          finalAmountCents,
+          paidOn,
+          deliveryOn,
+          version,
+          financeVersion,
+          completedAt,
+          completedByName,
+        ]
+      properties:
+        id: { type: string }
+        number: { type: string }
+        clientName: { type: string }
+        origin: { $ref: '#/components/schemas/OrderOrigin' }
+        isManual: { type: boolean }
+        ownerName: { type: string }
+        totalPieces: { type: integer, minimum: 1 }
+        finalAmountCents: { type: integer, minimum: 1 }
+        paidOn: { type: string, format: date }
+        deliveryOn: { type: [string, 'null'], format: date }
+        version: { type: integer, minimum: 1 }
+        financeVersion: { type: integer, minimum: 0 }
+        completedAt: { type: [string, 'null'], format: date-time }
+        completedByName: { type: [string, 'null'] }
+    FinanceResponse:
+      type: object
+      additionalProperties: false
+      required: [order]
+      properties:
+        order:
+          unevaluatedProperties: false
+          allOf:
+            - $ref: '#/components/schemas/FinanceOrder'
+            - type: object
+              required: [canManage, items, history]
+              properties:
+                canManage: { type: boolean }
+                items:
+                  type: array
+                  items: { $ref: '#/components/schemas/FinanceItem' }
+                history:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [id, action, actorName, occurredAt, reason]
+                    properties:
+                      id: { type: string }
+                      action:
+                        {
+                          type: string,
+                          enum: [completed, reopened, invalidated],
+                        }
+                      actorName: { type: string }
+                      occurredAt: { type: string, format: date-time }
+                      reason: { type: string }
+    FinanceItem:
+      type: object
+      additionalProperties: false
+      properties:
+        tipo: { type: string }
+        cor: { type: string }
+        grade:
+          type: array
+          items: { $ref: '#/components/schemas/FichaGradeLine' }
+        malhas:
+          type: array
+          items: { type: string }
+        tipo_servico: { type: string }
+        gola: { type: string }
+        publico: { type: string }
     N8nMode:
       type: string
       enum: [ai_active, handoff_pending, human_active, closed]
@@ -2952,7 +3168,7 @@ components:
         id: { type: string }
         name: { type: string, minLength: 1, maxLength: 120 }
         email: { type: string, format: email }
-        functionName: { type: string, enum: [Vendedor] }
+        functionName: { type: string, enum: [Vendedor, Financeiro] }
         createdAt: { type: [string, 'null'], format: date-time }
         disabledAt: { type: [string, 'null'], format: date-time }
         capabilities:
@@ -3002,6 +3218,11 @@ components:
         name: { type: string, minLength: 1, maxLength: 120 }
         password: { type: string, minLength: 1 }
         reason: { type: string, minLength: 1 }
+        accessType:
+          type: string
+          enum: [seller, finance, admin]
+          default: seller
+          description: Admin é Vendedor + COMMERCIAL_ADMIN; Financeiro sem capacidade.
     UpdateUserRequest:
       type: object
       additionalProperties: false
@@ -3012,6 +3233,7 @@ components:
         name: { type: string, minLength: 1, maxLength: 120 }
         password: { type: string, minLength: 1 }
         reason: { type: string, minLength: 1 }
+        accessType: { type: string, enum: [seller, finance, admin] }
     CapabilityRequest:
       type: object
       additionalProperties: false
@@ -3674,8 +3896,11 @@ components:
           type: [string, 'null']
           format: date
           description: >-
-            Dia do pagamento, informado por uma pessoa; no pedido da loja, o
+            Dia de recebimento integral, informado por uma pessoa; no pedido da loja, o
             dia (São Paulo) em que a InfinitePay confirmou o Pix.
+        paymentReviewRequired:
+          type: boolean
+          description: Data manual legada fora do Financeiro até declaração explícita de quitação integral.
         deliveredOn:
           type: [string, 'null']
           format: date
@@ -3993,6 +4218,9 @@ components:
           minimum: 1
           description: Versão atual do pedido.
         paidOn: { type: [string, 'null'], format: date }
+        paymentReviewed:
+          type: boolean
+          description: Declaração explícita de quitação integral que libera data manual legada, mesmo se inalterada.
         deliveredOn:
           type: [string, 'null']
           format: date

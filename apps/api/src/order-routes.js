@@ -436,7 +436,18 @@ export function registerOrderRoutes(
       const params = requireObject(request.params);
       const orderId = requireIdentifier(params.orderId, 'ORDER_ID');
       const body = requireObject(request.body);
-      rejectUnknownKeys(body, ['deliveredOn', 'expectedVersion', 'paidOn']);
+      rejectUnknownKeys(body, [
+        'deliveredOn',
+        'expectedVersion',
+        'paidOn',
+        'paymentReviewed',
+      ]);
+      if (
+        Object.hasOwn(body, 'paymentReviewed') &&
+        typeof body.paymentReviewed !== 'boolean'
+      ) {
+        throw new OrderRequestError(400, 'INVALID_REQUEST');
+      }
       const expectedVersion = requireVersion(body.expectedVersion);
       // A malformed or future day is not malformed JSON: the service answers
       // 422 INVALID_DATE naming the field.
@@ -471,6 +482,7 @@ export function registerOrderRoutes(
         expectedVersion,
         orderId,
         paidOn: body.paidOn,
+        paymentReviewed: body.paymentReviewed === true,
       });
       return reply.code(200).send({ order });
     }),

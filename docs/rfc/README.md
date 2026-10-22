@@ -66,6 +66,9 @@ entre os documentos.
 ## Decisão de 21/10/2026
 
 - [027 — Datas e afazeres do Pedido manual](027-datas-e-afazeres-do-pedido-manual.md), decidida na ADR 039.
+- [028 — Financeiro com fila e check manual](028-financeiro-com-fila-e-check-manual.md), decidida na ADR 040.
+- [029 — Consulta administrativa do Financeiro](029-consulta-administrativa-do-financeiro.md), decidida na ADR 041.
+- [030 — Perfis e nova quitação no Financeiro](030-perfis-e-requitacao-do-financeiro.md), decidida na ADR 042.
 
 ## Proposta de 14/10/2026
 

@@ -8,6 +8,8 @@ import {
   createPostgresAuthenticationThrottle,
   createPostgresIdentityRepository,
   OPERATIONAL_ACTIONS,
+  FINANCE_ACTIONS,
+  authorize,
 } from '@crm-silmer/identity-access';
 import {
   fingerprintCommand,
@@ -46,6 +48,7 @@ class IdentityHttpError extends Error {
 const OPERATIONAL_READ_ACTIONS = new Set([
   ...[...OPERATIONAL_ACTIONS].filter((action) => action.endsWith('.read')),
   'order.print',
+  'finance.read',
 ]);
 
 /**
@@ -128,9 +131,16 @@ export function createIdentityApiRuntime(database, environment = process.env) {
 
   /** @param {{sessionToken: string, csrfToken: string}} input */
   function preflight(input) {
-    return database.transaction((client) =>
-      authenticatedSession(client, input),
-    );
+    return database.transaction(async (client) => {
+      const session = await authenticatedSession(client, input);
+      const user = await createPostgresIdentityRepository(client).findUserById(
+        session.userId,
+      );
+      if (!user || user.disabledAt)
+        throw new IdentityHttpError(403, 'FORBIDDEN');
+      authorize(user, 'user.manage');
+      return session;
+    });
   }
 
   /**
@@ -191,6 +201,11 @@ export function createIdentityApiRuntime(database, environment = process.env) {
         target: metadata.target,
       },
       async (client, actorId) => {
+        // Profile and capability changes share one order, preventing concurrent
+        // grants/demotions from acting on a stale administrator or target.
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended('identity-administration', 0))",
+        );
         const session = await authenticatedSession(client, metadata);
         if (session.userId !== actorId) {
           throw new IdentityHttpError(403, 'FORBIDDEN');
@@ -217,7 +232,10 @@ export function createIdentityApiRuntime(database, environment = process.env) {
 
     /** @param {{action: string, csrfToken: string, sessionToken: string}} input */
     async authorizeOperational(input) {
-      if (!OPERATIONAL_ACTIONS.has(input.action)) {
+      if (
+        !OPERATIONAL_ACTIONS.has(input.action) &&
+        !FINANCE_ACTIONS.has(input.action)
+      ) {
         throw new IdentityHttpError(403, 'FORBIDDEN');
       }
       return database.transaction(async (client) => {
@@ -225,9 +243,10 @@ export function createIdentityApiRuntime(database, environment = process.env) {
         const user = await createPostgresIdentityRepository(
           client,
         ).findUserById(session.userId);
-        if (!user || user.functionName !== 'Vendedor') {
+        if (!user || user.disabledAt) {
           throw new IdentityHttpError(403, 'FORBIDDEN');
         }
+        authorize(user, input.action);
         return {
           actor: {
             capabilities: [...(user.capabilities ?? [])],
@@ -257,14 +276,17 @@ export function createIdentityApiRuntime(database, environment = process.env) {
         }
         const repository = createPostgresIdentityRepository(client);
         const actor = await repository.findUserById(session.userId);
-        if (!actor || actor.functionName !== 'Vendedor') {
+        if (!actor || actor.disabledAt || actor.functionName !== 'Vendedor') {
           throw new IdentityHttpError(403, 'FORBIDDEN');
         }
         const rows = await repository.listUsers();
         return Object.freeze({
           users: Object.freeze(
             rows
-              .filter((/** @type {any} */ row) => !row.disabledAt)
+              .filter(
+                (/** @type {any} */ row) =>
+                  !row.disabledAt && row.functionName === 'Vendedor',
+              )
               .map((/** @type {any} */ row) =>
                 Object.freeze({
                   id: row.id,
@@ -304,10 +326,11 @@ export function createIdentityApiRuntime(database, environment = process.env) {
         if (
           !activeUser ||
           activeUser.id !== session.userId ||
-          activeUser.functionName !== 'Vendedor'
+          activeUser.disabledAt
         ) {
           throw new IdentityHttpError(403, 'FORBIDDEN');
         }
+        authorize(activeUser, input.action);
         return {
           actor: {
             capabilities: [...(activeUser.capabilities ?? [])],
@@ -354,6 +377,9 @@ export function createIdentityApiRuntime(database, environment = process.env) {
           target: { id: input.targetId, type: 'user' },
         },
         async (client, actorId) => {
+          await client.query(
+            "SELECT pg_advisory_xact_lock(hashtextextended('identity-administration', 0))",
+          );
           const session = await authenticatedSession(client, input);
           if (session.userId !== actorId) {
             throw new IdentityHttpError(403, 'FORBIDDEN');
@@ -383,12 +409,18 @@ export function createIdentityApiRuntime(database, environment = process.env) {
       );
     },
 
-    /** @param {{correlationId: string, csrfToken: string, email: string, idempotencyKey: string, name: string, password: string, reason: string, sessionToken: string}} input */
+    /** @param {{accessType?: 'seller'|'finance'|'admin', correlationId: string, csrfToken: string, email: string, idempotencyKey: string, name: string, password: string, reason: string, sessionToken: string}} input */
     async createUser(input) {
       return adminMutation(
         {
           action: 'identity.user.create',
-          command: { email: input.email, name: input.name },
+          command: {
+            email: input.email,
+            name: input.name,
+            ...(input.accessType === undefined
+              ? {}
+              : { accessType: input.accessType }),
+          },
           correlationId: input.correlationId,
           csrfToken: input.csrfToken,
           idempotencyKey: input.idempotencyKey,
@@ -401,6 +433,7 @@ export function createIdentityApiRuntime(database, environment = process.env) {
         },
         (service, actorId) =>
           service.createOperationalUser({
+            accessType: input.accessType,
             actorId,
             correlationId: input.correlationId,
             email: input.email,
@@ -539,7 +572,7 @@ export function createIdentityApiRuntime(database, environment = process.env) {
       );
     },
 
-    /** @param {{correlationId: string, csrfToken: string, email?: string, idempotencyKey: string, name?: string, password?: string, reason: string, sessionToken: string, targetId: string}} input */
+    /** @param {{accessType?: 'seller'|'finance'|'admin', correlationId: string, csrfToken: string, email?: string, idempotencyKey: string, name?: string, password?: string, reason: string, sessionToken: string, targetId: string}} input */
     async updateUser(input) {
       return adminMutation(
         {
@@ -548,6 +581,9 @@ export function createIdentityApiRuntime(database, environment = process.env) {
           // values, and a patch that leaves a field untouched must not be
           // confused with one that sets it.
           command: {
+            ...(input.accessType === undefined
+              ? {}
+              : { accessType: input.accessType }),
             ...(input.email === undefined ? {} : { email: input.email }),
             ...(input.name === undefined ? {} : { name: input.name }),
             passwordChanged: input.password !== undefined,
@@ -562,6 +598,7 @@ export function createIdentityApiRuntime(database, environment = process.env) {
         },
         (service, actorId) =>
           service.updateUser({
+            accessType: input.accessType,
             actorId,
             correlationId: input.correlationId,
             email: input.email,

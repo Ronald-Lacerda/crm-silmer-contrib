@@ -14,6 +14,7 @@ const props = defineProps({
 const editing = inject('orderEditing');
 const firstField = ref(null);
 const draft = ref({ deliveredOn: '', paidOn: '' });
+const paymentReviewed = ref(false);
 /** @type {import('vue').Ref<Record<string, string>>} */
 const fieldErrors = ref({});
 const saving = ref(false);
@@ -39,6 +40,7 @@ const recordedCount = computed(
 );
 
 async function startEditing() {
+  paymentReviewed.value = false;
   draft.value = {
     deliveredOn: props.order.deliveredOn ?? '',
     paidOn: props.order.paidOn ?? '',
@@ -71,6 +73,12 @@ async function save() {
       errors[field] = FUTURE_DAY_MESSAGE;
     }
   }
+  if (
+    props.order.paymentReviewRequired &&
+    paymentReviewed.value &&
+    !draft.value.paidOn
+  )
+    errors.paidOn = 'Informe a data em que o valor integral foi recebido.';
   fieldErrors.value = errors;
   if (Object.keys(errors).length > 0) return;
 
@@ -78,6 +86,9 @@ async function save() {
   const result = await editing.saveMilestones({
     ...(isManual.value ? {} : { deliveredOn: draft.value.deliveredOn || null }),
     paidOn: draft.value.paidOn || null,
+    ...(props.order.paymentReviewRequired && paymentReviewed.value
+      ? { paymentReviewed: true }
+      : {}),
   });
   saving.value = false;
   if (result.ok) {
@@ -156,8 +167,20 @@ async function save() {
             {{ fieldErrors.paidOn }}
           </p>
           <p v-else id="milestone-paid-hint" class="op-hint">
-            O dia em que o pagamento entrou.
+            O dia em que o valor integral do pagamento entrou.
           </p>
+          <p v-if="order.paymentReviewRequired" class="op-hint">
+            Confirme o recebimento integral e salve a data de pagamento para
+            liberar no Financeiro.
+          </p>
+          <label v-if="order.paymentReviewRequired" class="op-check">
+            <input
+              v-model="paymentReviewed"
+              type="checkbox"
+              :disabled="saving"
+            />
+            <span>Confirmo que o valor integral foi recebido</span>
+          </label>
         </div>
 
         <div v-if="!isManual" class="op-field">
@@ -227,6 +250,10 @@ async function save() {
           <span class="op-origin-note">{{ step.note }}</span>
         </li>
       </ol>
+      <p v-if="order.paymentReviewRequired" class="op-hint">
+        Confirme o recebimento integral e salve a data de pagamento para liberar
+        no Financeiro.
+      </p>
       <p class="op-hint">
         {{
           isManual

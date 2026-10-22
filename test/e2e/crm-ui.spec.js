@@ -792,7 +792,7 @@ test('exposes the CRM screens as authenticated Vue routes', async ({
   for (const name of [
     'Dashboard',
     'Caixa de Entrada',
-    'Vendedores',
+    'Usuários',
     'Clientes',
     'Conta',
   ]) {

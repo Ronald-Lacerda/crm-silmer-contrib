@@ -1,10 +1,10 @@
 # Regras do CRM Silmer
 
-## Evolução aprovada — Financeiro (21/10/2026, ainda sem implementação)
+## Financeiro — implementação autorizada em 22/10/2026
 
 A [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md) aprova
 o perfil restrito Financeiro e os [requisitos FINQ-01–15](.specs/features/financeiro/spec.md).
-Na implementação futura, somente pedidos confirmados, integralmente pagos e
+Somente pedidos confirmados, integralmente pagos e
 não teste entram no universo financeiro; “Pago em” significa quitação integral,
 com revisão do uso legado antes de ativar. “Nota criada” é conclusão humana
 da rotina, separada do status comercial, com autoria, horário e reversão auditada.
@@ -15,16 +15,19 @@ As regras de edição comercial e handoff abaixo continuam válidas.
 O design existente é obrigatório: Fila e detalhe descreve composição e
 interação, sem autorizar novo shell, tema, marca, tipografia ou componentes
 paralelos. Usar [design.md](design.md), ADRs 035/036 e tokens do CRM.
-Somente [FINQ-PLAN-01](.specs/features/financeiro/tasks.md) é documental;
-FINQ-T01–T06 ficam abertas, sem código ou conta criada nesta etapa.
+Implementação e evidências em [FINQ-T01–T05](.specs/features/financeiro/tasks.md).
+Homologação e conta real permanecem em FINQ-T06.
 
 Complemento [ADR 041](docs/adr/041-consulta-administrativa-do-financeiro.md):
 FINQ-16 autoriza consulta do Admin ativo às filas, contagens, detalhes e
 histórico, preservando menu completo, login e permissões anteriores. Essa
 consulta não concede concluir/desfazer a rotina financeira. O visual do print
 foi rejeitado pelo PO e não é referência de aparência; usar o design real do
-CRM. [FINQ-PLAN-02](.specs/features/financeiro/tasks.md) registra o complemento,
-ainda sem implementação.
+CRM. [ADR 042](docs/adr/042-perfis-e-requitacao-do-financeiro.md) complementa:
+Usuários oferece Vendedor/Financeiro/Administrador; trocar perfil revoga
+sessões. Reconfirmar outro valor exige nova quitação e novo check, preservando
+histórico. Pagamento manual legado só qualifica após declaração explícita de
+recebimento integral; salvar entrega não o libera (FINQ-17–19).
 
 ## Regras de produto
 

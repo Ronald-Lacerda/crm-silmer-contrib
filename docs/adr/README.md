@@ -73,3 +73,6 @@ canônicos; ele registra o contexto e o motivo da escolha.
 - [038 — Correção administrativa de quantidade da loja](038-correcao-administrativa-quantidade-loja.md); exceção restrita por administrador, com pagamento e checkout original preservados.
 
 - [039 — Datas e afazeres do Pedido manual](039-datas-e-afazeres-do-pedido-manual.md); primeiro contato automático e entrega confirmada pelo responsável no Dashboard.
+- [040 — Financeiro com fila e check manual](040-financeiro-com-fila-e-check-manual.md).
+- [041 — Consulta administrativa do Financeiro](041-consulta-administrativa-do-financeiro.md).
+- [042 — Perfis e nova quitação no Financeiro](042-perfis-e-requitacao-do-financeiro.md); Usuários e invalidação do check quando o valor muda.

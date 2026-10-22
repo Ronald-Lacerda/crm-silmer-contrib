@@ -18,6 +18,7 @@ import { registerChatMediaUploadRoutes } from './chat-media-upload-routes.js';
 import { registerChatMediaStatusRoutes } from './chat-media-status-routes.js';
 import { registerChatMediaContentRoutes } from './chat-media-content-routes.js';
 import { registerIdentityRoutes } from './identity-routes.js';
+import { registerFinanceRoutes } from './finance-routes.js';
 import { registerN8nRoutes } from './n8n-routes.js';
 import { registerN8nCommandMediaRoutes } from './n8n-command-media-routes.js';
 import { registerOperationRoutes } from './operation-routes.js';
@@ -52,6 +53,7 @@ export const WEBHOOK_REQUESTS_PER_SECOND = 20;
  *   handoffs?: any,
  *   operations?: any,
  *   orders?: any,
+ *   finance?: any,
  *   orderPdfRenderer?: (html: string) => Promise<Buffer>,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime
  *   subjects?: Record<string, any>,
@@ -301,6 +303,13 @@ export function createApi(options = {}, runtime = {}) {
       );
   }
 
+  if (runtime.finance) {
+    registerFinanceRoutes(api, runtime.finance, (request) => ({
+      correlationId:
+        requests.get(/** @type {any} */ (request))?.correlationId ??
+        'finance-request',
+    }));
+  }
   if (runtime.orders) {
     registerOrderRoutes(
       api,

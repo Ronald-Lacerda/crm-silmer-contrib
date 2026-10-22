@@ -153,6 +153,7 @@ async function submitCreate(event) {
         email: values.email,
         name: values.name,
         password: values.password,
+        accessType: values.accessType,
         reason: CREATE_REASON,
       },
     });
@@ -187,6 +188,8 @@ async function submitEdit(event) {
     if (values.name !== target.name) body.name = values.name;
     if (values.email !== target.email) body.email = values.email;
     if (values.password !== '') body.password = values.password;
+    if (values.accessType && values.accessType !== accessType(target))
+      body.accessType = values.accessType;
     if (Object.keys(body).length === 1) {
       editing.value = null;
       return;
@@ -415,6 +418,19 @@ function isAdminUser(user) {
   return (user.capabilities ?? []).includes('COMMERCIAL_ADMIN');
 }
 
+/** @param {Record<string, any>} user */
+function accessType(user) {
+  if (isAdminUser(user)) return 'admin';
+  return user.functionName === 'Financeiro' ? 'finance' : 'seller';
+}
+
+/** @param {Record<string, any>} user */
+function accessLabel(user) {
+  return { seller: 'Vendedor', finance: 'Financeiro', admin: 'Administrador' }[
+    accessType(user)
+  ];
+}
+
 /** @param {unknown} error */
 function publicMessage(error) {
   if (error instanceof ApiError) {
@@ -446,10 +462,10 @@ function formValues(form) {
   <div class="page users-page">
     <header class="page-heading">
       <div>
-        <h1 ref="heading" tabindex="-1">Vendedores</h1>
+        <h1 ref="heading" tabindex="-1">Usuários</h1>
         <p>
-          Gerencie as contas dos vendedores que acessam o CRM. O acesso a esta
-          área é exclusivo de administradores.
+          Gerencie as contas e os perfis de acesso ao CRM. O acesso a esta área
+          é exclusivo de administradores.
         </p>
       </div>
     </header>
@@ -462,7 +478,7 @@ function formValues(form) {
       <section class="surface" aria-labelledby="users-overview">
         <div class="count-line">
           <div>
-            <h2 id="users-overview">Vendedores do CRM</h2>
+            <h2 id="users-overview">Usuários do CRM</h2>
           </div>
           <p v-if="!loading">
             {{ users.length }} contas · {{ activeCount }} ativas ·
@@ -504,7 +520,7 @@ function formValues(form) {
                     class="badge"
                     :data-tone="isAdminUser(user) ? 'info' : undefined"
                   >
-                    {{ isAdminUser(user) ? 'Administrador' : 'Vendedor' }}
+                    {{ accessLabel(user) }}
                   </span>
                 </td>
                 <td>
@@ -603,12 +619,18 @@ function formValues(form) {
       </section>
 
       <section v-else class="surface" aria-labelledby="create-user">
-        <h2 id="create-user">Criar vendedor</h2>
+        <h2 id="create-user">Criar usuário</h2>
         <form @submit.prevent="submitCreate">
           <label for="new-name">Nome</label>
           <input id="new-name" name="name" type="text" required />
           <label for="new-email">E-mail</label>
           <input id="new-email" name="email" type="email" required />
+          <label for="new-access">Perfil de acesso</label>
+          <select id="new-access" name="accessType" :disabled="busy">
+            <option value="seller">Vendedor</option>
+            <option value="finance">Financeiro</option>
+            <option value="admin">Administrador</option>
+          </select>
           <label for="new-password">Senha</label>
           <input
             id="new-password"
@@ -623,7 +645,7 @@ function formValues(form) {
           </p>
           <div class="button-row">
             <button class="primary" type="submit" :disabled="busy">
-              {{ busy ? 'Criando…' : 'Criar vendedor' }}
+              {{ busy ? 'Criando…' : 'Criar usuário' }}
             </button>
           </div>
         </form>
@@ -655,6 +677,27 @@ function formValues(form) {
             :value="editing.email"
             required
           />
+          <label for="edit-access">Perfil de acesso</label>
+          <select
+            id="edit-access"
+            name="accessType"
+            :value="accessType(editing)"
+            :disabled="busy || editing.id === currentUser.id"
+            :aria-describedby="
+              editing.id === currentUser.id ? 'own-access-help' : undefined
+            "
+          >
+            <option value="seller">Vendedor</option>
+            <option value="finance">Financeiro</option>
+            <option value="admin">Administrador</option>
+          </select>
+          <p
+            v-if="editing.id === currentUser.id"
+            id="own-access-help"
+            class="field-help"
+          >
+            Seu próprio perfil de acesso não pode ser alterado.
+          </p>
           <label for="edit-password">Nova senha</label>
           <input
             id="edit-password"

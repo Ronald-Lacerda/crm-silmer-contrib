@@ -238,6 +238,10 @@ if (connectionString) {
         /user_functions_function_name_check/iu,
       );
       await pool.query(
+        `INSERT INTO crm.user_functions (user_id, function_name)
+         VALUES ('seller-1', 'Vendedor')`,
+      );
+      await pool.query(
         `INSERT INTO crm.user_capabilities
            (user_id, capability, granted_by)
          VALUES ('seller-1', 'COMMERCIAL_ADMIN', 'admin-1')`,

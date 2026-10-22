@@ -1,12 +1,13 @@
 # Financeiro — Plano de entrega
 
-**Requisitos:** [FINQ-01–FINQ-16](spec.md).
+**Requisitos:** [FINQ-01–FINQ-19](spec.md).
 **Decisão:** [ADR 040](../../../docs/adr/040-financeiro-com-fila-e-check-manual.md)
 e [RFC 028](../../../docs/rfc/028-financeiro-com-fila-e-check-manual.md).
 **Complemento:** [ADR 041](../../../docs/adr/041-consulta-administrativa-do-financeiro.md)
 e [RFC 029](../../../docs/rfc/029-consulta-administrativa-do-financeiro.md).
-**Atualização:** 21/10/2026. Somente planejamento autorizado nesta etapa;
-não executar as tarefas de implementação abaixo por este registro.
+**Atualização:** 22/10/2026. Implementação autorizada pelo PO, incluindo
+seletor de três perfis em Usuários e nova quitação/check após mudança do valor.
+Complemento: [ADR 042](../../../docs/adr/042-perfis-e-requitacao-do-financeiro.md).
 
 ## FINQ-PLAN-01 — Registrar o escopo aprovado
 
@@ -28,19 +29,21 @@ não executar as tarefas de implementação abaixo por este registro.
 - Evidência: complemento do PO nesta conversa em 21/10/2026. Entrega somente
   documental; as tarefas FINQ-T01–T06 abaixo continuam abertas.
 
-## Implementação futura — todas as tarefas permanecem abertas
+## Implementação autorizada
 
 ### FINQ-T01 — Perfil Financeiro e acesso mínimo
 
-- [ ] Implementar a função humana Financeiro no schema e na política central,
+- [x] Implementar a função humana Financeiro no schema e na política central,
       sem herdar Vendedor; adaptar criação/edição/listagem de contas pelo Admin.
-- [ ] Preservar handoff exclusivo de Vendedor, login dos papéis existentes,
+- [x] Preservar handoff exclusivo de Vendedor, login dos papéis existentes,
       capacidades administrativas e bloqueio de conta desativada. Histórico
       financeiro deve impedir exclusão destrutiva da conta.
-- [ ] Autorizar leitura de Financeiro para Admin ativo (`COMMERCIAL_ADMIN`),
+- [x] Autorizar leitura de Financeiro para Admin ativo (`COMMERCIAL_ADMIN`),
       sem trocar o perfil e sem conceder os comandos de concluir/desfazer por
       essa capacidade. Cobrir autorização da tela, contagens, detalhes e histórico.
-- Requisitos: FINQ-01–03, FINQ-11, FINQ-16; emenda planejada de ROLE-01/02/04 e USR-02.
+- [x] Renomear a tela para Usuários e permitir Vendedor, Financeiro e
+      Administrador; auditar troca, revogar sessões e bloquear autoalteração de perfil.
+- Requisitos: FINQ-01–03, FINQ-11, FINQ-16/17; emenda de ROLE-01/02/04 e USR-02.
 - Fronteira futura: identity-access, migrations, identity API, contrato OpenAPI,
   gestão de usuários e testes de autorização/schema. Não editar dados reais.
 - Verificação: testes positivos/negativos por papel e URL/API direta;
@@ -49,15 +52,14 @@ não executar as tarefas de implementação abaixo por este registro.
 
 ### FINQ-T02 — Elegibilidade, persistência e comandos financeiros
 
-- [ ] Mapear “Pago em” como quitação integral; revisar uso legado e registrar
-      evidência de saneamento antes de ativar, sem presumir sinal como quitação.
-- [ ] Definir com Produto, antes de implementar os comandos, o tratamento de
-      pagamento/check anteriores após reabertura, reconfirmação ou mudança de
-      valor. Não presumir quitação ou conclusão válida para uma nova revisão;
-      a política de reconferência/retorno à fila permanece pendente na spec.
-- [ ] Implementar consulta e contagens filtradas no servidor, conclusão e
+- [x] Mapear “Pago em” como quitação integral; migration marca datas manuais
+      legadas para revisão explícita, sem presumir sinal como quitação. O
+      saneamento dos registros reais permanece no gate operacional FINQ-T06.
+- [x] Registrar decisão do PO: reconfirmar outro valor exige nova quitação e
+      novo check, preservando histórico; FINQ-18/19 e ADR 042.
+- [x] Implementar consulta e contagens filtradas no servidor, conclusão e
       reversão com estado próprio, autoria, relógio, versão e histórico auditável.
-- [ ] Garantir transação, CSRF, idempotência, concorrência e revalidação de
+- [x] Garantir transação, CSRF, idempotência, concorrência e revalidação de
       elegibilidade; preservar snapshot e travas da loja. Documentar API,
       migration compatível, rollback sem perda de histórico e resposta incerta.
 - Requisitos: FINQ-04–11, FINQ-14–15. Depende de FINQ-T01.
@@ -68,17 +70,17 @@ não executar as tarefas de implementação abaixo por este registro.
 
 ### FINQ-T03 — Entrada e composição Fila e detalhe no design vigente
 
-- [ ] Abrir Financeiro no login desse perfil e restringir o shell existente
+- [x] Abrir Financeiro no login desse perfil e restringir o shell existente
       a Financeiro/Minha conta; preservar os destinos dos demais papéis.
-- [ ] Acrescentar Financeiro ao menu completo do Admin, mantendo seu login
+- [x] Acrescentar Financeiro ao menu completo do Admin, mantendo seu login
       atual e todas as áreas existentes; exibir somente consulta nesse contexto.
-- [ ] Montar Aguardando e Concluídos, seleção de pedido e consulta lateral no
+- [x] Montar Aguardando e Concluídos, seleção de pedido e consulta lateral no
       desktop; adaptar navegação entre fila e detalhe no celular conforme os
       componentes e shell já usados pelo CRM.
-- [ ] Reutilizar tokens, marca configurável, seleção neutra, Poppins, temas,
+- [x] Reutilizar tokens, marca configurável, seleção neutra, Poppins, temas,
       espaçamento e padrões de jornada vigentes. Não copiar CSS do mockup,
       mudar identidade, redesenhar outras telas ou introduzir framework/store.
-- [ ] Usar as telas reais, componentes e tokens atuais como referência e aceite
+- [x] Usar as telas reais, componentes e tokens atuais como referência e aceite
       visual. O print da conversa foi rejeitado e não deve ser reproduzido.
 - Requisitos: FINQ-02–03, FINQ-06–07, FINQ-12–14, FINQ-16. Depende de FINQ-T01/T02.
 - Fronteira futura: router, shell, views/componentes locais e camada cliente.
@@ -87,9 +89,9 @@ não executar as tarefas de implementação abaixo por este registro.
 
 ### FINQ-T04 — Check, correção, teclado e recuperação
 
-- [ ] Ligar “Marcar nota criada”, feedback, Desfazer e “Voltar para aguardando”
+- [x] Ligar “Marcar nota criada”, feedback, Desfazer e “Voltar para aguardando”
       ao contrato; mostrar autoria, horário e histórico somente no contexto autorizado.
-- [ ] Implementar carregamento, vazio, erro, conflito e salvamento com foco
+- [x] Implementar carregamento, vazio, erro, conflito e salvamento com foco
       previsível, anúncios acessíveis e prevenção de conclusão fictícia.
 - Requisitos: FINQ-08–14. Depende de FINQ-T02/T03.
 - Fronteira futura: componentes do Financeiro e testes de interação.
@@ -98,17 +100,17 @@ não executar as tarefas de implementação abaixo por este registro.
 
 ### FINQ-T05 — Revisão de QA, segurança e regressão
 
-- [ ] Executar a matriz de aceite da spec; procurar vazamento em respostas,
+- [x] Executar a matriz de aceite da spec; procurar vazamento em respostas,
       contagens, logs, atalhos de pedido/conversa e rotas não autorizadas.
-- [ ] Comprovar que o Financeiro não muda pedido, pagamento ou dados da loja,
+- [x] Comprovar que o Financeiro não muda pedido, pagamento ou dados da loja,
       não recebe handoffs e não chama o Olist. Validar regressão de vendedores,
       Admin, login, pedidos, impressão e loja.
-- [ ] Validar consulta administrativa às duas filas, contagens, detalhes e
+- [x] Validar consulta administrativa às duas filas, contagens, detalhes e
       histórico, menu completo e login preservados; provar ausência das ações
       financeiras na UI e negação dos comandos pela API para Admin sem esse perfil.
-- [ ] Conferir aderência às telas reais e ao design vigente do CRM, sem usar
+- [x] Conferir aderência às telas reais e ao design vigente do CRM, sem usar
       a aparência do print rejeitado como referência ou resultado esperado.
-- Requisitos: FINQ-01–16. Depende de FINQ-T01–T04.
+- Requisitos: FINQ-01–19. Depende de FINQ-T01–T04.
 - Evidência: testes e achados priorizados; não converter simulação em aceite real.
 - Gates: `git diff --check`, `npm run validate`, `npm run test:e2e`,
   `npm audit --audit-level=high` e suites live afetadas, proporcionais à implementação.
@@ -117,10 +119,12 @@ não executar as tarefas de implementação abaixo por este registro.
 
 - [ ] Validar com a pessoa do Financeiro a fila, os dados de consulta, o
       significado do check e a correção, usando pedidos sintéticos.
-- [ ] Documentar operação, criação/desativação da conta, revisão dos pagamentos
-      legados, ativação, recuperação e rollback; só então criar a conta real pelo
-      fluxo administrativo autorizado, sem credenciais em documentação ou commits.
-- [ ] Atualizar evidências de entrega e concluir cada fatia com commit/push.
+- [x] Documentar operação, criação/desativação, revisão de pagamentos legados,
+      ativação, recuperação e rollback no [runbook](../../../docs/runbooks/financeiro.md).
+- [ ] Homologar e revisar pagamentos reais; só então criar a conta real pelo
+      fluxo administrativo, sem credenciais em documentação ou commits.
+- [x] Atualizar evidências técnicas da entrega; commit/push atômicos na branch
+      `codex/financeiro-painel`, com fechamento na PR de implementação.
 - Requisitos: FINQ-01, FINQ-04, FINQ-08–15. Depende de FINQ-T05.
 - A integração Olist não pertence a esta tarefa nem é gate desta fase.
 
@@ -132,3 +136,24 @@ mas não houve acesso à conta nem homologação. Não há tarefa de integraçã
 autorizada neste plano. Uma fase futura deve definir cadastros/produtos,
 preços por item, dados fiscais, permissões, credenciais, vínculo entre pedidos
 e notas e tratamento de duplicidade antes de qualquer implementação.
+
+## Evidências técnicas — 22/10/2026
+
+- Node 24.20.0/npm 11.19.0: `npm run validate` (formatação, tipos, lint,
+  fronteiras, tokens, validadores, 1111 testes aprovados e build; 5 skips de
+  suítes que exigem configuração externa no comando unitário).
+- PostgreSQL 17 local descartável, somente dados sintéticos:
+  `test:identity:live` 13/13, `test:commercial:live` 38/38 e
+  `test:finance:live` 10/10, sem skips. Casos Financeiro incluem projeção
+  mínima, paginação, papéis, replay, concorrência, transação única via xmin,
+  rollback de auditoria, legado, novo valor, loja e histórico imutável.
+- `npm run test:e2e -- --workers=4`: 324 aprovados, 7 cenários históricos
+  já desativados; inclui 24 cenários de Financeiro/Usuários/revisão de pagamento,
+  teclado, foco, axe claro/escuro e celular 390×844. Execução isolada do build
+  de validação para evitar alteração de assets durante a navegação.
+- `npm audit --audit-level=high`: zero vulnerabilidades. `git diff --check`
+  sem erros. Revisão especializada sem findings bloqueantes após corrigir
+  o salvamento de entrega que liberava pagamento legado sem declaração.
+- Capturas são da interface compilada com dados sintéticos e design do CRM;
+  não constituem homologação operacional. FINQ-T06 continua aberta: conferir
+  pagamentos reais e homologar com a pessoa do Financeiro antes de criar conta real.

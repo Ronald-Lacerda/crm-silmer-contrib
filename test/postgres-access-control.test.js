@@ -52,14 +52,19 @@ test('revokes a capability and every active session at the supplied instant', as
     '2026-09-01T12:00:00.000Z',
   );
 
-  assert.match(database.queries[0].sql, /DELETE FROM crm\.user_capabilities/iu);
-  assert.deepEqual(database.queries[0].values, [
+  assert.match(
+    database.queries[0].sql,
+    /SELECT id FROM crm\.users.*FOR UPDATE/isu,
+  );
+  assert.deepEqual(database.queries[0].values, ['seller-1']);
+  assert.match(database.queries[1].sql, /DELETE FROM crm\.user_capabilities/iu);
+  assert.deepEqual(database.queries[1].values, [
     'seller-1',
     'COMMERCIAL_ADMIN',
   ]);
-  assert.match(database.queries[1].sql, /UPDATE crm\.sessions/iu);
-  assert.match(database.queries[1].sql, /revoked_at IS NULL/iu);
-  assert.deepEqual(database.queries[1].values, [
+  assert.match(database.queries[2].sql, /UPDATE crm\.sessions/iu);
+  assert.match(database.queries[2].sql, /revoked_at IS NULL/iu);
+  assert.deepEqual(database.queries[2].values, [
     'seller-1',
     '2026-09-01T12:00:00.000Z',
   ]);

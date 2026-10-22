@@ -4,7 +4,7 @@ export const CAPABILITIES = Object.freeze({
 
 /**
  * @typedef {'COMMERCIAL_ADMIN'} Capability
- * @typedef {'Vendedor'} OperationalFunction
+ * @typedef {'Vendedor'|'Financeiro'} OperationalFunction
  */
 
 /**
@@ -77,6 +77,10 @@ export const AUTOMATION_ORDER_ACTIONS = Object.freeze(['order.intent']);
  */
 export const AUTOMATION_STORE_ACTIONS = Object.freeze(['store.order.record']);
 
+export const FINANCE_ACTIONS = Object.freeze(
+  new Set(['finance.read', 'finance.complete', 'finance.reopen']),
+);
+
 const operationalActions = OPERATIONAL_ACTIONS;
 /** @type {Map<string, Capability>} */
 const actionCapabilities = new Map([
@@ -130,6 +134,18 @@ function notFound(message) {
  */
 export function authorize(actor, action) {
   if (actor.kind === 'assistant') throw forbidden('Forbidden');
+  if (FINANCE_ACTIONS.has(action)) {
+    if (
+      (actor.functionName === 'Financeiro' &&
+        actor.capabilities.length === 0) ||
+      (action === 'finance.read' &&
+        actor.functionName === 'Vendedor' &&
+        actor.capabilities.includes(CAPABILITIES.COMMERCIAL_ADMIN))
+    )
+      return;
+    throw forbidden('Forbidden');
+  }
+  if (actor.functionName !== 'Vendedor') throw forbidden('Forbidden');
   if (operationalActions.has(action) && actor.functionName === 'Vendedor') {
     return;
   }
@@ -183,7 +199,11 @@ export function createAccessControlService({
     requireNonEmpty(input.reason, 'reason');
     requireNonEmpty(input.correlationId, 'correlationId');
     const actor = await repository.findUser(input.actorId);
-    if (!actor || !actor.capabilities.includes(CAPABILITIES.COMMERCIAL_ADMIN)) {
+    if (
+      !actor ||
+      actor.functionName !== 'Vendedor' ||
+      !actor.capabilities.includes(CAPABILITIES.COMMERCIAL_ADMIN)
+    ) {
       throw forbidden('Forbidden');
     }
     const target = await repository.findUser(input.targetId);
@@ -205,7 +225,12 @@ export function createAccessControlService({
 
   /** @param {CapabilityCommand} input */
   async function grantCapability(input) {
-    await validate(input);
+    const { target } = await validate(input);
+    if (target.functionName !== 'Vendedor') {
+      throw forbidden(
+        'Change the user access type to grant administrative access',
+      );
+    }
     if (input.actorId === input.targetId) {
       throw forbidden('An Admin cannot self-assign capabilities');
     }

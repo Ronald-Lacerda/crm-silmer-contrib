@@ -2,9 +2,10 @@ const bootstrapAdvisoryLock = 0x49414d31;
 
 /**
  * @typedef {'COMMERCIAL_ADMIN'} IdentityCapability
- * @typedef {'Vendedor'} OperationalFunction
+ * @typedef {'Vendedor'|'Financeiro'} OperationalFunction
  * @typedef {{
  *   capabilities: IdentityCapability[],
+ *   capabilityGrantedBy?: string,
  *   canDelete?: boolean,
  *   createdAt?: string | null,
  *   disabledAt?: string | null,
@@ -16,8 +17,12 @@ const bootstrapAdvisoryLock = 0x49414d31;
  * }} IdentityUser
  * @typedef {{
  *   email?: string,
+ *   capabilities?: IdentityCapability[],
+ *   functionName?: OperationalFunction,
+ *   capabilityGrantedBy?: string,
  *   name?: string,
  *   passwordHash?: string,
+ *   revokeSessionsAt?: string,
  * }} IdentityUserPatch
  * @typedef {{
  *   absoluteExpiresAt: string,
@@ -97,6 +102,7 @@ const userSelect = `
         SELECT 1 FROM crm.catalog_versions AS catalog
         WHERE catalog.created_by = u.id OR catalog.published_by = u.id
       )
+      AND NOT crm.identity_has_finance_history(u.id)
     ) AS can_delete
   FROM crm.users AS u
   JOIN crm.user_functions AS f ON f.user_id = u.id
@@ -140,8 +146,8 @@ export function createPostgresIdentityRepository(database) {
       await database.query(
         `INSERT INTO crm.user_capabilities
            (user_id, capability, granted_by)
-         VALUES ($1, $2, NULL)`,
-        [user.id, capability],
+         VALUES ($1, $2, $3)`,
+        [user.id, capability, user.capabilityGrantedBy ?? null],
       );
     }
   }
@@ -321,6 +327,31 @@ export function createPostgresIdentityRepository(database) {
 
     /** @param {string} id @param {IdentityUserPatch} patch */
     async updateUser(id, patch) {
+      const target = await database.query(
+        'SELECT id FROM crm.users WHERE id = $1 FOR UPDATE',
+        [id],
+      );
+      if (!target.rows[0]) return null;
+      if (patch.functionName !== undefined) {
+        await database.query(
+          'DELETE FROM crm.user_capabilities WHERE user_id = $1',
+          [id],
+        );
+        await database.query(
+          'UPDATE crm.user_functions SET function_name = $2, assigned_at = now() WHERE user_id = $1',
+          [id, patch.functionName],
+        );
+        for (const capability of patch.capabilities ?? []) {
+          await database.query(
+            `INSERT INTO crm.user_capabilities (user_id, capability, granted_by) VALUES ($1, $2, $3)`,
+            [id, capability, patch.capabilityGrantedBy ?? null],
+          );
+        }
+        await database.query(
+          `UPDATE crm.sessions SET revoked_at = $2::timestamptz WHERE user_id = $1 AND revoked_at IS NULL`,
+          [id, patch.revokeSessionsAt ?? new Date().toISOString()],
+        );
+      }
       /** @type {string[]} */
       const assignments = [];
       /** @type {unknown[]} */

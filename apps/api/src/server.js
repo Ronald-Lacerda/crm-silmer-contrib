@@ -19,6 +19,7 @@ import { createCommercialRuntime } from './commercial-runtime.js';
 import { createConversationHandoffRuntime } from './conversation-handoff-runtime.js';
 import { createConversationApiRuntime } from './conversation-runtime.js';
 import { createIdentityApiRuntime } from './identity-runtime.js';
+import { createFinanceApiRuntime } from './finance-runtime.js';
 import { createN8nApiRuntime } from './n8n-runtime.js';
 import { createOperationReadRuntime } from './operation-runtime.js';
 import { createOperationalAuthRuntime } from './operational-auth-runtime.js';
@@ -53,6 +54,7 @@ import { createSafeLogger, SERVICES } from '@crm-silmer/shared';
  *   n8n?: Record<string, any>,
  *   operations?: Record<string, any>,
  *   orders?: ReturnType<typeof createOrderApiRuntime>,
+ *   finance?: ReturnType<typeof createFinanceApiRuntime>,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime,
  *   subjects?: Record<string, any>,
  *   trustProxy?: import('fastify').FastifyServerOptions['trustProxy']
@@ -223,10 +225,19 @@ export function createServerApi(runtime = {}) {
           ),
         })
       : undefined);
+  const finance =
+    runtime.finance ??
+    (runtime.database && operations && orders
+      ? createFinanceApiRuntime(runtime.database, {
+          access: operations,
+          environment,
+        })
+      : undefined);
   const api = createApi(
     { trustProxy: runtime.trustProxy ?? false },
     {
       ...runtime,
+      finance,
       automationAuth,
       commercial,
       chatMedia,

@@ -1,8 +1,8 @@
 # Financeiro — Fila e detalhe
 
 **Decisão de produto:** aprovada pelo PO em 21/10/2026 nesta conversa.
-**Estado:** requisitos definidos; implementação, migrações e criação da conta
-não iniciadas. O PO solicitou somente o registro do planejamento.
+**Estado:** implementação autorizada em 22/10/2026; migrations, API, painel e
+gestão de perfis entregues nesta fatia. Homologação e conta real são FINQ-T06.
 **Decisão:** [ADR 040](../../../docs/adr/040-financeiro-com-fila-e-check-manual.md),
 a partir do [RFC 028](../../../docs/rfc/028-financeiro-com-fila-e-check-manual.md).
 **Complemento aprovado:** [ADR 041](../../../docs/adr/041-consulta-administrativa-do-financeiro.md)
@@ -71,10 +71,8 @@ A alternativa “Conferência ampla” não faz parte da entrega.
    elegíveis com conclusão ativa, pela conclusão mais recente e número como
    desempate. As contagens SHALL refletir o mesmo universo da API, sem apresentar
    falha de leitura como zero. Perder elegibilidade retira o pedido dessas listas
-   sem apagar seu histórico. O tratamento de pagamento e conclusão anteriores
-   depois de reabertura, mudança comercial ou retorno à elegibilidade fica
-   pendente de definição na FINQ-T02; não presumir quitação ou conclusão válida
-   para o novo valor/revisão, nem apagar eventos anteriores.
+   sem apagar seu histórico. Reconfirmação com outro valor exige nova quitação
+   e novo check, conforme FINQ-18.
 
 ### Consulta, conclusão e correção
 
@@ -153,7 +151,30 @@ A alternativa “Conferência ampla” não faz parte da entrega.
     `COMMERCIAL_ADMIN` SHALL NOT obter esse acesso adicional. As permissões
     comerciais administrativas já existentes continuam válidas nas demais áreas.
 
-## Critérios de verificação futura
+17. **FINQ-17 — Usuários e seleção de perfil:** WHEN Admin gerencia contas
+    THEN a tela SHALL se chamar “Usuários” e oferecer Vendedor, Financeiro e
+    Administrador na criação e edição. Administrador representa Vendedor +
+    `COMMERCIAL_ADMIN`; Financeiro não combina essa capacidade. Mudança de
+    perfil SHALL revogar sessões e ser auditada. O administrador não pode
+    trocar o próprio perfil por essa tela; vínculos históricos não são apagados
+    nem transferidos automaticamente.
+18. **FINQ-18 — Novo valor exige nova quitação e check:** WHEN um pedido
+    manual/de atendimento pago e concluído é reaberto e reconfirmado com valor
+    diferente THEN o pagamento anterior SHALL ser limpo, a conclusão ativa
+    invalidada e o histórico preservado. A volta ao Financeiro exige registrar
+    novamente a quitação integral, mesmo se na mesma data, e novo check.
+    Reabrir retira o pedido das filas enquanto pendente; reconfirmar pelo mesmo
+    valor preserva pagamento e check. Alterações sem mudança do valor não
+    invalidam a conclusão por mero incremento da versão. Correção administrativa
+    da loja preserva o pagamento verificado pelo gateway e a exigência de que
+    ele cubra o valor corrigido (ADR 038), mas invalida o check para nova revisão.
+19. **FINQ-19 — Revisão explícita do legado:** WHEN uma data manual anterior
+    à migration 0043 existe THEN ela SHALL permanecer visível, fora do Financeiro
+    até Vendedor/Admin declarar explicitamente que o valor integral foi recebido.
+    Salvar somente entrega, ou reenviar a mesma data sem essa declaração, SHALL
+    manter o bloqueio. Não inferir quitação por edição de outros campos.
+
+## Critérios de verificação
 
 - Matriz: confirmado + pagamento integral + não teste entra; pendente pago,
   confirmado sem quitação, sinal e teste ficam fora. Cobrir as três origens.
@@ -173,14 +194,7 @@ A alternativa “Conferência ampla” não faz parte da entrega.
 - Verificar que nenhuma chamada ao Olist é feita e que nenhum dado pessoal,
   conversa ou arquivo fora do contrato aparece nas respostas ou logs.
 
-Esses cenários são aceites a executar na implementação, não evidências de
-funcionalidade entregue nesta alteração documental.
-
-## Decisão pendente antes da implementação dos comandos
-
-Na FINQ-T02, definir com Produto o tratamento de pagamento e conclusão
-financeira quando um pedido já concluído é reaberto/reconfirmado ou tem
-alteração comercial. Exemplo: quitado e concluído por R$ 100, depois
-reconfirmado por R$ 150. A data de pagamento e o check antigos não comprovam
-quitação ou revisão do novo valor. Preservar auditoria é obrigatório; a regra
-de reconferência e de retorno à fila não foi decidida pelo PO nesta conversa.
+Decisões complementares em [RFC 030](../../../docs/rfc/030-perfis-e-requitacao-do-financeiro.md)
+e [ADR 042](../../../docs/adr/042-perfis-e-requitacao-do-financeiro.md).
+Evidências automatizadas e limites da homologação constam de [tasks.md](tasks.md)
+e do [runbook](../../../docs/runbooks/financeiro.md).

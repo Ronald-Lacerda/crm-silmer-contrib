@@ -1,6 +1,6 @@
 # Arquitetura — baseline do CRM Silmer
 
-## Evolução aprovada, ainda não implementada — Financeiro
+## Financeiro — implementação de 22/10/2026
 
 Em 21/10/2026 o PO aprovou [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md)
 e [RFC 028](docs/rfc/028-financeiro-com-fila-e-check-manual.md): perfil Financeiro
@@ -10,17 +10,24 @@ Conclusão/reversão ficam separadas do estado comercial, com auditoria; Pedido
 mantém dois status e a loja permanece travada. O perfil não herda Vendedor,
 não recebe handoffs e não acessa atendimento ou administração comercial.
 
-Fila e detalhe será composta no shell Vue e no design vigente, sem redesign,
-novas dependências ou infraestrutura. Integração Olist fica diferida. O runtime
-descrito abaixo permanece vigente; [FINQ-T01–T06](.specs/features/financeiro/tasks.md)
-estão abertas. [FINQ-01–15](.specs/features/financeiro/spec.md) definem o aceite;
-esta entrega registra apenas o planejamento FINQ-PLAN-01.
+Fila e detalhe é composta no shell Vue e no design vigente, sem redesign,
+novas dependências ou infraestrutura. Integração Olist fica diferida.
+[FINQ-01–19](.specs/features/financeiro/spec.md) definem o aceite;
+[FINQ-T01–T06](.specs/features/financeiro/tasks.md) distinguem implementação e
+homologação/ativação real, que permanece pendente.
 
 A [ADR 041](docs/adr/041-consulta-administrativa-do-financeiro.md) complementa
 o planejamento com FINQ-16: Admin ativo consulta o mesmo painel/universo,
 mantendo menu completo e login atual, sem comandos financeiros por essa
 capacidade. FINQ-12 descarta o print como referência visual e exige os
-componentes e padrões reais do CRM. FINQ-PLAN-02 é documental; não há código.
+componentes e padrões reais do CRM.
+
+[ADR 042](docs/adr/042-perfis-e-requitacao-do-financeiro.md) registra a seleção
+de perfis em Usuários e a nova quitação/check quando a reconfirmação muda o
+valor. As tabelas order_finance/order_finance_events mantêm estado e histórico
+próprios; comandos usam o mesmo cliente transacional para idempotência,
+auditoria e atualização. A migration marca pagamentos manuais legados para
+revisão explícita. Operação e rollback no [runbook](docs/runbooks/financeiro.md).
 
 Reconciliada com a master em 10/10/2026; ficha v6, arte no RustFS, loja paga, chat do site e mídia do vendedor. Detalhes em
 [TECHNICAL-DESIGN.md](TECHNICAL-DESIGN.md) e
@@ -30,7 +37,7 @@ Reconciliada com a master em 10/10/2026; ficha v6, arte no RustFS, loja paga, ch
 
 O CRM é um monólito modular. PostgreSQL guarda Contato, Conversa, Mensagem,
 Handoff, Pedido, auditoria e jobs. A interface Vue 3 oferece Dashboard,
-Caixa de Entrada, Clientes, Pedidos, Vendedores e Conta. Negócio/Kanban
+Caixa de Entrada, Clientes, Pedidos, Financeiro, Usuários e Conta, conforme ACL. Negócio/Kanban
 foram aposentados pela [ADR 004](docs/adr/004-aposentar-kanban-e-negocio.md).
 
 Novo Contato manual e novo Pedido manual exigem telefone. Nome identifica a

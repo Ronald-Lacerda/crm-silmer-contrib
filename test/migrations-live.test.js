@@ -331,7 +331,9 @@ if (connectionString) {
       'crm_silmer_test',
     );
     const pool = new Pool({ connectionString, max: 2 });
-    const migrations = await loadMigrations();
+    const migrations = (await loadMigrations()).filter(
+      ({ version }) => version <= '0041',
+    );
     const createdAt = new Date('2026-10-21T14:00:00.000Z');
     const recordedAt = new Date('2026-10-20T12:00:00.000Z');
     try {

@@ -55,6 +55,7 @@ const orderDateFormat = new Intl.DateTimeFormat('en-CA', {
  *   orderDate: string|null, confirmedAt: string|null, confirmedBy: string|null,
  *   reopenedAt: string|null, reopenedBy: string|null,
  *   firstContactAt: string|null, paidOn: string|null, deliveredOn: string|null,
+ *   paymentReviewRequired?: boolean,
  *   createdByKind: 'automation'|'user', createdBy: string|null,
  *   version: number, createdAt: string, updatedAt: string,
  * }} Order
@@ -281,6 +282,16 @@ export function confirmOrder(order, input) {
     confirmedAt,
     confirmedBy: input.actorId,
     finalAmountCents: input.amountCents,
+    // FINQ-18: an earlier settlement never proves payment of a new price.
+    paidOn:
+      order.finalAmountCents !== null &&
+      order.finalAmountCents !== input.amountCents
+        ? null
+        : order.paidOn,
+    ...(order.finalAmountCents !== null &&
+    order.finalAmountCents !== input.amountCents
+      ? { paymentReviewRequired: false }
+      : {}),
     missingFields: [],
     orderDate: orderDateFormat.format(input.now),
     paymentCondition: input.paymentCondition,

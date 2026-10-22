@@ -1,30 +1,38 @@
 # TDD — CRM Silmer MVP
 
-## Evolução aprovada — Financeiro (planejamento, sem implementação)
+## Financeiro — implementação autorizada em 22/10/2026
 
 A [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md) e o
 [RFC 028](docs/rfc/028-financeiro-com-fila-e-check-manual.md), de 21/10/2026,
-definem o perfil Financeiro sem permissões herdadas de Vendedor. A futura
-política central e as constraints de identidade devem permitir o novo perfil
+definem o perfil Financeiro sem permissões herdadas de Vendedor. A
+política central e as constraints de identidade permitem o novo perfil
 sem abrir as ações comerciais ou alterar o handoff exclusivo de Vendedor.
-Admin mantém a gestão de contas. Requisitos [FINQ-01–15](.specs/features/financeiro/spec.md);
-execução futura em [FINQ-T01–T06](.specs/features/financeiro/tasks.md).
+Admin mantém a gestão de contas. Requisitos [FINQ-01–19](.specs/features/financeiro/spec.md);
+evidências e homologação pendente em [FINQ-T01–T06](.specs/features/financeiro/tasks.md).
 
 O servidor filtra listagem, contagens e detalhe por confirmado, pagamento
 integral registrado e não teste, abrangendo todas as origens/responsáveis.
 “Pago em” (`paidOn`) representa quitação integral; revisar registros legados
 antes da ativação. Conclusão e reversão financeiras são estado próprio e
 auditável, sem alterar snapshot, status, preço, datas ou travas da loja. Os
-comandos devem usar sessão/CSRF, versão, idempotência, transação e revalidação
-de elegibilidade. Rotas, schema e migration serão detalhados na FINQ-T02;
-nenhum contrato OpenAPI ou código é alterado por este planejamento.
+comandos usam sessão/CSRF, versão, idempotência, transação e revalidação
+de elegibilidade. Rotas GET /finance/orders e /finance/orders/{id}, POST
+/complete e /reopen sob /api/v1 estão no [OpenAPI](docs/api/openapi.v1.yaml).
+Migrations 0042/0043 acrescentam função, revisão de pagamento legado,
+order_finance e order_finance_events. Cada comando bloqueia ator vigente e
+pedido; idempotência, estado, eventos e auditoria compartilham a transação.
 
-O login futuro do Financeiro abre sua fila, com navegação restrita e composição
+O login do Financeiro abre sua fila, com navegação restrita e composição
 Fila e detalhe no shell existente. Reutilizar componentes, tokens semânticos,
 marca, tipografia, temas e padrões de acessibilidade de [design.md](design.md)
 e ADRs 035/036. A referência da conversa não autoriza copiar seu CSS ou
 redesenhar o CRM. Olist permanece manual e sem credenciais, chamadas ou jobs.
-As seções seguintes descrevem a implementação vigente, sem o perfil Financeiro.
+Complemento [ADR 042](docs/adr/042-perfis-e-requitacao-do-financeiro.md): seletor
+de perfis em Usuários, revogação de sessões na troca, pagamento/check novos
+quando a reconfirmação muda o valor e revisão explícita de datas legadas.
+Versão financeira é independente da comercial; esta última só participa do
+controle de concorrência. Uma trigger no preço invalida o check ativo e limpa
+pagamento manual; loja preserva gateway com cobertura do total (ADR 038).
 
 Complemento [ADR 041](docs/adr/041-consulta-administrativa-do-financeiro.md),
 [RFC 029](docs/rfc/029-consulta-administrativa-do-financeiro.md) e FINQ-16:
@@ -34,7 +42,7 @@ login e permissões atuais, sem trocar perfil. A capacidade administrativa
 não concede os comandos financeiros; a UI de consulta omite essas ações e
 a API deve negá-las. FINQ-T01/T03/T05 cobrem essa distinção. O print foi
 rejeitado como referência visual: FINQ-12 exige comparar com as telas e
-componentes reais do CRM, sem copiar sua aparência. Apenas documentação.
+componentes reais do CRM, sem copiar sua aparência.
 
 Baseline técnica atualizada em 05/10/2026 após a PR #142. Esta síntese
 substitui o desenho anterior que ainda tratava Kanban, Negócio e pagamentos
@@ -62,7 +70,7 @@ não fazem parte da baseline.
 | postgres | Dados oficiais, auditoria e jobs persistentes             |
 | n8n      | WhatsApp, OpenAI, coleta guiada e handoff; banco próprio  |
 
-O produto inclui Inbox, Clientes, Pedidos, Dashboard, Vendedores e Conta.
+O produto inclui Inbox, Clientes, Pedidos, Dashboard, Financeiro, Usuários e Conta, conforme ACL.
 Pedido/Ficha já existem. Negócio/Kanban estão aposentados pela ADR 004;
 Instagram é fase posterior. Cobrança PIX, envio automático da Ficha, arquivos
 duráveis e cancelamento comercial seguem como fronteiras pendentes.

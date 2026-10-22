@@ -61,6 +61,7 @@ export function registerIdentityRoutes(api, identity, contextFor) {
       const body = requireBody(request.body);
       const result = await identity.createUser({
         ...command,
+        ...optionalAccessType(body.accessType),
         correlationId: contextFor(request).correlationId,
         email: requireString(body.email, 'email'),
         idempotencyKey: requireHeader(request, 'idempotency-key'),
@@ -80,6 +81,7 @@ export function registerIdentityRoutes(api, identity, contextFor) {
       );
       const body = requireBody(request.body);
       const patch = {
+        ...optionalAccessType(body.accessType),
         ...optionalString(body.email, 'email'),
         ...optionalString(body.name, 'name'),
         ...optionalString(body.password, 'password'),
@@ -369,6 +371,15 @@ function requireParam(request, name) {
 function optionalString(value, field) {
   if (value === undefined) return {};
   return { [field]: requireString(value, field) };
+}
+
+/** @param {unknown} value @returns {{accessType?: 'seller'|'finance'|'admin'}} */
+function optionalAccessType(value) {
+  if (value === undefined) return {};
+  if (value !== 'seller' && value !== 'finance' && value !== 'admin') {
+    throw new IdentityRequestError(400, 'INVALID_REQUEST');
+  }
+  return { accessType: value };
 }
 
 /** @param {unknown} value @param {string} field */

@@ -18,7 +18,7 @@ import { ORDER_ORIGINS } from '../domain/store-order.js';
  * }} CreatePendingOrderInput
  *
  * Human writes include `actor`; only technical briefing projection omits it.
- * @typedef {{expectedVersion: number, correlationId: string, actor?: {id: string, kind: string, capabilities?: readonly string[]}, agentTarget?: {conversationId: string, orderId: string, subjectId: string, automationEpoch: number, sourceRevision: number, eventId: string, eventType: string, expectedSubjectVersion: number, expectedOrderVersion: number, recovery: boolean}}} OrderWriteOptions
+ * @typedef {{expectedVersion: number, correlationId: string, paymentReviewed?:boolean, actor?: {id: string, kind: string, capabilities?: readonly string[]}, agentTarget?: {conversationId: string, orderId: string, subjectId: string, automationEpoch: number, sourceRevision: number, eventId: string, eventType: string, expectedSubjectVersion: number, expectedOrderVersion: number, recovery: boolean}}} OrderWriteOptions
  *
  * A search matches orders by exact number OR by conversation OR, for store
  * orders (ADRs 027 and 028), by the HMAC of the customer's phone or by the

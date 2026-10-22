@@ -1,6 +1,6 @@
 /**
  * @typedef {'COMMERCIAL_ADMIN'} Capability
- * @typedef {'Vendedor'} OperationalFunction
+ * @typedef {'Vendedor'|'Financeiro'} OperationalFunction
  * @typedef {{
  *   query: (
  *     sql: string,
@@ -51,6 +51,10 @@ export function createPostgresAccessRepository(database) {
     /** @param {string} id @param {Capability} capability @param {string} grantedBy */
     async grant(id, capability, grantedBy) {
       await database.query(
+        'SELECT id FROM crm.users WHERE id = $1 FOR UPDATE',
+        [id],
+      );
+      await database.query(
         `INSERT INTO crm.user_capabilities
            (user_id, capability, granted_by)
          VALUES ($1, $2, $3)
@@ -61,6 +65,10 @@ export function createPostgresAccessRepository(database) {
 
     /** @param {string} id @param {Capability} capability */
     async revoke(id, capability) {
+      await database.query(
+        'SELECT id FROM crm.users WHERE id = $1 FOR UPDATE',
+        [id],
+      );
       await database.query(
         `DELETE FROM crm.user_capabilities
          WHERE user_id = $1 AND capability = $2`,

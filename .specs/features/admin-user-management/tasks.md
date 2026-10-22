@@ -1,13 +1,13 @@
 # Gestão de Usuários pelo Administrador — Tarefas
 
-## Evolução aprovada, ainda não implementada — Financeiro
+## Evolução implementada — Financeiro e Usuários
 
 A evolução de ROLE-01/02/04 e USR-02 para admitir Financeiro sem herdar
 permissões de Vendedor está em [FINQ-T01](../financeiro/tasks.md), ligada a
 [FINQ-01–03](../financeiro/spec.md) e à
 [ADR 040](../../../docs/adr/040-financeiro-com-fila-e-check-manual.md).
-A tarefa permanece aberta; as tarefas AUM e evidências históricas abaixo não
-comprovam a existência do novo perfil. Preservar ROLE-03 e o handoff Vendedor,
+Implementação autorizada em 22/10/2026: seletor dos três perfis, revogação de
+sessões e auditoria na troca; evidências em FINQ-T01/T05. Preservar ROLE-03 e o handoff Vendedor,
 os controles administrativos e o design já estabelecido.
 
 [FINQ-PLAN-02 e FINQ-T01/T03/T05](../financeiro/tasks.md) registram e planejam

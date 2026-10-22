@@ -1166,6 +1166,10 @@ if (connectionString) {
       );
     }
     await pool.query(
+      `INSERT INTO crm.user_functions (user_id, function_name) VALUES ($1, 'Vendedor')`,
+      [admin.id],
+    );
+    await pool.query(
       `INSERT INTO crm.user_capabilities (user_id, capability)
        VALUES ($1, 'COMMERCIAL_ADMIN')`,
       [admin.id],

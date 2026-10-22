@@ -28,7 +28,7 @@ const ORDER_COLUMNS = `id, number_sequence, number, conversation_id,
   fab_code, ficha_envelope, total_pieces, missing_fields, final_amount_cents,
   payment_condition, order_date::text AS order_date, confirmed_at,
   confirmed_by, reopened_at, reopened_by, created_by_kind, created_by,
-  first_contact_at, paid_on::text AS paid_on,
+  first_contact_at, paid_on::text AS paid_on, finance_payment_review_required,
   delivered_on::text AS delivered_on, origin, is_test, store_number,
   lead_time_business_days, payment_source, payment_confirmed_at,
   paid_amount_cents, payment_transaction_nsu, payment_invoice_slug,
@@ -243,6 +243,7 @@ export class PostgresOrderRepository {
       orderDate: row.order_date,
       origin: row.origin ?? 'atendimento',
       paidOn: row.paid_on,
+      paymentReviewRequired: row.finance_payment_review_required ?? false,
       paymentCondition: row.payment_condition,
       reopenedAt: isoOrNull(row.reopened_at),
       reopenedBy: row.reopened_by,
@@ -1024,10 +1025,17 @@ export class PostgresOrderRepository {
         tx.query(
           `UPDATE crm.orders
            SET paid_on = $2::date, delivered_on = $3::date, updated_at = $4,
+               finance_payment_review_required = CASE WHEN $5::boolean THEN false ELSE finance_payment_review_required END,
                version = version + 1
            WHERE id = $1
            RETURNING ${ORDER_COLUMNS}`,
-          [order.id, order.paidOn, order.deliveredOn, order.updatedAt],
+          [
+            order.id,
+            order.paidOn,
+            order.deliveredOn,
+            order.updatedAt,
+            options.paymentReviewed === true,
+          ],
         ),
     );
   }

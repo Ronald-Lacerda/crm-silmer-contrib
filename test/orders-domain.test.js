@@ -349,6 +349,30 @@ test('no other transition is possible', () => {
   );
 });
 
+test('FINQ-18: reconfirming another amount requires a new full settlement, even on the same day', () => {
+  const paid = confirmOrder(
+    pendingOrder({ paidOn: '2026-09-12' }),
+    confirmation,
+  );
+  const reopened = reopenOrder(paid, {
+    actorId: 'seller-1',
+    now: CONFIRMED_AT,
+  });
+  assert.equal(confirmOrder(reopened, confirmation).paidOn, '2026-09-12');
+  const changed = confirmOrder(reopened, {
+    ...confirmation,
+    amountCents: 500000,
+  });
+  assert.equal(changed.paidOn, null);
+  const settled = recordMilestones(changed, {
+    paidOn: '2026-09-12',
+    deliveredOn: null,
+    now: CONFIRMED_AT,
+  });
+  assert.equal(settled.paidOn, '2026-09-12');
+  assert.equal(paid.paidOn, '2026-09-12');
+});
+
 test('records paid and delivered days in either status without moving it (PLA-04, PLA-06)', () => {
   const confirmed = confirmOrder(pendingOrder(), confirmation);
   const recordedAt = new Date('2026-09-20T15:00:00.000Z');
