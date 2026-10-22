@@ -68,7 +68,11 @@ test('the seller sees one next step on the phone and opens it by keyboard', asyn
   await expect(step).toHaveAttribute('href', '/inbox?fila=minhas');
   // No heading of its own: the outline stays the two sections.
   await expect(region.getByRole('heading')).toHaveCount(0);
-  await expect(sectionTitles(page)).toHaveText(['Minha fila', 'Entregas']);
+  await expect(sectionTitles(page)).toHaveText([
+    'Minha fila',
+    'Entregas',
+    'Meus afazeres de entrega',
+  ]);
   // One link more than the five indicators of the seller.
   await expect(visibleControls(page)).toHaveCount(6);
   expect((await step.boundingBox())?.height).toBeGreaterThanOrEqual(44);
@@ -105,6 +109,7 @@ test('the manager starts from the SLA and the period says it is for Vendido', as
   await expect(sectionTitles(page)).toHaveText([
     'Vendas e entregas',
     'Atendimento',
+    'Meus afazeres de entrega',
   ]);
   // Three period buttons and seven indicators, plus the next step.
   await expect(visibleControls(page)).toHaveCount(11);
@@ -230,7 +235,11 @@ test('the seller queue failure says the step could not be read', async ({
   );
   await page.goto('/dashboard');
 
-  await expect(sectionTitles(page)).toHaveText(['Minha fila', 'Entregas']);
+  await expect(sectionTitles(page)).toHaveText([
+    'Minha fila',
+    'Entregas',
+    'Meus afazeres de entrega',
+  ]);
   const region = nextStepRegion(page);
   await expect(region).toContainText(
     'A fila não respondeu; tente de novo mais abaixo.',

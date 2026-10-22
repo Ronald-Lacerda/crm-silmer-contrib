@@ -492,6 +492,7 @@ export function createOrderService(options) {
         paymentCondition: null,
         status: /** @type {const} */ ('pendente'),
       });
+      const now = clock();
       const order = await repository.createPending({
         actor: input.actor,
         contactId,
@@ -501,12 +502,12 @@ export function createOrderService(options) {
         createdByKind: 'user',
         fabCode,
         ficha,
-        firstContactAt: null,
+        firstContactAt: now.toISOString(),
         id: idFactory(),
         manualCreateKey,
         manualOwnerId: input.actor.id,
         missingFields: derived.missingFields,
-        now: clock(),
+        now,
         totalPieces: derived.totalPieces,
       });
       return readOne(order);
@@ -824,16 +825,75 @@ export function createOrderService(options) {
      * when the order was delivered, in either status; both days travel in one
      * write and null clears one.
      *
-     * @param {{orderId: string, paidOn: unknown, deliveredOn: unknown, expectedVersion: number, actor: OrderActor, correlationId: string}} input
+     * @param {{orderId: string, paidOn: unknown, deliveredOn?: unknown, expectedVersion: number, actor: OrderActor, correlationId: string}} input
      */
     async recordMilestones(input) {
       const order = await loadForCommand(input);
+      const manual = order.conversationId === null;
+      if (manual && Object.hasOwn(input, 'deliveredOn')) {
+        throw new OrderInputError('Manual delivery requires confirmation');
+      }
       return readOne(
         await repository.saveMilestones(
           recordMilestones(order, {
-            deliveredOn: input.deliveredOn,
+            deliveredOn: manual ? order.deliveredOn : input.deliveredOn,
             now: clock(),
             paidOn: input.paidOn,
+          }),
+          {
+            actor: input.actor,
+            correlationId: input.correlationId,
+            expectedVersion: order.version,
+          },
+        ),
+      );
+    },
+
+    /** PLA-10: derived afazeres, always scoped to their responsible seller.
+     * @param {{actor: OrderActor}} input
+     */
+    async deliveryTasks(input) {
+      if (input.actor?.kind !== 'human' || !input.actor.id) {
+        throw new OrderForbiddenError('A human actor is required');
+      }
+      const orders = (await repository.openDeliveries())
+        .filter(
+          (order) =>
+            order.conversationId === null &&
+            order.manualOwnerId === input.actor.id,
+        )
+        .sort(
+          (left, right) =>
+            (promisedDeliveryOn(left) ?? '9999-12-31').localeCompare(
+              promisedDeliveryOn(right) ?? '9999-12-31',
+            ) || left.numberSequence - right.numberSequence,
+        );
+      return readAll(orders);
+    },
+
+    /** PLA-11: the server records today's São Paulo day after human confirmation.
+     * @param {{orderId: string, expectedVersion: number, actor: OrderActor, correlationId: string}} input
+     */
+    async confirmDelivery(input) {
+      const order = await loadForCommand(input);
+      if (
+        order.conversationId !== null ||
+        order.status !== 'confirmado' ||
+        order.isTest
+      ) {
+        throw new OrderConflictError(
+          'Only confirmed manual orders can be delivered',
+          'ORDER_STATUS_CONFLICT',
+        );
+      }
+      if (order.deliveredOn) return order;
+      const now = clock();
+      return readOne(
+        await repository.saveMilestones(
+          recordMilestones(order, {
+            paidOn: order.paidOn,
+            deliveredOn: operationalDay(now),
+            now,
           }),
           {
             actor: input.actor,

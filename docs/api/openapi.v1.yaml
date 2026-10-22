@@ -1643,6 +1643,62 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/OrderNotFound' }
         '409': { $ref: '#/components/responses/OrderConflict' }
+  /orders/delivery-tasks:
+    get:
+      operationId: listManualOrderDeliveryTasks
+      summary: Lista as entregas a confirmar pelo vendedor da sessão
+      description: >-
+        PLA-10 / T136. Somente pedidos manuais sem conversa, confirmados, sem
+        Entregue em e que não são testes, cujo responsável é a pessoa da sessão.
+        Ordenados pela entrega prometida e número; pedidos sem prazo vêm ao fim.
+      security: [{ sessionCookie: [] }]
+      responses:
+        '200':
+          description: Afazeres de entrega do responsável
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /orders/{orderId}/delivery-confirmation:
+    post:
+      operationId: confirmManualOrderDelivery
+      summary: Confirma a entrega e registra o dia de hoje em São Paulo
+      description: >-
+        PLA-11 / T136. Autoriza com order.milestones, restrito ao responsável ou
+        COMMERCIAL_ADMIN. Apenas pedido manual confirmado e fora de teste.
+        Preserva Pago em, status e snapshot; não aceita data do cliente.
+        Auditoria order.delivery.confirm, controle de versão e replay idempotente.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Entrega confirmada ou replay idempotente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResponse' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/OrderNotFound' }
+        '409': { $ref: '#/components/responses/OrderConflict' }
   /orders/{orderId}/milestones:
     patch:
       operationId: recordOrderMilestones
@@ -1651,7 +1707,9 @@ paths:
         Ação order.milestones, restrita ao dono da conversa ou a
         COMMERCIAL_ADMIN (ADR 008). Vale para pedido pendente ou confirmado,
         sem reabrir, e nunca muda o status nem bloqueia a confirmação. As duas
-        datas vão sempre juntas; null limpa uma delas. Data inválida ou depois
+        datas vão juntas para pedidos com conversa; em pedidos manuais sem
+        conversa somente paidOn é aceito e deliveredOn é preservado (ADR 039).
+        null limpa a data editável. Data inválida ou depois
         de hoje (horário de São Paulo) responde 422 INVALID_DATE com os campos
         recusados.
       security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
@@ -3928,14 +3986,17 @@ components:
     OrderMilestonesRequest:
       type: object
       additionalProperties: false
-      required: [expectedVersion, paidOn, deliveredOn]
+      required: [expectedVersion, paidOn]
       properties:
         expectedVersion:
           type: integer
           minimum: 1
           description: Versão atual do pedido.
         paidOn: { type: [string, 'null'], format: date }
-        deliveredOn: { type: [string, 'null'], format: date }
+        deliveredOn:
+          type: [string, 'null']
+          format: date
+          description: Obrigatório para pedido com conversa; proibido para manual sem conversa.
     OrderOrigin:
       type: string
       enum: [atendimento, loja]

@@ -465,3 +465,20 @@ test('the store service refuses an incomplete configuration', () => {
     TypeError,
   );
 });
+
+test('manual delivery afazeres exclude normal and test store orders and delivery remains locked', async () => {
+  for (const body of [storeOrderBody(), testOrderBody()]) {
+    const { orders, record } = setup();
+    const { order } = await record(body);
+    assert.deepEqual(await orders.deliveryTasks({ actor: ADMIN }), []);
+    await assert.rejects(
+      orders.confirmDelivery({
+        actor: ADMIN,
+        correlationId: 'store-delivery-refused',
+        orderId: order.id,
+        expectedVersion: order.version,
+      }),
+      { code: 'ORDER_LOCKED', statusCode: 409 },
+    );
+  }
+});

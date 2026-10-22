@@ -21,6 +21,9 @@ const errorMessage = ref('');
 const today = ref('');
 
 const isEditing = computed(() => editing.editingSection.value === SECTION);
+const isManual = computed(
+  () => props.order.origin === 'atendimento' && !props.order.conversationId,
+);
 // ADR 008: unlike the ficha sections, the trail stays open after the order
 // is generated — payment and delivery usually come later — and never needs a
 // reopen.
@@ -62,7 +65,8 @@ async function save() {
   errorMessage.value = '';
   /** @type {Record<string, string>} */
   const errors = {};
-  for (const field of /** @type {const} */ (['paidOn', 'deliveredOn'])) {
+  const fields = isManual.value ? ['paidOn'] : ['paidOn', 'deliveredOn'];
+  for (const field of fields) {
     if (draft.value[field] !== '' && draft.value[field] > today.value) {
       errors[field] = FUTURE_DAY_MESSAGE;
     }
@@ -72,7 +76,7 @@ async function save() {
 
   saving.value = true;
   const result = await editing.saveMilestones({
-    deliveredOn: draft.value.deliveredOn || null,
+    ...(isManual.value ? {} : { deliveredOn: draft.value.deliveredOn || null }),
     paidOn: draft.value.paidOn || null,
   });
   saving.value = false;
@@ -156,7 +160,7 @@ async function save() {
           </p>
         </div>
 
-        <div class="op-field">
+        <div v-if="!isManual" class="op-field">
           <label for="milestone-delivered">Entregue em</label>
           <input
             id="milestone-delivered"
@@ -186,8 +190,12 @@ async function save() {
 
       <p class="op-locked-note">
         <OrderIcon name="lock" />
-        Primeiro contato vem da conversa. Data do pedido e entrega prometida
-        ficam no Resumo do pedido.
+        {{
+          isManual
+            ? 'Primeiro contato é preenchido na criação. Confirme a entrega nos seus afazeres do Dashboard.'
+            : 'Primeiro contato vem da conversa.'
+        }}
+        Data do pedido e entrega prometida ficam no Resumo do pedido.
       </p>
 
       <div class="op-form-actions">
@@ -220,8 +228,12 @@ async function save() {
         </li>
       </ol>
       <p class="op-hint">
-        Pago em e Entregue em são informados no pedido e não mudam o status nem
-        a ficha já gerada.
+        {{
+          isManual
+            ? 'Pago em é informado aqui. Entregue em é preenchido ao confirmar a entrega nos seus afazeres do Dashboard.'
+            : 'Pago em e Entregue em são informados no pedido.'
+        }}
+        Essas datas não mudam o status nem a ficha já gerada.
       </p>
     </div>
   </section>

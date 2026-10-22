@@ -94,6 +94,17 @@ export function registerOrderRoutes(
     }),
   );
 
+  api.get('/api/v1/orders/delivery-tasks', async (request, reply) =>
+    respond(reply, async () => {
+      rejectUnknownKeys(requireObject(request.query ?? {}), []);
+      const principal = await authorizeRead(request, orders);
+      privateReadHeaders(reply);
+      return reply
+        .code(200)
+        .send(await orders.deliveryTasks({ actor: principal.actor }));
+    }),
+  );
+
   api.post(
     '/api/v1/orders/search',
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
@@ -429,7 +440,10 @@ export function registerOrderRoutes(
       const expectedVersion = requireVersion(body.expectedVersion);
       // A malformed or future day is not malformed JSON: the service answers
       // 422 INVALID_DATE naming the field.
-      for (const field of ['deliveredOn', 'paidOn']) {
+      for (const field of [
+        'paidOn',
+        ...(Object.hasOwn(body, 'deliveredOn') ? ['deliveredOn'] : []),
+      ]) {
         if (body[field] !== null && typeof body[field] !== 'string') {
           throw new OrderRequestError(400, 'INVALID_REQUEST');
         }
@@ -440,15 +454,52 @@ export function registerOrderRoutes(
         contextFor,
         'order.milestones',
       );
+      const current = (await orders.get(orderId)).order;
+      if (
+        (current.origin !== 'loja' &&
+          current.conversationId === null &&
+          Object.hasOwn(body, 'deliveredOn')) ||
+        (current.conversationId !== null && !Object.hasOwn(body, 'deliveredOn'))
+      ) {
+        throw new OrderRequestError(400, 'INVALID_REQUEST');
+      }
       const order = await orders.recordMilestones({
         ...command,
-        deliveredOn: body.deliveredOn,
+        ...(Object.hasOwn(body, 'deliveredOn')
+          ? { deliveredOn: body.deliveredOn }
+          : {}),
         expectedVersion,
         orderId,
         paidOn: body.paidOn,
       });
       return reply.code(200).send({ order });
     }),
+  );
+
+  api.post(
+    '/api/v1/orders/:orderId/delivery-confirmation',
+    async (request, reply) =>
+      respond(reply, async () => {
+        const orderId = requireIdentifier(
+          requireObject(request.params).orderId,
+          'ORDER_ID',
+        );
+        const body = requireObject(request.body);
+        rejectUnknownKeys(body, ['expectedVersion']);
+        const expectedVersion = requireVersion(body.expectedVersion);
+        const command = await authorizeCommand(
+          request,
+          orders,
+          contextFor,
+          'order.milestones',
+        );
+        const order = await orders.confirmDelivery({
+          ...command,
+          orderId,
+          expectedVersion,
+        });
+        return reply.code(200).send({ order });
+      }),
   );
 
   registerOrderFileRoutes(api, orders, contextFor);

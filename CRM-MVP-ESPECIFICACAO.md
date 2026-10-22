@@ -90,8 +90,13 @@ Depois da confirmação, “Gerar PDF” baixa a ficha aprovada no celular ou no
 computador; onde houver compartilhamento nativo de arquivos, “Compartilhar PDF”
 permite escolher o WhatsApp manualmente (ADR 037). A entrega automática à
 operação continua sujeita a homologação separada.
-Pagamento e entrega não mudam status automaticamente. “Pago em” e “Entregue
-em” são datas manuais; receber arquivo não confirma pagamento.
+Pagamento e entrega não mudam status automaticamente. No Pedido manual sem
+conversa, Primeiro contato recebe a criação do pedido e só “Pago em” é
+digitável. O Dashboard pergunta ao responsável se cada pedido manual
+confirmado já foi entregue; marcar registra automaticamente o dia de São
+Paulo em “Entregue em” e encerra o afazer. Pedidos de teste ficam fora da
+lista. Pedidos de conversa preservam as duas datas manuais (ADR 039).
+Receber arquivo não confirma pagamento.
 
 A ficha impressa usa `ficha-canonical-v6` (ADR 025, público por item e Modelo de malha), paginação com cabeçalho e campos
 posteriores de produção vazios. Valor e condição não saem no papel. Aprovação

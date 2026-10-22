@@ -275,7 +275,7 @@ async function revisitNextStep() {
  * PLA-04 (ADR 008): paid and delivered travel together over the version the
  * page is showing, pending or confirmed.
  *
- * @param {{paidOn: string|null, deliveredOn: string|null}} value
+ * @param {{paidOn: string|null, deliveredOn?: string|null}} value
  */
 async function saveMilestones(value) {
   try {

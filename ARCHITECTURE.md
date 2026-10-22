@@ -62,6 +62,13 @@ simular WhatsApp. O contrato legado do agente conserva um pendente por
 Conversa; vários assuntos e pendentes na mesma Conversa exigem alvo explícito
 e implantação posterior do contrato por Assunto.
 
+No Pedido manual sem conversa, Primeiro contato recebe o instante de criação;
+legados sem a data recebem `created_at`. Só pagamento é digitável. Os afazeres
+do Dashboard são uma leitura dos pedidos manuais confirmados, sem entrega e
+sem marca de teste, do próprio responsável. Confirmar entrega é um comando
+autorizado, versionado e auditado que grava o dia de São Paulo; não cria outro
+status nem reutiliza tarefas de Negócio (ADR 039).
+
 O responsável ou administrador encerra explicitamente um ciclo de Conversa
 como `concluido` ou `sem_pedido`; a hora e o autor ficam registrados. Pedido
 pendente exige confirmação consciente e permanece pendente. Arquivar continua

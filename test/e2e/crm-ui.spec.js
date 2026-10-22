@@ -277,6 +277,13 @@ async function mockCrm(page, options = {}) {
       });
       return;
     }
+    if (path === '/api/v1/orders/delivery-tasks') {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [] }),
+      });
+      return;
+    }
     if (path === '/api/v1/orders/summary' && request.method() === 'GET') {
       await route.fulfill({
         contentType: 'application/json',

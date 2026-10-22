@@ -10,6 +10,7 @@ import {
 } from 'vue';
 import { RouterLink } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
+import DeliveryTasks from '../components/DeliveryTasks.vue';
 import { request } from '../lib/api-client.js';
 import {
   PERIODS,
@@ -417,5 +418,6 @@ onBeforeUnmount(() => {
         </ul>
       </section>
     </template>
+    <DeliveryTasks @confirmed="loadDashboard()" />
   </div>
 </template>

@@ -5,6 +5,63 @@
   margin-block-end: var(--space-6);
 }
 
+.delivery-tasks-hint,
+.delivery-task-detail {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.delivery-task-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.delivery-task {
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.delivery-task-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--target-min);
+  cursor: pointer;
+}
+
+.delivery-task-check input {
+  flex: none;
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  accent-color: var(--color-accent-solid);
+}
+
+.delivery-task-check input[aria-disabled='true'] {
+  cursor: progress;
+}
+
+.delivery-task-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.delivery-task-detail a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+}
+
+.delivery-task-announcement:empty {
+  margin: 0;
+}
+
 .dashboard-section-head {
   display: flex;
   flex-wrap: wrap;

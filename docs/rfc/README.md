@@ -55,6 +55,10 @@ entre os documentos.
 - [025 — Ficha em PDF para uso no celular](025-ficha-em-pdf-para-uso-mobile.md), decidida na ADR 037.
 - [026 — Correção administrativa de quantidade da loja](026-correcao-administrativa-quantidade-loja.md), decidida na ADR 038; LOJ-39–LOJ-41 e T135.
 
+## Decisão de 21/10/2026
+
+- [027 — Datas e afazeres do Pedido manual](027-datas-e-afazeres-do-pedido-manual.md), decidida na ADR 039.
+
 ## Proposta de 14/10/2026
 
 - [023 — Backup externo e recuperação do CRM e do n8n](023-backup-externo-e-recuperacao-do-crm-e-n8n.md), pendente de destino externo, execução e drill.

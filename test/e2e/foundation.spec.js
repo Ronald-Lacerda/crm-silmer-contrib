@@ -253,6 +253,13 @@ test('submits login, restores and closes a session by keyboard without browser s
       return;
     }
 
+    if (path === '/api/v1/orders/delivery-tasks') {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ items: [] }),
+      });
+      return;
+    }
     if (path === '/api/v1/inbox/summary' && method === 'GET') {
       await route.fulfill({
         contentType: 'application/json',

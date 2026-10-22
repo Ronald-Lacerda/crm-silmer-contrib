@@ -289,6 +289,17 @@ WHERE conversation.id = orders.conversation_id AND first_contact_at IS NULL;
 As colunas são anuláveis porque a API anterior continua criando pedidos durante
 a troca de versão. Não são dado pessoal e ficam fora do envelope.
 
+ADR 039 / T136: a migration 0041 completa `first_contact_at` com `created_at`
+somente para pedidos `origin = atendimento` sem conversa e com data nula.
+Novos manuais usam um único instante para criação e primeiro contato. O PATCH
+de milestones desses pedidos altera só `paidOn`; a entrega vem de
+`POST /api/v1/orders/:orderId/delivery-confirmation` com `expectedVersion` e
+Idempotency-Key. `GET /api/v1/orders/delivery-tasks` deriva os confirmados
+manuais não teste, sem entrega, do próprio responsável. A lista inclui prazos
+futuros e ausentes; o vendedor só marca quando o cliente recebeu. As duas
+rotas novas usam as capacidades de pedido existentes e não criam outra fila
+persistida. Snapshots de confirmação e templates não são reescritos.
+
 O nome do cliente e demais dados pessoais ficam só dentro de `ficha_envelope`.
 A busca por cliente/telefone da lista resolve pelo contato da conversa (mesmo
 caminho que o inbox usa), não por texto aberto na tabela de pedidos.

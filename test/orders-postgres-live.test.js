@@ -1495,4 +1495,110 @@ if (connectionString) {
     assert.equal(removed.files.final, null);
     assert.equal(await storage.getObject(second.file.objectKey), null);
   });
+
+  test('manual delivery: PostgreSQL permits one concurrent confirmation and preserves payment', async () => {
+    const conversationId = await seedConversation(pool, {
+      channel: 'whatsapp',
+    });
+    const contactId = (
+      await pool.query(
+        `SELECT identity.current_contact_id
+      FROM crm.conversations conversation JOIN crm.contact_identities identity
+      ON identity.id = conversation.contact_identity_id WHERE conversation.id = $1`,
+        [conversationId],
+      )
+    ).rows[0].current_contact_id;
+    const actor = { id: 'seller-contract', kind: 'human', capabilities: [] };
+    const now = new Date('2026-10-22T01:30:00.000Z');
+    const service = createOrderService({
+      authorizeOwnership: async () => undefined,
+      authorizeManualOwnership: async ({ actor: principal, ownerId }) => {
+        assert.equal(principal.id, ownerId);
+      },
+      clock: () => now,
+      conversations: {
+        readOrderContexts: async () => new Map(),
+        readContactNames: async () =>
+          new Map([[contactId, 'Cliente Sintético']]),
+        searchConversationIds: async () => [],
+      },
+      fabCode: '01',
+      repository,
+    });
+    let order = await service.createForContact({
+      actor,
+      contactId,
+      correlationId: 'manual-delivery-create',
+      idempotencyKey: randomUUID(),
+    });
+    assert.equal(order.firstContactAt, order.createdAt);
+    for (const [section, value] of Object.entries({
+      summary: {
+        nome: 'Evento Sintético',
+        data_entrega_confirmada: '2026-10-24',
+      },
+      items: syntheticItems(),
+      artwork: { feito_pelo_cliente: true, feito_pela_silmer: false },
+    })) {
+      order = await service.patchSection({
+        actor,
+        correlationId: 'manual-delivery-edit',
+        orderId: order.id,
+        expectedVersion: order.version,
+        section,
+        value,
+      });
+    }
+    order = await service.confirm({
+      actor,
+      correlationId: 'manual-delivery-confirm',
+      orderId: order.id,
+      expectedVersion: order.version,
+      amountText: '100,00',
+      paymentCondition: 'pix',
+    });
+    order = await service.recordMilestones({
+      actor,
+      correlationId: 'manual-delivery-paid',
+      orderId: order.id,
+      expectedVersion: order.version,
+      paidOn: '2026-10-20',
+    });
+    assert.ok(
+      (await service.deliveryTasks({ actor })).some(
+        (item) => item.id === order.id,
+      ),
+    );
+    const command = {
+      actor,
+      correlationId: 'manual-delivery-done',
+      orderId: order.id,
+      expectedVersion: order.version,
+    };
+    const results = await Promise.allSettled([
+      service.confirmDelivery(command),
+      service.confirmDelivery(command),
+    ]);
+    assert.equal(
+      results.filter((result) => result.status === 'fulfilled').length,
+      1,
+    );
+    const rejected = results.find((result) => result.status === 'rejected');
+    assert.equal(rejected?.reason.code, 'VERSION_CONFLICT');
+    const delivered = await service.get(order.id);
+    assert.equal(delivered.deliveredOn, '2026-10-21');
+    assert.equal(delivered.paidOn, '2026-10-20');
+    assert.equal(delivered.version, order.version + 1);
+    assert.ok(
+      !(await service.deliveryTasks({ actor })).some(
+        (item) => item.id === order.id,
+      ),
+    );
+    const events = await pool.query(
+      `SELECT count(*)::integer AS count FROM crm.domain_events
+      WHERE aggregate_id = $1 AND event_type = 'order.milestones_saved'`,
+      [order.id],
+    );
+    assert.equal(events.rows[0].count, 2);
+  });
 }

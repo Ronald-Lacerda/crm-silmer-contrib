@@ -414,13 +414,17 @@ fato entregamos, na ficha digital e na impressa.
    do pedido".
 2. **PLA-02** Primeiro contato SHALL ser a abertura da conversa que originou o
    pedido, copiada na criação e nunca digitada; pedidos criados antes da
-   migração SHALL recebê-la da conversa.
+   migração SHALL recebê-la da conversa. No Pedido manual sem conversa, SHALL
+   ser o instante de criação do pedido; legados sem a data SHALL receber
+   `created_at` sem reescrever snapshots confirmados (ADR 039).
 3. **PLA-03** Pedido fechado SHALL ser a data do pedido (PCL-04, PCL-12) e
    Entrega prometida SHALL ser a entrega prometida do Resumo (campo
    `data_entrega_confirmada`); nenhuma das duas é editada no lastro.
 4. **PLA-04** WHEN o dono da conversa ou um administrador informa "Pago em" e
    "Entregue em" THEN o sistema SHALL gravar as duas datas juntas, em pedido
-   pendente ou confirmado, sem reabrir; campo vazio limpa a data.
+   pendente ou confirmado, sem reabrir; campo vazio limpa a data. Para Pedido
+   manual sem conversa, apenas “Pago em” SHALL ser digitável, preservando a
+   entrega existente. “Entregue em” SHALL vir da confirmação PLA-11 (ADR 039).
 5. **PLA-05** WHEN uma data não é um dia válido ou é depois de hoje (horário de
    São Paulo) THEN a interface SHALL mostrar o erro junto ao campo e a API
    SHALL recusar com 422 `INVALID_DATE` nomeando os campos.
@@ -441,8 +445,27 @@ fato entregamos, na ficha digital e na impressa.
 9. **PLA-09** Enquanto a v2 imprime, a entrega confirmada SHALL sair como
    dd/mm/aaaa, igual à amostra aprovada.
 
-**Teste independente:** num pedido confirmado, informar "Entregue em" e ver a
-data no lastro, com o pedido ainda confirmado e a impressão liberada.
+10. **PLA-10** O Dashboard SHALL mostrar “Meus afazeres de entrega”, com a
+    pergunta “O pedido NN-CRM já foi entregue?” para cada pedido manual sem
+    conversa, confirmado, não teste, sem entrega e do responsável autenticado.
+    SHALL incluir pedidos sem prazo e com prazo futuro, ordenados por prazo e
+    número, sem criar tarefas no domínio legado. Lista vazia e falha de leitura
+    SHALL ser estados distintos; eventos de pedido SHALL atualizar a lista.
+11. **PLA-11** WHEN o vendedor marca a entrega THEN a API SHALL exigir pessoa
+    humana responsável ou administrador e versão atual, registrar o dia de São
+    Paulo no servidor e retirar o afazer. Pagamento, status, número e snapshot
+    SHALL permanecer inalterados. Pedido pendente, teste, loja ou de conversa
+    SHALL ser recusado nesse comando. A entrega SHALL ser auditada e
+    idempotente; repetição não SHALL mudar a data já registrada.
+12. **PLA-12** A confirmação SHALL operar por teclado, indicar andamento,
+    anunciar sucesso/erro e mover foco ao próximo afazer ou ao título da seção
+    após sucesso. Falha SHALL manter o afazer, sem simular entrega; conflito de
+    versão SHALL exigir atualização antes de nova tentativa. A API SHALL
+    recusar data de entrega enviada pelo cliente para Pedido manual.
+
+**Teste independente:** criar pedido manual e ver Primeiro contato preenchido;
+editar apenas pagamento; confirmar o pedido e marcar sua entrega no Dashboard.
+Ver “Entregue em” preenchido sem mudar pagamento, status ou ficha já gerada.
 
 ---
 

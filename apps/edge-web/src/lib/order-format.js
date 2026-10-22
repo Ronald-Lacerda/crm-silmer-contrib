@@ -504,13 +504,14 @@ export function operationalDay(value) {
  * @returns {{key: string, label: string, value: string, recorded: boolean, note: string}[]}
  */
 export function orderMilestones(order) {
+  const manual = order.origin === 'atendimento' && !order.conversationId;
   const steps = [
     {
       day: operationalDay(order.firstContactAt),
       emptyNote: 'sem registro',
       key: 'firstContact',
       label: 'Primeiro contato',
-      recordedNote: 'vem da conversa',
+      recordedNote: manual ? 'criação do pedido' : 'vem da conversa',
     },
     {
       day: order.paidOn,
@@ -521,10 +522,10 @@ export function orderMilestones(order) {
     },
     {
       day: order.deliveredOn,
-      emptyNote: 'a informar',
+      emptyNote: manual ? 'a confirmar nos afazeres' : 'a informar',
       key: 'delivered',
       label: 'Entregue em',
-      recordedNote: 'informado',
+      recordedNote: manual ? 'entrega confirmada' : 'informado',
     },
   ];
   return steps.map(({ day, emptyNote, key, label, recordedNote }) => {

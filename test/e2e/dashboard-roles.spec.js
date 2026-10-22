@@ -27,6 +27,7 @@ test('the manager reads the day first, with the period on the server', async ({
   await expect(sectionTitles(page)).toHaveText([
     'Vendas e entregas',
     'Atendimento',
+    'Meus afazeres de entrega',
   ]);
   // No technical copy from the old Dashboard.
   await expect(page.getByText(/100 conversas|Conteúdo mínimo/u)).toHaveCount(0);
@@ -88,7 +89,11 @@ test('the seller home is their queue: answer now, stalled, their orders', async 
   await page.setViewportSize({ height: 844, width: 390 });
   const mock = await mockPainel(page, { manager: false });
   await page.goto('/dashboard');
-  await expect(sectionTitles(page)).toHaveText(['Minha fila', 'Entregas']);
+  await expect(sectionTitles(page)).toHaveText([
+    'Minha fila',
+    'Entregas',
+    'Meus afazeres de entrega',
+  ]);
   const mine = page.getByRole('link', { name: /^Responder agora 2/u });
   await expect(mine).toContainText('O primeiro cliente escreveu há 25 min');
   await expect(

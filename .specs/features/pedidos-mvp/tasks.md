@@ -2134,3 +2134,21 @@ revisão.
   pedidos continuam confirmados e bloqueados nas outras operações.
 - **Gate:** validate, E2E da loja/correção, testes transacionais, diff check,
   commit e push; verificar deploy e pedido reparado pela API antes do fechamento.
+
+### T136: Datas automáticas e afazeres de entrega do Pedido manual
+
+- **Requisitos:** PLA-02, PLA-04, PLA-10–PLA-12; RFC 027 e ADR 039.
+- **Arquivos:** criação/comandos do Pedido, migration de backfill, API/OpenAPI,
+  Datas do pedido, afazeres no Dashboard e testes unitários, PostgreSQL e E2E.
+- **Aceite:** Primeiro contato nasce com a criação; apenas pagamento digitável
+  no manual; responsável vê seus confirmados não teste e marca entrega com dia
+  do servidor, ACL, auditoria, idempotência, concorrência e foco previsível.
+  Pedidos de conversa e loja mantêm seus contratos; snapshots são preservados.
+- **Gate:** `npm run validate`, E2E, audit de dependências, PostgreSQL local
+  sintético quando disponível, `git diff --check`, commit e push.
+
+- **Evidência local (21/10/2026):** Node 24.20.0 / npm 11.19.0;
+  validate passou (1.103 testes aprovados, quatro ignorados); E2E passou
+  (309 aprovados, sete ignorados); audit sem vulnerabilidades; diff check
+  limpo. Testes PostgreSQL de backfill e concorrência adicionados, execução
+  real pendente no CI por ausência de PostgreSQL/Docker local.

@@ -1056,6 +1056,56 @@ test('shows the three trail dates without repeating the summary (PLA-01..03, PLA
   expect(results.violations).toEqual([]);
 });
 
+test('manual orders edit only payment and preserve delivery and first contact (T136, PLA-02, PLA-04)', async ({
+  page,
+}) => {
+  /** @type {any[]} */
+  const writes = [];
+  await mockOrders(page, {
+    onWrite: (call) => writes.push(call),
+    orders: [
+      {
+        ...ownConfirmedOrder,
+        conversationId: null,
+        manualOwnerId: 'seller-marina',
+        origin: 'atendimento',
+        firstContactAt: ownConfirmedOrder.createdAt,
+        deliveredOn: '2026-09-19',
+      },
+    ],
+  });
+  await page.clock.setFixedTime(new Date('2026-09-20T15:00:00.000Z'));
+  await page.goto('/pedidos/order-confirmado');
+
+  const trail = page.getByRole('region', { name: 'Datas do pedido' });
+  await expect(trail.getByRole('listitem').first()).toContainText('08/09/2026');
+  await trail.getByRole('button', { name: 'Editar' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(trail.getByLabel('Pago em')).toBeFocused();
+  await expect(trail.locator('input')).toHaveCount(1);
+  await expect(trail.getByLabel('Entregue em')).toHaveCount(0);
+  await expect(trail.getByLabel('Primeiro contato')).toHaveCount(0);
+  await trail.getByLabel('Pago em').fill('2026-09-21');
+  await trail.getByRole('button', { name: 'Salvar datas' }).click();
+  await expect(trail.getByLabel('Pago em')).toHaveAttribute(
+    'aria-invalid',
+    'true',
+  );
+  expect(writes).toHaveLength(0);
+
+  await trail.getByLabel('Pago em').fill('');
+  await trail.getByRole('button', { name: 'Salvar datas' }).click();
+  await expect(trail.getByRole('button', { name: 'Editar' })).toBeVisible();
+  expect(writes).toEqual([
+    { action: 'milestones', body: { expectedVersion: 4, paidOn: null } },
+  ]);
+  await expect(trail.getByRole('listitem').first()).toContainText('08/09/2026');
+  await expect(trail.getByRole('listitem').last()).toContainText('19/09/2026');
+  await expect(page.locator('.op-head .op-status')).toHaveText(/Confirmado/u);
+  await expect(page.getByRole('button', { name: 'Gerar PDF' })).toBeEnabled();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
 test('records payment and delivery on a confirmed order without reopening it (PLA-04, PLA-06)', async ({
   page,
 }) => {

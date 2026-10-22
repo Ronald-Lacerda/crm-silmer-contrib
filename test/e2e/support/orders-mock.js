@@ -500,7 +500,9 @@ export async function mockOrders(page, options = {}) {
         (candidate) => candidate.id === milestones[1],
       );
       Object.assign(current, {
-        deliveredOn: body.deliveredOn,
+        ...(Object.hasOwn(body, 'deliveredOn')
+          ? { deliveredOn: body.deliveredOn }
+          : {}),
         paidOn: body.paidOn,
         version: current.version + 1,
       });

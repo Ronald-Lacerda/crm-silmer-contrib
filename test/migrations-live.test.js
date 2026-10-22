@@ -323,3 +323,70 @@ if (connectionString) {
     }
   });
 }
+
+if (connectionString) {
+  test('PostgreSQL live: 0041 fills only missing manual first contact and preserves the ficha', async () => {
+    assert.equal(
+      new URL(connectionString).pathname.slice(1),
+      'crm_silmer_test',
+    );
+    const pool = new Pool({ connectionString, max: 2 });
+    const migrations = await loadMigrations();
+    const createdAt = new Date('2026-10-21T14:00:00.000Z');
+    const recordedAt = new Date('2026-10-20T12:00:00.000Z');
+    try {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await migrate(pool, {
+        migrations: migrations.filter(({ version }) => version < '0041'),
+      });
+      await seedLiveConversation(pool, 'manual-first-contact', 1, recordedAt);
+      await pool.query(`INSERT INTO crm.users (id, email, password_hash, name)
+        VALUES ('manual-owner', 'manual-owner@example.test', '$argon2id$synthetic', 'Vendedor Sintetico')`);
+      for (let index = 1; index <= 3; index += 1) {
+        await pool.query(
+          `INSERT INTO crm.orders
+          (id, number_sequence, number, conversation_id, contact_id, manual_owner_id,
+           manual_create_key, status, fab_code, ficha_envelope, created_by_kind,
+           created_by, created_at, updated_at, first_contact_at)
+          VALUES ($1, $2, $3, $4, 'contact-manual-first-contact', $5, $6,
+            'pendente', '01', '{"snapshot":"synthetic"}'::jsonb, 'user', 'manual-owner', $7, $7, $8)`,
+          [
+            `manual-date-${index}`,
+            index,
+            `0${index}-CRM`,
+            index === 3 ? 'manual-first-contact' : null,
+            index === 3 ? null : 'manual-owner',
+            index === 3 ? null : `manual-key-${index}`,
+            createdAt,
+            index === 2 ? recordedAt : null,
+          ],
+        );
+      }
+      assert.deepEqual(await migrate(pool, { migrations }), {
+        applied: ['0041'],
+        phase: 'expand',
+      });
+      const result =
+        await pool.query(`SELECT id, first_contact_at, ficha_envelope, version, updated_at
+        FROM crm.orders ORDER BY id`);
+      assert.deepEqual(
+        result.rows.map((row) => row.first_contact_at),
+        [createdAt, recordedAt, null],
+      );
+      for (const row of result.rows) {
+        assert.deepEqual(row.ficha_envelope, { snapshot: 'synthetic' });
+        assert.equal(row.version, 1);
+        assert.deepEqual(row.updated_at, createdAt);
+      }
+      assert.deepEqual(await migrate(pool, { migrations }), {
+        applied: [],
+        phase: 'expand',
+      });
+    } finally {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await pool.end();
+    }
+  });
+}

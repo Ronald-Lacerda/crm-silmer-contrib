@@ -55,6 +55,7 @@ async function mockDashboard(page, options = {}) {
     if (path === '/api/v1/inbox/summary') {
       return json(QUEUE_SUMMARY);
     }
+    if (path === '/api/v1/orders/delivery-tasks') return json({ items: [] });
     if (path === '/api/v1/orders/summary') {
       summaryReads += 1;
       if ((summaryReads === 1 && options.failFirst) || failNext) {

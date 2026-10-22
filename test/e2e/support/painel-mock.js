@@ -101,6 +101,8 @@ export async function mockPainel(page, { manager = true } = {}) {
       return json(ordersSummary(key));
     }
     if (url.pathname === '/api/v1/inbox/summary') return json(QUEUE);
+    if (url.pathname === '/api/v1/orders/delivery-tasks')
+      return json({ items: [] });
     if (url.pathname === '/api/v1/orders') {
       orderLists.push(url.searchParams);
       return json({

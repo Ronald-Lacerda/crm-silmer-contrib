@@ -461,17 +461,41 @@ export function createOrderRuntime(options) {
       );
     },
 
-    /** @param {OrderCommand & {orderId: string, paidOn: unknown, deliveredOn: unknown, expectedVersion: number}} input */
+    /** @param {OrderCommand & {orderId: string, paidOn: unknown, deliveredOn?: unknown, expectedVersion: number}} input */
     async recordMilestones(input) {
       return run(
         input,
         {
           action: 'order.milestones',
-          command: { deliveredOn: input.deliveredOn, paidOn: input.paidOn },
+          command: {
+            ...(Object.hasOwn(input, 'deliveredOn')
+              ? { deliveredOn: input.deliveredOn }
+              : {}),
+            paidOn: input.paidOn,
+          },
           expectedVersion: input.expectedVersion,
           target: { id: input.orderId, type: 'order' },
         },
         async () => presentOne(await service.recordMilestones(input)),
+      );
+    },
+
+    /** @param {{actor: OrderActor}} input */
+    async deliveryTasks(input) {
+      return { items: await present(await service.deliveryTasks(input)) };
+    },
+
+    /** @param {OrderCommand & {orderId: string, expectedVersion: number}} input */
+    async confirmDelivery(input) {
+      return run(
+        input,
+        {
+          action: 'order.delivery.confirm',
+          command: {},
+          expectedVersion: input.expectedVersion,
+          target: { id: input.orderId, type: 'order' },
+        },
+        async () => presentOne(await service.confirmDelivery(input)),
       );
     },
 

@@ -107,8 +107,9 @@ import { ORDER_ORIGINS } from '../domain/store-order.js';
  *   (`totalPieces`, `missingFields`, `updatedAt`) of a pending order only.
  * - `saveStatus` writes the confirmation/reopen columns of the order and
  *   its ficha, so a generated order keeps the client it showed (ADR 018).
- * - `saveMilestones` writes the manual days of the trail (`paidOn`,
- *   `deliveredOn`, `updatedAt`) of an order in either status.
+ * - `saveMilestones` writes the days of the trail (`paidOn`, `deliveredOn`,
+ *   `updatedAt`). For manual orders the service preserves delivery while
+ *   editing payment, and records delivery only after explicit confirmation.
  * - `recordFirstPrint` (ADR 031) records who printed a store order's ficha
  *   and when, only while nobody has: the first print bumps `version` and
  *   appends an `order.ficha_first_printed` event and the

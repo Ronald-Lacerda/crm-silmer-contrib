@@ -202,11 +202,14 @@ async function createPending(runtime, conversationId) {
 }
 
 /**
- * @param {any} runtime @param {string} conversationId
+ * @param {any} runtime @param {string|null} conversationId
  * @param {Record<string, unknown>} [summary] saved before the items
  */
 async function createConfirmed(runtime, conversationId, summary) {
-  let order = await createPending(runtime, conversationId);
+  let order =
+    conversationId === null
+      ? await runtime.createForContact(seed({ contactId: 'contact-1' }))
+      : await createPending(runtime, conversationId);
   order = await runtime.patchSection(
     seed({
       expectedVersion: order.version,
@@ -1775,4 +1778,111 @@ test('GET /orders/:orderId/print needs an order and a session', async (t) => {
 
   assert.equal(forbidden.statusCode, 403);
   assert.deepEqual(forbidden.json(), { error: { code: 'FORBIDDEN' } });
+});
+
+test('manual delivery afazeres are scoped and confirmation is idempotent with no client date', async (t) => {
+  const { api, runtime, repository, guards } = orderHarness({
+    readActor: SELLER,
+  });
+  t.after(() => api.close());
+  const confirmed = await createConfirmed(runtime, null);
+  assert.equal(confirmed.firstContactAt, confirmed.createdAt);
+  await createConfirmed(runtime, 'conversation-1');
+  const listed = await api.inject({
+    method: 'GET',
+    headers: readHeaders,
+    url: '/api/v1/orders/delivery-tasks',
+  });
+  assert.equal(listed.statusCode, 200);
+  assert.deepEqual(
+    listed.json().items.map((/** @type {any} */ order) => order.id),
+    [confirmed.id],
+  );
+  assert.match(String(listed.headers['cache-control']), /private/u);
+
+  const paid = await api.inject({
+    method: 'PATCH',
+    headers: writeHeaders,
+    url: `/api/v1/orders/${confirmed.id}/milestones`,
+    payload: { expectedVersion: confirmed.version, paidOn: '2026-09-10' },
+  });
+  assert.equal(paid.statusCode, 200);
+  const order = paid.json().order;
+  const confirmation = {
+    method: /** @type {const} */ ('POST'),
+    headers: { ...writeHeaders, 'idempotency-key': 'delivery-confirm' },
+    url: `/api/v1/orders/${order.id}/delivery-confirmation`,
+    payload: { expectedVersion: order.version },
+  };
+  const first = await api.inject(confirmation);
+  assert.equal(first.statusCode, 200);
+  assert.equal(first.json().order.deliveredOn, '2026-09-12');
+  assert.equal(first.json().order.paidOn, '2026-09-10');
+  assert.equal(guards.at(-1)?.input.action, 'order.milestones');
+  const replay = await api.inject(confirmation);
+  assert.equal(replay.statusCode, 200);
+  assert.deepEqual(replay.json(), first.json());
+  assert.equal(
+    repository
+      .eventsFor(order.id)
+      .filter((event) => event.eventType === 'order.milestones_saved').length,
+    2,
+  );
+  const empty = await api.inject({
+    method: 'GET',
+    headers: readHeaders,
+    url: '/api/v1/orders/delivery-tasks',
+  });
+  assert.deepEqual(empty.json(), { items: [] });
+  const stale = await api.inject({
+    ...confirmation,
+    headers: { ...writeHeaders, 'idempotency-key': 'delivery-stale' },
+  });
+  assert.equal(stale.statusCode, 409);
+  const clientDate = await api.inject({
+    ...confirmation,
+    payload: {
+      expectedVersion: first.json().order.version,
+      deliveredOn: '2026-09-11',
+    },
+  });
+  assert.equal(clientDate.statusCode, 400);
+  const editDelivery = await api.inject({
+    method: 'PATCH',
+    headers: { ...writeHeaders, 'idempotency-key': 'edit-delivery' },
+    url: `/api/v1/orders/${order.id}/milestones`,
+    payload: {
+      expectedVersion: first.json().order.version,
+      paidOn: null,
+      deliveredOn: null,
+    },
+  });
+  assert.equal(editDelivery.statusCode, 400);
+});
+
+test('manual delivery tasks require session and another seller cannot confirm', async (t) => {
+  const harness = orderHarness({ writeActor: OTHER });
+  t.after(() => harness.api.close());
+  const confirmed = await createConfirmed(harness.runtime, null);
+  const list = await harness.api.inject({
+    method: 'GET',
+    headers: readHeaders,
+    url: '/api/v1/orders/delivery-tasks',
+  });
+  assert.deepEqual(list.json(), { items: [] });
+  const forbidden = await harness.api.inject({
+    method: 'POST',
+    headers: writeHeaders,
+    url: `/api/v1/orders/${confirmed.id}/delivery-confirmation`,
+    payload: { expectedVersion: confirmed.version },
+  });
+  assert.equal(forbidden.statusCode, 403);
+  const guarded = orderHarness({ readActor: null });
+  t.after(() => guarded.api.close());
+  const denied = await guarded.api.inject({
+    method: 'GET',
+    headers: readHeaders,
+    url: '/api/v1/orders/delivery-tasks',
+  });
+  assert.equal(denied.statusCode, 403);
 });

@@ -122,6 +122,19 @@ o Contato; o confirmado preserva seu snapshot (ADR 018).
 
 Pedido manual sem conversa (ADR 032) guarda Contato e vendedor responsável,
 usa a mesma ficha, numeração, versão e autorização do Pedido de atendimento.
+
+ADR 039 / T136: Primeiro contato do Pedido manual sem conversa é o instante
+de criação. A migration `0041_manual_order_first_contact.expand.sql` preenche
+somente datas nulas desses pedidos com `created_at`, preservando snapshots.
+`GET /api/v1/orders/delivery-tasks` deriva `{items}` dos pedidos manuais
+confirmados, não teste, sem entrega e do responsável autenticado, ordenados
+por prazo e número; não depende de scheduler nem das tabelas de tarefas legadas.
+`POST /api/v1/orders/:orderId/delivery-confirmation`, com `expectedVersion` e
+Idempotency-Key, exige responsável ou administrador humano, grava o dia de
+São Paulo e preserva pagamento/status/snapshot. O PATCH de milestones aceita
+somente `paidOn` para manuais; pedidos por conversa mantêm o contrato anterior.
+Rollback de aplicação exige compatibilizar esse PATCH antes de voltar o
+frontend; não apaga datas nem auditoria. O backfill não exige reversão.
 A identidade do canal permanece ausente até correlação verificável. O fluxo
 legado n8n continua restrito a um pendente por Conversa até Assuntos e alvo
 explícito serem implantados em CRM e workflow.

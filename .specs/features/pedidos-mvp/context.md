@@ -117,6 +117,10 @@ D10/D11/D15 foram refinadas pelas ADRs 016–020, preservando seus IDs e dados a
   resumo.
 - **D29** Pagamento é manual: o CRM não registra pagamento e não presume que
   gerar o pedido é pagar. Entrega realizada é 100% manual.
+  - **Emenda (21/10/2026, ADR 039):** no Pedido manual sem conversa,
+    Primeiro contato é a criação e a entrega recebe o dia do servidor quando
+    o responsável marca o afazer no Dashboard. Apenas pagamento é digitável.
+    Pedidos de conversa mantêm o comportamento anterior.
 - **D30** Pagamento e entrega realizada são informados pelo dono da conversa ou
   por um admin, pendente ou confirmado, sem reabrir. Nenhuma das datas muda
   status nem bloqueia a confirmação.
