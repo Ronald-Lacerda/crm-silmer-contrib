@@ -176,9 +176,14 @@ export class N8nCommandDeliveryClient {
         });
       }
       if (
-        typeof acknowledgement.command_id === 'string' &&
-        acknowledgement.command_id !== request.commandId
+        acknowledgement.accepted !== true ||
+        typeof acknowledgement.command_id !== 'string'
       ) {
+        throw new N8nCommandDeliveryError('N8N_COMMAND_ACK_INVALID', {
+          statusCode,
+        });
+      }
+      if (acknowledgement.command_id !== request.commandId) {
         throw new N8nCommandDeliveryError('N8N_COMMAND_ACK_MISMATCH', {
           statusCode,
         });

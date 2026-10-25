@@ -505,6 +505,17 @@ negado no webhook; `N8N_COMMAND_HTTP_404` ou `_405` aponta para a URL ou método
 do endpoint publicado. Mensagens que falharam antes dessa distinção conservam
 o código genérico.
 
+HTTP `200`/`202` só confirma o comando quando o corpo contém
+`accepted: true` e o mesmo `command_id`. Corpo vazio, JSON inválido ou resposta
+genérica como `Workflow was started` produz `N8N_COMMAND_ACK_INVALID`;
+outro identificador produz `N8N_COMMAND_ACK_MISMATCH`. Ambos preservam o
+resultado como desconhecido, sem retry automático, mesmo quando replay está
+habilitado. Confira o callback e o resultado externo antes de reconciliar;
+não envie outra mensagem para tentar corrigir a falta de confirmação.
+
+A preparação do WhatsApp após a aprovação do app, as verificações no ambiente
+e os bloqueios restantes estão no [runbook da Inbox WhatsApp](../../runbooks/inbox-whatsapp.md).
+
 O nó `Site - Receber mensagem do chat (MVP)` contém a opção **Custom Chat
 Styling** com as cores Silmer para a página hospedada do n8n. O estilo do
 widget incorporado está em

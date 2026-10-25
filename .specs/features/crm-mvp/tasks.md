@@ -203,3 +203,17 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
 | OPS-CI-01  | Investigar e corrigir publicação de imagens                              | INT-3 / T00.2                                   | Em verificação                                                                                                                            |
 | OPS-CHK-01 | Auditar deploy automático existente e checar ambiente alvo               | INT-3 / T00.3                                   | Auditoria dos quatro serviços registrada; gaps de produção pendentes ([evidência](../../../docs/runbooks/production-readiness-checks.md)) |
 | OPS-AI-01  | Escolher OpenAI e reconciliar baseline documental                        | ORC-06, PRV-01..03, AGENTE-3 / INT-3            | Decisão técnica registrada; privacidade externa pendente                                                                                  |
+
+## Confiabilidade da Inbox — 24/10/2026
+
+- [x] **OPS-INBOX-ACK-01 — validar confirmação do comando CRM → n8n.**
+  HTTP 200/202 exige `accepted: true` e `command_id` correspondente. Corpo
+  ausente, inválido ou genérico e confirmação de outro comando preservam
+  resultado desconhecido, sem retry cego. ACKs vigentes de estado, callback
+  e replay continuam aceitos. Requisitos ORC-08, MSG-03 e INBOX-3/INT-2.
+- [ ] **OPS-1 — homologação WhatsApp real.** Trigger alinhado à credencial
+  existente do app aprovado; callback e `messages` registrados. O teste
+  oficial sintético da Meta apareceu ao vivo na Inbox e a tomada humana foi
+  verificada. App publicado após autorização do proprietário; telefone offline
+  e credencial de envio inválida ainda impedem concluir
+  homologação. [Evidência e procedimento](../../../docs/runbooks/inbox-whatsapp.md).
