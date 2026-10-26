@@ -107,11 +107,79 @@ não desligar proteções pessoais ou do portfólio por tentativa.
 OPS-1 continua aberta até validar recebimento e resposta pelo canal real,
 takeover, status e replay. Mídia, privacidade e recovery conservam seus gates.
 
+### Diagnóstico após a assinatura — Coexistência pendente
+
+O novo teste real após a assinatura também não chegou à Inbox. A consulta
+do telefone retornou `platform_type: ON_PREMISE`,
+`code_verification_status: NOT_VERIFIED`, `status: DISCONNECTED` e
+`is_on_biz_app: true`. O Manager atualizado voltou a exibir `Offline`;
+o estado `Conectado` observado anteriormente não comprova registro na API.
+A WABA listou somente esse telefone. O app continua publicado, e
+`webhook_configuration` do telefone apontou somente para o callback de
+produção esperado, sem override adicional. O health do CRM e o GET público
+do webhook responderam `200`; isso não comprova entrega de mensagens.
+
+O proprietário confirmou que o WhatsApp Business já atende a loja e escolheu
+**Coexistência oficial**, preservando o aplicativo e o número. Não executar
+`register`, `deregister`, excluir conta, desvincular dispositivos ou orientar
+migração exclusiva para a API como tentativa de resolver a Inbox.
+
+No configurador oficial, a configuração de login existente foi selecionada
+com `Integração do app WhatsApp Business`. A ferramenta `Check a launch
+config` confirmou versão `v4` e onboarding do app Business ativado. Segundo
+o [fluxo padrão da Meta](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/default-flow#coexistence-flow),
+a versão 4 pode começar pela mesma tela de telefone do cadastro comum: após
+receber um número em uso no app Business, detecta a Coexistência
+automaticamente. A ausência da antiga opção de seleção, isoladamente, não
+prova que o fluxo perdeu a Coexistência. Confirmar o recurso no verificador
+antes de informar um número em uso.
+
+O proprietário autorizou os termos e o compartilhamento de atividade de
+eventos apresentados pela Meta. Ao consultar a elegibilidade do telefone,
+o fluxo parou no erro **2655111**, que exige permissões avançadas de mensagens
+e gerenciamento para onboarding. O histórico de análise do app confirmou
+`whatsapp_business_messaging` e `public_profile` aprovados em 24/10;
+`whatsapp_business_management` permanece `Pronto para teste`.
+Foi adicionada **somente gestão** a um novo rascunho de análise. O formulário
+mostra os testes de API de gestão como `Concluída`, mas exige gravação de tela
+e revisão do tratamento de dados. A análise ainda não foi enviada.
+Nova emissão de token não substitui Advanced Access aprovado para o app.
+Foi preparada uma demonstração local das consultas reais de app, telefone,
+assinatura e callback, com o painel de token excluído e legendas que
+explicitam o onboarding pendente. Esse material técnico não comprova o
+fluxo de Coexistência concluído nem substitui a demonstração de uso integral
+exigida pela análise. Não foi carregado na Meta. A justificativa está
+preparada no formulário; as declarações de tratamento de dados permanecem
+sem nova confirmação até conferir fatos da empresa e os provedores/países
+aplicáveis, sem presumir que as respostas anteriores continuam corretas.
+
+A [documentação de Coexistência da Meta](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users)
+também exige preparação dos webhooks `account_update`, `history`,
+`smb_app_state_sync` e `smb_message_echoes`. O workflow atual assina apenas
+`messages` e normaliza `value.messages`; histórico, contatos e mensagens
+enviadas pelo aplicativo não foram homologados como entradas compatíveis.
+Preparar tratamento idempotente e distinguir mensagens do cliente de ecos
+de saída antes de ativar esses eventos; um eco não pode disparar resposta do
+bot como se fosse mensagem do cliente. Não importar histórico de clientes
+por tentativa. A sincronização inicial tem janela de 24 horas após o
+onboarding, e a Meta orienta pular o registro convencional do telefone.
+
+Coexistência preserva o aplicativo principal, mas a Meta documenta efeitos
+operacionais: dispositivos complementares são desvinculados durante a
+integração e precisam ser vinculados novamente quando compatíveis. Confirmar
+com o proprietário o momento da ativação e esses efeitos antes da conclusão
+no celular. Só considerar Coexistência efetiva após confirmar
+`is_on_biz_app: true` com `platform_type: CLOUD_API`, além do teste real
+na Inbox e do uso preservado do aplicativo.
+
 ## Próximos passos no ambiente
 
-1. Receber uma nova mensagem real de um número de homologação autorizado após
-   a assinatura da WABA. Conferir mensagem única, contato correto, resposta
-   ou handoff e atualização da Inbox.
+1. Concluir o pacote e a análise de `whatsapp_business_management`, preparar
+   os eventos de Coexistência e só então concluir o onboarding oficial com
+   o proprietário no celular. Preservar o aplicativo da loja e não usar o
+   registro convencional como atalho. Após conexão efetiva, receber uma nova
+   mensagem real de homologação e conferir mensagem única, contato correto,
+   resposta ou handoff e atualização da Inbox.
 2. Assumir essa conversa, enviar um texto de teste e verificar a mesma mensagem
    uma única vez no telefone e no CRM, com confirmação do canal. Validar
    takeover durante a resposta, status e replay antes de concluir OPS-1.
@@ -120,9 +188,10 @@ takeover, status e replay. Mídia, privacidade e recovery conservam seus gates.
    a troca, com o proprietário inserindo e salvando o segredo diretamente na
    interface; nunca enviá-lo por chat ou commit. O escopo de gestão usado na
    assinatura pontual não exige nova troca do token de envio.
-4. Conferir que o telefone comercial continua registrado e conectado na
-   Cloud API. Se houver nova pendência de registro ou PIN, resolvê-la na
-   interface oficial com o proprietário.
+4. Conferir o registro da Coexistência por `is_on_biz_app: true` e
+   `platform_type: CLOUD_API`, preservando o app Business. O telefone ainda
+   não atende a esse critério. Não cadastrar PIN ou registrar o número fora
+   do fluxo oficial de Coexistência.
 5. Manter o app Meta publicado e conferir callback, campo `messages` e
    assinatura da WABA. A aprovação da permissão, isoladamente, não demonstra
    esses estados.
