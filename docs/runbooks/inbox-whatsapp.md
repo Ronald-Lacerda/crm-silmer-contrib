@@ -153,6 +153,20 @@ preparada no formulário; as declarações de tratamento de dados permanecem
 sem nova confirmação até conferir fatos da empresa e os provedores/países
 aplicáveis, sem presumir que as respostas anteriores continuam corretas.
 
+A página de habilitação como Provedor de Tecnologia mostra empresa
+`Aprovado`, uma de duas etapas concluídas, e exige vídeo separado da criação
+de modelo para gestão. A criação técnica na conta comercial foi recusada
+com código `100`, subcódigo `2494160`: a conta não pode criar ou atualizar
+modelos. Nenhum modelo foi criado nela e nenhuma mensagem foi enviada.
+O próprio painel do app identificou sua conta oficial de teste; o Explorer
+confirmou nome de conta de teste e `account_review_status: APPROVED`.
+Nessa conta isolada, após consulta negativa por nome, foi criado um único
+modelo `UTILITY` com exemplo sintético. O retorno foi `PENDING`; a leitura
+seguinte confirmou nome, idioma e componentes. A criação e a consulta foram
+registradas em demonstração local com o painel de token excluído. Essa é
+evidência de teste de gestão, sem alterar credencial, remetente ou WABA do
+workflow de produção e sem demonstrar Coexistência concluída na loja.
+
 A [documentação de Coexistência da Meta](https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users)
 também exige preparação dos webhooks `account_update`, `history`,
 `smb_app_state_sync` e `smb_message_echoes`. O workflow atual assina apenas
