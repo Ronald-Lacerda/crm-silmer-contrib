@@ -1,5 +1,17 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Piloto autorizado — WAHA com WEBJS
+
+A [ADR 042](docs/adr/042-piloto-whatsapp-waha-webjs.md), vinculada à
+[RFC 030](docs/rfc/030-piloto-whatsapp-waha-webjs.md), autoriza em 27/10/2026 o
+transporte da linha temporária por WhatsApp → WAHA → n8n → API CRM → Inbox.
+O retorno conserva a reserva de efeito único antes do WAHA. O serviço dedicado
+não acessa o banco do CRM, não adiciona Redis e não substitui regras de IA,
+pedido, site ou handoff. A versão original e seu backup permanecem preservados;
+o [runbook](docs/runbooks/waha-webjs.md) distingue instalação, pareamento e
+homologação. Esta exceção prevalece sobre referências à API oficial abaixo
+somente no piloto autorizado.
+
 ## Financeiro — implementação de 22/10/2026
 
 Em 21/10/2026 o PO aprovou [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md)

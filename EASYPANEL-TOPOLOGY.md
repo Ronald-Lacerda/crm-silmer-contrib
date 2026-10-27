@@ -1,5 +1,19 @@
 # Topologia EasyPanel — CRM Silmer
 
+## Serviço adicional autorizado — piloto WAHA/WEBJS
+
+A [ADR 042](docs/adr/042-piloto-whatsapp-waha-webjs.md) autoriza
+`schedule/silmer-waha`, sem Redis ou banco adicional, com uma réplica WEBJS.
+A imagem é `devlikeapro/waha:chrome-2026.9.2` fixada no digest
+`sha256:d4c2b1da8373fa48c5022aa947c95a87480cf6e26a9d3c9b59721f96b044d223`.
+Volumes privados: `/app/.sessions` e `/app/.media`; limites: 1 CPU e 1536 MB.
+Sem domínio ou porta publicada. n8n usa `http://schedule_silmer-waha:3000`,
+chave exclusiva e allowlist SSRF desse hostname, mantendo a proteção ativa.
+O retorno usa o HTTPS existente do n8n com autenticação própria. Dashboard,
+Swagger e impressão de QR em log ficam desativados. Estado de instalação,
+pareamento e homologação são registrados no
+[runbook](docs/runbooks/waha-webjs.md), sem antecipar readiness do canal.
+
 > **Status:** manter o fluxo atual de deploy automático GitHub → EasyPanel; gate de produção pendente de checagem operacional
 >
 > **Data:** baseline de 31/08/2026; revisão operacional em 05/10/2026

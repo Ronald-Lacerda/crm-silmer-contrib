@@ -1,5 +1,22 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## WAHA-01 — piloto autorizado da linha temporária
+
+Decisão: [ADR 042](../../../docs/adr/042-piloto-whatsapp-waha-webjs.md).
+Requisitos: ORC-01..08, INB-01 e MSG-01..04; fronteiras INBOX-2/3, AGENTE-6,
+OPS-1 e INT-1/2. [Runbook e evidências](../../../docs/runbooks/waha-webjs.md).
+
+- [x] WAHA-01A — preservar fonte e backup do workflow anterior.
+- [x] WAHA-01B — instalar e validar WEBJS privado com persistência e autenticação.
+- [x] WAHA-01C — adaptar, testar e salvar candidato inativo no n8n; smoke TEST
+      autenticado sem efeito de domínio, sem substituir homologação real.
+- [ ] WAHA-01D — ativar WhatsApp no celular, parear conta esperada e homologar
+      entrada/resposta na Inbox, mídia, takeover, status e replay antes do cutover.
+- [x] WAHA-01E — registrar evidências, checks e entrega atômica no Git.
+
+O fluxo original permanece publicado durante a preparação. O piloto não recebe
+cutover nem replay de comandos antigos antes do pareamento e das verificações.
+
 ## Evolução aprovada — Financeiro (21/10/2026)
 
 Requisitos [FINQ-01–19](../financeiro/spec.md), decisão
@@ -207,13 +224,13 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
 ## Confiabilidade da Inbox — 24/10/2026
 
 - [x] **OPS-INBOX-ACK-01 — validar confirmação do comando CRM → n8n.**
-  HTTP 200/202 exige `accepted: true` e `command_id` correspondente. Corpo
-  ausente, inválido ou genérico e confirmação de outro comando preservam
-  resultado desconhecido, sem retry cego. ACKs vigentes de estado, callback
-  e replay continuam aceitos. Requisitos ORC-08, MSG-03 e INBOX-3/INT-2.
+      HTTP 200/202 exige `accepted: true` e `command_id` correspondente. Corpo
+      ausente, inválido ou genérico e confirmação de outro comando preservam
+      resultado desconhecido, sem retry cego. ACKs vigentes de estado, callback
+      e replay continuam aceitos. Requisitos ORC-08, MSG-03 e INBOX-3/INT-2.
 - [ ] **OPS-1 — homologação WhatsApp real.** Trigger alinhado à credencial
-  existente do app aprovado; callback e `messages` registrados. O teste
-  oficial sintético da Meta apareceu ao vivo na Inbox e a tomada humana foi
-  verificada. App publicado após autorização do proprietário; telefone offline
-  e credencial de envio inválida ainda impedem concluir
-  homologação. [Evidência e procedimento](../../../docs/runbooks/inbox-whatsapp.md).
+      existente do app aprovado; callback e `messages` registrados. O teste
+      oficial sintético da Meta apareceu ao vivo na Inbox e a tomada humana foi
+      verificada. App publicado após autorização do proprietário; telefone offline
+      e credencial de envio inválida ainda impedem concluir
+      homologação. [Evidência e procedimento](../../../docs/runbooks/inbox-whatsapp.md).

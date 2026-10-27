@@ -1,5 +1,10 @@
 # Request for Comments
 
+## Decisão de 27/10/2026
+
+- [030 — Piloto WhatsApp com WAHA e WEBJS](030-piloto-whatsapp-waha-webjs.md),
+  aprovada pelo proprietário e decidida na ADR 042.
+
 - [029 — Consulta administrativa do Financeiro](029-consulta-administrativa-do-financeiro.md),
   decidida na ADR 041: consulta do Admin com menu completo e rejeição do print
   como referência visual, sem implementação.

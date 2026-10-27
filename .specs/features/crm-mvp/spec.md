@@ -1,5 +1,15 @@
 # CRM Silmer MVP — Requisitos Rastreáveis
 
+## Exceção autorizada — transporte do piloto WAHA
+
+A [ADR 042](../../../docs/adr/042-piloto-whatsapp-waha-webjs.md) autoriza em
+27/10/2026 que ORC-02 e MSG-04 sejam atendidos pelo transporte WAHA com WEBJS
+somente na linha temporária. Permanecem normalização, contratos versionados,
+idempotência, autorização, reserva anterior ao envio e handoff. ORC-01..08,
+INB-01 e MSG-01..04 exigem homologação própria no canal pareado; testes do
+adaptador não a substituem. A exceção prevalece sobre referências ao WhatsApp
+oficial neste documento exclusivamente no piloto.
+
 ## Evolução aprovada — Financeiro, Fila e detalhe
 
 Em 21/10/2026 o PO aprovou o perfil Financeiro e a composição Fila e detalhe,

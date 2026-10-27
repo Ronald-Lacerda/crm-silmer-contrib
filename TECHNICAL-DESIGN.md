@@ -1,5 +1,16 @@
 # TDD — CRM Silmer MVP
 
+## Exceção de transporte — WAHA/WEBJS
+
+A [ADR 042](docs/adr/042-piloto-whatsapp-waha-webjs.md) autoriza o piloto da
+linha temporária via WAHA/WEBJS. O adaptador em
+`ops/n8n/workflows/create-waha-workflow.mjs` transforma uma exportação do fluxo
+existente sem alterar a fonte: conserva nós de domínio, contratos CRM, site,
+painel, reservas e tratamento de resultado incerto. O candidato fica inativo;
+a publicação exige pareamento, identidade verificada e homologação. A API do
+WAHA fica privada, autenticada por credencial própria; o webhook do n8n exige
+outra credencial. [Runbook e evidências](docs/runbooks/waha-webjs.md).
+
 ## Financeiro — implementação autorizada em 22/10/2026
 
 A [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md) e o

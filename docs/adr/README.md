@@ -1,5 +1,10 @@
 # Architecture Decision Records
 
+## Decisão de 27/10/2026
+
+- [042 — Piloto WhatsApp com WAHA e WEBJS](042-piloto-whatsapp-waha-webjs.md),
+  exceção autorizada para a linha temporária, preservando n8n e contratos CRM.
+
 - [041 — Consulta administrativa do Financeiro](041-consulta-administrativa-do-financeiro.md),
   complemento documental à ADR 040: Admin consulta com menu completo; print
   descartado como referência visual e design real do CRM preservado.

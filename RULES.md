@@ -1,5 +1,14 @@
 # Regras do CRM Silmer
 
+## Exceção autorizada — piloto WAHA/WEBJS (27/10/2026)
+
+A [ADR 042](docs/adr/042-piloto-whatsapp-waha-webjs.md) autoriza WAHA com WEBJS
+somente para a linha temporária do piloto. Nessa fronteira, substitui a
+exigência de API oficial da regra técnica 4; as reservas da regra 11 valem antes
+de qualquer envio pelo transporte ativo. Mantêm-se n8n obrigatório, API do CRM,
+autorização, idempotência, handoff definitivo e os demais gates. A escolha não
+comprova pareamento, entrega real ou ausência de bloqueio.
+
 ## Financeiro — implementação autorizada em 22/10/2026
 
 A [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md) aprova
