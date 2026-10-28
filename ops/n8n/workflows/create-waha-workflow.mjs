@@ -8,6 +8,8 @@ const VALIDATE = 'WAHA - Validar origem (MVP)';
 const NEEDS_LID = 'WAHA - Resolver LID? (MVP)';
 const LOOKUP_LID = 'WAHA - Consultar identidade (MVP)';
 const CONVERT = 'WAHA - Montar evento WhatsApp (MVP)';
+const ACK_GATE = 'WAHA - Filtrar confirmação durável (MVP)';
+const ACK = 'WAHA - Confirmar recebimento durável (MVP)';
 const HUMAN_RESERVE = 'Preparar reserva de envio humano (MVP)';
 const MEDIA_UPLOAD = 'Meta - Upload midia humana (MVP)';
 const MEDIA_PREPARE = 'Preparar mensagem Meta de midia (MVP)';
@@ -48,14 +50,19 @@ export function validateWahaEvent(root, config) {
   if (pn(chat) === config.ownNumber) return null;
   if (typeof payload.id !== 'string' || !payload.id || payload.id.length > 512)
     throw new Error('WAHA_MESSAGE_ID_INVALID');
-  let occurred = payload.timestamp ?? event.timestamp;
+  // WAHA-01D / ORC-08: the synchronous reserved send records message.sent
+  // with its command_id. SERVER/ACK 1 has no command_id and is not a second
+  // authoritative send result. Only delivery/read/failure receipts follow.
+  if (ack && ![-1, 2, 3, 4].includes(Number(payload.ack))) return null;
+  // MSG-03: a receipt's payload timestamp is the original message time.
+  // Its envelope timestamp identifies the receipt; never invent that time.
+  let occurred = ack ? event.timestamp : (payload.timestamp ?? event.timestamp);
   if (typeof occurred === 'string' && !/^\d+(?:\.\d+)?$/.test(occurred))
     occurred = Date.parse(occurred);
   occurred = Number(occurred);
   if (occurred > 1e12) occurred /= 1000;
   if (!Number.isFinite(occurred) || occurred <= 0)
     throw new Error('WAHA_TIMESTAMP_INVALID');
-  if (ack && ![-1, 1, 2, 3, 4].includes(Number(payload.ack))) return null;
   return {
     waha: event,
     chat,
@@ -91,7 +98,6 @@ export function convertWahaEvent(validated, mapping, config) {
     /** @type {Record<string, string>} */
     const statuses = {
       '-1': 'failed',
-      1: 'sent',
       2: 'delivered',
       3: 'read',
       4: 'read',
@@ -312,6 +318,11 @@ export function createWahaWorkflow(source, options) {
   const workflow = structuredClone(source);
   if (!Array.isArray(workflow.nodes) || !workflow.connections)
     throw new Error('WAHA_WORKFLOW_INVALID');
+  if (
+    workflow.settings?.executionOrder &&
+    workflow.settings.executionOrder !== 'v1'
+  )
+    throw new Error('WAHA_EXECUTION_ORDER_UNSUPPORTED');
   if (workflow.nodes.some((/** @type {any} */ node) => node.name === VALIDATE))
     throw new Error('WAHA_WORKFLOW_ALREADY_ADAPTED');
   const find = (/** @type {string} */ name) => {
@@ -336,8 +347,8 @@ export function createWahaWorkflow(source, options) {
     httpMethod: 'POST',
     path: options.webhookPath ?? 'silmer/waha-events',
     authentication: 'headerAuth',
-    responseMode: 'onReceived',
-    options: { responseCode: 202, responseData: '{"accepted":true}' },
+    responseMode: 'responseNode',
+    options: {},
   };
   trigger.credentials = { httpHeaderAuth: webhookCredential };
   trigger.disabled = false;
@@ -401,6 +412,47 @@ export function createWahaWorkflow(source, options) {
   };
   workflow.connections[LOOKUP_LID] = { main: [[edge(CONVERT)]] };
   workflow.connections[CONVERT] = { main: [[edge(NORMALIZE)]] };
+  // WAHA-01D / ORC-08: acknowledge transport only after the CRM has durably
+  // accepted the message/status. v1 executes topmost branches first, so the
+  // ACK branch is both first in the connection list and above the journey.
+  // The inbound CRM node is shared by Site Chat. Its ACK branch must be a
+  // no-op there, otherwise Respond to Webhook could preempt the chat reply.
+  const ackY =
+    Math.min(
+      ...workflow.nodes.map(
+        (/** @type {any} */ node) => node.position?.[1] ?? 0,
+      ),
+    ) - 200;
+  const ackGate = codeNode(
+    ACK_GATE,
+    [-1700, ackY],
+    `if ($('${NORMALIZE}').item.json.channel !== 'whatsapp') return [];\nreturn $input.all();`,
+  );
+  ackGate.parameters.mode = 'runOnceForAllItems';
+  const ackNode = {
+    id: createHash('sha256').update(ACK).digest('hex').slice(0, 32),
+    name: ACK,
+    position: [-1500, ackY],
+    type: 'n8n-nodes-base.respondToWebhook',
+    typeVersion: 1.4,
+    parameters: {
+      respondWith: 'json',
+      responseBody: '{"accepted":true}',
+      options: { responseCode: 202 },
+    },
+  };
+  for (const name of [
+    'CRM - Registrar inbound (MVP)',
+    'CRM - Registrar status de entrega (MVP)',
+  ]) {
+    find(name);
+    const original = workflow.connections[name] ?? {};
+    const main = original.main ?? [];
+    main[0] = [edge(ACK_GATE), ...(main[0] ?? [])];
+    workflow.connections[name] = { ...original, main };
+  }
+  workflow.connections[ACK_GATE] = { main: [[edge(ACK)]] };
+  workflow.nodes.push(ackGate, ackNode);
   const normalizer = find(NORMALIZE);
   if (!normalizer.parameters.jsCode.includes("media_id: media?.id ?? '',"))
     throw new Error('WAHA_NORMALIZER_UNSUPPORTED');
@@ -516,11 +568,26 @@ export function createWahaWorkflow(source, options) {
   }
   workflow.settings = {
     ...workflow.settings,
+    executionOrder: 'v1',
     saveExecutionProgress: false,
     saveManualExecutions: false,
     saveDataErrorExecution: 'none',
     saveDataSuccessExecution: 'none',
   };
+  // n8n defaults a workflow containing Error Trigger to itself. Make this
+  // explicit only when a persisted workflow ID is available and no other
+  // handler was configured; retain its inherited sanitized failure branch.
+  if (
+    (workflow.settings.errorWorkflow === undefined ||
+      workflow.settings.errorWorkflow === null ||
+      workflow.settings.errorWorkflow === '') &&
+    typeof workflow.id === 'string' &&
+    workflow.id.trim() &&
+    workflow.nodes.some(
+      (/** @type {any} */ node) => node.type === 'n8n-nodes-base.errorTrigger',
+    )
+  )
+    workflow.settings.errorWorkflow = workflow.id;
   delete workflow.pinData;
   workflow.active = false;
   return workflow;

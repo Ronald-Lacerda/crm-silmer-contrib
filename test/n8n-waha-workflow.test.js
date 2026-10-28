@@ -112,6 +112,8 @@ test('WAHA-01: webhook uses header credential and never Meta OAuth; authenticate
   assert.equal(trigger.type, 'n8n-nodes-base.webhook');
   assert.equal(trigger.parameters.authentication, 'headerAuth');
   assert.equal(trigger.parameters.path, 'silmer/waha-events');
+  assert.equal(trigger.parameters.responseMode, 'responseNode');
+  assert.equal(trigger.parameters.options.responseCode, undefined);
   assert.deepEqual(trigger.credentials, {
     httpHeaderAuth: {
       id: 'synthetic-hook-credential',
@@ -129,6 +131,122 @@ test('WAHA-01: webhook uses header credential and never Meta OAuth; authenticate
     ),
     false,
   );
+});
+
+test('WAHA-01D / ORC-08: durable CRM success acknowledges first without changing journey or status branches', () => {
+  const gate = 'WAHA - Filtrar confirmação durável (MVP)';
+  const ack = 'WAHA - Confirmar recebimento durável (MVP)';
+  assert.equal(workflow.settings.executionOrder, 'v1');
+  for (const name of [
+    'CRM - Registrar inbound (MVP)',
+    'CRM - Registrar status de entrega (MVP)',
+  ]) {
+    const expected = source.connections[name]?.main?.[0] ?? [];
+    assert.equal(targets(name)[0], gate);
+    assert.deepEqual(workflow.connections[name].main[0].slice(1), expected);
+    assert.ok(
+      nodes.get(gate).position[1] <
+        Math.min(
+          ...expected.map(
+            (/** @type {any} */ edge) => nodes.get(edge.node).position[1],
+          ),
+        ),
+    );
+  }
+  assert.deepEqual(targets(gate), [ack]);
+  assert.equal(workflow.connections[ack], undefined);
+  assert.equal(nodes.get(ack).type, 'n8n-nodes-base.respondToWebhook');
+  assert.equal(nodes.get(ack).parameters.options.responseCode, 202);
+  assert.equal(nodes.get(ack).parameters.responseBody, '{"accepted":true}');
+  for (const name of [
+    'WAHA - Validar origem (MVP)',
+    'WAHA - Consultar identidade (MVP)',
+    'WAHA - Montar evento WhatsApp (MVP)',
+    'CRM - Registrar inbound (MVP)',
+    'CRM - Registrar status de entrega (MVP)',
+  ]) {
+    assert.equal(nodes.get(name).continueOnFail, undefined);
+    assert.equal(nodes.get(name).onError, undefined);
+  }
+});
+
+test('WAHA-01D: site chat bypasses the HTTP ACK branch; ignored WAHA events finish before CRM', async () => {
+  const gate = 'WAHA - Filtrar confirmação durável (MVP)';
+  const site = await runCode(
+    gate,
+    { private: 'synthetic-crm-result' },
+    { 'Normalizar evento WhatsApp (MVP)': { json: { channel: 'site_chat' } } },
+  );
+  assert.equal(site.length, 0);
+  const whatsapp = await runCode(
+    gate,
+    { durable: true },
+    { 'Normalizar evento WhatsApp (MVP)': { json: { channel: 'whatsapp' } } },
+  );
+  assert.equal(whatsapp.length, 1);
+  for (const skipped of [
+    event({ event: 'session.status', me: null }),
+    event({ payload: { ...event().payload, fromMe: true } }),
+  ]) {
+    const ignored = await runCode('WAHA - Validar origem (MVP)', {
+      body: skipped,
+    });
+    assert.equal(ignored.length, 0);
+  }
+  const unknownLid = event();
+  unknownLid.payload.from = '123456789@lid';
+  const validated = validateWahaEvent(unknownLid, config);
+  await assert.rejects(
+    runCode(
+      'WAHA - Montar evento WhatsApp (MVP)',
+      { lid: unknownLid.payload.from, pn: null },
+      { 'WAHA - Validar origem (MVP)': { json: validated } },
+    ),
+    /WAHA_IDENTITY_UNRESOLVED/u,
+  );
+  // n8n's documented responseNode semantics: completion without Respond is
+  // HTTP 200; a thrown error before the first Respond is HTTP 500. These
+  // structural assertions require the real n8n HTTP smoke before cutover.
+  assert.equal(
+    nodes.get('WhatsApp - Receber eventos (MVP)').parameters.responseMode,
+    'responseNode',
+  );
+});
+
+test('WAHA-01D: existing error handler is preserved; self handler requires known ID and saves no execution bodies', async () => {
+  const withId = structuredClone(source);
+  withId.id = 'synthetic-persisted-workflow';
+  delete withId.settings.errorWorkflow;
+  const self = createWahaWorkflow(withId, config);
+  assert.equal(self.settings.errorWorkflow, withId.id);
+  const configured = structuredClone(withId);
+  configured.settings.errorWorkflow = 'synthetic-existing-handler';
+  assert.equal(
+    createWahaWorkflow(configured, config).settings.errorWorkflow,
+    'synthetic-existing-handler',
+  );
+  assert.equal(workflow.settings.errorWorkflow, source.settings.errorWorkflow);
+  assert.deepEqual(
+    self.connections['Capturar falha do workflow (MVP)'],
+    source.connections['Capturar falha do workflow (MVP)'],
+  );
+  const body = await runCode('Preparar workflow.failed (MVP)', {
+    execution: {
+      id: 'synthetic-execution',
+      lastNodeExecuted: 'WAHA - Montar evento WhatsApp (MVP)',
+      error: {
+        message: 'synthetic-private-body-canary',
+        stack: 'synthetic-private-stack-canary',
+      },
+    },
+  });
+  assert.equal(body.json.payload.conversation_id, null);
+  assert.equal(body.json.payload.event_type, 'workflow.failed');
+  assert.equal(JSON.stringify(body).includes('canary'), false);
+  assert.equal(self.settings.saveDataSuccessExecution, 'none');
+  assert.equal(self.settings.saveDataErrorExecution, 'none');
+  assert.equal(self.settings.saveManualExecutions, false);
+  assert.equal(self.settings.saveExecutionProgress, false);
 });
 
 test('WAHA-01: wrong session, engine and own account fail before CRM or identity lookup', () => {
@@ -210,9 +328,8 @@ test('WAHA-01: LID requires exact authenticated lookup mapping, never interprete
   );
 });
 
-test('WAHA-01: outgoing ACKs map only server/device/read/played/failure to existing CRM delivery path', () => {
+test('WAHA-01D / ORC-08: outgoing ACKs map only device/read/played/failure; synchronous result owns sent', async () => {
   for (const [ack, status] of [
-    [1, 'sent'],
     [2, 'delivered'],
     [3, 'read'],
     [4, 'read'],
@@ -227,10 +344,58 @@ test('WAHA-01: outgoing ACKs map only server/device/read/played/failure to exist
     );
     assert.equal(result.statuses[0].status, status);
     assert.equal(result.statuses[0].id, input.payload.id);
+    const normalized = await runCode(
+      'Normalizar evento WhatsApp (MVP)',
+      result,
+    );
+    const prepared = await runCode(
+      'Preparar status de entrega (MVP)',
+      normalized.json,
+    );
+    assert.notEqual(prepared.json.payload.event_type, 'message.sent');
+    assert.equal(prepared.json.payload.event_type, 'message.' + status);
   }
-  const pending = event({ event: 'message.ack' });
-  Object.assign(pending.payload, { fromMe: true, ack: 0 });
-  assert.equal(validateWahaEvent(pending, config), null);
+  for (const ack of [0, 1]) {
+    const ignored = event({ event: 'message.ack' });
+    Object.assign(ignored.payload, { fromMe: true, ack });
+    assert.equal(validateWahaEvent(ignored, config), null);
+    const filtered = await runCode('WAHA - Validar origem (MVP)', {
+      body: ignored,
+    });
+    assert.equal(filtered.length, 0);
+  }
+});
+
+test('WAHA-01D / MSG-03: receipt time uses stable envelope milliseconds, not original message timestamp', async () => {
+  const input = event({ event: 'message.ack', timestamp: 1793100123456 });
+  Object.assign(input.payload, { fromMe: true, ack: 2, timestamp: 1793000000 });
+  const converted = convertWahaEvent(
+    validateWahaEvent(input, config),
+    null,
+    config,
+  );
+  const normalized = await runCode(
+    'Normalizar evento WhatsApp (MVP)',
+    converted,
+  );
+  assert.equal(normalized.json.occurred_at, '2026-10-27T11:22:03.000Z');
+  const repeated = await runCode('Normalizar evento WhatsApp (MVP)', converted);
+  assert.equal(repeated.json.event_id, normalized.json.event_id);
+  assert.equal(repeated.json.occurred_at, normalized.json.occurred_at);
+  const inbound = event({ timestamp: 1793100123456 });
+  assert.equal(
+    validateWahaEvent(inbound, config).occurred_at_seconds,
+    inbound.payload.timestamp,
+  );
+  const missingReceiptTime = event({
+    event: 'message.ack',
+    timestamp: undefined,
+  });
+  Object.assign(missingReceiptTime.payload, { fromMe: true, ack: 2 });
+  assert.throws(
+    () => validateWahaEvent(missingReceiptTime, config),
+    /WAHA_TIMESTAMP_INVALID/u,
+  );
 });
 
 test('WAHA-01: credential-bearing media URL rejects other origin, query keys, redirects and traversal', () => {

@@ -10,12 +10,43 @@ OPS-1 e INT-1/2. [Runbook e evidências](../../../docs/runbooks/waha-webjs.md).
 - [x] WAHA-01B — instalar e validar WEBJS privado com persistência e autenticação.
 - [x] WAHA-01C — adaptar, testar e salvar candidato inativo no n8n; smoke TEST
       autenticado sem efeito de domínio, sem substituir homologação real.
-- [ ] WAHA-01D — ativar WhatsApp no celular, parear conta esperada e homologar
+      Correções de ACK concluídas em 28/10 com 18 testes focados; candidato de
+      101 nós regenerado da fonte atual de 92 nós e importado inativo. Provas
+      remotas de falha `@lid`, resposta durável `202` e reentrega ainda pendentes.
+- [ ] WAHA-01D — confirmar pareamento da conta esperada e homologar
       entrada/resposta na Inbox, mídia, takeover, status e replay antes do cutover.
+      Em 28/10 o proprietário relatou ativação e leitura do QR; a consulta HTTP
+      `200` retornou sessão `FAILED`, `paired: false`, sem `me`, e a retomada
+      controlada preservando o volume voltou a `SCAN_QR_CODE`. Nenhuma identidade
+      da conta foi confirmada. Foto posterior do aplicativo mostrou a conta
+      bloqueada e o botão “Pedir análise”, sem informar causa. Tentativas
+      interrompidas, sessão parada e serviço `schedule/silmer-waha` suspenso
+      pelo EasyPanel com retorno de sucesso. A parada da sessão retornou
+      `201` e confirmou `STOPPED`, sem pareamento; lista vazia de containers
+      e botão `Start` na UI confirmaram a suspensão do serviço. Volumes, sessão
+      e backups preservados. Nenhuma conta substituta, publicação WAHA ou cutover.
+      WAHA-01D permanece impedida por esse bloqueio externo, sem promessa de
+      resultado da análise ou atribuição de causa ao gateway.
 - [x] WAHA-01E — registrar evidências, checks e entrega atômica no Git.
 
 O fluxo original permanece publicado durante a preparação. O piloto não recebe
 cutover nem replay de comandos antigos antes do pareamento e das verificações.
+
+Atualização de 28/10: o workflow principal evoluiu com encaminhamento
+site → WhatsApp, jornada e notas. O candidato foi regenerado da fonte atual,
+versão `91eaff25-87f6-4f13-9a27-382fcd958abe`, preservando IDs do principal,
+site e notas; o export `before-cutover-20261028.json` permanece protegido.
+Foram concluídos exclusão de ACK `1`, timestamp do ACK pelo envelope, resposta
+ao webhook após persistência no CRM com filtro para o site e tratamento
+sanitizado de erro pelo próprio candidato. `npm run validate` passou com checks
+e build: 1.168 testes, 1.165 aprovados, três ignorados, nenhuma falha. No smoke
+remoto TEST, a chamada sem autenticação retornou `403`; o status autenticado
+ignorado retornou `200`, sem CRM, IA ou envio. Isso não comprova resposta durável
+`202`, falha `@lid`, reentrega ou canal real; suas provas remotas continuam
+pendentes com o gateway suspenso. A sessão usa cliente Silmer CRM/Chrome,
+filtros de grupo/status/canais e `webjs.tagsEventsOn=true`; volume existente,
+limite de memória de 1536 MiB e contadores OOM zerados não explicam a causa
+da falha ou do bloqueio mostrado no aplicativo.
 
 ## Evolução aprovada — Financeiro (21/10/2026)
 

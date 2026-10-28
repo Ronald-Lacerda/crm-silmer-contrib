@@ -1,6 +1,6 @@
 # WAHA com WEBJS — piloto da Inbox Silmer
 
-Data: 27/10/2026, America/Sao_Paulo.
+Atualização: 28/10/2026, America/Sao_Paulo.
 Decisão: [ADR 042](../adr/042-piloto-whatsapp-waha-webjs.md) e
 [RFC 030](../rfc/030-piloto-whatsapp-waha-webjs.md).
 Rastreabilidade: WAHA-01, INBOX-2/3, AGENTE-6, OPS-1, INT-1/2;
@@ -72,21 +72,105 @@ O chat do site e o checkout da loja conservam seus contratos e webhooks.
   teste ponta a ponta e cutover permanecem pendentes. Não iniciar o atendimento
   ou declarar a linha conectada com base na instalação do gateway.
 
+## Evidência operacional em 28/10/2026
+
+O proprietário informou ter ativado o WhatsApp no celular, escaneado o QR code
+exibido pelo fluxo de pareamento no n8n e observado sucesso. A consulta seguinte
+`GET /api/sessions/default` retornou HTTP `200`, mas a sessão estava em `FAILED`,
+com `paired: false` e sem `me`. Portanto, o relato de sucesso no celular não foi
+confirmado pela identidade da conta no gateway.
+
+Uma retomada controlada, preservando o volume da sessão, voltou ao estado
+`SCAN_QR_CODE`, ainda sem identidade confirmada. Não houve publicação do
+candidato WAHA nem cutover. O workflow principal atual foi preservado e um
+export adicional foi salvo em arquivo protegido
+`before-cutover-20261028.json`, sem exportar credenciais ou execuções.
+
+A sessão está configurada com identificação de cliente Silmer CRM/Chrome,
+`ignore.groups`, `ignore.status` e `ignore.channels` habilitados, além de
+`webjs.tagsEventsOn=true`. O cgroup observado mantém limite de memória de
+1536 MiB, com contadores `oom=0` e `oom_kill=0`; o volume existe. Esses sinais
+não determinam a causa de `FAILED`, não comprovam falha de memória e não
+explicam eventual bloqueio da conta. Não apagar ou recriar o volume por tentativa.
+
+### Bloqueio da conta e suspensão do serviço
+
+Posteriormente, o proprietário enviou foto do WhatsApp Business mostrando
+“Esta conta não pode usar o WhatsApp”, com referência a 28/10 e o botão
+“Pedir análise”. A tela comprova o bloqueio apresentado pelo aplicativo; não
+informa sua causa. Não atribuir o bloqueio ao WAHA, ao pareamento, à memória
+ou a outro componente sem evidência específica, nem prometer resultado da análise.
+
+As tentativas foram interrompidas. `POST /api/sessions/default/stop` retornou
+HTTP `201`; a consulta seguinte confirmou `STOPPED` e `paired: false`.
+Em seguida, `stopAppService` para `schedule/silmer-waha` pelo conector EasyPanel
+confirmou sucesso. A consulta de containers retornou lista vazia para o serviço,
+e a UI exibiu o botão `Start` com memória de `0.0 B`, confirmando a suspensão.
+Volumes, sessão e backups foram preservados. Não houve conexão de outra conta,
+nova publicação WAHA ou cutover. O artefato local temporário do QR code foi
+removido; a foto do aplicativo enviada pelo proprietário não foi copiada para
+o repositório.
+
+O bloqueio é um impedimento externo à conclusão de WAHA-01D. A disponibilidade
+do botão “Pedir análise” não significa pedido enviado ou conta liberada.
+Enquanto o bloqueio persistir, manter o gateway suspenso e não repetir
+pareamentos, criar sessões substitutas ou reenviar mensagens por tentativa.
+
+### Correções do candidato e limites das evidências
+
+A fonte publicada do workflow principal evoluiu desde 27/10, incluindo
+encaminhamento do site para WhatsApp, jornada e notas. O candidato foi regenerado
+e importado a partir da fonte atual de 92 nós, versão
+`91eaff25-87f6-4f13-9a27-382fcd958abe`, com 101 nós no resultado. Os IDs do
+workflow principal e dos webhooks do site e as notas foram preservados; o
+candidato permanece inativo, com `errorWorkflow` apontando para ele próprio.
+Não substituir essa fonte pelo export de ontem em uma futura retomada.
+
+Foram concluídas no adapter:
+
+- Ignorar `message.ack` com valor `1`; conservar a confirmação síncrona do
+  envio como responsável pelo registro de `sent`, evitando recibo concorrente.
+- Usar o timestamp do envelope do ACK para o instante do recibo, em vez do
+  horário original da mensagem presente no payload.
+- Responder ao webhook WAHA somente após a gravação durável pelo CRM, com
+  filtro que exclui a entrada do site dessa resposta.
+- Preservar o tratamento de erro existente e configurar o vínculo ao próprio
+  workflow quando aplicável, mantendo os dados de falha sanitizados e sem
+  salvar conteúdo de execução.
+
+As correções passaram em 18 testes focados. A execução de `npm run validate`
+passou com checks e build: 1.168 testes, 1.165 aprovados, três ignorados e
+nenhuma falha. Esses testes locais não comprovam WhatsApp real.
+
+No candidato atualizado, o smoke remoto em modo de teste retornou `403` sem
+autenticação e `200` para um evento autenticado de status ignorado, sem chamar
+CRM, IA ou envio. Isso comprova apenas autenticação e transporte no-op em TEST.
+As provas remotas de falha na resolução de `@lid`, resposta durável `202`
+após CRM e reentrega continuam pendentes devido à suspensão do canal. O `200`
+do evento ignorado não substitui essas provas. Pareamento, identidade da conta
+e testes WhatsApp ponta a ponta não foram concluídos; WAHA-01D permanece aberta.
+
 ## WAHA-01 — sequência de execução
 
 - [x] WAHA-01A — preservar workflow anterior e registrar versão/identificador
       do backup, sem exportar credenciais ou dados de execução.
 - [x] WAHA-01B — instalar o serviço WEBJS com imagem identificada, volume
-      privado persistente, autenticação, limites e isolamento de rede. Container
-      em execução, acesso interno e recusa sem chave verificados; nenhuma
-      conta pareada.
+      privado persistente, autenticação, limites e isolamento de rede. Instalação,
+      acesso interno e recusa sem chave verificados; nenhuma identidade pareada
+      confirmada. Serviço suspenso em 28/10 após o bloqueio da conta no aplicativo.
 - [x] WAHA-01C — preparar e testar o adapter de eventos, identidade, envios e
       confirmações mantendo reservas, epoch, revisão, correlação e ACKs do CRM.
-      Testes locais e importação inativa concluídos; smoke remoto autenticado
-      no-op em modo de teste. Esta subetapa não comprova envio WhatsApp real.
+      Correções de ACK de 28/10 passaram em 18 testes focados; candidato de
+      101 nós regenerado da fonte atual e importado inativo. Smoke remoto
+      autenticado no-op em TEST passou; falha `@lid`, resposta durável `202`,
+      reentrega e envio WhatsApp real continuam sem prova remota.
 - [ ] WAHA-01D — parear a linha esperada e publicar a rota única; validar
-      recebimento/resposta reais, handoff, takeover, replay e reinício. Depende
-      da ativação da linha no WhatsApp do celular pelo proprietário.
+      recebimento/resposta reais, handoff, takeover, replay e reinício. Ativação
+      no celular e leitura do QR foram relatadas pelo proprietário em 28/10;
+      o runtime retornou `FAILED` e depois `SCAN_QR_CODE`, sem identidade
+      confirmada. Foto posterior mostrou a conta bloqueada no aplicativo.
+      Impedida por esse bloqueio externo; gateway suspenso, sem publicação WAHA
+      ou cutover. Volumes, sessão, backups e fluxo principal preservados.
 - [x] WAHA-01E — registrar evidências sanitizadas, limites de mídia e recovery,
       atualizar fontes canônicas, executar checks, commit e push da entrega.
       A entrega registra a preparação; a homologação real permanece em WAHA-01D.
