@@ -1851,7 +1851,7 @@ const siteChatTrigger = trigger({
 const siteRedirect = codeStep(
   'Site - Direcionar para WhatsApp (MVP)',
   [-1940, -900],
-  `return { json: { output: 'Oi! Nosso atendimento acontece pelo WhatsApp. Para conversar com a Silmer, acesse: https://wa.me/5527996337374?text=Ol%C3%A1%21%20Vim%20pelo%20site.' } };`,
+  `return { json: { output: 'Oi! Nosso atendimento acontece pelo WhatsApp. Para conversar com a Silmer, acesse: https://wa.me/5527936180599?text=Ol%C3%A1%21%20Vim%20pelo%20site.' } };`,
 );
 
 const buildSiteEvent = codeStep(

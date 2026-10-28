@@ -884,3 +884,8 @@ encaminham ao WhatsApp; trigger antigo termina em resposta fixa antes do
 CRM/IA. Mochilas e bolsas saem da abordagem do agente. Consulte a
 [auditoria](auditoria-vendedor-2026-10-27.md) para diferenças do publicado,
 testes, limitações e implantação sem perder o guard de segurança adicional.
+
+Destino de atendimento corrigido pelo proprietário: WhatsApp do CRM
+`https://wa.me/5527936180599`. O telefone institucional da loja não deve ser
+usado como fallback das entradas genéricas. Conservar contatos explicitamente
+nomeados e o fluxo de pós-pagamento da loja na fronteira correspondente.

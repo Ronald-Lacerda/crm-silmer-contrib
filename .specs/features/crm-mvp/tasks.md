@@ -245,6 +245,7 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
 - [x] Organizar canvas e notas; testar preservação de comportamento e layout.
 - [x] Publicar site em produção; PR #37 em main e smoke remoto das três rotas aprovado.
 - [x] Configurar e verificar resposta fixa Instagram/Messenger, bio e sete modelos salvos.
+- [x] Corrigir destino para o WhatsApp do CRM `5527936180599`, conforme orientação do proprietário.
 - [ ] Opcional: adicionar link direto/botão WhatsApp pelo aplicativo Instagram (edição web indisponível).
 
 Decisão ADR 043/RFC 031. Evidência em docs/integrations/n8n/auditoria-vendedor-2026-10-27.md.

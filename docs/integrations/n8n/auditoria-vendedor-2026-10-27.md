@@ -172,7 +172,8 @@ alterar links exige o aplicativo; o botão nativo de contato e um link direto
 O proprietário autorizou expressamente atualizar também o Messenger,
 pois as duas automações existentes compartilham o texto com o Instagram.
 A resposta automática e a mensagem de ausência foram salvas e reabertas
-para conferir persistência, com ambos os canais selecionados. Texto publicado:
+para conferir persistência, com ambos os canais selecionados. Texto inicialmente
+publicado (destino corrigido na seção seguinte):
 
 > Oi! Nosso atendimento acontece pelo WhatsApp. Para conversar com a Silmer,
 > toque no link: https://wa.me/5527996337374?text=Ol%C3%A1%21%20Vim%20pelas%20redes%20sociais.
@@ -198,3 +199,45 @@ Modelos salvos são manuais. Foram verificadas configuração e prévia, sem
 enviar DM a clientes nem alegar teste real de entrega externa. O inventário
 anexo foi usado como evidência, sem ser publicado ou alterar acessos,
 credenciais, recuperação, permissões ou integrações.
+
+## Correção do destino — WhatsApp do CRM
+
+O proprietário esclareceu que o atendimento deve chegar ao número
+`27936180599`, do CRM. O número usado inicialmente era o da loja e foi um
+erro de roteamento desta entrega. O destino de atendimento correto é
+`https://wa.me/5527936180599`.
+
+No n8n publicado, somente o código do nó “Site - Direcionar para WhatsApp
+(MVP)” mudou de destino. A versão “CHAN-WA-01 · Destino WhatsApp do CRM”
+ficou `Published`; smoke remoto no webhook antigo, com sessão sintética e
+texto adversarial, retornou HTTP 200 e somente a resposta fixa com o número
+correto. Nenhum envio WhatsApp foi acionado. SDK e snapshot canônico foram
+atualizados, e o teste existente passou a exigir o número do CRM e rejeitar
+o número da loja. Os 47 testes de contrato, mídia/chat e layout passaram.
+
+Na Meta, resposta automática e ausência foram corrigidas e reabertas para
+conferir persistência. Os sete modelos salvos foram corrigidos e conferidos:
+todos com o número do CRM, sem número anterior e sem texto duplicado.
+O compositor terminou vazio. Texto vigente nos dois canais:
+
+> Oi! Nosso atendimento acontece pelo WhatsApp. Para conversar com a Silmer,
+> toque no link: https://wa.me/5527936180599
+
+O link simples evita mostrar parâmetros codificados na mensagem do Direct.
+A bio não contém telefone e continua indicando o link. O link direto e o
+botão nativo do perfil permanecem para configuração pelo proprietário no
+aplicativo Instagram, usando o número do CRM. Não houve alteração de
+registro de linha, autenticação ou transporte WhatsApp.
+
+Site corrigido em produção pelas PRs
+[#38](https://github.com/romulosutil/silmer-web/pull/38) e
+[#39](https://github.com/romulosutil/silmer-web/pull/39), `main`
+`a8d71b2844a94e6bccceb1ef40a49cae1fdf6a1a`, com deploy Vercel concluído.
+Uma configuração própria de atendimento e helper sem fallback separam o
+número do CRM dos contatos da loja. Todas as entradas genéricas, inclusive
+“Dúvidas” do cabeçalho/vitrine e “Tirar dúvida” do produto, chegam ao CRM.
+Telefone institucional informativo, vendedores explicitamente nomeados e
+pós-pagamento mantêm seus destinos próprios; catálogo/checkout não mudaram.
+Build, check, 163 unitários e 219 links passaram. Smoke final em produção:
+dez cenários (início, chat, Instagram, loja e produto, em celular/desktop),
+mais chat sem JavaScript, aprovados, sem requests n8n/CRM e sem envio WhatsApp.

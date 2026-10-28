@@ -658,7 +658,8 @@ test('the public site chat redirects statically without entering CRM or AI (CHAN
   });
   assert.deepEqual(hostile, normal);
   assert.match(normal.json.output, /atendimento acontece pelo WhatsApp/u);
-  assert.match(normal.json.output, /https:\/\/wa\.me\/\d+\?text=/u);
+  assert.match(normal.json.output, /https:\/\/wa\.me\/5527936180599\?text=/u);
+  assert.doesNotMatch(normal.json.output, /5527996337374/u);
   assert.doesNotMatch(normal.json.output, /5500000000000|synthetic-untrusted/u);
   assert.doesNotMatch(redirectCode, /\$json|\$\(|fetch\(|briefing|open_order/u);
 
