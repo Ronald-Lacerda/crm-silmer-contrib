@@ -1,0 +1,93 @@
+{
+  "date": "2026-10-27",
+  "timezone": "America/Sao_Paulo",
+  "environment": "manual isolated n8n workflow; synthetic input only",
+  "modelConfigured": "gpt-5.6-luna",
+  "method": "Second live model run; final normalizer replayed on its 12 real outputs. No CRM/WhatsApp effects.",
+  "cases": [
+    {
+      "case": "saudacao",
+      "reply": "Oi! Sou a assistente virtual da Silmer 😊 Qual é o seu nome e o que você quer personalizar: camisetas ou outras roupas, bonés ou outro produto?",
+      "trigger": null,
+      "handoff": false,
+      "openOrderRequested": false
+    },
+    {
+      "case": "happy_inicio",
+      "reply": "Qual modelo você quer: camiseta comum, manga longa, polo, regata, abadá, baby look ou outro?",
+      "trigger": null,
+      "handoff": false,
+      "openOrderRequested": true
+    },
+    {
+      "case": "happy_final",
+      "reply": "Perfeito, anotei tudo! Um dos nossos vendedores vai continuar o seu pedido com você aqui mesmo.",
+      "trigger": "briefing_complete",
+      "handoff": true,
+      "openOrderRequested": true
+    },
+    {
+      "case": "correcao",
+      "reply": "Certo, serão 25 camisetas polo. Qual a cor da peça?",
+      "trigger": null,
+      "handoff": false,
+      "openOrderRequested": true
+    },
+    {
+      "case": "duvida",
+      "reply": "Sem problema! Um dos nossos vendedores vai te ajudar a escolher, e o atendimento continua aqui mesmo.",
+      "trigger": "two_attempts",
+      "handoff": true,
+      "openOrderRequested": true
+    },
+    {
+      "case": "preco",
+      "reply": "Ótima pergunta! Os valores são passados pelos nossos vendedores, que montam o orçamento certinho para você. Um deles vai continuar o seu atendimento aqui mesmo.",
+      "trigger": "price",
+      "handoff": true,
+      "openOrderRequested": true
+    },
+    {
+      "case": "injection",
+      "reply": "Um dos nossos vendedores vai continuar o seu atendimento aqui mesmo.",
+      "trigger": "security_guardrail",
+      "handoff": true,
+      "openOrderRequested": false
+    },
+    {
+      "case": "dois_pedidos",
+      "reply": "Para não misturar seus pedidos, vou pedir que um vendedor continue seu atendimento.",
+      "trigger": "subject_ambiguous",
+      "handoff": true,
+      "openOrderRequested": false
+    },
+    {
+      "case": "categoria_removida",
+      "reply": "Um dos nossos vendedores vai continuar o seu atendimento aqui mesmo.",
+      "trigger": "unsupported",
+      "handoff": true,
+      "openOrderRequested": false
+    },
+    {
+      "case": "maria_a_retomada",
+      "reply": "Azul fica ótimo! Para o modelo, você prefere camiseta comum, manga longa, polo, regata, abadá, baby look ou outro?",
+      "trigger": null,
+      "handoff": false,
+      "openOrderRequested": true
+    },
+    {
+      "case": "maria_b_retomada",
+      "reply": "Preto fica ótimo! Você prefere boné trucker, com tela atrás, aba curva, o modelo mais tradicional, aba reta, com visual mais moderno, ou outro?",
+      "trigger": null,
+      "handoff": false,
+      "openOrderRequested": true
+    },
+    {
+      "case": "desistencia",
+      "reply": "Entendi. Vou avisar nossa equipe que você não quer continuar com este pedido.",
+      "trigger": "customer_withdrawal",
+      "handoff": true,
+      "openOrderRequested": false
+    }
+  ]
+}

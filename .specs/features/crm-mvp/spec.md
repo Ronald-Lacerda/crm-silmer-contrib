@@ -323,3 +323,9 @@ do CRM/IA. O agente SHALL transferir mochilas/bolsas e duas intenções de
 pedidos explicitamente separadas sem agregar/projetar dados. Guard de
 segurança publicado SHALL ser preservado; confirmação segue humana.
 A loja mantém checkout. Nenhum clique SHALL unir identidades/históricos.
+
+A desistência explícita SHALL interromper a coleta e seguir para humano,
+sem alegar encerramento/cancelamento executado ou criar/projetar rascunho.
+Correções de produto/cor/quantidade não são desistência do atendimento.
+O próximo campo SHALL seguir o ritmo do workflow mesmo quando o modelo
+perguntar outro campo pendente ou já preenchido.

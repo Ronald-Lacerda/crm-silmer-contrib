@@ -135,6 +135,111 @@ test('a greeting alone does not open an order', () => {
   assert.equal(result.open_order, false);
 });
 
+test('a model cannot skip a missing product model when the first message gives later ficha points', () => {
+  const result = decide(
+    context('Sou Maria. Quero 30 camisetas pretas para 20 de novembro.'),
+    {
+      briefing_patch: {
+        customer_name: 'Maria',
+        product_type: 'camisetas',
+        quantity: 30,
+        colors: 'preta',
+        needed_by: '20 de novembro',
+      },
+      asked_field: 'artwork_locations',
+      reply_text: 'Onde vai a estampa?',
+      answer_status: 'answered',
+    },
+  );
+  assert.equal(result.handoff_required, false);
+  assert.equal(result.open_order, true);
+  assert.equal(result.briefing_patch.next_required_field, 'product_model');
+  assert.match(result.reply_text, /Qual modelo/u);
+  assert.doesNotMatch(result.reply_text, /Onde vai a estampa/u);
+});
+
+test('an already answered raw asked_field cannot bypass repair of the next model question', () => {
+  const result = decide(
+    context('Sou Maria. Quero 30 camisetas pretas para 20 de novembro.'),
+    {
+      briefing_patch: {
+        customer_name: 'Maria',
+        product_type: 'camisetas',
+        quantity: 30,
+        colors: 'pretas',
+        needed_by: '20 de novembro',
+      },
+      asked_field: 'colors',
+      reply_text: 'Além do preto, vocês querem alguma outra cor?',
+      answer_status: 'answered',
+    },
+  );
+  assert.equal(result.handoff_required, false);
+  assert.equal(result.briefing_patch.colors, 'pretas');
+  assert.equal(result.briefing_patch.next_required_field, 'product_model');
+  assert.match(result.reply_text, /Qual modelo/u);
+  assert.doesNotMatch(result.reply_text, /outra cor/u);
+});
+
+test('withdrawal transfers without silently updating or claiming to close the order', () => {
+  const target = subject('01', {
+    customer_name: 'Maria',
+    product_type: 'camisetas',
+    product_model: 'camiseta comum',
+    quantity: 30,
+    next_required_field: 'colors',
+  });
+  const result = decide(
+    context('Desisti. Não quero continuar o pedido.', {
+      subjects: [target],
+      source_subject_ids: [target.subject_id],
+    }),
+    {
+      answer_status: 'deferred',
+      asked_field: 'colors',
+      briefing_patch: { colors: 'Definir com o vendedor' },
+      reply_text: 'Vou encerrar seu pedido.',
+    },
+  );
+  assert.equal(result.trigger, 'customer_withdrawal');
+  assert.equal(result.handoff_required, true);
+  assert.equal(result.handoff_reason, 'human_requested');
+  assert.equal(result.briefing_patch, null);
+  assert.equal(result.open_order, false);
+  assert.equal(
+    result.reply_text,
+    'Entendi. Vou avisar nossa equipe que você não quer continuar com este pedido.',
+  );
+  assert.doesNotMatch(result.reply_text, /encerrar|encerrado|cancelado/u);
+});
+
+for (const text of [
+  'Não quero mais de 30 camisetas.',
+  'Desisti do azul. Prefiro preto.',
+]) {
+  test(`a quantity boundary or color correction is not a whole-order withdrawal: ${text}`, () => {
+    const result = decide(
+      context(text, {
+        briefing: {
+          customer_name: 'Maria',
+          product_type: 'camisetas',
+          product_model: 'camiseta comum',
+        },
+      }),
+      {
+        answer_status: 'answered',
+        briefing_patch: text.includes('30')
+          ? { quantity: 30 }
+          : { colors: 'preto' },
+      },
+    );
+    assert.notEqual(result.trigger, 'customer_withdrawal');
+    assert.equal(result.handoff_required, false);
+    assert.equal(result.open_order, true);
+    assert.notEqual(result.briefing_patch, null);
+  });
+}
+
 test('a correction replaces extracted quantity without creating another target', () => {
   const target = subject('01', {
     customer_name: 'Maria',

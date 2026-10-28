@@ -88,8 +88,58 @@ verificação explícita no ambiente alvo.
 - Auditoria npm encontrou quatro vulnerabilidades no lockfile intocado
   (uma alta em Vite, duas moderadas e uma baixa). O gate de auditoria não
   passou; atualização de dependências não integra este patch.
-- A sessão do navegador perdeu conexão depois do export (`Debugger unattached`).
-  Nenhuma publicação n8n foi realizada. O helper `prepare-vendedor-update.mjs`
-  prepara candidato privado preservando a configuração do export; importar e
-  publicar exige recuperar acesso. Modelo real e perfil/Direct Instagram
-  continuam sem evidência de teste/configuração nesta entrega.
+- Na primeira etapa a sessão do navegador perdeu conexão depois do export.
+  O proprietário reativou o acesso; a publicação e o modelo real foram
+  verificados na continuação descrita abaixo. Perfil/Direct Instagram
+  continuam sem evidência de configuração nesta entrega.
+
+## Continuação — modelo real, organização e publicação
+
+O proprietário pediu também organizar o fluxo como especialista em n8n.
+O organizador `organize-vendedor-workflow.mjs` gera cinco áreas: site para
+WhatsApp, atendimento WhatsApp, operação humana, falhas/reconciliação e
+compatibilidade histórica. A direção é da esquerda para a direita, com
+espaçamento previsível, modelo/parser próximos do agente e notas de operação.
+O layout não muda parâmetros executáveis, credenciais, webhooks ou conexões;
+testes cobrem determinismo, idempotência, corpos sem sobreposição e colisões
+de nomes reservados. A inspeção visual foi realizada no editor real.
+
+Foram executadas duas rodadas de 12 cenários sintéticos usando o modelo
+OpenAI configurado no n8n, em workflow manual privado sem nós de HTTP, CRM
+ou envio WhatsApp. As saídas reais revelaram duas lacunas adicionais:
+
+- O agente podia pular o modelo da camiseta ou repetir a cor já informada.
+  Agora o próximo campo segue o ritmo do workflow; uma pergunta declarada
+  pelo modelo que diverge desse campo é substituída pela pergunta correta,
+  incluindo quando o modelo pergunta um campo já respondido.
+- Diante de desistência, dizia que encerraria o atendimento, embora não
+  executasse encerramento. A nova guarda interrompe a coleta, transfere e
+  avisa a equipe, sem patch, novo rascunho ou alegação de cancelamento.
+  Correções como “não quero mais de 30” e “desisti do azul” não cancelam.
+
+A regra final de normalização foi reaplicada às 12 saídas reais da segunda
+rodada, sem gerar novas respostas ou efeitos comerciais. Os dois casos
+acima passaram, assim como saudação, correção, duas Marias isoladas,
+negociação, indecisão, injection, duas intenções, categoria removida e
+conclusão da pré-ficha. A [evidência sintética](evidence/vendedor-modelo-2026-10-27.json)
+guarda somente respostas e decisões mínimas, sem prompt/credenciais.
+Isso não homologa transações de encerramento ou entrega WhatsApp real.
+
+O original `k7tI6T4RhQPyJkn9` foi publicado com o nome de versão
+“CHAN-WA-01 · WhatsApp, guardas e canvas organizado”. A UI confirmou
+`Published`. O candidato WAHA continua sem cutover por esta entrega.
+O canvas tem 87 nós executáveis/legados e cinco notas, sem nomes duplicados.
+Webhooks, credenciais, configurações e conexões foram conferidos por export;
+a UI n8n regenera os IDs internos dos nós ao importar, preservando os IDs
+dos webhooks e os nomes usados nas referências. Backup anterior preservado.
+
+Smoke remoto no endereço antigo do chat, com sessão sintética inválida para
+o fluxo legado e texto pedindo orçamento/instrução adversarial: HTTP 200,
+somente `output` estático com “Nosso atendimento acontece pelo WhatsApp” e
+link `wa.me`. O caminho de entrada tem apenas trigger e resposta fixa,
+sem CRM/IA. A produção do site permanece na PR separada; não se declara
+publicação do site ou configuração do Direct com base nesse smoke.
+
+Gate final após os ajustes: `npm run validate` aprovou 1.161 testes, com
+três ignorados e nenhuma falha, seguido de build. A auditoria npm anterior
+continua com o finding de Vite; nenhuma dependência foi alterada.

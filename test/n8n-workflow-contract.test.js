@@ -1201,6 +1201,7 @@ test('a question ignored twice hands off, and news for the ficha is welcome (PO,
     { answer_status: 'question', asked_field: 'colors' },
     {
       briefing: {
+        customer_name: 'Ana',
         product_type: 'camisetas',
         next_required_field: 'colors',
         briefing_status: 'ignored',
@@ -1236,9 +1237,10 @@ test('a question ignored twice hands off, and news for the ficha is welcome (PO,
   );
   assert.equal(
     newQuestion.briefing_patch.briefing_status,
-    'collecting',
-    'an ignored question counts only while the bot asks it again',
+    'ignored',
+    'the model cannot reset an ignored question by asking a different ficha point',
   );
+  assert.equal(newQuestion.briefing_patch.next_required_field, 'customer_name');
 
   const missedThenIgnored = decide(
     { answer_status: 'other', asked_field: 'colors' },
@@ -2277,8 +2279,8 @@ test('the decision node picks the next point from the rhythm (ADR 012, ADR 024)'
       { asked_field: 'needed_by' },
       { briefing: { customer_name: 'Ana' } },
     ),
-    'needed_by',
-    'what the bot actually asked is kept for the ignored and clarifying counts',
+    'product_type',
+    'the workflow repairs a model question that skips earlier missing points',
   );
 
   const firstMiss = await rhythmDecision(

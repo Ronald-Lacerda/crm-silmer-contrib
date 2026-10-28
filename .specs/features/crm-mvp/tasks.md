@@ -241,7 +241,9 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
 - [x] Remover categorias, preservar guard publicado e cobrir ambiguidades.
 - [x] Criar CTA site/linktree e fallback estático do webhook sem CRM/IA.
 - [x] Executar matriz de 35 cenários e pesquisa documental de UX/a11y.
-- [ ] Publicar e verificar n8n/site no ambiente alvo; executar modelo real.
+- [x] Publicar e verificar n8n; executar modelo real em harness sintético sem CRM/envios.
+- [x] Organizar canvas e notas; testar preservação de comportamento e layout.
+- [ ] Publicar site em produção (preview e PR separados disponíveis).
 - [ ] Configurar e verificar botão/resposta fixa na conta Instagram.
 
 Decisão ADR 043/RFC 031. Evidência em docs/integrations/n8n/auditoria-vendedor-2026-10-27.md.
