@@ -1,5 +1,28 @@
 # TDD — CRM Silmer MVP
 
+## Transporte atual da nova linha — WAHA/WEBJS; WPPConnect pausado
+
+A [ADR 045](docs/adr/045-retomar-waha-para-atendimento-da-nova-linha.md)
+pausa o WPPConnect preparado pela ADR 044: API privada e build verificados,
+mas Chromium falhou em namespace com `EPERM`; não houve pareamento ou aplicação
+de `--no-sandbox`. Fonte e volume permanecem preservados, com serviço parado.
+O WAHA/WEBJS existente foi retomado com volumes novos de sessão e mídia,
+separados da conta anterior bloqueada, para a nova linha da Inbox real.
+O adapter de 101 nós foi regenerado do principal atual de 92 nós, preservando
+jornada, site, notas, domínio, IDs, webhooks e contratos CRM. A sessão `default`
+está em `WORKING` e sua identidade corresponde exatamente à configuração
+privada. O principal foi despublicado, importado no mesmo ID e publicado como
+“WAHA-01D · Nova linha na Inbox”, com backup protegido da versão anterior.
+Fila e execuções em andamento foram conferidas antes da troca; replay permanece
+desabilitado. Entrada real, transferência, takeover e resposta humana foram
+observados. O adapter normaliza somente um `+` inicial do destinatário E.164
+nos envios humanos de texto e mídia; a correção de dois nós foi publicada como
+“WAHA-01D · Envio humano E.164”. Resultado incerto anterior foi preservado,
+sem replay. Mídia e recuperação continuam sem homologação real.
+Não há domínio de teste ou banco/Redis adicional.
+[Estado WAHA](docs/runbooks/waha-webjs.md) e
+[preparação WPPConnect](docs/runbooks/wppconnect.md).
+
 ## Exceção de transporte — WAHA/WEBJS
 
 A [ADR 042](docs/adr/042-piloto-whatsapp-waha-webjs.md) autoriza o piloto da

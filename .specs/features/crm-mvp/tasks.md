@@ -1,5 +1,25 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## WPP-01 — preparação WPPConnect pausada
+
+Preparação: [ADR 044](../../../docs/adr/044-piloto-whatsapp-wppconnect.md).
+Revisão do transporte: [ADR 045](../../../docs/adr/045-retomar-waha-para-atendimento-da-nova-linha.md).
+Requisitos ORC-01..08, INB-01 e MSG-01..04; OPS-1, INT-1/2 e INBOX-2/3.
+[Etapas e evidências](../../../docs/runbooks/wppconnect.md).
+
+- [x] WPP-01A — construir gateway restrito e verificar API privada; navegador
+      impedido por falha de namespace `EPERM`, sem pareamento.
+- [ ] WPP-01B — confirmar pareamento e identidade real: pausado.
+- [x] WPP-01C — salvar candidato de atendimento WPPConnect de 101 nós,
+      a partir da fonte atual de 92 nós; permanece inativo e sem cutover.
+- [ ] WPP-01D — homologar canal real, recuperação e takeover: pausado.
+
+O proprietário forneceu nova linha para a Inbox real em 28/10 e pediu QR após
+reiterar a opção não oficial. WPPConnect nunca foi pareado e seu serviço foi
+parado, sem aplicação de `--no-sandbox`. Pela ADR 045, WAHA/WEBJS foi retomado
+com volumes novos para essa linha; a conta anterior bloqueada segue sem uso,
+com seus volumes preservados. Nenhuma taxa de bloqueio é inferida da biblioteca.
+
 ## WAHA-01 — piloto autorizado da linha temporária
 
 Decisão: [ADR 042](../../../docs/adr/042-piloto-whatsapp-waha-webjs.md).
@@ -13,24 +33,43 @@ OPS-1 e INT-1/2. [Runbook e evidências](../../../docs/runbooks/waha-webjs.md).
       Correções de ACK concluídas em 28/10 com 18 testes focados; candidato de
       101 nós regenerado da fonte atual de 92 nós e importado inativo. Provas
       remotas de falha `@lid`, resposta durável `202` e reentrega ainda pendentes.
-- [ ] WAHA-01D — confirmar pareamento da conta esperada e homologar
-      entrada/resposta na Inbox, mídia, takeover, status e replay antes do cutover.
-      Em 28/10 o proprietário relatou ativação e leitura do QR; a consulta HTTP
-      `200` retornou sessão `FAILED`, `paired: false`, sem `me`, e a retomada
-      controlada preservando o volume voltou a `SCAN_QR_CODE`. Nenhuma identidade
-      da conta foi confirmada. Foto posterior do aplicativo mostrou a conta
-      bloqueada e o botão “Pedir análise”, sem informar causa. Tentativas
-      interrompidas, sessão parada e serviço `schedule/silmer-waha` suspenso
-      pelo EasyPanel com retorno de sucesso. A parada da sessão retornou
-      `201` e confirmou `STOPPED`, sem pareamento; lista vazia de containers
-      e botão `Start` na UI confirmaram a suspensão do serviço. Volumes, sessão
-      e backups preservados. Nenhuma conta substituta, publicação WAHA ou cutover.
-      WAHA-01D permanece impedida por esse bloqueio externo, sem promessa de
-      resultado da análise ou atribuição de causa ao gateway.
+- [x] WAHA-01D (texto operacional) — mensagem nova pelo WhatsApp Web persistiu
+      na Inbox, bot transferiu e sua resposta chegou ao remetente. Takeover
+      humano observado; nova resposta pela Inbox chegou uma vez ao WhatsApp.
+      A conta anterior permanece bloqueada e sem uso, com seus volumes
+      preservados; o histórico está no runbook. Pela ADR 045, WAHA/WEBJS foi
+      retomado com volumes novos para a nova linha da Inbox real. O candidato
+      `WahaSilmerPilot01` foi atualizado da fonte atual de 92 nós para 101 nós,
+      permanecendo inativo. Depois do pareamento privado, a sessão `default`
+      passou a `WORKING` e sua identidade foi conferida exatamente com a
+      configuração privada. O principal `k7tI6T4RhQPyJkn9` foi despublicado,
+      atualizado no mesmo ID para 101 nós e publicado na UI como
+      “WAHA-01D · Nova linha na Inbox”, preservando IDs, webhooks e notas.
+      Backup anterior protegido e filas sem pendências foram conferidos;
+      `replaySafe=false`. Dois nós de envio humano foram corrigidos para
+      normalizar um `+` inicial do destinatário E.164 e publicados como
+      “WAHA-01D · Envio humano E.164”. O primeiro comando que falhou antes do
+      HTTP conserva `OUTCOME_UNKNOWN`, sem replay; a prova final usou outro
+      comando com texto diferente. Conteúdo e capturas permanecem privados.
+- [ ] WAHA-01D (homologação restante) — mídia, matriz de status/falhas,
+      reentrega, resultado incerto e reinício/reconexão do canal ainda exigem
+      evidências próprias; não declarar a matriz inteira homologada.
 - [x] WAHA-01E — registrar evidências, checks e entrega atômica no Git.
 
-O fluxo original permanece publicado durante a preparação. O piloto não recebe
-cutover nem replay de comandos antigos antes do pareamento e das verificações.
+O transporte WAHA está publicado no ID principal preservado; candidatos
+separados continuam inativos. Não reprocessar comandos ou execuções antigas.
+O smoke completo com origem inválida retornou `500` antes do CRM; o no-op
+anterior `200` verificava somente transporte. Em produção, sem autenticação
+retornou `403`; status autenticado ignorado retornou `200`. Nenhuma dessas
+respostas comprova recebimento/resposta real; a prova real está registrada
+separadamente acima. Após a correção E.164, 39 testes focados passaram
+(21 WAHA e 18 WPP). `npm run validate` passou com build: 1.189 testes,
+1.186 aprovados, três ignorados e nenhuma falha. Site e link da bio foram publicados pela PR 40,
+com novo destino e ausência do anterior verificados por HTTP. Duas automações
+Meta e sete respostas salvas foram conferidas com o novo destino. Bio aponta
+ao site atualizado; telefone comercial do Instagram e telefone da página
+Facebook estavam sem telefone, sem destino antigo nesses campos. Autorização
+e solicitação de análise do app não foram alteradas.
 
 Atualização de 28/10: o workflow principal evoluiu com encaminhamento
 site → WhatsApp, jornada e notas. O candidato foi regenerado da fonte atual,
@@ -43,7 +82,9 @@ e build: 1.168 testes, 1.165 aprovados, três ignorados, nenhuma falha. No smoke
 remoto TEST, a chamada sem autenticação retornou `403`; o status autenticado
 ignorado retornou `200`, sem CRM, IA ou envio. Isso não comprova resposta durável
 `202`, falha `@lid`, reentrega ou canal real; suas provas remotas continuam
-pendentes com o gateway suspenso. A sessão usa cliente Silmer CRM/Chrome,
+pendentes. A suspensão e o bloqueio relatados nesse histórico referem-se à
+conta anterior; o estado da nova linha consta em WAHA-01D e na ADR 045.
+A sessão anterior usava cliente Silmer CRM/Chrome,
 filtros de grupo/status/canais e `webjs.tagsEventsOn=true`; volume existente,
 limite de memória de 1536 MiB e contadores OOM zerados não explicam a causa
 da falha ou do bloqueio mostrado no aplicativo.

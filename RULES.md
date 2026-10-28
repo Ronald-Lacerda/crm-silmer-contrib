@@ -1,5 +1,19 @@
 # Regras do CRM Silmer
 
+## Exceção atualizada — nova linha na Inbox por WAHA/WEBJS (28/10/2026)
+
+A [ADR 045](docs/adr/045-retomar-waha-para-atendimento-da-nova-linha.md)
+supersede a escolha de transporte da ADR 044 para a nova linha: WPPConnect
+fica parado, sem pareamento ou `--no-sandbox`, e WAHA/WEBJS é retomado com
+volumes novos. O destino é a Inbox real, sem atendimento de teste paralelo.
+A conta anterior bloqueada não é reativada; seus volumes ficam preservados.
+Mantêm-se n8n, API do CRM, autenticação, reservas e idempotência. A identidade
+da nova conta foi confirmada em `WORKING` e o transporte publicado no workflow
+principal preservado. Texto real de entrada, transferência, takeover e
+resposta humana foram verificados; os gates restantes continuam em WAHA-01D.
+Exibição de QR e resposta HTTP no-op não comprovam atendimento ponta a ponta.
+Não repetir comandos antigos nem inferir menor risco de bloqueio.
+
 ## Exceção autorizada — piloto WAHA/WEBJS (27/10/2026)
 
 A [ADR 042](docs/adr/042-piloto-whatsapp-waha-webjs.md) autoriza WAHA com WEBJS

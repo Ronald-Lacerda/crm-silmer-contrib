@@ -1,5 +1,23 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Transporte atual da nova linha — WAHA/WEBJS
+
+A [ADR 045](docs/adr/045-retomar-waha-para-atendimento-da-nova-linha.md)
+pausa a preparação WPPConnect da ADR 044 após falha de namespace do Chromium,
+sem pareamento e sem aplicação de `--no-sandbox`. O serviço WPPConnect está
+parado. WAHA/WEBJS foi retomado com volumes novos para a nova linha destinada
+ao atendimento real da Inbox; a conta anterior bloqueada permanece sem uso e
+seus volumes foram preservados. A sessão `default` está em `WORKING`, com
+identidade exatamente igual à configuração privada esperada. O transporte foi
+publicado no mesmo workflow principal, agora com 101 nós, preservando IDs,
+webhooks e notas da fonte de 92 nós e seu backup protegido. Mensagem nova,
+persistência na Inbox, transferência, takeover e resposta humana entregue
+uma vez foram observados. WAHA-01D segue aberta para os gates restantes de
+mídia, falhas, reentrega e recuperação.
+Não há Inbox paralela, Redis ou banco adicional.
+[Estado atual e gates](docs/runbooks/waha-webjs.md);
+[preparação WPPConnect preservada](docs/runbooks/wppconnect.md).
+
 ## Piloto autorizado — WAHA com WEBJS
 
 A [ADR 042](docs/adr/042-piloto-whatsapp-waha-webjs.md), vinculada à

@@ -1,5 +1,23 @@
 # Topologia EasyPanel — CRM Silmer
 
+## Transporte da nova linha — WAHA retomado; WPPConnect parado
+
+A [ADR 045](docs/adr/045-retomar-waha-para-atendimento-da-nova-linha.md)
+pausa `schedule/silmer-wppconnect`, preparado pela ADR 044 com API privada na
+porta 21465 e volume `/data`. O build passou, mas o Chromium falhou em namespace
+com `EPERM`; o serviço foi parado sem parear conta e sem `--no-sandbox`.
+Fonte, configuração e volume foram preservados. O serviço existente
+`schedule/silmer-waha` foi retomado com a imagem WEBJS já fixada abaixo e
+volumes novos de sessão e mídia para a nova linha. Os volumes anteriores
+continuam separados e preservados; a conta bloqueada não foi reutilizada.
+Não foram publicados domínio ou porta para os gateways. O QR é manual e privado
+no n8n. A sessão WAHA `default` está em `WORKING`, com identidade esperada
+confirmada; o workflow principal foi atualizado no mesmo ID e publicado com
+101 nós. Entrada real na Inbox e resposta humana entregue uma vez foram
+verificadas; mídia, reentrega e recuperação continuam com gates abertos.
+[Estado atual WAHA](docs/runbooks/waha-webjs.md) e
+[evidências WPPConnect](docs/runbooks/wppconnect.md).
+
 ## Serviço adicional autorizado — piloto WAHA/WEBJS
 
 A [ADR 042](docs/adr/042-piloto-whatsapp-waha-webjs.md) autoriza

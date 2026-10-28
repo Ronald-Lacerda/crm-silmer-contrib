@@ -1,5 +1,14 @@
 # Request for Comments
 
+## Decisão de 28/10/2026
+
+- [033 — Retomar WAHA para atendimento da nova linha](033-retomar-waha-para-atendimento-da-nova-linha.md),
+  decidida na ADR 045; WPPConnect parado e pareamento WAHA da nova linha
+  destinado à Inbox real; identidade confirmada e principal publicado,
+  com texto real de ida e volta verificado e gates restantes abertos.
+- [032 — Pareamento privado com WPPConnect](032-pareamento-privado-com-wppconnect.md),
+  decidida na ADR 044; preparação preservada e transporte revisto na RFC 033/ADR 045.
+
 ## Decisão de 27/10/2026
 
 - [030 — Piloto WhatsApp com WAHA e WEBJS](030-piloto-whatsapp-waha-webjs.md),

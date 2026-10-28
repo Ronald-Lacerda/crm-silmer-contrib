@@ -1,0 +1,484 @@
+# syntax=docker/dockerfile:1.7
+# WPP-01. Inline source build: no local context, credentials or Manager assets.
+FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS build
+ENV PUPPETEER_SKIP_DOWNLOAD=true PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true HUSKY=0 SHARP_IGNORE_GLOBAL_LIBVIPS=1
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates python3 make g++ pkg-config && rm -rf /var/lib/apt/lists/*
+RUN git init . && git remote add origin https://github.com/wppconnect-team/wppconnect-server.git && git fetch --depth 1 origin 27d2b0e573870d8ac20e28ed4180a2e51c30c8ea && git checkout --detach FETCH_HEAD && test "$(git rev-parse HEAD)" = "27d2b0e573870d8ac20e28ed4180a2e51c30c8ea"
+RUN corepack enable && corepack prepare yarn@4.14.1 --activate && yarn install --immutable
+COPY <<'SILMER_SOURCE' /app/src/silmer-runtime.cjs
+// WPP-01 / ORC-08. Private profile for the pinned upstream gateway.
+const fs = require('node:fs/promises');
+const { timingSafeEqual, createHash } = require('node:crypto');
+
+let sessionToken;
+
+function required(env, name, minimum = 1) {
+  const value = env[name];
+  if (typeof value !== 'string' || value.length < minimum)
+    throw new Error('WPP_CONFIGURATION_REQUIRED_' + name);
+  return value;
+}
+
+function settings(env) {
+  const session = required(env, 'WPP_SESSION');
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(session))
+    throw new Error('WPP_SESSION_INVALID');
+  const phase = required(env, 'WPP_PHASE');
+  if (!['pair', 'integrated'].includes(phase))
+    throw new Error('WPP_PHASE_INVALID');
+  const secret = required(env, 'SECRET_KEY', 32);
+  let webhook = null;
+  if (phase === 'integrated') {
+    required(env, 'WPP_WEBHOOK_TOKEN', 32);
+    if (
+      !/^\d{8,15}@(c\.us|s\.whatsapp\.net)$/.test(
+        env.WPP_EXPECTED_OWN_JID || '',
+      )
+    )
+      throw new Error('WPP_EXPECTED_OWN_JID_REQUIRED');
+    let url;
+    try {
+      url = new URL(required(env, 'WPP_WEBHOOK_URL'));
+    } catch {
+      throw new Error('WPP_WEBHOOK_URL_INVALID');
+    }
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    )
+      throw new Error('WPP_WEBHOOK_URL_INVALID');
+    webhook = url.href;
+  }
+  return { session, phase, secret, webhook };
+}
+
+function buildConfig(env) {
+  const { secret, webhook } = settings(env);
+  const args = ['--disable-dev-shm-usage', '--no-first-run', '--mute-audio'];
+  // Opt in only after proving the container cannot use Chromium's sandbox.
+  if (env.WPP_CHROMIUM_NO_SANDBOX === 'true') args.push('--no-sandbox');
+  return {
+    secretKey: secret,
+    host: 'http://127.0.0.1',
+    port: 21465,
+    deviceName: 'Silmer CRM',
+    poweredBy: 'Chrome',
+    startAllSession: false,
+    tokenStoreType: 'file',
+    maxListeners: 15,
+    customUserDataDir: '/data/browser',
+    webhook: {
+      url: webhook,
+      allowedUrls: webhook ? [webhook] : [],
+      autoDownload: false,
+      retryAttempts: 3,
+      retryDelay: 5000,
+      requestTimeout: 30000,
+      autoDownloadMaxSize: 5 * 1024 * 1024,
+      uploadS3: false,
+      readMessage: false,
+      allUnreadOnStart: false,
+      listenAcks: env.WPP_PHASE === 'integrated',
+      onPresenceChanged: false,
+      onParticipantsChanged: false,
+      onReactionMessage: false,
+      onPollResponse: false,
+      onRevokedMessage: false,
+      onLabelUpdated: false,
+      onSelfMessage: false,
+      ignore: ['status@broadcast', 'qrcode', 'phoneCode'],
+    },
+    websocket: { autoDownload: false, uploadS3: false },
+    chatwoot: { sendQrCode: false, sendStatus: false },
+    archive: { enable: false, waitTime: 10, daysToArchive: 45 },
+    log: { level: 'error', logger: [] },
+    createOptions: {
+      browserArgs: args,
+      useInsecureChromiumArgs: false,
+      useChrome: false,
+      headless: true,
+      debug: false,
+      devtools: false,
+      logQR: false,
+      disableWelcome: true,
+      updatesLog: false,
+      autoClose: 120000,
+      deviceSyncTimeout: 180000,
+      linkPreviewApiServers: [],
+      puppeteerOptions: { executablePath: '/usr/bin/chromium' },
+    },
+    mapper: { enable: false, prefix: '' },
+    db: {},
+    aws_s3: {},
+  };
+}
+
+function equalSecret(left, right) {
+  if (typeof left !== 'string' || typeof right !== 'string') return false;
+  return timingSafeEqual(
+    createHash('sha256').update(left).digest(),
+    createHash('sha256').update(right).digest(),
+  );
+}
+
+async function prepareToken(env, bcrypt) {
+  const { session, secret } = settings(env);
+  process.umask(0o077);
+  await fs.mkdir('/data/api', { recursive: true, mode: 0o700 });
+  const file = '/data/api/session.token';
+  let value = env.WPP_SESSION_TOKEN;
+  if (
+    value &&
+    !(await bcrypt.compare(
+      session + secret,
+      value.replaceAll('_', '/').replaceAll('-', '+'),
+    ))
+  )
+    throw new Error('WPP_TOKEN_BINDING_INVALID');
+  if (value) {
+    await fs.writeFile(file, value + '\n', { mode: 0o600 });
+  } else {
+    try {
+      const stat = await fs.lstat(file);
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 256)
+        throw new Error('WPP_TOKEN_FILE_INVALID');
+      value = (await fs.readFile(file, 'utf8')).trim();
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+      value = (await bcrypt.hash(session + secret, 12))
+        .replaceAll('/', '_')
+        .replaceAll('+', '-');
+      await fs.writeFile(file, value + '\n', { flag: 'wx', mode: 0o600 });
+    }
+  }
+  if (
+    !(await bcrypt.compare(
+      session + secret,
+      value.replaceAll('_', '/').replaceAll('-', '+'),
+    ))
+  )
+    throw new Error('WPP_TOKEN_BINDING_INVALID');
+  await fs.chmod(file, 0o600);
+  sessionToken = value;
+}
+
+const pairGet = new Set([
+  'qrcode-session',
+  'check-connection-session',
+  'status-session',
+]);
+const pairPost = new Set(['start-session', 'close-session']);
+const integratedPost = new Set([
+  'send-message',
+  'send-file-base64',
+  'send-voice-base64',
+]);
+
+function createGuard(
+  env,
+  token,
+  getClients = () => require('./util/sessionUtil').clientsArray,
+) {
+  const { session, phase } = settings(env);
+  return function guard(req, res, next) {
+    res.setHeader('Cache-Control', 'no-store');
+    if (req.originalUrl?.includes('?')) return res.status(404).end();
+    if (req.method === 'GET' && req.path === '/healthz') return next();
+    // Exact session route; rejects URL credentials and stock secret-in-URL APIs.
+    const prefix = '/api/' + session + '/';
+    if (!req.path.startsWith(prefix)) return res.status(404).end();
+    if (!equalSecret(req.headers.authorization, 'Bearer ' + token))
+      return res.status(401).json({ error: 'UNAUTHORIZED' });
+    const action = req.path.slice(prefix.length);
+    if (req.method === 'GET' && action === 'silmer-identity') {
+      const clients = getClients();
+      const client = clients[session];
+      return Promise.resolve(client?.isConnected?.())
+        .then((connected) => (connected === true ? client.getWid() : null))
+        .then((jid) => {
+          if (
+            typeof jid !== 'string' ||
+            !/^\d{8,15}@(c\.us|s\.whatsapp\.net)$/.test(jid)
+          )
+            return res.status(409).json({ connected: false });
+          return res.status(200).json({ connected: true, own_jid: jid });
+        })
+        .catch(() => res.status(409).json({ connected: false }));
+    }
+    const allowed =
+      (req.method === 'GET' && pairGet.has(action)) ||
+      (req.method === 'POST' && pairPost.has(action)) ||
+      (phase === 'integrated' &&
+        req.method === 'POST' &&
+        integratedPost.has(action)) ||
+      (phase === 'integrated' &&
+        req.method === 'GET' &&
+        /^get-media-by-message\/[^/]+$/.test(action)) ||
+      (phase === 'integrated' &&
+        req.method === 'GET' &&
+        /^contact\/pn-lid\/(?:\d{8,15}(?:%40|@)(?:c\.us|s\.whatsapp\.net)|\d{5,30}(?:%40|@)lid)$/.test(
+          action,
+        ));
+    if (!allowed) return res.status(404).end();
+    return next();
+  };
+}
+
+function guard(req, res, next) {
+  return createGuard(process.env, sessionToken)(req, res, next);
+}
+
+function guardBody(req, res, next) {
+  if (req.path.endsWith('/start-session')) req.body = { waitQrCode: false };
+  return next();
+}
+
+function silenceConsole() {
+  for (const key of ['log', 'warn', 'error', 'info', 'debug', 'trace'])
+    console[key] = () => {};
+  process.on('uncaughtException', () => {
+    process.stderr.write('WPP_UNCAUGHT_ERROR\n');
+    process.exit(1);
+  });
+  process.on('unhandledRejection', () => {
+    process.stderr.write('WPP_UNHANDLED_REJECTION\n');
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  buildConfig,
+  settings,
+  prepareToken,
+  guard,
+  createGuard,
+  guardBody,
+  silenceConsole,
+  equalSecret,
+};
+SILMER_SOURCE
+COPY <<'SILMER_SOURCE' /app/src/silmer-webhook.cjs
+// WPP-01 / MSG-01..04. Retry inbound notifications, never outbound sends.
+const transientCodes = new Set([
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'ECONNABORTED',
+  'ECONNRESET',
+  'EAI_AGAIN',
+]);
+const pn = (value) =>
+  typeof value === 'string' &&
+  /^\d{8,15}@(c\.us|s\.whatsapp\.net)$/.test(value);
+
+async function deliverWebhook(
+  client,
+  req,
+  event,
+  data,
+  transport,
+  options = {},
+) {
+  const env = options.env || process.env;
+  if (env.WPP_PHASE !== 'integrated' || !['onmessage', 'onack'].includes(event))
+    return false;
+  if (client?.session !== env.WPP_SESSION) return false;
+  const configured = req.serverOptions.webhook;
+  if (!configured?.url || configured.url !== env.WPP_WEBHOOK_URL) return false;
+  if (client?.config?.webhook && client.config.webhook !== configured.url)
+    return false;
+  if (
+    event === 'onmessage' &&
+    (data?.fromMe !== false ||
+      data?.isGroupMsg ||
+      /@(g\.us|broadcast|newsletter)$/.test(data?.from || ''))
+  )
+    return false;
+  let ownJid;
+  try {
+    ownJid = await client.getWid();
+  } catch {}
+  if (!pn(ownJid) || ownJid !== env.WPP_EXPECTED_OWN_JID) {
+    process.stderr.write('WPP_IDENTITY_UNAVAILABLE\n');
+    return false;
+  }
+  // Trusted fields overwrite payload fields. Timestamp and body are stable across retries.
+  const body = {
+    ...data,
+    event,
+    session: client.session,
+    __wpp_received_at: (options.now || (() => new Date()))().toISOString(),
+    __wpp_own_jid: ownJid,
+  };
+  const sleep =
+    options.sleep ||
+    ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const result = await transport.post(configured.url, body, {
+        timeout: 30000,
+        maxRedirects: 0,
+        headers: { 'X-Silmer-WPP-Token': env.WPP_WEBHOOK_TOKEN },
+      });
+      if (result.status < 200 || result.status >= 300) {
+        const error = new Error('WPP_WEBHOOK_HTTP');
+        error.response = { status: result.status };
+        throw error;
+      }
+      return true;
+    } catch (error) {
+      const status = error?.response?.status;
+      const retryable = Number.isInteger(status)
+        ? status >= 500 && status <= 599
+        : transientCodes.has(error?.code);
+      if (!retryable || attempt === 2) {
+        process.stderr.write('WPP_WEBHOOK_DELIVERY_FAILED\n');
+        return false;
+      }
+      await sleep(5000 * 2 ** attempt);
+    }
+  }
+  return false;
+}
+
+module.exports = { deliverWebhook };
+SILMER_SOURCE
+COPY <<'SILMER_SOURCE' /tmp/patch-upstream.mjs
+import { readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
+// Deliberately fail if upstream moves. Use only the source commit pinned in Dockerfile.
+const root = resolve(process.argv[2] || '.');
+async function edit(path, before, after) {
+  const file = resolve(root, path);
+  const source = await readFile(file, 'utf8');
+  if (
+    !source.includes(before) ||
+    source.indexOf(before) !== source.lastIndexOf(before)
+  )
+    throw new Error('WPP_PATCH_CONTEXT_MISMATCH_' + path);
+  await writeFile(file, source.replace(before, after));
+}
+
+await writeFile(
+  resolve(root, 'src/config.ts'),
+  `import { ServerOptions } from './types/ServerOptions';
+const { buildConfig } = require('./silmer-runtime.cjs');
+export default buildConfig(process.env) as unknown as ServerOptions;
+`,
+);
+await writeFile(
+  resolve(root, 'src/server.ts'),
+  `import bcrypt from 'bcrypt';
+import config from './config';
+import { initServer } from './index';
+const runtime = require('./silmer-runtime.cjs');
+runtime.silenceConsole();
+runtime.prepareToken(process.env, bcrypt).then(() => initServer(config)).catch(() => {
+  process.stderr.write('WPP_STARTUP_CONFIGURATION_FAILED\\n'); process.exit(1);
+});
+`,
+);
+
+await edit(
+  'src/index.ts',
+  'export const logger = createLogger(config.log);',
+  `defaultLogger.silent = true;
+export const logger = createLogger(config.log);
+logger.silent = true;`,
+);
+await edit(
+  'src/index.ts',
+  '  const app = express();',
+  `  const app = express();
+  app.disable('x-powered-by');
+  app.use(require('./silmer-runtime.cjs').guard);`,
+);
+await edit(
+  'src/index.ts',
+  '  app.use(cors());',
+  '  // Private gateway: no browser CORS surface.',
+);
+await edit(
+  'src/index.ts',
+  '  app.use(boolParser());',
+  `  app.use(boolParser());
+  app.use(require('./silmer-runtime.cjs').guardBody);`,
+);
+await edit(
+  'src/index.ts',
+  '  const io = new Socket(http, {',
+  `  const io = new Socket(http, {
+    allowRequest: (_request, callback) => callback('Disabled', false),`,
+);
+
+const fnPath = resolve(root, 'src/util/functions.ts');
+let source = await readFile(fnPath, 'utf8');
+const begin = source.indexOf('export async function callWebHook(');
+const end = source.indexOf('\nfunction webhookNumber(', begin);
+if (begin < 0 || end < 0) throw new Error('WPP_WEBHOOK_PATCH_CONTEXT_MISMATCH');
+source =
+  source.slice(0, begin) +
+  `export async function callWebHook(client: any, req: Request, event: any, data: any) {
+  return require('../silmer-webhook.cjs').deliverWebhook(client, req, event, data, api);
+}
+` +
+  source.slice(end);
+await writeFile(fnPath, source);
+await edit(
+  'src/util/tokenStore/FileTokenStore/FileTokenStore.ts',
+  "  path: './tokens',",
+  "  path: '/data/tokens',",
+);
+await edit(
+  'src/util/createSessionUtil.ts',
+  '    await this.listenMessages(client, req);',
+  "    if (process.env.WPP_PHASE === 'integrated') await this.listenMessages(client, req);",
+);
+await edit(
+  'src/util/createSessionUtil.ts',
+  `      if (message.type === 'sticker') {
+        download(message, client, req.logger);
+      }`,
+  '      // Silmer: no unsolicited sticker download or public static media copy.',
+);
+
+// Upstream routes import instrumentation at module load and Babel emits runtime
+// helper imports. Keep these locked packages when pruning build-only packages.
+const packagePath = resolve(root, 'package.json');
+const project = JSON.parse(await readFile(packagePath, 'utf8'));
+if (project.version !== '2.10.69')
+  throw new Error('WPP_PACKAGE_PATCH_CONTEXT_MISMATCH');
+for (const [name, version] of [
+  ['prom-client', '^14.2.0'],
+  ['@babel/runtime', '^7.29.10'],
+]) {
+  if (project.devDependencies[name] !== version)
+    throw new Error('WPP_PACKAGE_PATCH_CONTEXT_MISMATCH');
+  project.dependencies[name] = version;
+  delete project.devDependencies[name];
+}
+await writeFile(packagePath, JSON.stringify(project, null, 2) + '\n');
+
+// No dependency updates: the upstream immutable lock must resolve this exact core.
+const lock = await readFile(resolve(root, 'yarn.lock'), 'utf8');
+if (!lock.includes('resolution: "@wppconnect-team/wppconnect@npm:2.3.6"'))
+  throw new Error('WPP_CORE_LOCK_MISMATCH');
+console.log('WPP_PATCH_APPLIED');
+SILMER_SOURCE
+RUN node /tmp/patch-upstream.mjs /app && yarn build && test -f dist/silmer-runtime.cjs && test -f dist/silmer-webhook.cjs && yarn workspaces focus --all --production && node -e "if(require('@wppconnect-team/wppconnect/package.json').version!=='2.3.6')process.exit(1);require('prom-client');require('bcrypt');require.resolve('@babel/runtime/package.json')"
+FROM node:22.23.4-bookworm-slim@sha256:4b150b48b4116e2a22f2c39cc27025fbf4f153e2078fd3b14d159fdb5c7279da AS runtime
+LABEL org.opencontainers.image.source="https://github.com/wppconnect-team/wppconnect-server" org.opencontainers.image.revision="27d2b0e573870d8ac20e28ed4180a2e51c30c8ea" org.opencontainers.image.version="2.10.69-silmer-private-1"
+ENV NODE_ENV=production PORT=21465 PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium PUPPETEER_SKIP_DOWNLOAD=true MANAGER_ENABLED=false
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends chromium chromium-sandbox tini ca-certificates fonts-liberation && rm -rf /var/lib/apt/lists/* && test -u /usr/lib/chromium/chrome-sandbox && test "$(stat -c %u /usr/lib/chromium/chrome-sandbox)" = "0" && mkdir -p /data/api /data/tokens /data/browser /app/uploads /app/WhatsAppImages && chown -R node:node /app /data && chmod 700 /data /data/api /data/tokens /data/browser
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/package.json /app/yarn.lock /app/LICENSE ./
+USER node
+EXPOSE 21465
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD node -e "fetch('http://127.0.0.1:21465/healthz').then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"
+ENTRYPOINT ["/usr/bin/tini", "--", "node", "dist/server.js"]

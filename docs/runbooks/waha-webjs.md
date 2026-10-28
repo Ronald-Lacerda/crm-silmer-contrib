@@ -14,6 +14,12 @@ As evidências observadas estão registradas abaixo. A criação do serviço e o
 testes do adapter não comprovam sessão conectada, tráfego real, mídia homologada
 ou recuperação.
 
+Estado atual em 28/10: nova identidade confirmada em `WORKING`, transporte
+WAHA publicado no mesmo workflow principal e texto real de ida e volta
+verificado, com transferência e takeover. WAHA-01D continua aberta para os
+gates restantes do canal. O registro mais recente ao final deste
+runbook prevalece sobre os estados históricos de preparação abaixo.
+
 O número e a identidade da conta esperada ficam na configuração privada do
 ambiente. Não registrar telefone real, chave de API, QR code, código de
 pareamento, credenciais n8n ou conteúdo de cliente neste documento.
@@ -156,24 +162,28 @@ e testes WhatsApp ponta a ponta não foram concluídos; WAHA-01D permanece abert
       do backup, sem exportar credenciais ou dados de execução.
 - [x] WAHA-01B — instalar o serviço WEBJS com imagem identificada, volume
       privado persistente, autenticação, limites e isolamento de rede. Instalação,
-      acesso interno e recusa sem chave verificados; nenhuma identidade pareada
-      confirmada. Serviço suspenso em 28/10 após o bloqueio da conta no aplicativo.
+      acesso interno e recusa sem chave verificados. A conta anterior bloqueada
+      continua sem uso; a nova conta tem identidade confirmada em `WORKING`.
 - [x] WAHA-01C — preparar e testar o adapter de eventos, identidade, envios e
       confirmações mantendo reservas, epoch, revisão, correlação e ACKs do CRM.
       Correções de ACK de 28/10 passaram em 18 testes focados; candidato de
       101 nós regenerado da fonte atual e importado inativo. Smoke remoto
       autenticado no-op em TEST passou; falha `@lid`, resposta durável `202`,
-      reentrega e envio WhatsApp real continuam sem prova remota.
-- [ ] WAHA-01D — parear a linha esperada e publicar a rota única; validar
-      recebimento/resposta reais, handoff, takeover, replay e reinício. Ativação
-      no celular e leitura do QR foram relatadas pelo proprietário em 28/10;
-      o runtime retornou `FAILED` e depois `SCAN_QR_CODE`, sem identidade
-      confirmada. Foto posterior mostrou a conta bloqueada no aplicativo.
-      Impedida por esse bloqueio externo; gateway suspenso, sem publicação WAHA
-      ou cutover. Volumes, sessão, backups e fluxo principal preservados.
+      reentrega e mídia continuam sem prova remota. A prova posterior de texto
+      real e a correção E.164 estão registradas ao final deste runbook.
+- [x] WAHA-01D (texto operacional) — recebimento real, persistência na Inbox,
+      transferência, takeover e resposta humana entregue uma vez verificados.
+      Nova linha pareada com identidade confirmada em
+      `WORKING`; principal publicado no mesmo ID com 101 nós. Volumes da conta
+      anterior bloqueada e backups preservados, sem uso daquela conta. Prova
+      real registrada na seção final, sem versionar conteúdo ou captura.
+- [ ] WAHA-01D (homologação restante) — mídia, matriz de status/falhas,
+      reentrega e reinício/reconexão ainda pendentes. Instalação, publicação,
+      texto bem-sucedido e no-op HTTP não homologam esses cenários.
 - [x] WAHA-01E — registrar evidências sanitizadas, limites de mídia e recovery,
       atualizar fontes canônicas, executar checks, commit e push da entrega.
-      A entrega registra a preparação; a homologação real permanece em WAHA-01D.
+      A entrega inclui texto real de ida e volta; a homologação restante
+      permanece explicitamente aberta em WAHA-01D.
 
 ## Instalação no EasyPanel
 
@@ -352,3 +362,148 @@ Para rollback:
 - [Integração n8n do WAHA](https://waha.devlike.pro/docs/integrations/n8n/).
 - [Contrato CRM ↔ n8n](../integrations/n8n/README.md).
 - [Histórico de ativação Meta e confirmação de comandos](inbox-whatsapp.md).
+
+## Retomada inicial em 28/10/2026 — nova linha para a Inbox real
+
+A [ADR 045](../adr/045-retomar-waha-para-atendimento-da-nova-linha.md) e o
+[RFC 033](../rfc/033-retomar-waha-para-atendimento-da-nova-linha.md) registram
+a pausa do WPPConnect e a retomada do WAHA/WEBJS para a nova linha destinada
+ao atendimento real na Inbox do CRM. A suspensão e o bloqueio descritos
+anteriormente pertencem à conta anterior, que continua sem uso e com seus
+volumes preservados. Eles não descrevem o estado atual da nova linha.
+
+WPPConnect foi construído e teve a API privada verificada, mas nunca pareado.
+O serviço foi parado após falha `EPERM` de namespace do Chromium; não houve
+aprovação nem aplicação de `--no-sandbox` ou alteração do host para contornar
+a falha. O serviço existente `schedule/silmer-waha` foi retomado com a mesma
+imagem WEBJS fixada e volumes novos de sessão e mídia, separados dos anteriores.
+
+O candidato `WahaSilmerPilot01` foi atualizado da fonte atual de 92 nós para
+101 nós, com número esperado em configuração privada, e permanece inativo.
+O principal `k7tI6T4RhQPyJkn9` continua publicado e preservado. Não houve
+cutover nem publicação do candidato de atendimento WAHA.
+
+O utilitário manual privado `WahaPairSilmerNew01` exibiu QR. O telefone
+recusou duas tentativas com “não foi possível conectar o dispositivo”. Uma
+consulta autenticada a `/api/screenshot?session=default` mostrou a tela nativa
+do WhatsApp Web com QR expirado e “Select to reload QR code”, enquanto a API
+de sessão ainda retornava `SCAN_QR_CODE`, com `me: null`. Essa divergência
+permite que o QR retornado esteja vencido; não comprova a causa das recusas.
+A sessão nova ainda vazia foi reiniciada por `POST /api/sessions/default/restart`
+e um QR novo foi obtido; a resposta do proprietário está pendente. Nenhuma identidade foi confirmada e não
+há evidência de bloqueio dessa nova conta.
+
+O utilitário salvo foi corrigido para usar `POST /api/sessions/default/restart`
+na etapa de iniciar conexão. A leitura `GET /api/default/auth/qr` tem no máximo
+cinco tentativas, com intervalo de 5.000 ms, para aguardar a inicialização.
+Somente essa leitura admite retry; não se aplica a mensagens. A execução
+manual completa gerou um PNG novo com sucesso. O export confirmou quatro nós,
+estado inativo e retenção de execuções manuais, sucesso e erro desabilitada.
+Executar o fluxo completo com o celular pronto para a leitura; a imagem
+exibida não se atualiza sozinha. Uma leitura GET isolada não renova um QR
+que já venceu no navegador. Não executar o pareamento como rotina de saúde
+de uma conta em atendimento.
+
+A verificação por export confirmou o principal publicado com 92 nós e versão
+`91eaff25-87f6-4f13-9a27-382fcd958abe`; o candidato WAHA tem 101 nós,
+`active: false` e nenhuma versão ativa. A configuração privada corresponde
+à nova linha esperada. Isso não comprova identidade pareada.
+
+WAHA-01D permanece aberta: confirmar identidade real, entrada e resposta na
+Inbox, mídia, takeover, status, reentrega e reconexão com efeito único antes
+do cutover. Falha `@lid`, ACK HTTP durável e reentrega também continuam sem
+prova remota. O smoke autenticado que ignorou status sem efeito de domínio
+não substitui essas verificações. Manter QR, telefone e tokens fora do Git;
+não reutilizar a conta anterior nem repetir comandos antigos como fallback.
+
+## Estado atual em 28/10/2026 — identidade confirmada e principal publicado
+
+A sessão WAHA `default` retornou `WORKING`. A identidade observada foi
+comparada exatamente com a configuração privada da nova linha esperada.
+Isso confirma o pareamento observado; não substitui mensagem real na Inbox,
+resposta, homologação de mídia ou recuperação. A conta anterior bloqueada
+continua sem uso, com seus volumes preservados. WPPConnect continua parado.
+
+Antes da troca, a leitura da fila CRM mostrou oito comandos enviados e oito
+jobs concluídos; zero pendentes, em processamento, aguardando retry ou com
+resultado incerto. A consulta ao banco próprio do n8n mostrou `inflight=[]`
+para o principal. Não foi usado acesso do n8n ao banco CRM. O backup da fonte
+de 92 nós, versão `91eaff25-87f6-4f13-9a27-382fcd958abe`, foi preservado em
+`/home/node/.n8n/wpp-pilot/before-waha-live-cutover.json`, protegido e sem
+exportar credenciais ou execuções. Manter `replaySafe=false`; não repetir
+comandos anteriores pela nova conta.
+
+Na UI, o principal `k7tI6T4RhQPyJkn9` foi despublicado. O adapter de 101 nós
+foi importado no mesmo ID, inicialmente com `active: false`, e publicado como
+“WAHA-01D · Nova linha na Inbox”. Foram preservados os IDs da fonte atual,
+webhooks, notas e contratos; o redirect estático do site acompanha o destino
+da configuração privada pela factory. Candidatos separados permanecem
+inativos. A publicação foi concluída; a prova posterior de texto está abaixo,
+com os gates restantes de canal explicitamente abertos.
+
+No TEST do workflow completo, origem inválida retornou `500` antes de CRM.
+O teste anterior somente do listener retornava `200` e não comprovava essa
+fronteira. Em produção, a chamada sem autenticação retornou `403`; evento
+autenticado de status ignorado retornou `200` sem efeito de domínio. Nenhum
+desses casos comprova ACK HTTP durável após CRM, entrada real, IA ou envio.
+Após a correção posterior de E.164, os 39 testes focados WAHA/WPP passaram
+(21 WAHA e 18 WPP). O novo `npm run validate` completo passou com build:
+1.189 testes, 1.186 aprovados, três ignorados e nenhuma falha.
+
+O site e o link da bio foram publicados pela
+[PR 40](https://github.com/romulosutil/silmer-web/pull/40), merge
+`49262dba31ebffc403643cf75032431c74d35d59`. O deploy Production `7390013140`
+concluiu com sucesso. Home, `/instagram` e `/chat` retornaram HTTP `200`, com
+links para a nova linha e nenhuma ocorrência da anterior no HTML. Contatos
+institucionais, vendedores e pós-pagamento mantiveram seus destinos próprios.
+Na Meta, resposta automática e ausência foram salvas com o novo destino;
+a leitura das sete respostas salvas confirmou sete destinos novos e zero
+antigos. A bio aponta ao site atualizado. Telefone comercial do Instagram e
+telefone da página Facebook estavam sem telefone, sem destino antigo nesses
+campos. Autorização e solicitação de análise do app não foram alteradas.
+
+### Prova real de texto e takeover em 28/10/2026
+
+Uma mensagem nova, enviada pelo WhatsApp Web autorizado do proprietário,
+persistiu na Inbox. O bot transferiu o atendimento e sua resposta chegou ao
+WhatsApp Web às 12:53, horário de São Paulo. A conversa de homologação foi
+assumida por uma pessoa no CRM, comprovando o takeover observado.
+
+A primeira resposta humana falhou antes do HTTP: o CRM entregava destinatário
+E.164 com `+` e o adapter aceitava somente dígitos. O registro
+`OUTCOME_UNKNOWN` foi preservado e não reexecutado. O adapter passou a
+normalizar somente um `+` inicial nos envios humanos de texto e mídia. Apenas
+os dois nós correspondentes foram atualizados no mesmo workflow e publicados
+como “WAHA-01D · Envio humano E.164”. Não houve replay do comando anterior.
+
+Uma nova resposta humana, com texto diferente e outro comando, foi enviada
+pela Inbox e chegou uma vez ao WhatsApp Web às 13:05. Isso confirma texto
+real nos dois sentidos, persistência, transferência e takeover no cenário
+executado. A captura permanece privada e fora do Git; conteúdo da mensagem,
+números pessoais e número comercial não integram esta evidência versionada.
+
+WAHA-01D tem a parte de texto operacional cumprida; os gates restantes
+continuam abertos. Mídia, matriz de status/falhas, falha `@lid`, ACK durável,
+reentrega e reinício/reconexão exigem suas próprias evidências. O resultado
+de texto não comprova a matriz inteira, recuperação ou segurança de replay.
+
+### Metadados finais de conferência
+
+O export final confirmou `active: true`, 101 nós e
+`versionId = activeVersionId = a107910d-9668-4962-be06-199feb852b78` no
+principal preservado. O diff remoto da correção E.164 alterou exatamente dois
+nós: `Preparar mensagem Meta de midia (MVP)` e
+`WhatsApp - Enviar texto humano (MVP)`. A sessão WAHA permaneceu `WORKING`,
+com `expectedAccount: true`.
+
+O último comando humano de homologação ficou em `sent`,
+`last_error_code: null`, com ID externo presente, `retryable: false` e
+`retry_safe: false`. O job terminou em `completed`, com `attempt_count: 1`.
+Esses metadados pertencem à nova resposta bem-sucedida e não alteram o
+`OUTCOME_UNKNOWN` anterior preservado. UUIDs de comando, telefones e conteúdo
+não foram versionados.
+
+A conferência final das configurações de ausência e resposta automática Meta
+mostrou o novo destino persistido, botão de salvar desabilitado e os dois
+canais selecionados. Não houve alteração na autorização ou na solicitação
+de análise do app.

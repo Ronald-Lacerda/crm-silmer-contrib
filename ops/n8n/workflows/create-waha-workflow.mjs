@@ -469,6 +469,12 @@ export function createWahaWorkflow(source, options) {
     const node = find(name);
     const recipient = expressionBody(node.parameters.recipientPhoneNumber);
     const text = expressionBody(node.parameters.textBody);
+    // CRM human commands use canonical E.164 (+digits); inbound bot numbers
+    // already contain digits. Accept only the one optional leading plus.
+    const humanPrefix =
+      name === 'WhatsApp - Enviar texto humano (MVP)'
+        ? ".replace(/^\\+/, '')"
+        : '';
     asHttp(
       node,
       {
@@ -477,7 +483,7 @@ export function createWahaWorkflow(source, options) {
         sendBody: true,
         contentType: 'json',
         specifyBody: 'json',
-        jsonBody: `={{ (() => { const to = String(${recipient}); if (!/^\\d{8,15}$/.test(to)) throw new Error('WAHA_RECIPIENT_INVALID'); return { session: ${JSON.stringify(config.session)}, chatId: to + '@c.us', text: String(${text}), linkPreview: false }; })() }}`,
+        jsonBody: `={{ (() => { const to = String(${recipient})${humanPrefix}; if (!/^\\d{8,15}$/.test(to)) throw new Error('WAHA_RECIPIENT_INVALID'); return { session: ${JSON.stringify(config.session)}, chatId: to + '@c.us', text: String(${text}), linkPreview: false }; })() }}`,
         options: requestOptions(),
       },
       apiCredential,
@@ -538,7 +544,7 @@ export function createWahaWorkflow(source, options) {
   });
   delete upload.credentials;
   const prepare = find(MEDIA_PREPARE);
-  prepare.parameters.jsCode = `const command = $('${HUMAN_RESERVE}').item.json.command;\nconst expected = command.message;\nif ($json.valid !== true || $json.media_id !== expected.media_id || $json.type !== expected.type || $json.sha256 !== expected.sha256 || $json.mime_type !== expected.mime_type || $json.size_bytes !== expected.size_bytes) throw new Error('MEDIA_PREFLIGHT_REJECTED');\nconst prepared = $('${MEDIA_UPLOAD}').item.json;\nif (prepared.id !== expected.media_id || typeof prepared.file?.data !== 'string' || prepared.file.mimetype !== expected.mime_type) throw new Error('MEDIA_PREFLIGHT_REJECTED');\nif (!/^\\d{8,15}$/.test(String(command.to))) throw new Error('WAHA_RECIPIENT_INVALID');\nconst endpoint = { image: 'sendImage', audio: 'sendVoice', video: 'sendVideo' }[expected.type];\nif (!endpoint) throw new Error('WAHA_MEDIA_TYPE_UNSUPPORTED');\nreturn { json: { waha_endpoint: endpoint, waha_message: { session: ${JSON.stringify(config.session)}, chatId: command.to + '@c.us', file: prepared.file, ...(expected.type !== 'audio' && expected.caption ? { caption: expected.caption } : {}), ...(expected.type === 'audio' || expected.type === 'video' ? { convert: true } : {}) } } };`;
+  prepare.parameters.jsCode = `const command = $('${HUMAN_RESERVE}').item.json.command;\nconst expected = command.message;\nif ($json.valid !== true || $json.media_id !== expected.media_id || $json.type !== expected.type || $json.sha256 !== expected.sha256 || $json.mime_type !== expected.mime_type || $json.size_bytes !== expected.size_bytes) throw new Error('MEDIA_PREFLIGHT_REJECTED');\nconst prepared = $('${MEDIA_UPLOAD}').item.json;\nif (prepared.id !== expected.media_id || typeof prepared.file?.data !== 'string' || prepared.file.mimetype !== expected.mime_type) throw new Error('MEDIA_PREFLIGHT_REJECTED');\nconst to = String(command.to).replace(/^\\+/, '');\nif (!/^\\d{8,15}$/.test(to)) throw new Error('WAHA_RECIPIENT_INVALID');\nconst endpoint = { image: 'sendImage', audio: 'sendVoice', video: 'sendVideo' }[expected.type];\nif (!endpoint) throw new Error('WAHA_MEDIA_TYPE_UNSUPPORTED');\nreturn { json: { waha_endpoint: endpoint, waha_message: { session: ${JSON.stringify(config.session)}, chatId: to + '@c.us', file: prepared.file, ...(expected.type !== 'audio' && expected.caption ? { caption: expected.caption } : {}), ...(expected.type === 'audio' || expected.type === 'video' ? { convert: true } : {}) } } };`;
   asHttp(
     find(MEDIA_SEND),
     {
@@ -557,6 +563,16 @@ export function createWahaWorkflow(source, options) {
 
   const version = options.workflowVersion ?? 'waha-webjs-1';
   for (const node of workflow.nodes) {
+    // CHAN-WA-01 / WAHA-01D: the site's existing redirect follows the
+    // configured pilot account without changing its message or query.
+    if (
+      node.name === 'Site - Direcionar para WhatsApp (MVP)' &&
+      typeof node.parameters?.jsCode === 'string'
+    )
+      node.parameters.jsCode = node.parameters.jsCode.replace(
+        /https:\/\/wa\.me\/\d{8,15}(?=[?#\s'"`]|$)/g,
+        'https://wa.me/' + config.ownNumber,
+      );
     if (node.parameters?.jsCode)
       node.parameters.jsCode = node.parameters.jsCode.replaceAll(
         'META_SEND_OUTCOME_UNKNOWN',

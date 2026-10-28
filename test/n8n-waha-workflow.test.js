@@ -93,6 +93,11 @@ test('WAHA-01: transformer preserves all original IDs, domain nodes, site/panel 
     ) {
       // Only the technical workflow version header may change.
       const expected = structuredClone(previous);
+      if (expected.name === 'Site - Direcionar para WhatsApp (MVP)')
+        expected.parameters.jsCode = expected.parameters.jsCode.replace(
+          /https:\/\/wa\.me\/\d{8,15}(?=[?#\s'"`]|$)/g,
+          'https://wa.me/' + config.ownNumber,
+        );
       for (const header of expected.parameters?.headerParameters?.parameters ??
         []) {
         if (header.name === 'X-Silmer-Workflow-Version')
@@ -105,6 +110,63 @@ test('WAHA-01: transformer preserves all original IDs, domain nodes, site/panel 
   assert.equal(result.pinData, undefined);
   assert.equal(result.settings.saveDataSuccessExecution, 'none');
   assert.equal(result.settings.saveDataErrorExecution, 'none');
+});
+
+test('CHAN-WA-01 / WAHA-01D: site redirect follows ownNumber and preserves query, message, IDs and unrelated links', () => {
+  const original = structuredClone(source);
+  const name = 'Site - Direcionar para WhatsApp (MVP)';
+  const redirect = original.nodes.find(
+    (/** @type {any} */ node) => node.name === name,
+  );
+  redirect.id = 'synthetic-redirect-id';
+  redirect.webhookId = 'synthetic-redirect-webhook';
+  const query = '?text=Ol%C3%A1%21%20Vim%20pelo%20site.&source=site#chat';
+  const before = `return { json: { output: 'Oi! WhatsApp: https://wa.me/5511000000002${query} Outro link: https://example.invalid/5511000000002' } };`;
+  redirect.parameters.jsCode = before;
+  const other = original.nodes.find(
+    (/** @type {any} */ node) =>
+      node.name === 'Normalizar comando do painel (MVP)',
+  );
+  if (other)
+    other.parameters.syntheticLink = 'https://wa.me/5511000000002?keep=true';
+  const result = createWahaWorkflow(original, config);
+  const changed = result.nodes.find(
+    (/** @type {any} */ node) => node.name === name,
+  );
+  assert.deepEqual(changed, {
+    ...redirect,
+    parameters: {
+      ...redirect.parameters,
+      jsCode: before.replace(
+        'https://wa.me/5511000000002' + query,
+        'https://wa.me/' + config.ownNumber + query,
+      ),
+    },
+  });
+  assert.equal(redirect.parameters.jsCode, before);
+  if (other)
+    assert.equal(
+      result.nodes.find((/** @type {any} */ node) => node.name === other.name)
+        .parameters.syntheticLink,
+      other.parameters.syntheticLink,
+    );
+});
+
+test('CHAN-WA-01: source without optional site redirect remains supported', () => {
+  const original = structuredClone(source);
+  original.nodes = original.nodes.filter(
+    (/** @type {any} */ node) =>
+      node.name !== 'Site - Direcionar para WhatsApp (MVP)',
+  );
+  const result = createWahaWorkflow(original, config);
+  assert.equal(
+    result.nodes.some(
+      (/** @type {any} */ node) =>
+        node.name === 'Site - Direcionar para WhatsApp (MVP)',
+    ),
+    false,
+  );
+  assert.equal(result.active, false);
 });
 
 test('WAHA-01: webhook uses header credential and never Meta OAuth; authenticated conversion is the sole WhatsApp entry', () => {
@@ -515,7 +577,7 @@ test('WAHA-01: human media remains private and ordered hash → base64 → CRM p
   assert.equal(nodes.get(name).type, 'n8n-nodes-base.code');
   assert.deepEqual(targets(name), ['CRM - Preflight midia reservada (MVP)']);
   const command = {
-    to: '5511000000001',
+    to: '+5511000000001',
     message: {
       media_id: 'synthetic-media',
       type: 'image',
@@ -548,8 +610,28 @@ test('WAHA-01: human media remains private and ordered hash → base64 → CRM p
     { ...upstream, [name]: prepared },
   );
   assert.equal(payload.json.waha_endpoint, 'sendImage');
-  assert.equal(payload.json.waha_message.chatId, command.to + '@c.us');
+  assert.equal(payload.json.waha_message.chatId, '5511000000001@c.us');
   assert.equal(payload.json.waha_message.caption, 'Arte sintética');
+  for (const to of [
+    '++5511000000001',
+    ' 5511000000001',
+    '5511-000000001',
+    '5511000000001@c.us',
+    '123@lid',
+    '1234567',
+    '1234567890123456',
+  ]) {
+    await assert.rejects(
+      runCode('Preparar mensagem Meta de midia (MVP)', preflight, {
+        ...upstream,
+        'Preparar reserva de envio humano (MVP)': {
+          json: { command: { ...command, to } },
+        },
+        [name]: prepared,
+      }),
+      /WAHA_RECIPIENT_INVALID/u,
+    );
+  }
   await assert.rejects(
     runCode(
       'Preparar mensagem Meta de midia (MVP)',
@@ -564,6 +646,52 @@ test('WAHA-01: human media remains private and ordered hash → base64 → CRM p
   assert.equal(
     JSON.stringify(workflow).includes('https://graph.facebook.com'),
     false,
+  );
+});
+
+test('WAHA-01D / ORC-05: human command accepts CRM E.164 plus without changing bot recipients or reservation', () => {
+  const name = 'WhatsApp - Enviar texto humano (MVP)';
+  const expression = nodes
+    .get(name)
+    .parameters.jsonBody.replace(/^=?\{\{\s*/, '')
+    .replace(/\s*\}\}$/, '');
+  const bodyFor = (/** @type {any} */ to) =>
+    vm.runInNewContext(expression, {
+      $: () => ({
+        item: {
+          json: { command: { to, message: { text: 'Mensagem sintética' } } },
+        },
+      }),
+    });
+  for (const to of ['5511000000001', '+5511000000001']) {
+    const body = bodyFor(to);
+    assert.equal(body.chatId, '5511000000001@c.us');
+    assert.equal(body.text, 'Mensagem sintética');
+    assert.equal(body.session, config.session);
+  }
+  for (const to of [
+    '++5511000000001',
+    '+ 5511000000001',
+    ' 5511000000001',
+    '5511-000000001',
+    '5511000000001@c.us',
+    '123@lid',
+    '1234567',
+    '1234567890123456',
+    '',
+  ])
+    assert.throws(() => bodyFor(to), /WAHA_RECIPIENT_INVALID/u);
+  for (const name of [
+    'WhatsApp - Enviar aviso de transferência (MVP)',
+    'WhatsApp - Enviar resposta da IA (MVP)',
+  ])
+    assert.equal(
+      nodes.get(name).parameters.jsonBody.includes('.replace(/^\\+/, '),
+      false,
+    );
+  assert.deepEqual(
+    workflow.connections['CRM - Reservar envio humano (MVP)'],
+    source.connections['CRM - Reservar envio humano (MVP)'],
   );
 });
 
