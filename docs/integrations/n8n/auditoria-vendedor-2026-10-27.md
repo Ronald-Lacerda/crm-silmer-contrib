@@ -143,3 +143,58 @@ publicação do site ou configuração do Direct com base nesse smoke.
 Gate final após os ajustes: `npm run validate` aprovou 1.161 testes, com
 três ignorados e nenhuma falha, seguido de build. A auditoria npm anterior
 continua com o finding de Vite; nenhuma dependência foi alterada.
+
+## Publicação do site e configuração da conta Meta
+
+Após autorização explícita do proprietário, o encaminhamento do site foi
+isolado da branch de loja e publicado pela
+[PR #37](https://github.com/romulosutil/silmer-web/pull/37), em `main`
+`e1e411f73c72a277cf66d5d99f97e57742f09c28`. O
+[deploy Vercel](https://vercel.com/romulodesigns/silmer-web/DTWq6icmVg94FR1YqNHVeKp5Wek7)
+concluiu com sucesso. Somente os 13 arquivos do encaminhamento foram
+integrados; catálogo, checkout e configuração comercial permaneceram
+idênticos ao `main` anterior. Os commits de inventário/acessos e de correção
+anterior da loja não integraram essa publicação.
+
+Na base de produção passaram build, check sem erros/avisos, 160 unitários
+e 12 jornadas. Smoke em `https://silmer.com.br`, `/chat` e `/instagram`,
+em celular e desktop: seis cenários aprovados, HTTP 200, um CTA flutuante
+“Falar no WhatsApp”, destino comercial correto, ausência do formulário
+antigo e zero requests n8n/CRM. Teclado, foco e alvo de toque foram
+conferidos. `/chat` também passou sem JavaScript. Nenhuma mensagem foi enviada.
+
+Na conta `@silmeroficial`, a bio publicada passou a orientar
+“Atendimento pelo WhatsApp no link”. Os links existentes para o site foram
+preservados e chegam às páginas publicadas. O Instagram web informa que
+alterar links exige o aplicativo; o botão nativo de contato e um link direto
+`wa.me` no perfil não foram configurados por esta entrega.
+
+O proprietário autorizou expressamente atualizar também o Messenger,
+pois as duas automações existentes compartilham o texto com o Instagram.
+A resposta automática e a mensagem de ausência foram salvas e reabertas
+para conferir persistência, com ambos os canais selecionados. Texto publicado:
+
+> Oi! Nosso atendimento acontece pelo WhatsApp. Para conversar com a Silmer,
+> toque no link: https://wa.me/5527996337374?text=Ol%C3%A1%21%20Vim%20pelas%20redes%20sociais.
+
+Os sete modelos de resposta salvos foram atualizados para esse mesmo texto,
+sem nomes de pessoas, variável de telefone quebrada, número antigo,
+horários divergentes ou promessa de retorno pelo Direct. Atalhos distintos:
+Atendimento, Continuar, Máscaras, Orçamento, Máscara, Uniforme e Solicitação,
+todos com o sufixo “WhatsApp”. A biblioteca foi conferida: sete destinos
+corretos e nenhuma promessa de espera. O compositor terminou vazio.
+
+Três legendas públicas foram corrigidas pontualmente e verificadas após
+publicação: `DeMkPF8Fn8X` e `DdoiP8DOsLT` passaram de convite ao Direct
+para WhatsApp pelo link da bio; `DewoNuekQd_` passou a indicar o link da bio
+e deixou de prometer resposta “rapidinho”. O conteúdo editorial restante
+dessas legendas foi preservado. Isso não representa revisão de todo o
+histórico de posts/Stories.
+
+Limites de verificação: a resposta automática nativa informa responder à
+primeira mensagem, enquanto a ausência depende do status/horários da Meta.
+Esses gatilhos foram preservados; não se declara resposta a cada DM.
+Modelos salvos são manuais. Foram verificadas configuração e prévia, sem
+enviar DM a clientes nem alegar teste real de entrega externa. O inventário
+anexo foi usado como evidência, sem ser publicado ou alterar acessos,
+credenciais, recuperação, permissões ou integrações.

@@ -243,7 +243,8 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
 - [x] Executar matriz de 35 cenários e pesquisa documental de UX/a11y.
 - [x] Publicar e verificar n8n; executar modelo real em harness sintético sem CRM/envios.
 - [x] Organizar canvas e notas; testar preservação de comportamento e layout.
-- [ ] Publicar site em produção (preview e PR separados disponíveis).
-- [ ] Configurar e verificar botão/resposta fixa na conta Instagram.
+- [x] Publicar site em produção; PR #37 em main e smoke remoto das três rotas aprovado.
+- [x] Configurar e verificar resposta fixa Instagram/Messenger, bio e sete modelos salvos.
+- [ ] Opcional: adicionar link direto/botão WhatsApp pelo aplicativo Instagram (edição web indisponível).
 
 Decisão ADR 043/RFC 031. Evidência em docs/integrations/n8n/auditoria-vendedor-2026-10-27.md.
