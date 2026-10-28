@@ -78,3 +78,5 @@ entre os documentos.
 ## Proposta de 14/10/2026
 
 - [023 — Backup externo e recuperação do CRM e do n8n](023-backup-externo-e-recuperacao-do-crm-e-n8n.md), pendente de destino externo, execução e drill.
+
+- [031 — Atendimento comercial concentrado no WhatsApp](031-atendimento-comercial-concentrado-no-whatsapp.md), decidida na ADR 043.

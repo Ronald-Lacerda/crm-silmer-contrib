@@ -188,12 +188,12 @@ test('keeps the simplified workflow inactive and free of removed runtime concept
   const workflow = JSON.parse(await readFile(workflowSnapshot, 'utf8'));
   assert.equal(workflow.source.active, false);
   assert.equal(workflow.source.activeVersionId, null);
-  // Baseline 51, 17 seller media nodes and 16 inbound media/site nodes.
-  assert.equal(workflow.nodes.length, 86);
+  // Baseline includes the static site redirect; legacy nodes stay disconnected.
+  assert.equal(workflow.nodes.length, 87);
   const serialized = JSON.stringify(workflow);
   assert.doesNotMatch(serialized, /claim_token|claim_id|ai-turns\/claim/u);
   assert.doesNotMatch(serialized, /silmer_failures|windowBufferMemory/u);
-  assert.doesNotMatch(serialized, /credentials|webhookId|pinData/u);
+  assert.doesNotMatch(serialized, /"(?:credentials|webhookId|pinData)":/u);
 
   const reserveNodes = workflow.nodes.filter((/** @type {any} */ node) =>
     /Reservar envio/u.test(node.name),
@@ -1538,7 +1538,7 @@ test('the ficha is the name plus the product points in one rhythm, kept in one p
   // ADR 024: the name first, then what to customize, never "qual camisa".
   assert.match(
     prompt,
-    /pergunte o nome da pessoa e o que ela quer personalizar \(camisetas ou outras roupas, bonés, mochilas e bolsas, ou outro produto\)\. Não pergunte "qual camisa" antes de saber o produto/u,
+    /pergunte o nome da pessoa e o que ela quer personalizar \(camisetas ou outras roupas, bonés ou outro produto\)\. Não pergunte "qual camisa" antes de saber o produto/u,
   );
   assert.match(
     prompt,
@@ -1546,8 +1546,9 @@ test('the ficha is the name plus the product points in one rhythm, kept in one p
   );
   assert.match(
     prompt,
-    /product_model: o modelo, só quando o contexto pedir\. Roupa: camiseta comum, manga longa, polo, regata, abadá, baby look ou outro\. Boné: trucker \(com tela atrás\), aba curva, aba reta ou outro\. Mochila ou bolsa: mochila de costas, mochila saco, ecobag ou outro\./u,
+    /product_model: o modelo, só quando o contexto pedir\. Roupa: camiseta comum, manga longa, polo, regata, abadá, baby look ou outro\. Boné: trucker \(com tela atrás\), aba curva, aba reta ou outro\./u,
   );
+  assert.doesNotMatch(prompt, /Mochila ou bolsa:|"ecobags"|"mochila saco"/u);
   assert.match(prompt, /artwork_locations: onde vai a estampa/u);
   // ADR 025: the split by audience has its own field, recorded, never asked.
   assert.match(
@@ -1597,7 +1598,7 @@ test('the context node asks the name first, then the points of the product (ADR 
   assert.equal(fresh.next_point, 'customer_name', 'the greeting asks the name');
   assert.match(
     fresh.prompt,
-    /Como perguntar: apresente-se, pergunte o nome e o que a pessoa quer personalizar: camisetas ou outras roupas, bonés, mochilas e bolsas, ou outro produto\n/u,
+    /Como perguntar: apresente-se, pergunte o nome e o que a pessoa quer personalizar: camisetas ou outras roupas, bonés ou outro produto\n/u,
   );
   assert.match(fresh.prompt, /Nome do cliente: ainda não pedido/u);
   assert.doesNotMatch(fresh.prompt, /Se o cliente pular/u);
@@ -1645,7 +1646,7 @@ test('the context node asks the name first, then the points of the product (ADR 
   assert.match(start.prompt, /Produto: ainda não informado\n/u);
   assert.match(
     start.prompt,
-    /Próximo ponto da ficha: product_type \(produto\); pergunte só isso\nComo perguntar: O que você quer personalizar: camisetas ou outras roupas, bonés, mochilas e bolsas, ou outro produto\?\n/u,
+    /Próximo ponto da ficha: product_type \(produto\); pergunte só isso\nComo perguntar: O que você quer personalizar: camisetas ou outras roupas, bonés ou outro produto\?\n/u,
   );
   assert.match(
     start.prompt,
@@ -1884,7 +1885,7 @@ test('the decision node requires only the name and the points of the product (AD
   assert.equal(legacy.briefing_patch.next_required_field, 'product_type');
 });
 
-test('a cap, a bag or another product asks only its own points (ADR 024)', async () => {
+test('a cap or another product asks its own points, and removed bags transfer (CHAN-WA-01)', async () => {
   const cap = await rhythmDecision({
     briefing_patch: {
       customer_name: 'Ana',
@@ -1916,21 +1917,19 @@ test('a cap, a bag or another product asks only its own points (ADR 024)', async
     { answer_status: 'answered', briefing_patch: { product_type: 'ecobags' } },
     { briefing: { customer_name: 'Ana', next_required_field: 'product_type' } },
   );
-  assert.equal(
-    bagStart.briefing_patch.product_model,
-    'ecobags',
-    'a product that names its model is not asked the model',
-  );
-  assert.equal(bagStart.briefing_patch.collar, 'NAO APLICAVEL');
-  assert.equal(bagStart.briefing_patch.next_required_field, 'colors');
-  assert.equal(bagStart.open_order, true, 'the product opens the order');
+  assert.equal(bagStart.handoff_required, true);
+  assert.equal(bagStart.handoff_reason, 'unsupported');
+  assert.equal(bagStart.briefing_patch, null);
+  assert.equal(bagStart.open_order, false);
 
   const backpack = await rhythmDecision(
     { answer_status: 'answered', briefing_patch: { product_type: 'mochilas' } },
     { briefing: { customer_name: 'Ana', next_required_field: 'product_type' } },
   );
-  assert.equal(backpack.briefing_patch.product_model, undefined);
-  assert.equal(backpack.briefing_patch.next_required_field, 'product_model');
+  assert.equal(backpack.handoff_required, true);
+  assert.equal(backpack.handoff_reason, 'unsupported');
+  assert.equal(backpack.briefing_patch, null);
+  assert.equal(backpack.open_order, false);
   const sameName = await rhythmDecision(
     { briefing_patch: { product_model: 'mochila saco' } },
     {
@@ -1941,11 +1940,10 @@ test('a cap, a bag or another product asks only its own points (ADR 024)', async
       },
     },
   );
-  assert.equal(
-    sameName.briefing_patch.product_model,
-    'mochila saco',
-    'a model that already names the product is kept as said',
-  );
+  assert.equal(sameName.handoff_required, true);
+  assert.equal(sameName.handoff_reason, 'unsupported');
+  assert.equal(sameName.briefing_patch, null);
+  assert.equal(sameName.open_order, false);
 
   const regatas = await rhythmDecision(
     {
@@ -2456,7 +2454,6 @@ test('something already going on elsewhere calls a seller at once (ADR 013)', as
     'Quero a camisa do post',
     'quero essa camisa',
     'quero esse boné',
-    'gostei dessa mochila',
     'Pode me enviar por e-mail?',
     'me manda no whatsapp por favor',
     'vi no story, ainda tem?',

@@ -215,3 +215,11 @@ webhook direto da Meta nem restaura banco como primeiro recurso.
 Decisões anteriores continuam em `docs/adr/`; o histórico não substitui
 `RULES.md` e as specs atuais. Rastreabilidade e pendências em
 [tasks](.specs/features/crm-mvp/tasks.md).
+
+## CHAN-WA-01 — Encaminhamento para WhatsApp
+
+A [ADR 043](docs/adr/043-atendimento-comercial-concentrado-no-whatsapp.md)
+supersede o chat comercial ativo do site dos ADRs 026/034. Site/linktree
+usam link direto; o webhook antigo responde orientação estática antes de
+CRM/IA. A loja e dados históricos mantêm seus contratos. Configuração do
+perfil/Direct Instagram e publicação n8n exigem evidência própria.

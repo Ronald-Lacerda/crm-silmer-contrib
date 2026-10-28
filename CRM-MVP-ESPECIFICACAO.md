@@ -198,3 +198,10 @@ pós-venda automatizado. Instagram entra depois em `CANAL-2`, com identidades
 correlacionadas explicitamente. Cobrança PIX, comprovante estruturado,
 boas-vindas automáticas e automação do envio da ficha permanecem evolução
 rastreada, sem bloquear confirmação humana do Pedido vigente.
+
+## CHAN-WA-01 — Atualização aprovada em 27/10/2026
+
+O proprietário concentrou o atendimento comercial no WhatsApp (ADR 043).
+Site e Instagram encaminham por CTA explícito, sem qualificação/coleta.
+Mochilas e bolsas saem da abordagem automática e são encaminhadas à pessoa.
+Loja/checkout e históricos permanecem conforme seus contratos anteriores.

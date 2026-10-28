@@ -81,3 +81,5 @@ canônicos; ele registra o contexto e o motivo da escolha.
 - [040 — Financeiro com fila e check manual](040-financeiro-com-fila-e-check-manual.md).
 - [041 — Consulta administrativa do Financeiro](041-consulta-administrativa-do-financeiro.md).
 - [042 — Perfis e nova quitação no Financeiro](042-perfis-e-requitacao-do-financeiro.md); Usuários e invalidação do check quando o valor muda.
+
+- [043 — Atendimento comercial concentrado no WhatsApp](043-atendimento-comercial-concentrado-no-whatsapp.md), decisão na RFC 031; supersede atendimento ativo do site e retira mochilas/bolsas da coleta.

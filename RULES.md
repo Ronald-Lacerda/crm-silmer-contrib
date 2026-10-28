@@ -88,3 +88,11 @@ da loja continuam bloqueadas.
 13. OpenAI é o provedor escolhido para produção. Produção com PII exige evidências aplicáveis de DPA, retenção, logging e ZDR; escolha do provedor não satisfaz esse gate.
 14. `PRINT_TEMPLATE` seleciona `ficha-canonical-v6` (ADR 025), com aprovação provisória do PO. Rose e Operação devem assinar a amostra física antes da produção; templates v2–v5 e hashes permanecem imutáveis.
 15. Manter o deploy automático GitHub → EasyPanel existente; verificar imagem/digest, migrations, health, segredos, isolamento, rollback e recovery no ambiente alvo antes de declarar prontidão operacional.
+
+## CHAN-WA-01 — Atendimento concentrado no WhatsApp (27/10/2026)
+
+A ADR 043 supersede o atendimento ativo do site: site e Instagram encaminham
+para WhatsApp sem coleta comercial, IA ou abertura de pedido. A loja mantém
+seu checkout. O agente não oferece/coleta mochilas, bolsas e similares;
+encaminha pedidos dessas categorias ao humano sem projetar rascunho.
+Identidades e histórico não são unidos pelo clique.

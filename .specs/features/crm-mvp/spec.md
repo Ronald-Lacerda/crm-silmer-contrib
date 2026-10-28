@@ -313,3 +313,13 @@ papéis usam `silmer:romulo.sutil` e exceção de operação solo limitada ao pi
 
 Essa aprovação remove apenas o bloqueio da T00.6; os demais gates técnicos,
 externos e operacionais continuam independentes.
+
+## CHAN-WA-01 — Atendimento no WhatsApp
+
+Aprovado pelo proprietário em 27/10/2026; ADR 043. Site/linktree Instagram
+SHALL encaminhar por link acessível Falar no WhatsApp, sem formulário, IA ou
+abertura de pedido. O webhook antigo SHALL retornar orientação fixa antes
+do CRM/IA. O agente SHALL transferir mochilas/bolsas e duas intenções de
+pedidos explicitamente separadas sem agregar/projetar dados. Guard de
+segurança publicado SHALL ser preservado; confirmação segue humana.
+A loja mantém checkout. Nenhum clique SHALL unir identidades/históricos.

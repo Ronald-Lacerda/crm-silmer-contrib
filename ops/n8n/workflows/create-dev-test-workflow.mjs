@@ -27,6 +27,7 @@ const PANEL_TRIGGER = 'Painel - Receber comando (MVP)';
 // ADR 026: the public site chat stays in the canonical workflow; DEV and LOCAL
 // keep their own chat, restricted to the n8n user.
 const SITE_CHAT_NODES = [
+  'Site - Direcionar para WhatsApp (MVP)',
   'Site - Receber mensagem do chat (MVP)',
   'Site - Montar evento do chat (MVP)',
 ];

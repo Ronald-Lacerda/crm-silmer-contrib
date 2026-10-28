@@ -875,3 +875,12 @@ incertos para reconciliação. A rota direta não é reativada automaticamente.
 
 As próximas telas e a ordem de entrega estão em
 [`docs/roadmap/PROXIMAS-FASES.md`](../../roadmap/PROXIMAS-FASES.md).
+
+## CHAN-WA-01 — Atualização de 27/10/2026
+
+A [ADR 043](../../adr/043-atendimento-comercial-concentrado-no-whatsapp.md)
+supersede a qualificação no chat público descrita acima. Site/linktree
+encaminham ao WhatsApp; trigger antigo termina em resposta fixa antes do
+CRM/IA. Mochilas e bolsas saem da abordagem do agente. Consulte a
+[auditoria](auditoria-vendedor-2026-10-27.md) para diferenças do publicado,
+testes, limitações e implantação sem perder o guard de segurança adicional.

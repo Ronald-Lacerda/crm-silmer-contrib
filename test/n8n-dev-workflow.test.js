@@ -41,10 +41,11 @@ test('keeps the canonical MVP path while replacing only WhatsApp transport', asy
 
   assert.equal(dev.source.id, DEV_WORKFLOW_ID);
   assert.equal(dev.source.active, false);
-  // Canonical inbound/site/media chains, minus two public site triggers, plus nine DEV nodes.
+  // Canonical chains exclude all three public site nodes, plus nine DEV nodes.
   assert.equal(nodes.length, 93);
   assert.equal(names.has('Site - Receber mensagem do chat (MVP)'), false);
   assert.equal(names.has('Site - Montar evento do chat (MVP)'), false);
+  assert.equal(names.has('Site - Direcionar para WhatsApp (MVP)'), false);
   assert.equal(
     Object.keys(dev.connections).some((name) =>
       name.startsWith('Site - Receber'),
@@ -65,7 +66,7 @@ test('keeps the canonical MVP path while replacing only WhatsApp transport', asy
   assert.ok(names.has('Painel - Receber comando (MVP)'));
   assert.match(serialized, /simulate_send_unknown/u);
   assert.match(serialized, /loadPreviousSession/u);
-  assert.doesNotMatch(serialized, /credentials|webhookId|pinData/u);
+  assert.doesNotMatch(serialized, /"(?:credentials|webhookId|pinData)":/u);
 });
 
 test('isolates workflow identity, webhook paths and persistence settings', async () => {

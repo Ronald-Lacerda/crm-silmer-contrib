@@ -234,3 +234,14 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
       verificada. App publicado após autorização do proprietário; telefone offline
       e credencial de envio inválida ainda impedem concluir
       homologação. [Evidência e procedimento](../../../docs/runbooks/inbox-whatsapp.md).
+
+## CHAN-WA-01 — Auditoria e encaminhamento (27/10/2026)
+
+- [x] Exportar publicado e comparar regras/nós sem expor configuração privada.
+- [x] Remover categorias, preservar guard publicado e cobrir ambiguidades.
+- [x] Criar CTA site/linktree e fallback estático do webhook sem CRM/IA.
+- [x] Executar matriz de 35 cenários e pesquisa documental de UX/a11y.
+- [ ] Publicar e verificar n8n/site no ambiente alvo; executar modelo real.
+- [ ] Configurar e verificar botão/resposta fixa na conta Instagram.
+
+Decisão ADR 043/RFC 031. Evidência em docs/integrations/n8n/auditoria-vendedor-2026-10-27.md.

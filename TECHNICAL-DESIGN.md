@@ -384,3 +384,11 @@ O fingerprint original não muda, e o replay n8n lê o pedido já corrigido.
 Confirmação, pagamento, primeira impressão e número ficam preservados.
 Contrato detalhado no OpenAPI e operação no runbook da loja; LOJ-39–LOJ-41,
 T135 e [RFC 026](docs/rfc/026-correcao-administrativa-quantidade-loja.md).
+
+## CHAN-WA-01 — Fronteira de atendimento
+
+Conforme ADR 043, o CTA público leva ao WhatsApp sem formulário. O trigger
+antigo do chat encadeia somente resposta fixa, sem CRM/IA/upload. Os nós
+legados ficam sem entrada pública para compatibilidade histórica. Preservar
+o guard publicado, IDs de webhook e credenciais ao implantar. Pedido de
+mochila/bolsa ou dois pedidos explicitamente separados transfere sem patch.
