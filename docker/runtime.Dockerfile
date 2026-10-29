@@ -57,8 +57,9 @@ ENV HOST=0.0.0.0 \
 WORKDIR /app
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends --only-upgrade perl-base \
+  && apt-get install -y --no-install-recommends --only-upgrade perl-base libbrotli1 \
   && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' perl-base)" ge '5.36.0-7+deb12u4' \
+  && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' libbrotli1)" ge '1.0.9-2+deb12u1' \
   && apt-get install -y --no-install-recommends ca-certificates clamav clamav-daemon clamdscan clamav-freshclam file ffmpeg \
   && rm -rf /var/lib/apt/lists/*
 
