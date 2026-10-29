@@ -84,6 +84,13 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
+      - name: Decide whether PR dependencies changed
+        id: dependency_scope
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/check-pr-dependency-scope.mjs
       - name: Install exact dependencies
         run: npm ci
       - name: Restore Playwright browsers
@@ -112,11 +119,10 @@ jobs:
         run: npm audit --audit-level=high
       - name: Reject generated diff
         run: git diff --check && test -z "$(git status --short)"
-      # Dependency review needs the dependency graph, which a private repository
-      # only has with GitHub Advanced Security. Without it the step always fails
-      # and skips the image build/scan below; npm audit above still gates.
+      # Dependency changes require review in every repository. Code-only PRs
+      # do not need this service; npm audit above remains unconditional.
       - name: Review dependency changes
-        if: github.event_name == 'pull_request' && !github.event.repository.private
+        if: github.event_name == 'pull_request' && steps.dependency_scope.outputs.required == 'true'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
 
   images:

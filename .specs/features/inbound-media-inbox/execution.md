@@ -71,3 +71,26 @@ Aplicação, revisão dos mounts, scan real, publicação do workflow, recupera�
 pontual e confirmação visual na conversa permanecem pendentes. O procedimento
 está em `docs/runbooks/inbound-images-inbox.md`. Não declarar o incidente
 resolvido ou as imagens exibidas em produção com esta evidência local.
+
+## INBOX-IMG-CI-01 — aplicabilidade da revisão de dependências
+
+O PR de fork privado #226 não iniciou workflows. O mesmo commit foi publicado
+em branch interna no PR #235, sem alterar permissões do GitHub. O CI
+40801959042 aprovou testes estáticos, banco, E2E e audit, mas falhou apenas
+em `Review dependency changes`: o serviço exige Dependency Graph e GitHub
+Advanced Security indisponíveis no repositório privado.
+
+A correção de CI calcula o delta de manifests/lockfiles npm e referências
+de GitHub Actions antes de acionar esse serviço. Mudança de dependência
+continua exigindo a revisão; sintaxe ambígua exige revisão e erro Git falha
+o job. `npm audit` continua incondicional. Nenhuma configuração de acesso,
+licença ou serviço de segurança foi alterada.
+
+Verificação local: fixtures de código sem dependências, campos `run/if`,
+manifest nested, lockfile, exclusão, pins de Actions, refs adicionadas/removidas,
+quoted/flow/multiline, Docker, anchors, escapes, dinâmica e comparação inválida;
+dois testes com todos os cenários passaram. Typecheck, lint focal, Prettier e
+diff check passaram. A comparação real da feature e a comparação do workflow
+base com a alteração local não identificaram mudanças de dependência.
+
+A implantação continua condicionada aos gates do PR após essa correção.
