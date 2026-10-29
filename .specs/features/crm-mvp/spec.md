@@ -1,5 +1,14 @@
 # CRM Silmer MVP — Requisitos Rastreáveis
 
+## Exceção vigente — ponte Evolution/Baileys
+
+A [ADR 050](../../../docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md)
+autoriza ORC-02 e MSG-04 por Evolution/Baileys enquanto a API oficial está em
+aprovação. Substitui a escolha WAHA anterior e preserva ORC-01..08, INB-01,
+MSG-01..04, a integração Meta, reservas, identidade comprovada, idempotência
+e handoff. EVOL-01 exige evidência de instalação, limpeza por referências,
+pareamento e homologação separadas; testes do adapter não comprovam canal real.
+
 ## Exceção autorizada — transporte do piloto WAHA
 
 A [ADR 043](../../../docs/adr/043-piloto-whatsapp-waha-webjs.md) autoriza em

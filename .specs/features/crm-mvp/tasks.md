@@ -133,6 +133,27 @@ INBOX-AUDIO-01, INB-01, MSG-01/02 e PRV-03.
 Implantação, limites e evidências no
 [runbook de áudio](../../../docs/runbooks/inbound-audio-inbox.md).
 
+## EVOL-01 — ponte Evolution/Baileys e limpeza do n8n
+
+Autorizada em 29/10/2026 na [ADR 050](../../../docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md),
+[RFC 039](../../../docs/rfc/039-evolution-baileys-como-ponte-do-whatsapp.md).
+Requisitos ORC-01..08, INB-01 e MSG-01..04; OPS-1 / INT-1/2.
+
+- [x] EVOL-01A — decisão, fonte fixada, perfil privado, banco exclusivo sem Redis,
+      adapter e testes negativos; jornada atual preservada.
+- [x] EVOL-01B (provisionamento) — gateway/banco EasyPanel criados, backup privado
+      e inventário n8n por CLI sem outro servidor/consumidor.
+- [x] EVOL-01B (verificação) — imagem/build, perfil não root, health privado `200`
+      e recusa sem chave `401`; instância sem conta, QR não solicitado.
+- [x] EVOL-01C — candidato importado e principal convertido no mesmo ID, ainda
+      inativo; seis candidatos WAHA/WPP e duplicado Evolution arquivados após
+      verificar referências. Sete workflows Meta e terceiros preservados por
+      fingerprints; volumes e credenciais dos arquivados permanecem recuperáveis.
+- [ ] EVOL-01D — parear conta disponível, confirmar identidade e homologar entrada
+      Inbox, resposta, mídia/status, takeover, replay, reconexão e recuperação.
+
+Estado e limites no [runbook Evolution](../../../docs/runbooks/evolution-baileys.md).
+
 ## WPP-01 — preparação WPPConnect pausada
 
 Preparação: [ADR 045](../../../docs/adr/045-piloto-whatsapp-wppconnect.md).

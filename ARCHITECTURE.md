@@ -1,5 +1,16 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Ponte aprovada — Evolution/Baileys (29/10/2026)
+
+A [ADR 050](docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md) substitui
+a escolha WAHA abaixo por Evolution/Baileys enquanto a API oficial está em
+aprovação. Gateway e PostgreSQL exclusivos ficam no EasyPanel, privados e sem
+Redis. n8n, jornada, reservas e Inbox continuam nas fronteiras atuais.
+O fluxo Meta e terceiros são preservados; limpeza exige backup e análise de
+referências. Preparação não equivale a pareamento ou entrega. Estado e gates
+no [runbook Evolution](docs/runbooks/evolution-baileys.md), tarefa EVOL-01.
+As seções WAHA/WPPConnect abaixo registram a situação anterior.
+
 ## Transporte atual da nova linha — WAHA/WEBJS
 
 A [ADR 046](docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md)

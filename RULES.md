@@ -1,5 +1,17 @@
 # Regras do CRM Silmer
 
+## Exceção vigente — ponte Evolution/Baileys (29/10/2026)
+
+A [ADR 050](docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md), autorizada
+pelo proprietário, substitui a escolha de transporte da ADR 046 por Evolution
+com Baileys. Autoriza gateway e banco exclusivo de transporte, sem Redis; o
+n8n nunca acessa o banco CRM. Fluxos Meta e terceiros são preservados. Limpeza
+WAHA/candidatos exige backup privado e referências verificadas. Contratos CRM,
+reservas, epoch, idempotência, handoff e gates de identidade/entrega permanecem.
+Não presumir liberação de conta nem menor risco de bloqueio. Estado em
+[EVOL-01](.specs/features/crm-mvp/tasks.md) e no
+[runbook](docs/runbooks/evolution-baileys.md). Exceções anteriores são históricas.
+
 ## Exceção atualizada — nova linha na Inbox por WAHA/WEBJS (28/10/2026)
 
 A [ADR 046](docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md)

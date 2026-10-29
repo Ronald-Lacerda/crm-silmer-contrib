@@ -1,5 +1,19 @@
 # Topologia EasyPanel — CRM Silmer
 
+## Ponte Evolution/Baileys — 29/10/2026
+
+Conforme a [ADR 050](docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md),
+`schedule/silmer-evolution` usa API interna 8080 e volume exclusivo
+`/evolution/instances`, sem domínio/porta pública, 1 CPU e 1024 MiB.
+`schedule/silmer-evolution-db` guarda somente transporte, com banco/usuário
+`silmer_evolution`, 0,5 CPU e 512 MiB, sem porta publicada. Sem Redis.
+Imagem, runtime e variáveis estão em [ops/evolution](ops/evolution/README.md).
+Meta, checkout, CRM e DEV são preservados. Um auxiliar CLI temporário pode
+exportar/importar workflows com a mesma imagem do n8n sem iniciar servidor;
+seu diagnóstico autenticado não expõe payloads nem credenciais e deve ser
+retirado após a operação. Backup permanece privado. Estado operacional e
+limpeza em [EVOL-01](docs/runbooks/evolution-baileys.md); seções abaixo são históricas.
+
 ## Transporte da nova linha — WAHA retomado; WPPConnect parado
 
 A [ADR 046](docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md)

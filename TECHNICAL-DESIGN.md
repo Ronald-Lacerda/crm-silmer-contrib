@@ -1,5 +1,18 @@
 # TDD — CRM Silmer MVP
 
+## Transporte aprovado — Evolution/Baileys (29/10/2026)
+
+A [ADR 050](docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md) autoriza
+Evolution/Baileys como ponte até a API oficial: API privada, PostgreSQL exclusivo,
+cache local, sem Redis. O perfil fixado em `ops/evolution/` protege logs e
+webhook e expurga mensagens de transporte anteriores a sete dias. O gerador
+`ops/n8n/workflows/create-evolution-workflow.mjs` preserva a jornada atual e
+restaura somente a fronteira do transporte quando a fonte já usa WAHA.
+Persistência antes do ACK, reservas, epoch, resultado incerto e Inbox mantêm
+seus contratos. Meta e terceiros são preservados. Preparação, pareamento,
+cutover e homologação são gates distintos no
+[runbook](docs/runbooks/evolution-baileys.md), EVOL-01. Estado WAHA abaixo é histórico.
+
 ## Transporte atual da nova linha — WAHA/WEBJS; WPPConnect pausado
 
 A [ADR 046](docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md)

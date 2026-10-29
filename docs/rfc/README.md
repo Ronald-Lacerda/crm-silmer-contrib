@@ -11,6 +11,8 @@
 - [040 — Vendedor aprende com os atendentes humanos](040-vendedor-aprende-com-os-atendentes-humanos.md),
   decidida na ADR 051; nove conversas reais de 29/10 e o que a vendedora
   perguntou e respondeu.
+- [039 — Evolution/Baileys como ponte do WhatsApp](039-evolution-baileys-como-ponte-do-whatsapp.md),
+  decidida na ADR 050 para a ponte temporária, limpeza do n8n e preservação Meta.
 
 ## Decisão de 28/10/2026
 

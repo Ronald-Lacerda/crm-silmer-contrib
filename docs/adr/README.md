@@ -7,6 +7,9 @@
   falha, rajada agrupada, urgência pelo prazo, parceria e revenda, tom e aviso
   perto do fechamento; supersede a ADR 009 (item 4) e a ADR 024 (item 3) em
   parte.
+- [050 — Evolution/Baileys como ponte do WhatsApp](050-evolution-baileys-como-ponte-do-whatsapp.md),
+  gateway e banco privados sem Redis, jornada preservada, limpeza WAHA por
+  referências e integração Meta protegida; homologação real em EVOL-01.
 
 ## Decisão de 28/10/2026
 
