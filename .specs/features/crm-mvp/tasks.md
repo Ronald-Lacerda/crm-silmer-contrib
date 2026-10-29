@@ -156,6 +156,12 @@ Requisitos ORC-01..08, INB-01 e MSG-01..04; OPS-1 / INT-1/2.
       Backups conferidos e auxiliares temporários removidos.
 - [ ] EVOL-01D (homologação restante) — mídia, recibos `delivered`/`read`, replay,
       reconexão e recuperação. Recebimento visual não homologa recibos do provider.
+- [x] EVOL-01D / CHAN-WA-01-PHONE (texto e IA, 29/10) — após encerrar o
+      ciclo de teste humano com autorização, nova mensagem abriu ciclo com IA;
+      duas respostas e coleta progressiva observadas na Inbox/WhatsApp Web.
+      Site/bio/chat/pós-pagamento publicados com canal único; Facebook salvo.
+      Telefone do perfil Instagram depende de verificação de acesso recusada
+      pelo proprietário. Evidência e limites no runbook Evolution.
 
 Estado e limites no [runbook Evolution](../../../docs/runbooks/evolution-baileys.md).
 

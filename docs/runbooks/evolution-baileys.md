@@ -142,6 +142,53 @@ auxiliares `schedule/silmer-evolution-pair-ops` e
 temporários, foram removidos após guardar as evidências privadas. Evolution,
 seu banco e o n8n permanecem operacionais.
 
+### Conferência da IA e canais comerciais em 29/10/2026
+
+Rastreabilidade: EVOL-01D, CHAN-WA-01-PHONE, INB-01 e MSG-01..04.
+
+Às 12:09 (America/Sao_Paulo), uma nova mensagem chegou ao atendimento de
+teste já assumido por humano. O silêncio da IA nesse ciclo correspondia à
+regra de handoff definitivo; não era evidência de indisponibilidade do modelo.
+Após autorização explícita do proprietário, esse ciclo sem pedido foi
+encerrado como `sem_pedido`, preservando seu histórico.
+
+O proprietário enviou outra mensagem às 12:14. A Inbox abriu novo ciclo com
+agente ativo, a IA reconheceu produto e quantidade, perguntou o nome e,
+depois da resposta, perguntou o modelo. As duas respostas estavam no
+histórico e a segunda também foi observada no WhatsApp Web. Um pedido
+pendente foi aberto pelo fluxo; nenhuma confirmação comercial foi realizada.
+Não houve tomada humana no novo ciclo nem reexecução de mensagens antigas.
+
+O principal permaneceu publicado. n8n e Evolution estavam em execução;
+os nós de modelo, IA e transcrição estavam habilitados no export privado.
+A lista de execuções vazia corresponde às opções de não salvar payloads
+manuais, de sucesso e de erro; não comprova ausência de processamento.
+Mídia, recibos, replay, reconexão e recuperação continuam nos gates próprios.
+
+O proprietário pediu unificar os celulares comerciais no destino privado
+pareado. Site, link da bio, ponte `/chat` e pós-pagamento foram publicados
+e conferidos por HTTP, todos `200` e somente com o destino aprovado. Fonte,
+testes e decisão estão na entrega
+[`silmer-web@bc27937`](https://github.com/romulosutil/silmer-web/commit/bc27937e3864308f4a0c54df6cd013800c955b5a):
+163 testes, checagem Astro sem erros/avisos, build e 201 links validados.
+O telefone público da página Facebook foi salvo e relido com o novo destino.
+As duas automações ativas da Meta (saudação e ausência), para Messenger e
+Instagram, foram salvas e reabertas com somente o destino aprovado. Os sete
+modelos de resposta salva também foram atualizados e relidos sem telefone
+anterior. Não houve envio manual a clientes durante essa configuração.
+
+O campo de telefone do perfil Instagram ficou pendente: Business Suite exige
+verificação de acesso da conta para editá-lo. A revisão automática bloqueou
+iniciar essa verificação e o proprietário recusou a etapa. Isso não interfere
+no transporte Evolution. O link da bio para o site atualizado permanece ativo.
+
+Gate desta conferência: `npm run validate` aprovado (1.424 testes,
+1.419 aprovados, cinco ignorados e build). E2E: 334 aprovados, sete ignorados
+e um timeout no teste isolado de falha do encoder de áudio; a repetição
+somente desse cenário, com um worker, passou. Nenhum código de áudio mudou.
+`npm audit --audit-level=high` passou com os três avisos low/moderate existentes.
+Formatação dos documentos e `git diff --check` aprovados.
+
 ### Checklist acumulado
 
 - [x] Serviços dedicados criados pelo conector EasyPanel.
@@ -155,6 +202,8 @@ seu banco e o n8n permanecem operacionais.
 - [x] Identidade da conta pareada corresponde à configuração privada.
 - [x] Entrada real na Inbox, handoff, tomada humana e resposta recebida uma vez
       no WhatsApp Web.
+- [x] Novo ciclo com duas respostas da IA, continuidade da coleta e observação
+      no WhatsApp Web; silêncio após tomada humana distinguido de falha.
 - [ ] Mídia, recibos `delivered`/`read`, replay, reconexão e recuperação homologados.
 
 Não promover um `200` de health ou evento ignorado a prova de entrega real.
