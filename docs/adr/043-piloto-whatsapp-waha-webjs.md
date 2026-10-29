@@ -1,8 +1,8 @@
-# ADR 042 — Piloto WhatsApp com WAHA e WEBJS
+# ADR 043 — Piloto WhatsApp com WAHA e WEBJS
 
 Status: aceita em 27/10/2026; implantação e homologação exigem evidência própria.
 Decisor: proprietário, autorização explícita nesta conversa.
-RFC: [030](../rfc/030-piloto-whatsapp-waha-webjs.md).
+RFC: [031](../rfc/031-piloto-whatsapp-waha-webjs.md).
 Requisitos: [ORC-01..08, INB-01 e MSG-01..04](../../.specs/features/crm-mvp/spec.md).
 Tarefa: WAHA-01, vinculada a INBOX-2/3, AGENTE-6, OPS-1 e INT-1/2 no
 [plano do MVP](../../.specs/features/crm-mvp/tasks.md).

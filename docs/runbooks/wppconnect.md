@@ -1,7 +1,7 @@
 # WPPConnect — piloto e pareamento privado
 
-Rastreabilidade: [ADR 044](../adr/044-piloto-whatsapp-wppconnect.md),
-[RFC 032](../rfc/032-pareamento-privado-com-wppconnect.md), WPP-01,
+Rastreabilidade: [ADR 045](../adr/045-piloto-whatsapp-wppconnect.md),
+[RFC 033](../rfc/033-pareamento-privado-com-wppconnect.md), WPP-01,
 OPS-1/INT-1/2, ORC-01..08, INB-01 e MSG-01..04.
 
 ## Estado em 28/10/2026 — preparação pausada
@@ -14,10 +14,10 @@ comparação com a API oficial.
 WPPConnect Server 2.10.69, core 2.3.6, foi preparado, mas nunca pareado.
 O Chromium falhou ao criar namespaces com `EPERM`; o serviço foi parado.
 Não houve aprovação nem aplicação de `--no-sandbox` ou alteração do host
-para contornar a falha. A [ADR 045](../adr/045-retomar-waha-para-atendimento-da-nova-linha.md)
-e o [RFC 033](../rfc/033-retomar-waha-para-atendimento-da-nova-linha.md)
+para contornar a falha. A [ADR 046](../adr/046-retomar-waha-para-atendimento-da-nova-linha.md)
+e o [RFC 034](../rfc/034-retomar-waha-para-atendimento-da-nova-linha.md)
 registram a pausa e a retomada do WAHA/WEBJS existente com volumes novos.
-A ADR 044 permanece como registro da preparação. A conta anterior bloqueada
+A ADR 045 permanece como registro da preparação. A conta anterior bloqueada
 continua sem uso, com volumes preservados. Nenhuma taxa de bloqueio é inferida
 da biblioteca ou das falhas de pareamento.
 
@@ -78,7 +78,7 @@ entrega ao telefone. A confirmação do comando humano permanece associada
 Parar somente o gateway/candidato deste piloto. Conservar sessão, volume,
 mensagens persistidas e resultados incertos. Reconciliar antes de reenvio.
 O fluxo publicado e seu backup devem permanecer recuperáveis. A retomada do
-WAHA para a nova linha segue a decisão explícita da ADR 045. A conta anterior
+WAHA para a nova linha segue a decisão explícita da ADR 046. A conta anterior
 não deve ser reutilizada nem servir como fallback automático. Não repetir
 comandos antigos ou ativar outro transporte automaticamente.
 

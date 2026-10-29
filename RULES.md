@@ -2,8 +2,8 @@
 
 ## Exceção atualizada — nova linha na Inbox por WAHA/WEBJS (28/10/2026)
 
-A [ADR 045](docs/adr/045-retomar-waha-para-atendimento-da-nova-linha.md)
-supersede a escolha de transporte da ADR 044 para a nova linha: WPPConnect
+A [ADR 046](docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md)
+supersede a escolha de transporte da ADR 045 para a nova linha: WPPConnect
 fica parado, sem pareamento ou `--no-sandbox`, e WAHA/WEBJS é retomado com
 volumes novos. O destino é a Inbox real, sem atendimento de teste paralelo.
 A conta anterior bloqueada não é reativada; seus volumes ficam preservados.
@@ -16,7 +16,7 @@ Não repetir comandos antigos nem inferir menor risco de bloqueio.
 
 ## Exceção autorizada — piloto WAHA/WEBJS (27/10/2026)
 
-A [ADR 042](docs/adr/042-piloto-whatsapp-waha-webjs.md) autoriza WAHA com WEBJS
+A [ADR 043](docs/adr/043-piloto-whatsapp-waha-webjs.md) autoriza WAHA com WEBJS
 somente para a linha temporária do piloto. Nessa fronteira, substitui a
 exigência de API oficial da regra técnica 4; as reservas da regra 11 valem antes
 de qualquer envio pelo transporte ativo. Mantêm-se n8n obrigatório, API do CRM,
@@ -105,7 +105,7 @@ da loja continuam bloqueadas.
 
 ## CHAN-WA-01 — Atendimento concentrado no WhatsApp (27/10/2026)
 
-A ADR 043 supersede o atendimento ativo do site: site e Instagram encaminham
+A ADR 044 supersede o atendimento ativo do site: site e Instagram encaminham
 para WhatsApp sem coleta comercial, IA ou abertura de pedido. A loja mantém
 seu checkout. O agente não oferece/coleta mochilas, bolsas e similares;
 encaminha pedidos dessas categorias ao humano sem projetar rascunho.

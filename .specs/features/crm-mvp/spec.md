@@ -2,7 +2,7 @@
 
 ## Exceção autorizada — transporte do piloto WAHA
 
-A [ADR 042](../../../docs/adr/042-piloto-whatsapp-waha-webjs.md) autoriza em
+A [ADR 043](../../../docs/adr/043-piloto-whatsapp-waha-webjs.md) autoriza em
 27/10/2026 que ORC-02 e MSG-04 sejam atendidos pelo transporte WAHA com WEBJS
 somente na linha temporária. Permanecem normalização, contratos versionados,
 idempotência, autorização, reserva anterior ao envio e handoff. ORC-01..08,
@@ -316,7 +316,7 @@ externos e operacionais continuam independentes.
 
 ## CHAN-WA-01 — Atendimento no WhatsApp
 
-Aprovado pelo proprietário em 27/10/2026; ADR 043. Site/linktree Instagram
+Aprovado pelo proprietário em 27/10/2026; ADR 044. Site/linktree Instagram
 SHALL encaminhar por link acessível Falar no WhatsApp, sem formulário, IA ou
 abertura de pedido. O webhook antigo SHALL retornar orientação fixa antes
 do CRM/IA. O agente SHALL transferir mochilas/bolsas e duas intenções de

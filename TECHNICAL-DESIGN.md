@@ -2,8 +2,8 @@
 
 ## Transporte atual da nova linha — WAHA/WEBJS; WPPConnect pausado
 
-A [ADR 045](docs/adr/045-retomar-waha-para-atendimento-da-nova-linha.md)
-pausa o WPPConnect preparado pela ADR 044: API privada e build verificados,
+A [ADR 046](docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md)
+pausa o WPPConnect preparado pela ADR 045: API privada e build verificados,
 mas Chromium falhou em namespace com `EPERM`; não houve pareamento ou aplicação
 de `--no-sandbox`. Fonte e volume permanecem preservados, com serviço parado.
 O WAHA/WEBJS existente foi retomado com volumes novos de sessão e mídia,
@@ -25,7 +25,7 @@ Não há domínio de teste ou banco/Redis adicional.
 
 ## Exceção de transporte — WAHA/WEBJS
 
-A [ADR 042](docs/adr/042-piloto-whatsapp-waha-webjs.md) autoriza o piloto da
+A [ADR 043](docs/adr/043-piloto-whatsapp-waha-webjs.md) autoriza o piloto da
 linha temporária via WAHA/WEBJS. O adaptador em
 `ops/n8n/workflows/create-waha-workflow.mjs` transforma uma exportação do fluxo
 existente sem alterar a fonte: conserva nós de domínio, contratos CRM, site,
@@ -410,7 +410,7 @@ T135 e [RFC 026](docs/rfc/026-correcao-administrativa-quantidade-loja.md).
 
 ## CHAN-WA-01 — Fronteira de atendimento
 
-Conforme ADR 043, o CTA público leva ao WhatsApp sem formulário. O trigger
+Conforme ADR 044, o CTA público leva ao WhatsApp sem formulário. O trigger
 antigo do chat encadeia somente resposta fixa, sem CRM/IA/upload. Os nós
 legados ficam sem entrada pública para compatibilidade histórica. Preservar
 o guard publicado, IDs de webhook e credenciais ao implantar. Pedido de

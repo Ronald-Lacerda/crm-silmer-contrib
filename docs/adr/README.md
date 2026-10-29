@@ -2,18 +2,18 @@
 
 ## Decisão de 28/10/2026
 
-- [045 — Retomar WAHA para atendimento da nova linha](045-retomar-waha-para-atendimento-da-nova-linha.md),
+- [046 — Retomar WAHA para atendimento da nova linha](046-retomar-waha-para-atendimento-da-nova-linha.md),
   pausa WPPConnect sem pareamento e retoma WAHA/WEBJS para a Inbox real,
   com volumes novos e sem reutilizar a conta bloqueada; identidade confirmada,
   principal publicado com WAHA e texto real de ida e volta verificado;
   gates restantes de canal continuam abertos.
-- [044 — Piloto WhatsApp com WPPConnect](044-piloto-whatsapp-wppconnect.md),
+- [045 — Piloto WhatsApp com WPPConnect](045-piloto-whatsapp-wppconnect.md),
   preparação por QR com atendimento preservado; escolha de transporte
-  posteriormente supersedida pela ADR 045, sem reescrever o registro.
+  posteriormente supersedida pela ADR 046, sem reescrever o registro.
 
 ## Decisão de 27/10/2026
 
-- [042 — Piloto WhatsApp com WAHA e WEBJS](042-piloto-whatsapp-waha-webjs.md),
+- [043 — Piloto WhatsApp com WAHA e WEBJS](043-piloto-whatsapp-waha-webjs.md),
   exceção autorizada para a linha temporária, preservando n8n e contratos CRM.
 
 - [041 — Consulta administrativa do Financeiro](041-consulta-administrativa-do-financeiro.md),
@@ -93,4 +93,4 @@ canônicos; ele registra o contexto e o motivo da escolha.
 - [041 — Consulta administrativa do Financeiro](041-consulta-administrativa-do-financeiro.md).
 - [042 — Perfis e nova quitação no Financeiro](042-perfis-e-requitacao-do-financeiro.md); Usuários e invalidação do check quando o valor muda.
 
-- [043 — Atendimento comercial concentrado no WhatsApp](043-atendimento-comercial-concentrado-no-whatsapp.md), decisão na RFC 031; supersede atendimento ativo do site e retira mochilas/bolsas da coleta.
+- [044 — Atendimento comercial concentrado no WhatsApp](044-atendimento-comercial-concentrado-no-whatsapp.md), decisão na RFC 032; supersede atendimento ativo do site e retira mochilas/bolsas da coleta.

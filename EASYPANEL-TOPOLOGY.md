@@ -2,8 +2,8 @@
 
 ## Transporte da nova linha — WAHA retomado; WPPConnect parado
 
-A [ADR 045](docs/adr/045-retomar-waha-para-atendimento-da-nova-linha.md)
-pausa `schedule/silmer-wppconnect`, preparado pela ADR 044 com API privada na
+A [ADR 046](docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md)
+pausa `schedule/silmer-wppconnect`, preparado pela ADR 045 com API privada na
 porta 21465 e volume `/data`. O build passou, mas o Chromium falhou em namespace
 com `EPERM`; o serviço foi parado sem parear conta e sem `--no-sandbox`.
 Fonte, configuração e volume foram preservados. O serviço existente
@@ -20,7 +20,7 @@ verificadas; mídia, reentrega e recuperação continuam com gates abertos.
 
 ## Serviço adicional autorizado — piloto WAHA/WEBJS
 
-A [ADR 042](docs/adr/042-piloto-whatsapp-waha-webjs.md) autoriza
+A [ADR 043](docs/adr/043-piloto-whatsapp-waha-webjs.md) autoriza
 `schedule/silmer-waha`, sem Redis ou banco adicional, com uma réplica WEBJS.
 A imagem é `devlikeapro/waha:chrome-2026.9.2` fixada no digest
 `sha256:d4c2b1da8373fa48c5022aa947c95a87480cf6e26a9d3c9b59721f96b044d223`.

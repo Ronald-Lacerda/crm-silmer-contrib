@@ -1,9 +1,9 @@
-# ADR 044 — Piloto WhatsApp com WPPConnect
+# ADR 045 — Piloto WhatsApp com WPPConnect
 
 Status: aceita em 28/10/2026 para preparação e pareamento; homologação pendente.
 Decisão técnica: Tech Lead, executando a autorização do proprietário para
 continuar por QR com a nova linha fornecida nesta conversa.
-RFC: [032](../rfc/032-pareamento-privado-com-wppconnect.md).
+RFC: [033](../rfc/033-pareamento-privado-com-wppconnect.md).
 Requisitos: ORC-01..08, INB-01 e MSG-01..04; tarefa WPP-01/OPS-1/INT-1/2.
 Issue/PR específica: não criada nesta etapa.
 
@@ -31,7 +31,7 @@ Issue/PR específica: não criada nesta etapa.
    de sucesso não comprovam entrega. Não realizar disparos para testar
    bloqueio nem prometer que um período conectado prevê estabilidade futura.
 
-Esta ADR supersede a escolha de transporte da ADR 042 somente para este novo
+Esta ADR supersede a escolha de transporte da ADR 043 somente para este novo
 piloto. Mantém a exceção limitada à API oficial, n8n obrigatório e contratos
 CRM. A conta anterior continua em sua própria condição externa de bloqueio.
 O [runbook](../runbooks/wppconnect.md) registra os estados observados e rollback.

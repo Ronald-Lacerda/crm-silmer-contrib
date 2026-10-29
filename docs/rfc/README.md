@@ -2,17 +2,17 @@
 
 ## Decisão de 28/10/2026
 
-- [033 — Retomar WAHA para atendimento da nova linha](033-retomar-waha-para-atendimento-da-nova-linha.md),
-  decidida na ADR 045; WPPConnect parado e pareamento WAHA da nova linha
+- [034 — Retomar WAHA para atendimento da nova linha](034-retomar-waha-para-atendimento-da-nova-linha.md),
+  decidida na ADR 046; WPPConnect parado e pareamento WAHA da nova linha
   destinado à Inbox real; identidade confirmada e principal publicado,
   com texto real de ida e volta verificado e gates restantes abertos.
-- [032 — Pareamento privado com WPPConnect](032-pareamento-privado-com-wppconnect.md),
-  decidida na ADR 044; preparação preservada e transporte revisto na RFC 033/ADR 045.
+- [033 — Pareamento privado com WPPConnect](033-pareamento-privado-com-wppconnect.md),
+  decidida na ADR 045; preparação preservada e transporte revisto na RFC 034/ADR 046.
 
 ## Decisão de 27/10/2026
 
-- [030 — Piloto WhatsApp com WAHA e WEBJS](030-piloto-whatsapp-waha-webjs.md),
-  aprovada pelo proprietário e decidida na ADR 042.
+- [031 — Piloto WhatsApp com WAHA e WEBJS](031-piloto-whatsapp-waha-webjs.md),
+  aprovada pelo proprietário e decidida na ADR 043.
 
 - [029 — Consulta administrativa do Financeiro](029-consulta-administrativa-do-financeiro.md),
   decidida na ADR 041: consulta do Admin com menu completo e rejeição do print
@@ -88,4 +88,4 @@ entre os documentos.
 
 - [023 — Backup externo e recuperação do CRM e do n8n](023-backup-externo-e-recuperacao-do-crm-e-n8n.md), pendente de destino externo, execução e drill.
 
-- [031 — Atendimento comercial concentrado no WhatsApp](031-atendimento-comercial-concentrado-no-whatsapp.md), decidida na ADR 043.
+- [032 — Atendimento comercial concentrado no WhatsApp](032-atendimento-comercial-concentrado-no-whatsapp.md), decidida na ADR 044.

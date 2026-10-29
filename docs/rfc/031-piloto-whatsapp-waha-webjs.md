@@ -1,7 +1,7 @@
-# RFC 030 — Piloto WhatsApp com WAHA e WEBJS
+# RFC 031 — Piloto WhatsApp com WAHA e WEBJS
 
 Status: decidida em 27/10/2026 na
-[ADR 042](../adr/042-piloto-whatsapp-waha-webjs.md).
+[ADR 043](../adr/043-piloto-whatsapp-waha-webjs.md).
 Responsável: Tech Lead. Decisor: proprietário, autorização explícita nesta conversa.
 Requisitos: [ORC-01..08, INB-01 e MSG-01..04](../../.specs/features/crm-mvp/spec.md).
 Tarefa: WAHA-01, vinculada a INBOX-2/3, AGENTE-6, OPS-1 e INT-1/2 no

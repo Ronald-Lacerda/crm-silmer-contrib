@@ -1,8 +1,8 @@
 # WAHA com WEBJS — piloto da Inbox Silmer
 
 Atualização: 28/10/2026, America/Sao_Paulo.
-Decisão: [ADR 042](../adr/042-piloto-whatsapp-waha-webjs.md) e
-[RFC 030](../rfc/030-piloto-whatsapp-waha-webjs.md).
+Decisão: [ADR 043](../adr/043-piloto-whatsapp-waha-webjs.md) e
+[RFC 031](../rfc/031-piloto-whatsapp-waha-webjs.md).
 Rastreabilidade: WAHA-01, INBOX-2/3, AGENTE-6, OPS-1, INT-1/2;
 [ORC-01..08, INB-01 e MSG-01..04](../../.specs/features/crm-mvp/spec.md).
 
@@ -365,8 +365,8 @@ Para rollback:
 
 ## Retomada inicial em 28/10/2026 — nova linha para a Inbox real
 
-A [ADR 045](../adr/045-retomar-waha-para-atendimento-da-nova-linha.md) e o
-[RFC 033](../rfc/033-retomar-waha-para-atendimento-da-nova-linha.md) registram
+A [ADR 046](../adr/046-retomar-waha-para-atendimento-da-nova-linha.md) e o
+[RFC 034](../rfc/034-retomar-waha-para-atendimento-da-nova-linha.md) registram
 a pausa do WPPConnect e a retomada do WAHA/WEBJS para a nova linha destinada
 ao atendimento real na Inbox do CRM. A suspensão e o bloqueio descritos
 anteriormente pertencem à conta anterior, que continua sem uso e com seus

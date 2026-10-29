@@ -1,6 +1,6 @@
-# RFC 032 — Pareamento privado com WPPConnect
+# RFC 033 — Pareamento privado com WPPConnect
 
-Status: decidida em 28/10/2026 pela [ADR 044](../adr/044-piloto-whatsapp-wppconnect.md).
+Status: decidida em 28/10/2026 pela [ADR 045](../adr/045-piloto-whatsapp-wppconnect.md).
 Requisitos: ORC-01..08, INB-01 e MSG-01..04; tarefa WPP-01, vinculada a
 OPS-1, INT-1/2 e INBOX-2/3. Issue/PR específica: não criada nesta etapa.
 

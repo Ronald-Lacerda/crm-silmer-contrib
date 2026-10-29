@@ -1,7 +1,7 @@
-# RFC 033 — Retomar WAHA para atendimento da nova linha
+# RFC 034 — Retomar WAHA para atendimento da nova linha
 
 Status: decidida em 28/10/2026 na
-[ADR 045](../adr/045-retomar-waha-para-atendimento-da-nova-linha.md).
+[ADR 046](../adr/046-retomar-waha-para-atendimento-da-nova-linha.md).
 Responsável: Tech Lead. Objetivo confirmado pelo proprietário: nova linha no
 atendimento real da Caixa de Entrada, preservando o fluxo n8n existente.
 Requisitos: [ORC-01..08, INB-01 e MSG-01..04](../../.specs/features/crm-mvp/spec.md).
@@ -11,7 +11,7 @@ Issue/PR específica: não criada nesta etapa.
 
 ## Contexto e alternativas
 
-O WPPConnect preparado pela RFC 032/ADR 044 passou pelo build e pelas checagens
+O WPPConnect preparado pela RFC 033/ADR 045 passou pelo build e pelas checagens
 da API privada, mas o Chromium falhou em namespaces com `EPERM`. A instalação
 do helper oficial de sandbox não comprovou browser operacional. Não houve
 pareamento WPPConnect nem aprovação ou aplicação de `--no-sandbox`.

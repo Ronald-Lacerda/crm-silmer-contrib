@@ -1,6 +1,6 @@
-# RFC 031 — Atendimento comercial concentrado no WhatsApp
+# RFC 032 — Atendimento comercial concentrado no WhatsApp
 
-Data: 27/10/2026. Status: decidida na [ADR 043](../adr/043-atendimento-comercial-concentrado-no-whatsapp.md).
+Data: 27/10/2026. Status: decidida na [ADR 044](../adr/044-atendimento-comercial-concentrado-no-whatsapp.md).
 
 O proprietário pediu auditar o workflow publicado, retirar mochilas e bolsas,
 testar conversas adversariais e concentrar o atendimento de site/Instagram no

@@ -878,7 +878,7 @@ As próximas telas e a ordem de entrega estão em
 
 ## CHAN-WA-01 — Atualização de 27/10/2026
 
-A [ADR 043](../../adr/043-atendimento-comercial-concentrado-no-whatsapp.md)
+A [ADR 044](../../adr/044-atendimento-comercial-concentrado-no-whatsapp.md)
 supersede a qualificação no chat público descrita acima. Site/linktree
 encaminham ao WhatsApp; trigger antigo termina em resposta fixa antes do
 CRM/IA. Mochilas e bolsas saem da abordagem do agente. Consulte a

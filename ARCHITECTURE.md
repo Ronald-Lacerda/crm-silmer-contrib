@@ -2,8 +2,8 @@
 
 ## Transporte atual da nova linha — WAHA/WEBJS
 
-A [ADR 045](docs/adr/045-retomar-waha-para-atendimento-da-nova-linha.md)
-pausa a preparação WPPConnect da ADR 044 após falha de namespace do Chromium,
+A [ADR 046](docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md)
+pausa a preparação WPPConnect da ADR 045 após falha de namespace do Chromium,
 sem pareamento e sem aplicação de `--no-sandbox`. O serviço WPPConnect está
 parado. WAHA/WEBJS foi retomado com volumes novos para a nova linha destinada
 ao atendimento real da Inbox; a conta anterior bloqueada permanece sem uso e
@@ -20,8 +20,8 @@ Não há Inbox paralela, Redis ou banco adicional.
 
 ## Piloto autorizado — WAHA com WEBJS
 
-A [ADR 042](docs/adr/042-piloto-whatsapp-waha-webjs.md), vinculada à
-[RFC 030](docs/rfc/030-piloto-whatsapp-waha-webjs.md), autoriza em 27/10/2026 o
+A [ADR 043](docs/adr/043-piloto-whatsapp-waha-webjs.md), vinculada à
+[RFC 031](docs/rfc/031-piloto-whatsapp-waha-webjs.md), autoriza em 27/10/2026 o
 transporte da linha temporária por WhatsApp → WAHA → n8n → API CRM → Inbox.
 O retorno conserva a reserva de efeito único antes do WAHA. O serviço dedicado
 não acessa o banco do CRM, não adiciona Redis e não substitui regras de IA,
@@ -236,7 +236,7 @@ Decisões anteriores continuam em `docs/adr/`; o histórico não substitui
 
 ## CHAN-WA-01 — Encaminhamento para WhatsApp
 
-A [ADR 043](docs/adr/043-atendimento-comercial-concentrado-no-whatsapp.md)
+A [ADR 044](docs/adr/044-atendimento-comercial-concentrado-no-whatsapp.md)
 supersede o chat comercial ativo do site dos ADRs 026/034. Site/linktree
 usam link direto; o webhook antigo responde orientação estática antes de
 CRM/IA. A loja e dados históricos mantêm seus contratos. Configuração do

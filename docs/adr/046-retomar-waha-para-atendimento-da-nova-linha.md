@@ -1,9 +1,9 @@
-# ADR 045 — Retomar WAHA para atendimento da nova linha
+# ADR 046 — Retomar WAHA para atendimento da nova linha
 
 Status: aceita em 28/10/2026; pareamento e homologação pendentes.
 Decisão técnica: Tech Lead, executando a orientação do proprietário de conectar
 a nova linha ao atendimento real da Inbox, preservando o fluxo existente.
-RFC: [033](../rfc/033-retomar-waha-para-atendimento-da-nova-linha.md).
+RFC: [034](../rfc/034-retomar-waha-para-atendimento-da-nova-linha.md).
 Requisitos: [ORC-01..08, INB-01 e MSG-01..04](../../.specs/features/crm-mvp/spec.md).
 Tarefas: WAHA-01D / WPP-01 / OPS-1 no
 [plano do MVP](../../.specs/features/crm-mvp/tasks.md).
@@ -13,7 +13,7 @@ Issue/PR específica: não criada nesta etapa.
 
 O proprietário esclareceu que a nova linha será usada na Caixa de Entrada real
 da Silmer, não em um atendimento de teste separado. O WPPConnect foi preparado
-conforme a [ADR 044](044-piloto-whatsapp-wppconnect.md), mas seu Chromium falhou
+conforme a [ADR 045](045-piloto-whatsapp-wppconnect.md), mas seu Chromium falhou
 ao criar namespaces com `EPERM`. O serviço foi parado antes de parear qualquer
 conta. Não houve aprovação ou aplicação de `--no-sandbox`.
 
@@ -48,9 +48,9 @@ comprova o mesmo bloqueio nem identifica sua causa.
 ## Relação com decisões anteriores
 
 Esta ADR supersede a escolha e a proibição de retomada do serviço WAHA da
-ADR 044 somente para a nova linha autorizada; o registro da ADR 044 permanece
+ADR 045 somente para a nova linha autorizada; o registro da ADR 045 permanece
 imutável. Retoma a fronteira de transporte da
-[ADR 042](042-piloto-whatsapp-waha-webjs.md), sem reativar a conta bloqueada.
+[ADR 043](043-piloto-whatsapp-waha-webjs.md), sem reativar a conta bloqueada.
 Não cria Inbox paralela, domínio de teste, novo banco ou Redis. O objetivo é
 atendimento real, e sua liberação continua dependendo de evidência operacional.
 

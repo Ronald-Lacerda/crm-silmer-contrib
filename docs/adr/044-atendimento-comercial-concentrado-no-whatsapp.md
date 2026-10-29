@@ -1,7 +1,7 @@
-# ADR 043 — Atendimento comercial concentrado no WhatsApp
+# ADR 044 — Atendimento comercial concentrado no WhatsApp
 
 Data: 27/10/2026. Status: aprovada pelo proprietário nesta solicitação.
-Proposta: [RFC 031](../rfc/031-atendimento-comercial-concentrado-no-whatsapp.md).
+Proposta: [RFC 032](../rfc/032-atendimento-comercial-concentrado-no-whatsapp.md).
 Rastreabilidade: CHAN-WA-01, AGT-01..08, ORC-01..08 e tarefa CHAN-WA-01
 em [.specs/features/crm-mvp/tasks.md](../../.specs/features/crm-mvp/tasks.md).
 

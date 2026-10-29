@@ -2,8 +2,8 @@
 
 ## WPP-01 — preparação WPPConnect pausada
 
-Preparação: [ADR 044](../../../docs/adr/044-piloto-whatsapp-wppconnect.md).
-Revisão do transporte: [ADR 045](../../../docs/adr/045-retomar-waha-para-atendimento-da-nova-linha.md).
+Preparação: [ADR 045](../../../docs/adr/045-piloto-whatsapp-wppconnect.md).
+Revisão do transporte: [ADR 046](../../../docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md).
 Requisitos ORC-01..08, INB-01 e MSG-01..04; OPS-1, INT-1/2 e INBOX-2/3.
 [Etapas e evidências](../../../docs/runbooks/wppconnect.md).
 
@@ -16,13 +16,13 @@ Requisitos ORC-01..08, INB-01 e MSG-01..04; OPS-1, INT-1/2 e INBOX-2/3.
 
 O proprietário forneceu nova linha para a Inbox real em 28/10 e pediu QR após
 reiterar a opção não oficial. WPPConnect nunca foi pareado e seu serviço foi
-parado, sem aplicação de `--no-sandbox`. Pela ADR 045, WAHA/WEBJS foi retomado
+parado, sem aplicação de `--no-sandbox`. Pela ADR 046, WAHA/WEBJS foi retomado
 com volumes novos para essa linha; a conta anterior bloqueada segue sem uso,
 com seus volumes preservados. Nenhuma taxa de bloqueio é inferida da biblioteca.
 
 ## WAHA-01 — piloto autorizado da linha temporária
 
-Decisão: [ADR 042](../../../docs/adr/042-piloto-whatsapp-waha-webjs.md).
+Decisão: [ADR 043](../../../docs/adr/043-piloto-whatsapp-waha-webjs.md).
 Requisitos: ORC-01..08, INB-01 e MSG-01..04; fronteiras INBOX-2/3, AGENTE-6,
 OPS-1 e INT-1/2. [Runbook e evidências](../../../docs/runbooks/waha-webjs.md).
 
@@ -37,7 +37,7 @@ OPS-1 e INT-1/2. [Runbook e evidências](../../../docs/runbooks/waha-webjs.md).
       na Inbox, bot transferiu e sua resposta chegou ao remetente. Takeover
       humano observado; nova resposta pela Inbox chegou uma vez ao WhatsApp.
       A conta anterior permanece bloqueada e sem uso, com seus volumes
-      preservados; o histórico está no runbook. Pela ADR 045, WAHA/WEBJS foi
+      preservados; o histórico está no runbook. Pela ADR 046, WAHA/WEBJS foi
       retomado com volumes novos para a nova linha da Inbox real. O candidato
       `WahaSilmerPilot01` foi atualizado da fonte atual de 92 nós para 101 nós,
       permanecendo inativo. Depois do pareamento privado, a sessão `default`
@@ -83,7 +83,7 @@ remoto TEST, a chamada sem autenticação retornou `403`; o status autenticado
 ignorado retornou `200`, sem CRM, IA ou envio. Isso não comprova resposta durável
 `202`, falha `@lid`, reentrega ou canal real; suas provas remotas continuam
 pendentes. A suspensão e o bloqueio relatados nesse histórico referem-se à
-conta anterior; o estado da nova linha consta em WAHA-01D e na ADR 045.
+conta anterior; o estado da nova linha consta em WAHA-01D e na ADR 046.
 A sessão anterior usava cliente Silmer CRM/Chrome,
 filtros de grupo/status/canais e `webjs.tagsEventsOn=true`; volume existente,
 limite de memória de 1536 MiB e contadores OOM zerados não explicam a causa
@@ -322,4 +322,4 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
 - [ ] Homologar chegada na Inbox e resposta do Vendedor após pareamento/ativação da linha do CRM (WAHA-01D/OPS-1).
 - [ ] Opcional: adicionar link direto/botão WhatsApp pelo aplicativo Instagram (edição web indisponível).
 
-Decisão ADR 043/RFC 031. Evidência em docs/integrations/n8n/auditoria-vendedor-2026-10-27.md.
+Decisão ADR 044/RFC 032. Evidência em docs/integrations/n8n/auditoria-vendedor-2026-10-27.md.

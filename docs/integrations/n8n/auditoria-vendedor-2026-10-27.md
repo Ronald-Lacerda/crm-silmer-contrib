@@ -1,7 +1,7 @@
 # Auditoria do Vendedor — 27/10/2026
 
 Requisito/tarefa: CHAN-WA-01; AGT-01..08, ORC-01..08.
-Decisão: [ADR 043](../../adr/043-atendimento-comercial-concentrado-no-whatsapp.md).
+Decisão: [ADR 044](../../adr/044-atendimento-comercial-concentrado-no-whatsapp.md).
 
 ## Fonte realmente observada
 

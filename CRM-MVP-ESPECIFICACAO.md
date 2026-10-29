@@ -201,7 +201,7 @@ rastreada, sem bloquear confirmação humana do Pedido vigente.
 
 ## CHAN-WA-01 — Atualização aprovada em 27/10/2026
 
-O proprietário concentrou o atendimento comercial no WhatsApp (ADR 043).
+O proprietário concentrou o atendimento comercial no WhatsApp (ADR 044).
 Site e Instagram encaminham por CTA explícito, sem qualificação/coleta.
 Mochilas e bolsas saem da abordagem automática e são encaminhadas à pessoa.
 Loja/checkout e históricos permanecem conforme seus contratos anteriores.
