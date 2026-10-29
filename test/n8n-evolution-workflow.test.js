@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
+import { patchWahaInboundImages } from '../ops/n8n/patch-waha-inbound-images.mjs';
 import { createWahaWorkflow } from '../ops/n8n/workflows/create-waha-workflow.mjs';
 import {
   convertEvolutionEvent,
@@ -30,6 +32,28 @@ const config = {
 };
 for (const node of source.nodes) node.id = 'synthetic:' + node.name;
 const before = JSON.stringify(source);
+
+/** The complete persisted-image branch, rather than two stand-in provider nodes. */
+function persistedImageWorkflow() {
+  const current = createWahaWorkflow(source, {
+    ownNumber: config.ownNumber,
+    apiCredentialId: 'synthetic-old-api',
+    webhookCredentialId: 'synthetic-old-hook',
+  });
+  const inbound = current.nodes.find(
+    (/** @type {any} */ node) => node.name === 'CRM - Registrar inbound (MVP)',
+  );
+  inbound.parameters.url =
+    'https://crm.invalid/api/v1/integrations/n8n/messages/inbound';
+  inbound.credentials = { httpBasicAuth: { id: 'synthetic-crm', name: 'CRM' } };
+  const patched = patchWahaInboundImages(current).workflow;
+  const result = createEvolutionWorkflow(patched, {
+    ...config,
+    transportBaseline: source,
+  });
+  return { patched, result };
+}
+
 const workflow = createEvolutionWorkflow(source, config);
 const nodes = new Map(
   workflow.nodes.map((/** @type {any} */ node) => [node.name, node]),
@@ -609,6 +633,139 @@ test('EVOL-01: invalid config and adapting an already adapted workflow fail clos
   assert.throws(
     () => createEvolutionWorkflow(workflow, config),
     /EVOLUTION_WORKFLOW_ALREADY_ADAPTED/u,
+  );
+});
+
+test('IMG-01/03/04: complete Evolution image branch preserves bytes, digest and replay identity in human mode', async () => {
+  const { patched, result } = persistedImageWorkflow();
+  const prefix = 'Inbox - Imagem recebida - ';
+  const byName = new Map(
+    result.nodes.map((/** @type {any} */ node) => [node.name, node]),
+  );
+  const raw = event();
+  raw.data.message = { imageMessage: { mimetype: 'image/png' } };
+  const normalized = await runCode(
+    'Normalizar evento WhatsApp (MVP)',
+    convertEvolutionEvent(validateEvolutionEvent(raw, config), null, config),
+  );
+  /** @type {Record<string,any>} */
+  const upstream = { 'Normalizar evento WhatsApp (MVP)': normalized };
+  const bytes = await readFile('test/fixtures/media-composer.png');
+  /** @param {string} name @param {any} item */
+  async function execute(name, item) {
+    return vm.runInNewContext(
+      `(async function(){${byName.get(prefix + name).parameters.jsCode}}).call(ctx)`,
+      {
+        $json: item.json,
+        $input: { item },
+        $itemIndex: 0,
+        $execution: { id: '42' },
+        $: (/** @type {string} */ key) => ({ item: upstream[key] }),
+        Buffer,
+        ctx: {
+          helpers: {
+            async getBinaryDataBuffer() {
+              return Buffer.from(item.binary.data.data, 'base64');
+            },
+          },
+        },
+      },
+    );
+  }
+  const query = byName.get(prefix + 'Consultar URL');
+  assert.equal(query.credentials.httpHeaderAuth.id, config.apiCredentialId);
+  assert.equal(
+    query.parameters.options.redirect.redirect.followRedirects,
+    false,
+  );
+  assert.equal(
+    evaluate(query.parameters.jsonBody, {}, upstream).message.key.id,
+    raw.data.key.id,
+  );
+  const downloaded = await execute('Baixar', {
+    json: { mimetype: 'image/png', base64: bytes.toString('base64') },
+  });
+  assert.deepEqual(Buffer.from(downloaded.binary.data.data, 'base64'), bytes);
+  const measured = await execute('Medir', downloaded);
+  upstream[prefix + 'Medir'] = measured;
+  assert.equal(measured.json.mime_type, 'image/png');
+  assert.equal(measured.json.filename, 'imagem.png');
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  assert.deepEqual(byName.get(prefix + 'SHA256').parameters, {
+    action: 'hash',
+    type: 'SHA256',
+    binaryData: true,
+    binaryPropertyName: 'data',
+    encoding: 'hex',
+    dataPropertyName: 'media_sha256',
+  });
+  const upload = byName.get(prefix + 'Salvar no CRM');
+  for (const duplicate of [false, true]) {
+    upstream['CRM - Registrar inbound (MVP)'] = {
+      json: {
+        conversation_id: 'conversation-synthetic',
+        mode: 'human',
+        duplicate,
+      },
+    };
+    const filter = byName.get(prefix + 'Filtrar').parameters.conditions
+      .conditions[0];
+    assert.equal(evaluate(filter.leftValue, {}, upstream), true);
+    // n8n Crypto may omit binary: Preparar must retrieve the measured original.
+    const prepared = await execute('Preparar anexo', {
+      json: { media_sha256: digest },
+    });
+    assert.deepEqual(Buffer.from(prepared.binary.data.data, 'base64'), bytes);
+    assert.equal(prepared.json.content_sha256, digest);
+    assert.equal(prepared.json.external_id, raw.data.key.id);
+    assert.equal(prepared.json.idempotency_key, raw.data.key.id);
+    assert.equal(prepared.json.conversation_id, 'conversation-synthetic');
+    assert.equal(
+      evaluate(upload.parameters.url, prepared.json, upstream),
+      'https://crm.invalid/api/v1/integrations/n8n/conversations/conversation-synthetic/attachments',
+    );
+  }
+  for (const node of patched.nodes.filter(
+    (/** @type {any} */ node) =>
+      node.name.startsWith(prefix) &&
+      !['Consultar URL', 'Baixar'].some((name) => node.name === prefix + name),
+  )) {
+    const expected = structuredClone(node);
+    for (const header of expected.parameters.headerParameters?.parameters ?? [])
+      if (header.name === 'X-Silmer-Workflow-Version')
+        header.value = 'evolution-baileys-1';
+    assert.deepEqual(byName.get(node.name), expected);
+  }
+  for (const [name, connection] of Object.entries(patched.connections))
+    if (name.startsWith(prefix))
+      assert.deepEqual(result.connections[name], connection);
+  const reached = new Set();
+  const pending = [prefix + 'Filtrar'];
+  while (pending.length) {
+    const name = pending.pop();
+    if (!name) continue;
+    if (reached.has(name)) continue;
+    reached.add(name);
+    assert.ok(name.startsWith(prefix), name);
+    for (const output of result.connections[name]?.main ?? [])
+      for (const edge of output) pending.push(edge.node);
+  }
+  assert.equal(reached.size, 9);
+  for (const invalid of [
+    { mimetype: 'image/png', base64: '' },
+    { mimetype: 'text/html', base64: bytes.toString('base64') },
+  ])
+    await assert.rejects(
+      execute('Baixar', { json: invalid }),
+      /EVOLUTION_MEDIA_INVALID/u,
+    );
+  const failed = await execute('Preparar falha', {
+    json: { error: 'PRIVATE_PROVIDER_DETAIL' },
+  });
+  assert.equal(failed.json.payload.failure.code, 'INBOUND_MEDIA_STORE_FAILED');
+  assert.equal(
+    JSON.stringify(failed).includes('PRIVATE_PROVIDER_DETAIL'),
+    false,
   );
 });
 
