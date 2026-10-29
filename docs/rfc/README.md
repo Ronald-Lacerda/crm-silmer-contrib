@@ -4,6 +4,8 @@
 
 - [037 — Aprendizados do Vendedor na Inbox real](037-aprendizados-do-vendedor-na-inbox-real.md),
   decidida na ADR 049; cinco conversas reais de 28/10 e correções aprovadas.
+- [036 — Assunto da mensagem só na dúvida do agente](036-assunto-da-mensagem-so-na-duvida-do-agente.md),
+  decidida na ADR 048 quanto ao CRM; ajustes do workflow n8n aguardam o PO.
 - [035 — Cadastro completo do cliente](035-cadastro-completo-do-cliente.md),
   decidida na ADR 047.
 - [034 — Retomar WAHA para atendimento da nova linha](034-retomar-waha-para-atendimento-da-nova-linha.md),

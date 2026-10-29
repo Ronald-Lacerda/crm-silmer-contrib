@@ -709,6 +709,10 @@ export class PostgresN8nIntegrationRepository {
     // and its outcome is reported in the response without failing the event.
     /** @type {any} */
     let projectionTarget = null;
+    // CP-12: the inbound revisions this automated turn answered, so the
+    // order bootstrap after commit can record their subject too.
+    /** @type {{fromRevision: number, toRevision: number} | null} */
+    let answeredTurn = null;
     const result = await this.database.transaction(async (client) => {
       await transactionBounds(client);
       await advisoryLock(client, `n8n-event:${input.technical.idempotencyKey}`);
@@ -720,6 +724,15 @@ export class PostgresN8nIntegrationRepository {
       if (replay) {
         assertFingerprint(replay, input.eventFingerprint);
         const previous = jsonObject(replay.outcome);
+        if (
+          Number.isInteger(previous.turnFromRevision) &&
+          Number.isInteger(input.sourceRevision)
+        ) {
+          answeredTurn = {
+            fromRevision: previous.turnFromRevision,
+            toRevision: input.sourceRevision,
+          };
+        }
         if (input.subjectId && input.briefingPatch && input.conversationId) {
           const conversation = (
             await client.query(
@@ -878,6 +891,18 @@ export class PostgresN8nIntegrationRepository {
           explicitTarget,
         );
         messageId = reservation.messageId;
+        // The snapshot was read FOR UPDATE before the fence moved
+        // claimed_revision: the turn answers (claimed, sourceRevision].
+        const turn = reservation.automated
+          ? {
+              fromRevision: Number(conversation.claimed_revision),
+              toRevision: Number(eventInput.sourceRevision),
+            }
+          : null;
+        if (turn) {
+          answeredTurn = turn;
+          outcome.turnFromRevision = turn.fromRevision;
+        }
         if (explicitTarget) {
           await client.query(
             `INSERT INTO crm.message_subject_links
@@ -887,6 +912,17 @@ export class PostgresN8nIntegrationRepository {
              ON CONFLICT (message_id, subject_id) DO NOTHING`,
             [messageId, explicitTarget.id, conversation.id, processedAt],
           );
+          if (turn) {
+            await this.#linkTurnInbound(
+              client,
+              runtime,
+              eventInput,
+              conversation.id,
+              turn,
+              explicitTarget.id,
+              processedAt,
+            );
+          }
         }
         outcome.sendAuthorized = true;
         if (eventInput.briefingPatch) {
@@ -988,6 +1024,38 @@ export class PostgresN8nIntegrationRepository {
         );
         outcome.handoffId = handoff.id;
         outcome.targetRole = handoff.target_role;
+        const turn = {
+          fromRevision: Number(conversation.claimed_revision),
+          toRevision: Number(eventInput.sourceRevision),
+        };
+        answeredTurn = turn;
+        outcome.turnFromRevision = turn.fromRevision;
+        if (explicitTarget) {
+          await this.#linkTurnInbound(
+            client,
+            runtime,
+            eventInput,
+            conversation.id,
+            turn,
+            explicitTarget.id,
+            processedAt,
+          );
+        } else if (
+          eventInput.subjectContractRequired &&
+          isLowConfidenceHandoff(eventInput)
+        ) {
+          // CP-16: the agent could not tell which subject the turn is about.
+          // Ask the seller for those messages only; no order or briefing.
+          await this.#requestSubjectReview(
+            client,
+            runtime,
+            eventInput,
+            conversation.id,
+            turn,
+            handoff.id,
+            processedAt,
+          );
+        }
         if (eventInput.handoff?.notice) {
           outcome.noticeCommandId = await this.#reserveHandoffNotice(
             client,
@@ -1080,7 +1148,9 @@ export class PostgresN8nIntegrationRepository {
     // A replay opens it too: the order call is idempotent, and a retry after
     // a lost response must still learn whether the order exists.
     const order =
-      input.openOrder === true ? await this.#openOrder(input, runtime) : null;
+      input.openOrder === true
+        ? await this.#openOrder(input, runtime, answeredTurn)
+        : null;
     // An order created just now was built from the briefing this event
     // merged; only an order that already existed needs the projection.
     const createdNow = order?.opened === true && order.created;
@@ -1103,9 +1173,10 @@ export class PostgresN8nIntegrationRepository {
    * `{opened: false, error}` so the workflow raises `ORDER_OPEN_FAILED`.
    *
    * @param {any} input @param {any} runtime
+   * @param {{fromRevision: number, toRevision: number} | null} [turn]
    * @returns {Promise<OrderOpening>}
    */
-  async #openOrder(input, runtime) {
+  async #openOrder(input, runtime, turn = null) {
     if (typeof this.orders?.ensurePendingFromIntent !== 'function') {
       return this.#orderOpenFailed(
         input,
@@ -1122,6 +1193,7 @@ export class PostgresN8nIntegrationRepository {
         input,
         runtime,
         order.id,
+        turn,
       );
       return {
         opened: true,
@@ -1134,9 +1206,15 @@ export class PostgresN8nIntegrationRepository {
     }
   }
 
-  /** The bootstrap pairs a newly opened order with a stable subject. */
-  /** @param {any} input @param {any} runtime @param {string} orderId */
-  async #ensureSubjectForOrder(input, runtime, orderId) {
+  /**
+   * The bootstrap pairs a newly opened order with a stable subject. While
+   * that subject is the conversation's only one, the turn that opened the
+   * order is unambiguous and its inbound messages are recorded under it.
+   *
+   * @param {any} input @param {any} runtime @param {string} orderId
+   * @param {{fromRevision: number, toRevision: number} | null} [turn]
+   */
+  async #ensureSubjectForOrder(input, runtime, orderId, turn = null) {
     return this.database.transaction(async (client) => {
       await transactionBounds(client);
       const conversation = (
@@ -1180,7 +1258,13 @@ export class PostgresN8nIntegrationRepository {
             runtime,
           );
         }
-        return existing.id;
+        return this.#linkBootstrapTurn(
+          client,
+          runtime,
+          input,
+          existing.id,
+          turn,
+        );
       }
       const position = (
         await client.query(
@@ -1222,7 +1306,142 @@ export class PostgresN8nIntegrationRepository {
           runtime,
         );
       }
-      return created.id;
+      return this.#linkBootstrapTurn(client, runtime, input, created.id, turn);
+    });
+  }
+
+  /**
+   * @param {Queryable} client @param {any} runtime @param {any} input @param {string} subjectId
+   * @param {{fromRevision: number, toRevision: number} | null} turn
+   * @returns {Promise<string>}
+   */
+  async #linkBootstrapTurn(client, runtime, input, subjectId, turn) {
+    // CP-29: a turn the agent handed off because it was unsure is never
+    // recorded under a subject on its behalf, not even the only one.
+    if (!turn || isLowConfidenceHandoff(input)) return subjectId;
+    const subjects = (
+      await client.query(
+        `SELECT count(*)::integer AS total
+         FROM crm.conversation_subjects WHERE conversation_id = $1`,
+        [input.conversationId],
+      )
+    ).rows[0];
+    if (Number(subjects.total) === 1) {
+      await this.#linkTurnInbound(
+        client,
+        runtime,
+        input,
+        input.conversationId,
+        turn,
+        subjectId,
+        validClock(runtime.clock),
+      );
+    }
+    return subjectId;
+  }
+
+  /**
+   * CP-12: records the subject of the inbound messages one automated turn
+   * answered — revisions after the pre-turn claimed_revision up to the
+   * turn's source_revision. A message with any link, or one a person
+   * already reviewed (including "no subject"), is never overwritten.
+   *
+   * @param {Queryable} client @param {any} runtime @param {any} input
+   * @param {string} conversationId
+   * @param {{fromRevision: number, toRevision: number}} turn
+   * @param {string} subjectId @param {string} at
+   */
+  async #linkTurnInbound(
+    client,
+    runtime,
+    input,
+    conversationId,
+    turn,
+    subjectId,
+    at,
+  ) {
+    const linked = await client.query(
+      `INSERT INTO crm.message_subject_links
+         (message_id, subject_id, conversation_id, assigned_by,
+          assigned_by_kind, assigned_at)
+       SELECT message.id, $2, message.conversation_id, 'AUTOMATION_EXECUTOR',
+              'agent', $5
+       FROM crm.messages AS message
+       WHERE message.conversation_id = $1 AND message.direction = 'inbound'
+         AND message.inbound_revision > $3 AND message.inbound_revision <= $4
+         AND NOT EXISTS (
+           SELECT 1 FROM crm.message_subject_links AS link
+           WHERE link.message_id = message.id)
+         AND NOT EXISTS (
+           SELECT 1 FROM crm.message_subject_reviews AS review
+           WHERE review.message_id = message.id
+             AND review.resolved_at IS NOT NULL)
+       ON CONFLICT (message_id, subject_id) DO NOTHING
+       RETURNING message_id`,
+      [conversationId, subjectId, turn.fromRevision, turn.toRevision, at],
+    );
+    if (linked.rows.length === 0) return;
+    await appendAudit(client, runtime, {
+      action: 'integration.n8n.message_subjects_inferred',
+      actor: input.technical.actor,
+      correlationId: input.correlationId,
+      occurredAt: at,
+      reason: 'AGENT_SUBJECT_ASSIGNMENT',
+      targetId: subjectId,
+      targetType: 'conversation_subject',
+      // IDs and counts only: the audit never carries message content.
+      version: linked.rows.length,
+    });
+  }
+
+  /**
+   * CP-16: a subject-v1 handoff the agent raised for low confidence, with
+   * no target, asks the seller to classify the turn's unlinked inbound
+   * messages. It never touches the order, the briefing or existing links.
+   *
+   * @param {Queryable} client @param {any} runtime @param {any} input
+   * @param {string} conversationId
+   * @param {{fromRevision: number, toRevision: number}} turn
+   * @param {string} handoffId @param {string} at
+   */
+  async #requestSubjectReview(
+    client,
+    runtime,
+    input,
+    conversationId,
+    turn,
+    handoffId,
+    at,
+  ) {
+    const requested = await client.query(
+      `INSERT INTO crm.message_subject_reviews
+         (message_id, conversation_id, handoff_id, source_revision, reason,
+          requested_at)
+       SELECT message.id, message.conversation_id, $4, $3, 'subject_ambiguous',
+              $5
+       FROM crm.messages AS message
+       WHERE message.conversation_id = $1 AND message.direction = 'inbound'
+         AND message.inbound_revision > $2 AND message.inbound_revision <= $3
+         AND EXISTS (
+           SELECT 1 FROM crm.conversation_subjects AS subject
+           WHERE subject.conversation_id = $1)
+         AND NOT EXISTS (
+           SELECT 1 FROM crm.message_subject_links AS link
+           WHERE link.message_id = message.id)
+       ON CONFLICT (message_id) DO NOTHING
+       RETURNING message_id`,
+      [conversationId, turn.fromRevision, turn.toRevision, handoffId, at],
+    );
+    if (requested.rows.length === 0) return;
+    await appendAudit(client, runtime, {
+      action: 'integration.n8n.message_subject_review_requested',
+      actor: input.technical.actor,
+      correlationId: input.correlationId,
+      occurredAt: at,
+      reason: 'AGENT_SUBJECT_AMBIGUOUS',
+      targetId: handoffId,
+      targetType: 'handoff',
+      version: requested.rows.length,
     });
   }
 
@@ -1866,7 +2085,7 @@ export class PostgresN8nIntegrationRepository {
         'STALE_AUTOMATION_FENCE',
       );
     }
-    return { messageId };
+    return { messageId, automated: true };
   }
 
   /**
@@ -2215,6 +2434,17 @@ function assertCurrentAutomatedTurn(conversation, input) {
       'STALE_AUTOMATION_FENCE',
     );
   }
+}
+
+/**
+ * CP-16/CP-29: the agent handed the turn off because it was unsure.
+ * @param {any} input
+ */
+function isLowConfidenceHandoff(input) {
+  return (
+    input.eventType === 'handoff.requested' &&
+    input.handoff?.reason === 'low_confidence'
+  );
 }
 
 /** @param {Queryable} client @param {any} input @param {string} now */

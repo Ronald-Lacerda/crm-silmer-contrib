@@ -485,6 +485,51 @@ if (connectionString) {
         subjectId: first.subject.id,
       });
       assert.equal(target.currentSubjectId, first.subject.id);
+      // CP-31: "separar como novo assunto" creates a subject that does not
+      // become the current one, so the agent keeps its target.
+      const separated = await subjects.create({
+        ...command(null, `subject-separated-${runId}`),
+        select: false,
+      });
+      assert.equal(separated.subject.isCurrent, false);
+      assert.equal(separated.subject.selectedSource, null);
+      const afterSeparate = await subjects.list(owned.id);
+      assert.equal(afterSeparate.currentSubjectId, first.subject.id);
+      assert.deepEqual(
+        afterSeparate.subjects
+          .filter((/** @type {{isCurrent: boolean}} */ row) => row.isCurrent)
+          .map((/** @type {{id: string}} */ row) => row.id),
+        [first.subject.id],
+      );
+      assert.deepEqual(
+        (
+          await pool.query(
+            `SELECT is_current, selected_source, selected_by, selected_at
+             FROM crm.conversation_subjects WHERE id = $1`,
+            [separated.subject.id],
+          )
+        ).rows[0],
+        {
+          is_current: false,
+          selected_source: null,
+          selected_by: null,
+          selected_at: null,
+        },
+      );
+      await assert.rejects(
+        subjects.create(command(null, `subject-separated-${runId}`)),
+        { code: 'IDEMPOTENCY_KEY_REUSED' },
+      );
+      // CP-16: an open agent review asks the seller until a person decides.
+      await pool.query(
+        `INSERT INTO crm.message_subject_reviews
+           (message_id, conversation_id, source_revision, reason, requested_at)
+         VALUES ($1, $2, 1, 'subject_ambiguous', now())`,
+        [received.message.id, owned.id],
+      );
+      assert.deepEqual((await subjects.list(owned.id)).needsSubjectMessageIds, [
+        received.message.id,
+      ]);
       const tagged = await subjects.tagMessage({
         actor: ATTENDANT,
         conversationId: owned.id,
@@ -495,10 +540,26 @@ if (connectionString) {
       });
       assert.equal(tagged.subjectIds.length, 2);
       const read = await subjects.list(owned.id);
-      assert.equal(read.subjects.length, 3);
+      assert.equal(read.subjects.length, 4);
       assert.equal(read.orders.length, 2);
       assert.equal(read.links.length, 2);
       assert.equal(read.currentSubjectId, first.subject.id);
+      assert.deepEqual(read.needsSubjectMessageIds, []);
+      assert.deepEqual(
+        read.links.map(
+          (/** @type {{assignedByKind: string}} */ link) => link.assignedByKind,
+        ),
+        ['human', 'human'],
+      );
+      const review = await pool.query(
+        `SELECT resolved_by, resolved_at IS NOT NULL AS resolved
+         FROM crm.message_subject_reviews WHERE message_id = $1`,
+        [received.message.id],
+      );
+      assert.deepEqual(review.rows[0], {
+        resolved_by: ATTENDANT.id,
+        resolved: true,
+      });
       await subjects.tagMessage({
         actor: ATTENDANT,
         conversationId: owned.id,
@@ -521,6 +582,13 @@ if (connectionString) {
       assert.deepEqual(correction.rows[0].payload.subjectIds, [
         second.subject.id,
       ]);
+      assert.deepEqual(
+        correction.rows[0].payload.previousLinks,
+        [first.subject.id, general.subject.id]
+          .sort()
+          .map((subjectId) => ({ subjectId, assignedByKind: 'human' })),
+      );
+      assert.equal(correction.rows[0].payload.reviewResolved, false);
       assert.deepEqual(
         (await subjects.list(owned.id)).links.map(
           (/** @type {{subjectId: string}} */ link) => link.subjectId,

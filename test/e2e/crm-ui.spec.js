@@ -166,7 +166,7 @@ const conversationOrder = {
   version: 2,
 };
 
-/** @param {import('@playwright/test').Page} page @param {{assistant?: boolean, assistantKeepsOwner?: boolean, claimGate?: Promise<void>, claimTakesOver?: boolean, conflict?: boolean, confirmOnRefresh?: boolean, empty?: boolean, emptyWhen?:(params:URLSearchParams)=>boolean, failBoard?: boolean, failDetailOnce?: boolean, failInboxList?:(params:URLSearchParams)=>boolean, failedDelivery?: boolean, liveEvent?: Record<string, unknown>|null, longThread?: boolean, manyContacts?: boolean, manyConversations?: boolean, mixedAuthors?: boolean, newMessageOnRefresh?: boolean, noAdmin?: boolean, onBoard?:()=>void, onCreateOrder?:(body:any)=>void, onHandoffClaim?:(body:any)=>void, onInboxList?:(params:URLSearchParams)=>void, onMessage?:(body:any)=>void, order?: any, otherOwner?: boolean, pendingHandoff?:boolean, siteChat?:boolean, suggestion?:boolean, waitingQueue?:boolean}} [options] */
+/** @param {import('@playwright/test').Page} page @param {{assistant?: boolean, assistantKeepsOwner?: boolean, claimGate?: Promise<void>, claimTakesOver?: boolean, conflict?: boolean, confirmOnRefresh?: boolean, empty?: boolean, emptyWhen?:(params:URLSearchParams)=>boolean, failBoard?: boolean, failDetailOnce?: boolean, failInboxList?:(params:URLSearchParams)=>boolean, failedDelivery?: boolean, handoffReason?: string, liveEvent?: Record<string, unknown>|null, longThread?: boolean, manyContacts?: boolean, manyConversations?: boolean, mixedAuthors?: boolean, newMessageOnRefresh?: boolean, noAdmin?: boolean, onBoard?:()=>void, onCreateOrder?:(body:any)=>void, onHandoffClaim?:(body:any)=>void, onInboxList?:(params:URLSearchParams)=>void, onMessage?:(body:any)=>void, order?: any, otherOwner?: boolean, pendingHandoff?:boolean, siteChat?:boolean, suggestion?:boolean, waitingQueue?:boolean}} [options] */
 async function mockCrm(page, options = {}) {
   let conflict = options.conflict ?? false;
   let failDetail = options.failDetailOnce ?? false;
@@ -188,6 +188,9 @@ async function mockCrm(page, options = {}) {
         handoff: {
           dueAt: '2026-09-08T16:10:00.000Z',
           id: 'handoff-1',
+          ...(options.handoffReason
+            ? { reasonCode: options.handoffReason }
+            : {}),
           status: 'pending',
           targetRole: 'Vendedor',
           version: 1,
@@ -892,16 +895,480 @@ test('selects a conversation subject by keyboard and restores focus', async ({
   // The subjects sit in the context panel, closed by default below 1440 px.
   await page.getByRole('button', { name: 'Detalhes', exact: true }).click();
   const panel = page.locator('.subject-panel');
-  const select = panel.getByRole('button', { name: 'Selecionar' });
+  // UXA-04: the badge and the button say they change what the agent uses.
+  await expect(panel.getByText('O agente usa este')).toBeVisible();
+  const select = panel.getByRole('button', {
+    name: 'Usar este: fazer o agente usar Pedido 01-CRM',
+  });
   await expect(select).toBeVisible();
   await select.focus();
   await select.press('Enter');
   await expect(
-    panel.getByRole('heading', { name: 'Assuntos deste atendimento' }),
+    panel.getByRole('heading', { name: 'Pedidos e assuntos desta conversa' }),
   ).toBeFocused();
-  await expect(panel.getByRole('status')).toHaveText('Assunto atual alterado.');
+  await expect(panel.getByRole('status')).toHaveText(
+    'Pronto. O agente passa a usar este.',
+  );
   expect(currentSubjectId).toBe('subject-order');
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+/**
+ * CP-16: the subjects of `conversation-1`, as the read model answers them.
+ * `needsSubjectMessageIds` is left out when not given, as an API that does
+ * not flag messages yet would answer.
+ *
+ * @param {{links?: any[], needs?: string[], subjects: any[]}} state
+ */
+function subjectsBody(state) {
+  return JSON.stringify({
+    currentSubjectId: state.subjects.find((item) => item.isCurrent)?.id ?? null,
+    links: state.links ?? [],
+    ...(state.needs ? { needsSubjectMessageIds: state.needs } : {}),
+    orders: [],
+    ordersHasMore: false,
+    subjects: state.subjects,
+  });
+}
+
+/** @param {string} id @param {string|null} orderNumber @param {number} position */
+function subjectRow(id, orderNumber, position) {
+  return {
+    id,
+    isCurrent: position === 1,
+    kind: orderNumber ? 'pedido' : 'geral',
+    orderId: orderNumber ? `order-${position}` : null,
+    orderNumber,
+    orderStatus: orderNumber ? 'pendente' : null,
+    position,
+    selectedSource: 'agent',
+    version: 1,
+  };
+}
+
+const twoSubjects = [
+  subjectRow('subject-order', '01-CRM', 1),
+  subjectRow('subject-general', null, 2),
+];
+
+/** @param {import('@playwright/test').Page} page @param {() => any} state */
+async function routeSubjects(page, state) {
+  await page.route(
+    '**/api/v1/inbox/conversations/conversation-1/subjects?*',
+    async (route) => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: subjectsBody(state()),
+      });
+    },
+  );
+}
+
+test('a conversation with one subject shows no subject control on its messages', async ({
+  page,
+}) => {
+  await mockCrm(page, { mixedAuthors: true });
+  // UXA-01: with one order everything is its; nothing to decide or read.
+  await routeSubjects(page, () => ({
+    links: [
+      {
+        assignedByKind: 'agent',
+        messageId: 'message-1',
+        subjectId: 'subject-order',
+      },
+    ],
+    subjects: [subjectRow('subject-order', '01-CRM', 1)],
+  }));
+  await page.goto('/inbox');
+  await expect(page.getByText('Preciso de 120 camisetas.')).toBeVisible();
+  const thread = page.getByRole('list', { name: 'Histórico da conversa' });
+  await expect(thread.locator('details, fieldset')).toHaveCount(0);
+  await expect(thread.getByText(/Pedido 01-CRM/u)).toHaveCount(0);
+  await expect(thread.getByRole('button', { name: 'Corrigir' })).toHaveCount(0);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test('asks which order only on the flagged message and confirms in its bubble', async ({
+  page,
+}) => {
+  await mockCrm(page, { mixedAuthors: true });
+  /** @type {{links?: any[], needs?: string[], subjects: any[]}} */
+  let state = { needs: ['message-1'], subjects: twoSubjects };
+  await routeSubjects(page, () => state);
+  let putBody;
+  let putKey;
+  await page.route(
+    '**/api/v1/inbox/conversations/conversation-1/messages/message-1/subjects',
+    async (route) => {
+      putBody = route.request().postDataJSON();
+      putKey = route.request().headers()['idempotency-key'];
+      state = {
+        links: [
+          {
+            assignedByKind: 'human',
+            messageId: 'message-1',
+            subjectId: 'subject-order',
+          },
+        ],
+        needs: [],
+        subjects: twoSubjects,
+      };
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          messageId: 'message-1',
+          subjectIds: ['subject-order'],
+        }),
+      });
+    },
+  );
+  await page.goto('/inbox');
+  const thread = page.getByRole('list', { name: 'Histórico da conversa' });
+  const question = thread.getByRole('group', {
+    name: 'A qual pedido esta mensagem se refere?',
+  });
+  await expect(question).toHaveCount(1);
+  const flagged = thread
+    .getByRole('listitem')
+    .filter({ hasText: 'Preciso de 120 camisetas.' });
+  await expect(flagged.getByRole('group')).toBeVisible();
+  // UXA-04: a general subject is not numbered by its place.
+  await expect(
+    question.getByRole('button', { name: 'Assunto sem pedido', exact: true }),
+  ).toBeVisible();
+  await expect(
+    question.getByRole('button', { name: 'Nenhum pedido' }),
+  ).toBeVisible();
+  await expect(
+    question.getByRole('button', { name: 'Separar como novo assunto' }),
+  ).toBeVisible();
+  const more = question.getByRole('button', { name: 'Mais de um' });
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+  const order = question.getByRole('button', { name: 'Pedido 01-CRM' });
+  await order.focus();
+  await order.press('Enter');
+  const answer = flagged.getByRole('status');
+  await expect(answer).toHaveText('Ligada ao Pedido 01-CRM por você.');
+  await expect(answer).toBeFocused();
+  expect(putBody).toEqual({ subjectIds: ['subject-order'] });
+  expect(putKey).toBeTruthy();
+  await expect(question).toHaveCount(0);
+  // CP-14: the seller's link reads as theirs.
+  await expect(
+    flagged.getByText('Pedido 01-CRM · pelo vendedor'),
+  ).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test('separates a flagged message as a new subject and retries with the same subject', async ({
+  page,
+}) => {
+  await mockCrm(page, { mixedAuthors: true });
+  /** @type {{links?: any[], needs?: string[], subjects: any[]}} */
+  let state = { needs: ['message-1'], subjects: twoSubjects };
+  await routeSubjects(page, () => state);
+  /** @type {any[]} */
+  const created = [];
+  await page.route(
+    '**/api/v1/inbox/conversations/conversation-1/subjects',
+    async (route) => {
+      const body = route.request().postDataJSON();
+      created.push(body);
+      // CP-30: as the API, only a create without `select: false` would move
+      // the agent to the new subject.
+      const selects = body?.select !== false;
+      if (selects) {
+        state = {
+          ...state,
+          subjects: state.subjects.map((item) => ({
+            ...item,
+            isCurrent: false,
+          })),
+        };
+      }
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          subject: {
+            ...subjectRow('subject-new', null, 3),
+            isCurrent: selects,
+          },
+        }),
+      });
+    },
+  );
+  /** @type {{body: any, key: string|undefined}[]} */
+  const puts = [];
+  await page.route(
+    '**/api/v1/inbox/conversations/conversation-1/messages/message-1/subjects',
+    async (route) => {
+      puts.push({
+        body: route.request().postDataJSON(),
+        key: route.request().headers()['idempotency-key'],
+      });
+      if (puts.length === 1) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/problem+json',
+          body: '{}',
+        });
+        return;
+      }
+      state = {
+        links: [
+          {
+            assignedByKind: 'human',
+            messageId: 'message-1',
+            subjectId: 'subject-new',
+          },
+        ],
+        needs: [],
+        subjects: [
+          ...state.subjects,
+          { ...subjectRow('subject-new', null, 3), isCurrent: false },
+        ],
+      };
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          messageId: 'message-1',
+          subjectIds: ['subject-new'],
+        }),
+      });
+    },
+  );
+  await page.goto('/inbox');
+  const question = page.getByRole('group', {
+    name: 'A qual pedido esta mensagem se refere?',
+  });
+  const separate = question.getByRole('button', {
+    name: 'Separar como novo assunto',
+  });
+  await separate.click();
+  // The error stays beside the question and the focus stays on the button.
+  await expect(question.getByRole('alert')).toHaveText(
+    'Não deu para salvar. A pergunta continua aqui; tente de novo.',
+  );
+  await expect(separate).toBeFocused();
+  await separate.press('Enter');
+  await expect(page.locator('.thread').getByRole('status')).toHaveText(
+    'Ligada ao Assunto sem pedido (2) por você.',
+  );
+  // The subject already created is linked again, not created twice, and the
+  // agent keeps the subject it was using (CP-30).
+  expect(created).toEqual([{ orderId: null, select: false }]);
+  expect(JSON.parse(subjectsBody(state)).currentSubjectId).toBe(
+    'subject-order',
+  );
+  expect(puts.map((put) => put.body)).toEqual([
+    { subjectIds: ['subject-new'] },
+    { subjectIds: ['subject-new'] },
+  ]);
+  expect(puts[1].key).toBe(puts[0].key);
+});
+
+test('a linked customer message says who linked it and Corrigir opens the question', async ({
+  page,
+}) => {
+  await mockCrm(page, { mixedAuthors: true });
+  await routeSubjects(page, () => ({
+    links: [
+      {
+        assignedByKind: 'agent',
+        messageId: 'message-1',
+        subjectId: 'subject-order',
+      },
+      {
+        assignedByKind: 'agent',
+        messageId: 'message-assistant',
+        subjectId: 'subject-order',
+      },
+    ],
+    subjects: twoSubjects,
+  }));
+  await page.goto('/inbox');
+  const thread = page.getByRole('list', { name: 'Histórico da conversa' });
+  const customer = thread
+    .getByRole('listitem')
+    .filter({ hasText: 'Preciso de 120 camisetas.' });
+  await expect(customer.getByText('Pedido 01-CRM · pelo agente')).toBeVisible();
+  // UXA-01: the agent's own messages carry no chip.
+  await expect(thread.getByText(/· pelo agente/u)).toHaveCount(1);
+  await expect(thread.getByRole('group')).toHaveCount(0);
+  const correct = customer.getByRole('button', { name: 'Corrigir' });
+  await correct.focus();
+  await correct.press('Enter');
+  const question = customer.getByRole('group', {
+    name: 'A qual pedido esta mensagem se refere?',
+  });
+  await expect(question).toBeVisible();
+  await expect(
+    question.getByRole('button', { name: 'Pedido 01-CRM' }),
+  ).toBeFocused();
+  await expect(
+    question.getByRole('checkbox', { name: 'Pedido 01-CRM' }),
+  ).toBeChecked();
+  await expect(
+    question.getByRole('checkbox', { name: 'Assunto sem pedido' }),
+  ).not.toBeChecked();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await question.getByRole('button', { name: 'Cancelar' }).click();
+  await expect(question).toHaveCount(0);
+  await expect(
+    customer.getByRole('button', { name: 'Corrigir' }),
+  ).toBeFocused();
+});
+
+test('a stop over which order explains itself before the takeover', async ({
+  page,
+}) => {
+  await mockCrm(page, {
+    handoffReason: 'low_confidence',
+    mixedAuthors: true,
+    pendingHandoff: true,
+  });
+  await routeSubjects(page, () => ({
+    needs: ['message-1'],
+    subjects: [subjectRow('subject-order', '01-CRM', 1)],
+  }));
+  await page.goto('/inbox');
+  // UXA-03: the reason, not "Agente sem confiança".
+  const reason = page.locator('#takeover-reason');
+  await expect(reason).toContainText(
+    'O agente parou para não misturar pedidos.',
+  );
+  await expect(reason).toContainText(
+    'Ao assumir, indique a qual pedido a mensagem se refere.',
+  );
+  // UXA-10: before taking it, an administrator too reads why, not controls.
+  const thread = page.getByRole('list', { name: 'Histórico da conversa' });
+  await expect(thread.getByRole('group')).toHaveCount(0);
+  await expect(
+    thread.getByText(
+      'O agente não soube a qual pedido esta mensagem se refere. Assuma o atendimento para indicar.',
+    ),
+  ).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test('a stop for another reason keeps its own words with a message to review', async ({
+  page,
+}) => {
+  await mockCrm(page, {
+    handoffReason: 'complaint',
+    mixedAuthors: true,
+    pendingHandoff: true,
+  });
+  await routeSubjects(page, () => ({
+    needs: ['message-1'],
+    subjects: twoSubjects,
+  }));
+  await page.goto('/inbox');
+  const reason = page.locator('#takeover-reason');
+  await expect(reason.locator('strong')).toHaveText('Reclamação');
+  await expect(reason).not.toContainText('não misturar pedidos');
+});
+
+test('keeps the boxes checked under Mais de um through a live refresh', async ({
+  page,
+}) => {
+  await mockCrm(page, { mixedAuthors: true });
+  let subjectReads = 0;
+  await page.route(
+    '**/api/v1/inbox/conversations/conversation-1/subjects?*',
+    async (route) => {
+      subjectReads += 1;
+      await route.fulfill({
+        contentType: 'application/json',
+        body: subjectsBody({ needs: ['message-1'], subjects: twoSubjects }),
+      });
+    },
+  );
+  /** @type {() => void} */
+  let sendEvent = () => {};
+  const eventGate = new Promise((resolve) => {
+    sendEvent = () => resolve(null);
+  });
+  await page.route(/\/api\/v1\/events\?/u, async (route) => {
+    await eventGate;
+    return route.fulfill({
+      body: eventStreamBody({
+        payload: { conversationId: 'conversation-1' },
+        type: 'inbox.conversation.changed',
+      }),
+      contentType: 'text/event-stream',
+      status: 200,
+    });
+  });
+  /** @type {any} */
+  let putBody;
+  await page.route(
+    '**/api/v1/inbox/conversations/conversation-1/messages/message-1/subjects',
+    async (route) => {
+      putBody = route.request().postDataJSON();
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          messageId: 'message-1',
+          subjectIds: putBody.subjectIds,
+        }),
+      });
+    },
+  );
+  await page.goto('/inbox');
+  const question = page.getByRole('group', {
+    name: 'A qual pedido esta mensagem se refere?',
+  });
+  await question.getByRole('button', { name: 'Mais de um' }).click();
+  const order = question.getByRole('checkbox', { name: 'Pedido 01-CRM' });
+  const general = question.getByRole('checkbox', {
+    name: 'Assunto sem pedido',
+  });
+  await order.check();
+  await general.check();
+  const readsBefore = subjectReads;
+  // A live event refreshes the conversation silently while the seller works.
+  sendEvent();
+  await expect.poll(() => subjectReads).toBeGreaterThan(readsBefore);
+  await expect(order).toBeChecked();
+  await expect(general).toBeChecked();
+  await question.getByRole('button', { name: 'Ligar aos marcados' }).click();
+  await expect(page.locator('.thread').getByRole('status')).toContainText(
+    'por você.',
+  );
+  expect(putBody).toEqual({
+    subjectIds: ['subject-general', 'subject-order'],
+  });
+});
+
+test('does not ask which order to someone the API would refuse', async ({
+  page,
+}) => {
+  // CP-14: another seller's conversation, seen by a seller who is not admin.
+  await mockCrm(page, { mixedAuthors: true, noAdmin: true, otherOwner: true });
+  await routeSubjects(page, () => ({
+    links: [
+      {
+        assignedByKind: 'agent',
+        messageId: 'message-1',
+        subjectId: 'subject-order',
+      },
+    ],
+    needs: ['message-1'],
+    subjects: twoSubjects,
+  }));
+  await page.goto('/inbox');
+  const thread = page.getByRole('list', { name: 'Histórico da conversa' });
+  await expect(
+    thread.getByText(
+      'O agente não soube a qual pedido esta mensagem se refere. Aguardando o vendedor indicar o pedido.',
+    ),
+  ).toBeVisible();
+  await expect(thread.getByRole('group')).toHaveCount(0);
+  await expect(thread.getByRole('button', { name: 'Corrigir' })).toHaveCount(0);
 });
 
 test('claims a pending handoff from its conversation in the Caixa de Entrada', async ({

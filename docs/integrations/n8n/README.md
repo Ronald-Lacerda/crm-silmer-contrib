@@ -397,9 +397,14 @@ invalidar a decisão, a projeção falha fechada (`SUBJECT_SUPERSEDED` ou
 ```
 
 Quando `source_subject_ids` contiver mais de um Assunto, ou a mensagem puder
-referir-se a dois Pedidos, o workflow pergunta qual Pedido é o alvo com um
-envio **sem** `briefing_patch`, `subject_id` e `order_id`, ou transfere sem
-patch. Um alvo incorreto ou uma seleção humana divergente retorna `409`
+referir-se a dois Pedidos, o workflow transfere sem patch (gatilho
+`subject_ambiguous`, motivo `low_confidence`). Um envio sem alvo é recusado
+com `SUBJECT_TARGET_REQUIRED` quando há mais de um pendente; perguntar ao
+cliente antes de transferir é proposta da
+[RFC 036](../../rfc/036-assunto-da-mensagem-so-na-duvida-do-agente.md). O CRM
+marca as mensagens desse turno para o vendedor indicar o Pedido e, nos turnos
+com alvo, liga sozinho as mensagens de entrada ao Assunto (ADR 048). Um alvo
+incorreto ou uma seleção humana divergente retorna `409`
 (`SUBJECT_AMBIGUOUS`, `SUBJECT_TARGET_INVALID` ou
 `SUBJECT_TARGET_CONFLICT`); um evento legado inseguro retorna
 `SUBJECT_TARGET_REQUIRED`. Não reenviar a mesma decisão após o conflito.
@@ -417,7 +422,8 @@ dependem de confirmação pelo WhatsApp. Ele nunca vira `wa_id` confirmado por
 inferência nem entra na identidade WhatsApp.
 Mesmo com um único pendente, uma mensagem como "outro pedido" ou "agora quero
 bonés" não herda esse alvo: o workflow transfere sem alterar o briefing ou a
-Ficha. O vendedor escolhe ou cria o Assunto antes de continuar.
+Ficha. O vendedor responde na própria mensagem marcada a qual Pedido ela se
+refere, ou cria o Assunto, antes de continuar.
 
 ## Ingresso do chat do site (CP-T06, CP-21..22)
 

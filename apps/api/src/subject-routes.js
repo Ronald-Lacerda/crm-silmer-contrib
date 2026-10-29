@@ -38,7 +38,10 @@ export function registerSubjectRoutes(api, subjects, contextFor) {
           /** @type {any} */ (request.params)?.conversationId,
           'CONVERSATION_ID',
         );
-        const body = object(request.body, ['orderId']);
+        const body = object(request.body, ['orderId', 'select']);
+        if (body.select !== undefined && typeof body.select !== 'boolean') {
+          throw problem(400, 'INVALID_REQUEST');
+        }
         const input = await command(
           request,
           subjects,
@@ -50,9 +53,13 @@ export function registerSubjectRoutes(api, subjects, contextFor) {
             ? null
             : id(body.orderId, 'ORDER_ID');
         privateHeaders(reply);
-        return reply
-          .code(201)
-          .send(await subjects.create({ ...input, orderId }));
+        return reply.code(201).send(
+          await subjects.create({
+            ...input,
+            orderId,
+            select: body.select ?? true,
+          }),
+        );
       }),
   );
 

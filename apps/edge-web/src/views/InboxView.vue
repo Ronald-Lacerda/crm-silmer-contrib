@@ -100,6 +100,8 @@ const LIST_DAY = new Intl.DateTimeFormat('pt-BR', {
   month: '2-digit',
 });
 const LIST_DATE = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' });
+/** "ao Pedido 01-CRM e ao Assunto sem pedido". */
+const LIST_FORMAT = new Intl.ListFormat('pt-BR', { type: 'conjunction' });
 /** Pixels from the bottom that still count as reading the latest message. */
 const STICKY_THREAD_GAP_PX = 64;
 
@@ -176,13 +178,7 @@ const conversations = ref([]);
 const totalCount = ref(0);
 const activeId = ref('');
 const detail = ref(null);
-const subjectState = ref({
-  currentSubjectId: null,
-  links: [],
-  orders: [],
-  ordersHasMore: false,
-  subjects: [],
-});
+const subjectState = ref(emptySubjects());
 const subjectError = ref('');
 const subjectNotice = ref('');
 const subjectBusy = ref(false);
@@ -190,6 +186,19 @@ const subjectHeading = ref(null);
 const selectedSubjectOrderId = ref('');
 const subjectOrderQuery = ref('');
 const messageSubjectDrafts = ref({});
+/**
+ * CP-16/UXA-05: per message, the question opened to correct it, the
+ * "Mais de um" choice, and the answer or error written in its own bubble.
+ *
+ * @type {import('vue').Ref<Record<string, boolean>>}
+ */
+const subjectCorrecting = ref({});
+/** @type {import('vue').Ref<Record<string, boolean>>} */
+const subjectManyOpen = ref({});
+/** @type {import('vue').Ref<Record<string, string>>} */
+const subjectAnswers = ref({});
+/** @type {import('vue').Ref<Record<string, string>>} */
+const subjectAnswerErrors = ref({});
 const reply = ref('');
 const renaming = ref(false);
 const draftName = ref('');
@@ -208,6 +217,8 @@ let countController;
 let detailController;
 let subjectController;
 const subjectCommandKeys = new Map();
+/** "Separar como novo assunto" already created, while its link is retried. */
+const separatedSubjects = new Map();
 let refreshTimer = 0;
 let orderChangedLive = false;
 let threadFollowsLatest = true;
@@ -300,12 +311,23 @@ const takeoverReason = computed(() => {
   if (!conversation) return { detail: '', title: '' };
   if (pendingHandoff.value) {
     const elapsed = elapsedSince(conversation.handoff.createdAt, now.value);
-    return {
-      detail: elapsed
-        ? `Esperando vendedor há ${elapsed}.`
-        : 'Esperando um vendedor assumir.',
-      title: stopReason(conversation),
-    };
+    const waiting = elapsed
+      ? `Esperando vendedor há ${elapsed}.`
+      : 'Esperando um vendedor assumir.';
+    // UXA-03/CP-16: the agent's stop over which order a message is about
+    // (`low_confidence` with a message to review) must not read as "Agente
+    // sem confiança"; it says what the seller decides after taking. Any other
+    // reason keeps its own words, even with a message still to review.
+    if (
+      conversation.handoff.reasonCode === 'low_confidence' &&
+      subjectReviewIds.value.size
+    ) {
+      return {
+        detail: `${waiting} Ao assumir, indique a qual pedido a mensagem se refere.`,
+        title: 'O agente parou para não misturar pedidos.',
+      };
+    }
+    return { detail: waiting, title: stopReason(conversation) };
   }
   const assistant = brand.assistant.reference;
   return {
@@ -341,6 +363,36 @@ const availableSubjectOrders = computed(() =>
       ),
   ),
 );
+/** CP-16: messages the agent stopped on, still without any order. */
+const subjectReviewIds = computed(
+  () => new Set(subjectState.value.needsSubjectMessageIds),
+);
+/**
+ * CP-14/UXA-10: only whoever has the conversation says which order a message
+ * is about, and only after taking it; an administrator also takes it first.
+ * The API asks the same (a human seller, owner or COMMERCIAL_ADMIN), so the
+ * question is never offered to someone it would refuse.
+ */
+const canAnswerSubjects = computed(
+  () =>
+    sessionUser.value?.functionName === 'Vendedor' &&
+    canClose.value &&
+    !needsTakeover.value,
+);
+/**
+ * UXA-04: a general subject is not numbered by its place in the conversation;
+ * "(2)" tells two of them apart only when there is more than one.
+ */
+const generalSubjectNumbers = computed(() => {
+  const general = subjectState.value.subjects.filter(
+    (subject) => !subject.orderId,
+  );
+  return new Map(
+    general.length > 1
+      ? general.map((subject, index) => [subject.id, index + 1])
+      : [],
+  );
+});
 /** PCX-08/PCL-10: creating the order follows the owner of the conversation. */
 const canCreateOrder = computed(
   () => isAdmin.value || owner.value?.id === currentUserId.value,
@@ -1046,13 +1098,7 @@ async function selectVisibleConversation(refreshActive = true) {
     activeId.value = '';
     detail.value = null;
     subjectController?.abort();
-    subjectState.value = {
-      currentSubjectId: null,
-      links: [],
-      orders: [],
-      ordersHasMore: false,
-      subjects: [],
-    };
+    subjectState.value = emptySubjects();
     return;
   }
   // Typing in the search box must not refetch the open conversation on every
@@ -1078,15 +1124,14 @@ async function selectConversation(id, silent = false) {
     renameBase.value = null;
     renameConflict.value = false;
     transferring.value = false;
-    subjectState.value = {
-      currentSubjectId: null,
-      links: [],
-      orders: [],
-      ordersHasMore: false,
-      subjects: [],
-    };
+    subjectState.value = emptySubjects();
     subjectError.value = '';
     subjectNotice.value = '';
+    subjectCorrecting.value = {};
+    subjectManyOpen.value = {};
+    messageSubjectDrafts.value = {};
+    subjectAnswers.value = {};
+    subjectAnswerErrors.value = {};
   }
   activeId.value = id;
   if (!silent) detailLoading.value = true;
@@ -1113,6 +1158,18 @@ async function selectConversation(id, silent = false) {
   }
 }
 
+/** @returns {Record<string, any>} what a conversation without subjects reads. */
+function emptySubjects() {
+  return {
+    currentSubjectId: null,
+    links: [],
+    needsSubjectMessageIds: [],
+    orders: [],
+    ordersHasMore: false,
+    subjects: [],
+  };
+}
+
 /** @param {string} conversationId */
 async function loadSubjects(conversationId) {
   subjectController?.abort();
@@ -1133,13 +1190,30 @@ async function loadSubjects(conversationId) {
     ) {
       throw new Error('Invalid conversation subjects response');
     }
-    subjectState.value = subjects;
+    // CP-16: an API that does not flag messages yet asks nothing.
+    subjectState.value = {
+      ...subjects,
+      needsSubjectMessageIds: Array.isArray(subjects.needsSubjectMessageIds)
+        ? subjects.needsSubjectMessageIds
+        : [],
+    };
+    // A question open under "Mais de um" or "Corrigir" keeps the boxes the
+    // seller is checking through a silent live refresh; every other message
+    // reads its links again. Only a change of conversation drops them all.
+    const known = new Set(subjects.subjects.map((subject) => subject.id));
+    const drafts = messageSubjectDrafts.value;
     messageSubjectDrafts.value = Object.fromEntries(
       (detail.value?.messages ?? []).map((message) => [
         message.id,
-        subjects.links
-          .filter((link) => link.messageId === message.id)
-          .map((link) => link.subjectId),
+        (subjectManyOpen.value[message.id] ||
+          subjectCorrecting.value[message.id]) &&
+        Array.isArray(drafts[message.id])
+          ? drafts[message.id].filter((/** @type {string} */ id) =>
+              known.has(id),
+            )
+          : subjects.links
+              .filter((link) => link.messageId === message.id)
+              .map((link) => link.subjectId),
       ]),
     );
     subjectError.value = '';
@@ -1151,7 +1225,30 @@ async function loadSubjects(conversationId) {
   }
 }
 
-/** @param {string} kind @param {string|null} [target] */
+/**
+ * A command retried after a timeout or a lost answer keeps its idempotency
+ * key, so the API replays it instead of acting twice; success or a conflict
+ * ends that key.
+ *
+ * @param {unknown[]} parts what makes two attempts the same command
+ * @param {(idempotencyKey: string) => Promise<any>} send
+ */
+async function keyedSubjectCommand(parts, send) {
+  const signature = JSON.stringify(parts);
+  const idempotencyKey = subjectCommandKeys.get(signature) ?? commandKey();
+  subjectCommandKeys.set(signature, idempotencyKey);
+  try {
+    const response = await send(idempotencyKey);
+    subjectCommandKeys.delete(signature);
+    return response;
+  } catch (cause) {
+    if (/** @type {any} */ (cause)?.status === 409)
+      subjectCommandKeys.delete(signature);
+    throw cause;
+  }
+}
+
+/** @param {'create'|'select'} kind @param {string|null} [target] */
 async function subjectCommand(kind, target = null) {
   if (!active.value || subjectBusy.value) return;
   subjectBusy.value = true;
@@ -1159,80 +1256,251 @@ async function subjectCommand(kind, target = null) {
   subjectNotice.value = '';
   const conversationId = active.value.id;
   const base = `/api/v1/inbox/conversations/${encodeURIComponent(conversationId)}`;
-  const subjectIds =
-    kind === 'tag'
-      ? [...(messageSubjectDrafts.value[target] ?? [])].sort()
-      : [];
-  const signature = JSON.stringify([conversationId, kind, target, subjectIds]);
-  const idempotencyKey = subjectCommandKeys.get(signature) ?? commandKey();
-  subjectCommandKeys.set(signature, idempotencyKey);
   try {
-    if (kind === 'create') {
-      await request(`${base}/subjects`, {
-        body: { orderId: target },
-        idempotencyKey,
-        method: 'POST',
-      });
-      selectedSubjectOrderId.value = '';
-    } else if (kind === 'select') {
-      await request(`${base}/subjects/${encodeURIComponent(target)}/select`, {
-        body: {},
-        idempotencyKey,
-        method: 'POST',
-      });
-    } else if (kind === 'tag') {
-      await request(`${base}/messages/${encodeURIComponent(target)}/subjects`, {
-        body: { subjectIds },
-        idempotencyKey,
-        method: 'PUT',
-      });
-    }
-    subjectCommandKeys.delete(signature);
+    await keyedSubjectCommand([conversationId, kind, target, []], (key) =>
+      kind === 'create'
+        ? request(`${base}/subjects`, {
+            body: { orderId: target },
+            idempotencyKey: key,
+            method: 'POST',
+          })
+        : request(
+            `${base}/subjects/${encodeURIComponent(String(target))}/select`,
+            { body: {}, idempotencyKey: key, method: 'POST' },
+          ),
+    );
+    if (kind === 'create') selectedSubjectOrderId.value = '';
     await loadSubjects(conversationId);
     if (activeId.value !== conversationId) return;
     if (!subjectError.value) {
       subjectNotice.value =
-        kind === 'tag'
-          ? 'Assuntos da mensagem salvos.'
-          : kind === 'select'
-            ? 'Assunto atual alterado.'
-            : 'Assunto criado e selecionado.';
+        kind === 'select'
+          ? 'Pronto. O agente passa a usar este.'
+          : 'Assunto criado. O agente passa a usar este.';
     }
-    if (kind === 'create' || kind === 'select') {
-      await nextTick();
-      subjectHeading.value?.focus();
-    }
+    await nextTick();
+    subjectHeading.value?.focus();
   } catch (cause) {
     if (activeId.value !== conversationId) return;
     subjectError.value = describeError(cause);
-    if (cause?.status === 409) {
-      subjectCommandKeys.delete(signature);
+    if (/** @type {any} */ (cause)?.status === 409)
       await loadSubjects(conversationId);
-    }
   } finally {
     subjectBusy.value = false;
   }
 }
 
-/** @param {Record<string, any>} subject */
-function subjectLabel(subject) {
-  return subject.orderId
-    ? `Pedido ${subject.orderNumber ?? ''}`
-    : `Assunto sem pedido ${subject.position}`;
+/**
+ * CP-14/CP-16: the seller's answer is a human link that also resolves the
+ * agent's review; "Nenhum pedido" sends `[]`. "Separar como novo assunto"
+ * first creates a general subject, kept while its link is retried, and
+ * "Ligar aos marcados" sends the boxes checked under "Mais de um".
+ * UXA-05: the outcome is written in the message itself and takes the focus,
+ * never the Detalhes panel that is hidden below 1440 px.
+ *
+ * @param {string} messageId
+ * @param {string[]|'separate'|'marked'} choice
+ */
+async function answerMessageSubject(messageId, choice) {
+  if (!active.value || subjectBusy.value) return;
+  if (choice === 'marked' && !messageSubjectDrafts.value[messageId]?.length) {
+    subjectAnswerErrors.value = {
+      ...subjectAnswerErrors.value,
+      [messageId]: 'Marque pelo menos um pedido ou escolha “Nenhum pedido”.',
+    };
+    return;
+  }
+  subjectBusy.value = true;
+  subjectAnswerErrors.value = { ...subjectAnswerErrors.value, [messageId]: '' };
+  const conversationId = active.value.id;
+  const base = `/api/v1/inbox/conversations/${encodeURIComponent(conversationId)}`;
+  const separatedKey = JSON.stringify([conversationId, messageId]);
+  try {
+    let subjectIds;
+    if (choice === 'separate') {
+      let subjectId = separatedSubjects.get(separatedKey);
+      if (!subjectId) {
+        const created = await keyedSubjectCommand(
+          [conversationId, 'separate', messageId],
+          (key) =>
+            // CP-30: separating one message does not change which subject
+            // the agent uses; only "Usar este" does.
+            request(`${base}/subjects`, {
+              body: { orderId: null, select: false },
+              idempotencyKey: key,
+              method: 'POST',
+            }),
+        );
+        subjectId = created?.data?.subject?.id;
+        if (!subjectId) throw new Error('Invalid created subject response');
+        separatedSubjects.set(separatedKey, subjectId);
+      }
+      subjectIds = [subjectId];
+    } else {
+      subjectIds = [
+        ...(choice === 'marked'
+          ? messageSubjectDrafts.value[messageId]
+          : choice),
+      ].sort();
+    }
+    await keyedSubjectCommand(
+      [conversationId, 'tag', messageId, subjectIds],
+      (key) =>
+        request(`${base}/messages/${encodeURIComponent(messageId)}/subjects`, {
+          body: { subjectIds },
+          idempotencyKey: key,
+          method: 'PUT',
+        }),
+    );
+    separatedSubjects.delete(separatedKey);
+    // The saved answer is what the message holds now, whatever the reload.
+    messageSubjectDrafts.value[messageId] = [...subjectIds];
+    await loadSubjects(conversationId);
+    if (activeId.value !== conversationId) return;
+    closeSubjectQuestion(messageId);
+    // A reload that failed (or raced) must not leave the question beside the
+    // success text: the message is answered, so it no longer asks.
+    subjectState.value = {
+      ...subjectState.value,
+      needsSubjectMessageIds: subjectState.value.needsSubjectMessageIds.filter(
+        (/** @type {string} */ id) => id !== messageId,
+      ),
+    };
+    subjectAnswers.value = {
+      ...subjectAnswers.value,
+      [messageId]: answerText(subjectIds),
+    };
+    await nextTick();
+    globalThis.document.getElementById(`subject-answer-${messageId}`)?.focus();
+  } catch (cause) {
+    if (activeId.value !== conversationId) return;
+    const status = /** @type {any} */ (cause)?.status;
+    subjectAnswerErrors.value = {
+      ...subjectAnswerErrors.value,
+      // A 409 is a closed conversation, a subject of another contact or a
+      // reused key; it reads as the conversation having changed, and reloads.
+      [messageId]:
+        status === 409 || status === 403
+          ? describeError(cause)
+          : 'Não deu para salvar. A pergunta continua aqui; tente de novo.',
+    };
+    if (status === 409) await loadSubjects(conversationId);
+  } finally {
+    subjectBusy.value = false;
+  }
+}
+
+/** @param {string[]} subjectIds */
+function answerText(subjectIds) {
+  if (!subjectIds.length) return 'Marcada sem pedido.';
+  const labels = subjectIds.map((id) => {
+    const subject = subjectState.value.subjects.find((item) => item.id === id);
+    return `ao ${subject ? subjectLabel(subject) : 'novo assunto sem pedido'}`;
+  });
+  return `Ligada ${LIST_FORMAT.format(labels)} por você.`;
 }
 
 /** @param {string} messageId */
-function messageSubjectLabels(messageId) {
-  return subjectState.value.links
+function closeSubjectQuestion(messageId) {
+  const { [messageId]: _correcting, ...correcting } = subjectCorrecting.value;
+  const { [messageId]: _many, ...many } = subjectManyOpen.value;
+  const { [messageId]: _error, ...errors } = subjectAnswerErrors.value;
+  subjectCorrecting.value = correcting;
+  subjectManyOpen.value = many;
+  subjectAnswerErrors.value = errors;
+}
+
+/** @param {string} messageId */
+function toggleSubjectMany(messageId) {
+  if (!Array.isArray(messageSubjectDrafts.value[messageId]))
+    messageSubjectDrafts.value[messageId] = [];
+  subjectManyOpen.value = {
+    ...subjectManyOpen.value,
+    [messageId]: !subjectManyOpen.value[messageId],
+  };
+}
+
+/**
+ * UXA-09: "Corrigir" opens the same question with the message's current
+ * orders already checked, and moves the focus to its first option.
+ *
+ * @param {string} messageId
+ */
+async function correctMessageSubject(messageId) {
+  const { [messageId]: _previous, ...answers } = subjectAnswers.value;
+  subjectAnswers.value = answers;
+  messageSubjectDrafts.value[messageId] = subjectState.value.links
+    .filter((/** @type {any} */ link) => link.messageId === messageId)
+    .map((/** @type {any} */ link) => link.subjectId);
+  subjectCorrecting.value = { ...subjectCorrecting.value, [messageId]: true };
+  if (!subjectManyOpen.value[messageId]) toggleSubjectMany(messageId);
+  await nextTick();
+  globalThis.document
+    .getElementById(`subject-question-${messageId}`)
+    ?.querySelector('button')
+    ?.focus();
+}
+
+/** @param {string} messageId */
+async function cancelSubjectCorrection(messageId) {
+  closeSubjectQuestion(messageId);
+  messageSubjectDrafts.value[messageId] = subjectState.value.links
     .filter((link) => link.messageId === messageId)
+    .map((link) => link.subjectId);
+  await nextTick();
+  globalThis.document.getElementById(`subject-correct-${messageId}`)?.focus();
+}
+
+/**
+ * CP-16/UXA-01: a message asks only where the agent stopped on it, or while
+ * the seller corrects it; everywhere else it carries no control.
+ *
+ * @param {{id: string}} message
+ */
+function showsSubjectQuestion(message) {
+  return (
+    canAnswerSubjects.value &&
+    (subjectReviewIds.value.has(message.id) ||
+      Boolean(subjectCorrecting.value[message.id]))
+  );
+}
+
+/**
+ * UXA-01/UXA-09: with two or more subjects, a customer message says quietly
+ * which order it went to and who linked it; with one there is nothing to tell.
+ *
+ * @param {{id: string, direction?: string}} message
+ */
+function messageSubjectChip(message) {
+  if (subjectState.value.subjects.length < 2 || message.direction !== 'inbound')
+    return '';
+  const links = subjectState.value.links.filter(
+    (link) => link.messageId === message.id,
+  );
+  const labels = links
     .map((link) =>
       subjectState.value.subjects.find(
         (subject) => subject.id === link.subjectId,
       ),
     )
     .filter(Boolean)
-    .map(subjectLabel)
-    .join(', ');
+    .map(subjectLabel);
+  if (!labels.length) return '';
+  // CP-14: a person's answer replaces the agent's links, so it names them.
+  const kinds = new Set(links.map((link) => link.assignedByKind));
+  const by = kinds.has('human')
+    ? ' · pelo vendedor'
+    : kinds.has('agent')
+      ? ' · pelo agente'
+      : '';
+  return `${labels.join(', ')}${by}`;
+}
+
+/** @param {Record<string, any>} subject */
+function subjectLabel(subject) {
+  if (subject.orderId) return `Pedido ${subject.orderNumber ?? ''}`.trim();
+  const number = generalSubjectNumbers.value.get(subject.id);
+  return number ? `Assunto sem pedido (${number})` : 'Assunto sem pedido';
 }
 
 /** @param {string} path @param {Record<string, unknown>} body @param {string} successMessage */
@@ -2113,18 +2381,62 @@ onBeforeUnmount(() => {
               <small v-if="deliveryNotice(message)" class="msg-delivery">{{
                 deliveryNotice(message)
               }}</small>
-              <details
-                v-if="canClose && subjectState.subjects.length"
-                class="message-subjects"
+              <!-- CP-16/UXA-01: no control on every message. The question
+                   sits only on the message the agent stopped on, for whoever
+                   has the conversation; the others read why it waits. -->
+              <fieldset
+                v-if="showsSubjectQuestion(message)"
+                :id="`subject-question-${message.id}`"
+                class="subject-question"
               >
-                <summary>
-                  Assuntos desta mensagem<template
-                    v-if="messageSubjectLabels(message.id)"
-                    >: {{ messageSubjectLabels(message.id) }}</template
+                <legend>A qual pedido esta mensagem se refere?</legend>
+                <div class="subject-question-options">
+                  <button
+                    v-for="subject in subjectState.subjects"
+                    :key="subject.id"
+                    type="button"
+                    :aria-disabled="subjectBusy ? 'true' : undefined"
+                    @click="answerMessageSubject(message.id, [subject.id])"
                   >
-                </summary>
-                <fieldset>
-                  <legend>Marque todos os assuntos mencionados</legend>
+                    {{ subjectLabel(subject) }}
+                  </button>
+                  <button
+                    v-if="subjectState.subjects.length > 1"
+                    type="button"
+                    :aria-expanded="Boolean(subjectManyOpen[message.id])"
+                    :aria-controls="`subject-many-${message.id}`"
+                    @click="toggleSubjectMany(message.id)"
+                  >
+                    Mais de um
+                  </button>
+                  <button
+                    type="button"
+                    :aria-disabled="subjectBusy ? 'true' : undefined"
+                    @click="answerMessageSubject(message.id, 'separate')"
+                  >
+                    Separar como novo assunto
+                  </button>
+                  <button
+                    type="button"
+                    :aria-disabled="subjectBusy ? 'true' : undefined"
+                    @click="answerMessageSubject(message.id, [])"
+                  >
+                    Nenhum pedido
+                  </button>
+                  <button
+                    v-if="subjectCorrecting[message.id]"
+                    type="button"
+                    class="quiet"
+                    @click="cancelSubjectCorrection(message.id)"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+                <div
+                  v-if="subjectManyOpen[message.id]"
+                  :id="`subject-many-${message.id}`"
+                  class="subject-question-many"
+                >
                   <label
                     v-for="subject in subjectState.subjects"
                     :key="subject.id"
@@ -2133,22 +2445,61 @@ onBeforeUnmount(() => {
                       v-model="messageSubjectDrafts[message.id]"
                       type="checkbox"
                       :value="subject.id"
-                      :disabled="subjectBusy"
                     />
                     {{ subjectLabel(subject) }}
                   </label>
-                </fieldset>
-                <button
-                  type="button"
-                  :disabled="subjectBusy"
-                  @click="subjectCommand('tag', message.id)"
+                  <button
+                    type="button"
+                    :aria-disabled="subjectBusy ? 'true' : undefined"
+                    @click="answerMessageSubject(message.id, 'marked')"
+                  >
+                    Ligar aos marcados
+                  </button>
+                </div>
+                <p
+                  v-if="subjectAnswerErrors[message.id]"
+                  class="subject-question-error"
+                  role="alert"
                 >
-                  Salvar assuntos
+                  {{ subjectAnswerErrors[message.id] }}
+                </p>
+              </fieldset>
+              <p
+                v-else-if="subjectReviewIds.has(message.id) && !isTerminal"
+                class="subject-question-hint"
+              >
+                O agente não soube a qual pedido esta mensagem se refere.
+                {{
+                  needsTakeover
+                    ? 'Assuma o atendimento para indicar.'
+                    : 'Aguardando o vendedor indicar o pedido.'
+                }}
+              </p>
+              <p v-if="messageSubjectChip(message)" class="subject-chip">
+                <span :id="`subject-chip-${message.id}`">{{
+                  messageSubjectChip(message)
+                }}</span>
+                <button
+                  v-if="canAnswerSubjects && !subjectCorrecting[message.id]"
+                  :id="`subject-correct-${message.id}`"
+                  type="button"
+                  class="link-button"
+                  :aria-describedby="`subject-chip-${message.id}`"
+                  @click="correctMessageSubject(message.id)"
+                >
+                  Corrigir
                 </button>
-              </details>
-              <small v-else-if="messageSubjectLabels(message.id)">
-                Assuntos: {{ messageSubjectLabels(message.id) }}
-              </small>
+              </p>
+              <!-- UXA-05: the answer is confirmed where it was given. -->
+              <p
+                v-if="subjectAnswers[message.id]"
+                :id="`subject-answer-${message.id}`"
+                class="subject-answer"
+                role="status"
+                tabindex="-1"
+              >
+                {{ subjectAnswers[message.id] }}
+              </p>
             </li>
             <li v-if="!detail.messages.length" class="empty-list">
               Sem mensagens persistidas.
@@ -2283,8 +2634,9 @@ onBeforeUnmount(() => {
         />
 
         <section class="subject-panel" aria-labelledby="subject-panel-title">
+          <!-- UXA-04: the seller's words, and what each action changes. -->
           <h3 id="subject-panel-title" ref="subjectHeading" tabindex="-1">
-            Assuntos deste atendimento
+            Pedidos e assuntos desta conversa
           </h3>
           <p v-if="subjectError" role="alert">{{ subjectError }}</p>
           <p v-if="subjectNotice" role="status">{{ subjectNotice }}</p>
@@ -2296,15 +2648,16 @@ onBeforeUnmount(() => {
             <li v-for="subject in subjectState.subjects" :key="subject.id">
               <span>{{ subjectLabel(subject) }}</span>
               <strong v-if="subject.isCurrent" class="badge" data-tone="info"
-                >Atual</strong
+                >O agente usa este</strong
               >
               <button
                 v-else-if="canClose"
                 type="button"
+                :aria-label="`Usar este: fazer o agente usar ${subjectLabel(subject)}`"
                 :disabled="subjectBusy"
                 @click="subjectCommand('select', subject.id)"
               >
-                Selecionar
+                Usar este
               </button>
             </li>
           </ul>

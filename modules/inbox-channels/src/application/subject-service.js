@@ -159,7 +159,7 @@ export function createSubjectService(database) {
         throw new SubjectError(404, 'CONVERSATION_NOT_FOUND');
       const contactId = conversation.rows[0].contact_id;
       const identityId = conversation.rows[0].contact_identity_id;
-      const [subjects, orders, links] = await Promise.all([
+      const [subjects, orders, links, reviews] = await Promise.all([
         database.query(
           `SELECT subject.id, subject.kind, subject.order_id, subject.position,
                   subject.is_current, subject.selected_source, subject.version,
@@ -183,8 +183,20 @@ export function createSubjectService(database) {
           [contactId, query, identityId],
         ),
         database.query(
-          `SELECT message_id, subject_id FROM crm.message_subject_links
+          `SELECT message_id, subject_id, assigned_by_kind
+           FROM crm.message_subject_links
            WHERE conversation_id=$1 ORDER BY message_id, subject_id`,
+          [id],
+        ),
+        // CP-16: only messages the agent flagged as ambiguous, still without
+        // any subject and without a human decision, ask the seller.
+        database.query(
+          `SELECT review.message_id FROM crm.message_subject_reviews review
+           WHERE review.conversation_id=$1 AND review.resolved_at IS NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM crm.message_subject_links link
+               WHERE link.message_id=review.message_id)
+           ORDER BY review.message_id`,
           [id],
         ),
       ]);
@@ -195,7 +207,13 @@ export function createSubjectService(database) {
         links: links.rows.map((/** @type {any} */ row) => ({
           messageId: row.message_id,
           subjectId: row.subject_id,
+          assignedByKind: row.assigned_by_kind,
         })),
+        // UXA-14: reviews only open while the conversation has a subject,
+        // so "one order + also another one" still reaches the seller.
+        needsSubjectMessageIds: reviews.rows.map(
+          (/** @type {any} */ row) => row.message_id,
+        ),
         orders: orders.rows.slice(0, 100).map((/** @type {any} */ row) => ({
           id: row.id,
           number: row.number,
@@ -211,8 +229,17 @@ export function createSubjectService(database) {
       const conversationId = requireId(input.conversationId, 'CONVERSATION_ID');
       const orderId =
         input.orderId === null ? null : requireId(input.orderId, 'ORDER_ID');
+      // CP-31: `select: false` ("separar como novo assunto") creates the
+      // subject without moving the conversation's current subject.
+      const select = input.select ?? true;
+      if (typeof select !== 'boolean') {
+        throw new SubjectError(400, 'INVALID_REQUEST');
+      }
+      // The default keeps the original fingerprint, so keys already stored
+      // for `select: true` still replay; `select: false` is a distinct body.
+      const body = select ? { orderId } : { orderId, select };
       return database.transaction((/** @type {any} */ transaction) =>
-        command(transaction, 'create', input, { orderId }, async () => {
+        command(transaction, 'create', input, body, async () => {
           const conversation = await context(transaction, conversationId);
           await requireOwner(transaction, conversation, input.actor);
           let orderNumber = null;
@@ -253,18 +280,24 @@ export function createSubjectService(database) {
           );
           const now = new Date().toISOString();
           const subjectId = randomUUID();
-          const previous = await transaction.query(
-            `UPDATE crm.conversation_subjects SET is_current=false,
-                    version=version+1, updated_at=$2
-             WHERE conversation_id=$1 AND is_current RETURNING id`,
-            [conversationId, now],
-          );
+          const previous = select
+            ? await transaction.query(
+                `UPDATE crm.conversation_subjects SET is_current=false,
+                        version=version+1, updated_at=$2
+                 WHERE conversation_id=$1 AND is_current RETURNING id`,
+                [conversationId, now],
+              )
+            : { rows: [] };
           await transaction.query(
             `INSERT INTO crm.conversation_subjects
                (id, conversation_id, contact_id, order_id, kind, position,
                 is_current, selected_source, selected_by, selected_at,
                 created_by, created_by_kind, version, created_at, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,true,'human',$7,$8,$7,'human',1,$8,$8)`,
+             VALUES ($1,$2,$3,$4,$5,$6,$9::boolean,
+                     CASE WHEN $9::boolean THEN 'human' END,
+                     CASE WHEN $9::boolean THEN $7 END,
+                     CASE WHEN $9::boolean THEN $8::timestamptz END,
+                     $7,'human',1,$8,$8)`,
             [
               subjectId,
               conversationId,
@@ -274,6 +307,7 @@ export function createSubjectService(database) {
               Number(position.rows[0].next),
               input.actor.id,
               now,
+              select,
             ],
           );
           await record(
@@ -297,8 +331,8 @@ export function createSubjectService(database) {
               orderNumber,
               orderStatus,
               position: Number(position.rows[0].next),
-              isCurrent: true,
-              selectedSource: 'human',
+              isCurrent: select,
+              selectedSource: select ? 'human' : null,
               version: 1,
             },
           };
@@ -421,7 +455,8 @@ export function createSubjectService(database) {
               }
             }
             const previous = await transaction.query(
-              `SELECT subject_id FROM crm.message_subject_links
+              `SELECT subject_id, assigned_by_kind
+               FROM crm.message_subject_links
                WHERE message_id=$1 ORDER BY subject_id FOR UPDATE`,
               [messageId],
             );
@@ -438,6 +473,39 @@ export function createSubjectService(database) {
                 [messageId, subjectId, conversationId, input.actor.id],
               );
             }
+            // A human decision, including "no subject", resolves the review
+            // and keeps later agent turns from overwriting it. It does not
+            // resolve the handoff nor change automation state or epoch.
+            const review = await transaction.query(
+              `SELECT reason, resolved_at FROM crm.message_subject_reviews
+               WHERE message_id=$1 FOR UPDATE`,
+              [messageId],
+            );
+            const reviewResolved = Boolean(
+              review.rows[0] && review.rows[0].resolved_at === null,
+            );
+            if (review.rows[0]) {
+              await transaction.query(
+                `UPDATE crm.message_subject_reviews
+                 SET resolved_at=now(), resolved_by=$2 WHERE message_id=$1`,
+                [messageId, input.actor.id],
+              );
+            } else {
+              await transaction.query(
+                `INSERT INTO crm.message_subject_reviews
+                   (message_id, conversation_id, handoff_id, source_revision,
+                    reason, requested_at, resolved_at, resolved_by)
+                 SELECT message.id, message.conversation_id, NULL,
+                        message.inbound_revision, 'human_review', now(), now(),
+                        $3
+                 FROM crm.messages message
+                 WHERE message.id=$1 AND message.conversation_id=$2
+                   AND message.direction='inbound'
+                   AND message.inbound_revision > 0
+                 ON CONFLICT (message_id) DO NOTHING`,
+                [messageId, conversationId, input.actor.id],
+              );
+            }
             await record(
               transaction,
               input,
@@ -450,6 +518,11 @@ export function createSubjectService(database) {
                 previousSubjectIds: previous.rows.map(
                   (/** @type {any} */ row) => row.subject_id,
                 ),
+                previousLinks: previous.rows.map((/** @type {any} */ row) => ({
+                  subjectId: row.subject_id,
+                  assignedByKind: row.assigned_by_kind,
+                })),
+                reviewResolved,
                 subjectIds,
               },
             );

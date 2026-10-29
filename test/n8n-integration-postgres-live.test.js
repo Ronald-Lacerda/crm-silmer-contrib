@@ -10,7 +10,10 @@ import {
   migrate,
   withTransaction,
 } from '../modules/database/src/index.js';
-import { PostgresInboxReadRepository } from '../modules/inbox-channels/src/index.js';
+import {
+  PostgresInboxReadRepository,
+  createSubjectService,
+} from '../modules/inbox-channels/src/index.js';
 import {
   PostgresN8nIntegrationRepository,
   createN8nIntegrationService,
@@ -1707,6 +1710,582 @@ if (connectionString) {
       const ambiguous = await service.receiveInbound(inbound(siteId(3), 1));
       assert.equal(ambiguous.site_contact_match, 'ambiguous');
       assert.ok(!JSON.stringify(ambiguous).includes('known-site-2'));
+    } finally {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await pool.end();
+    }
+  });
+
+  test('CP-12/CP-16: the agent records the subject of the turn it answered and asks only when unsure', async () => {
+    assertTestDatabase(connectionString);
+    const pool = new Pool({ connectionString, max: 12 });
+    const database = {
+      query: pool.query.bind(pool),
+      transaction: (/** @type {(client: any) => Promise<any>} */ work) =>
+        withTransaction(pool, work),
+    };
+    const envelopeKey = Buffer.alloc(32, 61);
+    const contactEnvelopeKey = Buffer.alloc(32, 62);
+    const orders = createOrderService({
+      authorizeOwnership: async () => {},
+      conversations: new PostgresOrderConversationPort({
+        contactEnvelopeKey,
+        contactLookupKey: Buffer.alloc(32, 73),
+        database,
+        envelopeKey,
+      }),
+      fabCode: 'FAB-TEST',
+      repository: new PostgresOrderRepository({ database, envelopeKey }),
+    });
+    let sequence = 0;
+    const service = createN8nIntegrationService({
+      clock: () => NOW,
+      idFactory: (kind) => `${kind}-cp12-${++sequence}`,
+      repository: new PostgresN8nIntegrationRepository({
+        contactEnvelopeKey,
+        contactLookupKey: Buffer.alloc(32, 63),
+        database,
+        envelopeKey,
+        messageEnvelopeKey: Buffer.alloc(32, 64),
+        orders,
+      }),
+    });
+    const subjectService = createSubjectService(database);
+    const seller = {
+      id: 'seller-cp12',
+      kind: 'human',
+      functionName: 'Vendedor',
+    };
+    const technical = (/** @type {string} */ id) => ({
+      actor: 'AUTOMATION_EXECUTOR',
+      correlationId: `correlation-${id}`,
+      credentialVersion: 'current',
+      executionId: id,
+      idempotencyKey: id,
+      requestId: `request-${id}`,
+      workflowKey: 'whatsapp-mvp',
+      workflowVersion: 'mvp-simple-15',
+    });
+    const inbound = (/** @type {string} */ phone, /** @type {number} */ turn) =>
+      service.receiveInbound({
+        channel: 'whatsapp',
+        contact: { wa_id: phone },
+        event_id: `wamid.cp12.${phone}.${turn}`,
+        message: {
+          external_id: `wamid.cp12.${phone}.${turn}`,
+          text: `Mensagem sintética ${turn}`,
+          type: 'text',
+        },
+        metadata: { phone_number_id: 'phone-cp12' },
+        occurred_at: NOW.toISOString(),
+        schema_version: '1.0',
+        technical: technical(`inbound-cp12-${phone}-${turn}`),
+      });
+    /** @param {any} context @param {string} id @param {Record<string, unknown>} [extra] @returns {any} */
+    const send = (context, id, extra = {}) => ({
+      automation_epoch: context.automation_epoch,
+      command_id: `${context.conversation_id}:${context.source_revision}:ai-response`,
+      conversation_id: context.conversation_id,
+      event_id: `send-cp12-${id}`,
+      event_type: 'message.send.requested',
+      message: { type: 'text', text: 'Qual a cor?' },
+      occurred_at: NOW.toISOString(),
+      schema_version: '1.0',
+      source_revision: context.source_revision,
+      target_contract: 'subject-v1',
+      technical: technical(`send-cp12-${id}`),
+      ...extra,
+    });
+    /** @param {any} context @param {string} id @param {string} reason @param {Record<string, unknown>} [extra] */
+    const handoff = (context, id, reason, extra = {}) => ({
+      automation_epoch: context.automation_epoch,
+      conversation_id: context.conversation_id,
+      event_id: `handoff-cp12-${id}`,
+      event_type: 'handoff.requested',
+      handoff: { reason, summary: 'Resumo sintético' },
+      occurred_at: NOW.toISOString(),
+      schema_version: '1.0',
+      source_revision: context.source_revision,
+      target_contract: 'subject-v1',
+      technical: technical(`handoff-cp12-${id}`),
+      ...extra,
+    });
+    /** Inbound links by revision, without message content. @param {string} conversationId */
+    const inboundLinks = async (conversationId) =>
+      (
+        await pool.query(
+          `SELECT message.inbound_revision AS revision, link.subject_id,
+                  link.assigned_by_kind
+           FROM crm.messages AS message
+           JOIN crm.message_subject_links AS link ON link.message_id = message.id
+           WHERE message.conversation_id = $1 AND message.direction = 'inbound'
+           ORDER BY message.inbound_revision, link.subject_id`,
+          [conversationId],
+        )
+      ).rows.map((/** @type {any} */ row) => [
+        Number(row.revision),
+        row.subject_id,
+        row.assigned_by_kind,
+      ]);
+    /** @param {string} conversationId @param {number} revision @returns {Promise<string>} */
+    const messageAt = async (conversationId, revision) =>
+      (
+        await pool.query(
+          `SELECT id FROM crm.messages WHERE conversation_id = $1
+             AND direction = 'inbound' AND inbound_revision = $2`,
+          [conversationId, revision],
+        )
+      ).rows[0].id;
+    /** @param {string} action */
+    const audits = async (action) =>
+      (
+        await pool.query(
+          `SELECT target_type, target_id, version, reason FROM crm.audit_events
+           WHERE action = $1 ORDER BY occurred_at, id`,
+          [action],
+        )
+      ).rows;
+    /** @param {string} conversationId */
+    const reviewCount = async (conversationId) =>
+      (
+        await pool.query(
+          'SELECT 1 FROM crm.message_subject_reviews WHERE conversation_id = $1',
+          [conversationId],
+        )
+      ).rows.length;
+    /** @param {string} conversationId @param {Array<{id: string, order: any, position: number, current: boolean}>} subjects @param {string} contactId */
+    const insertSubjects = async (conversationId, subjects, contactId) => {
+      for (const { id, order, position, current } of subjects) {
+        await pool.query(
+          `INSERT INTO crm.conversation_subjects
+             (id, conversation_id, contact_id, order_id, kind, position,
+              is_current, selected_source, selected_by, selected_at,
+              created_by, created_by_kind, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, 'pedido', $5, $6,
+                   CASE WHEN $6 THEN 'agent' END,
+                   CASE WHEN $6 THEN 'AUTOMATION_EXECUTOR' END,
+                   CASE WHEN $6 THEN $7::timestamptz END,
+                   'seller-test', 'human', $7, $7)`,
+          [id, conversationId, contactId, order.id, position, current, NOW],
+        );
+      }
+    };
+    try {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await migrate(pool, { migrations: await loadMigrations() });
+      await pool.query(
+        `INSERT INTO crm.users (id, email, password_hash, name)
+         VALUES ($1, 'seller-cp12@example.test', '$argon2id$synthetic',
+                 'Vendedora Sintética')`,
+        [seller.id],
+      );
+      const a = await inbound('5527900000301', 1);
+      const b = await inbound('5527900000302', 1);
+      const c = await inbound('5527900000303', 1);
+      const e = await inbound('5527900000305', 1);
+      const f = await inbound('5527900000306', 1);
+      await pool.query(
+        `UPDATE crm.contact_identities SET current_contact_id = $1
+         WHERE id IN (SELECT contact_identity_id FROM crm.conversations
+                      WHERE id = ANY($2::text[]))`,
+        [
+          a.contact_id,
+          [
+            b.conversation_id,
+            c.conversation_id,
+            e.conversation_id,
+            f.conversation_id,
+          ],
+        ],
+      );
+      const orderA = (
+        await orders.ensurePendingFromIntent({
+          conversationId: a.conversation_id,
+          correlationId: 'cp12-create-a',
+        })
+      ).order;
+      const orderB = (
+        await orders.ensurePendingFromIntent({
+          conversationId: b.conversation_id,
+          correlationId: 'cp12-create-b',
+        })
+      ).order;
+      await insertSubjects(
+        c.conversation_id,
+        [
+          { id: 'cp12-c-a', order: orderA, position: 1, current: false },
+          { id: 'cp12-c-b', order: orderB, position: 2, current: true },
+        ],
+        a.contact_id,
+      );
+
+      // Turn range: revisions 1..3 were not answered yet. Revision 1 has a
+      // human subject and revision 2 a human "no subject" decision; only
+      // revision 3 is recorded under the turn's explicit target.
+      await inbound('5527900000303', 2);
+      const c3 = await inbound('5527900000303', 3);
+      await pool.query(
+        `INSERT INTO crm.message_subject_links
+           (message_id, subject_id, conversation_id, assigned_by,
+            assigned_by_kind, assigned_at)
+         VALUES ($1, 'cp12-c-a', $2, 'seller-test', 'human', $3)`,
+        [await messageAt(c.conversation_id, 1), c.conversation_id, NOW],
+      );
+      await pool.query(
+        `INSERT INTO crm.message_subject_reviews
+           (message_id, conversation_id, source_revision, reason,
+            requested_at, resolved_at, resolved_by)
+         VALUES ($1, $2, 2, 'human_review', $3, $3, 'seller-test')`,
+        [await messageAt(c.conversation_id, 2), c.conversation_id, NOW],
+      );
+      const firstSend = send(c3, 'c3', {
+        subject_id: 'cp12-c-b',
+        order_id: orderB.id,
+      });
+      const accepted = await service.recordEvent(firstSend);
+      assert.equal(accepted.send_authorized, true);
+      assert.deepEqual(await inboundLinks(c.conversation_id), [
+        [1, 'cp12-c-a', 'human'],
+        [3, 'cp12-c-b', 'agent'],
+      ]);
+      assert.deepEqual(
+        await audits('integration.n8n.message_subjects_inferred'),
+        [
+          {
+            target_type: 'conversation_subject',
+            target_id: 'cp12-c-b',
+            version: '1',
+            reason: 'AGENT_SUBJECT_ASSIGNMENT',
+          },
+        ],
+      );
+      // A replay writes nothing new.
+      const replayed = await service.recordEvent(firstSend);
+      assert.equal(replayed.duplicate, true);
+      assert.equal((await inboundLinks(c.conversation_id)).length, 2);
+      assert.equal(
+        (await audits('integration.n8n.message_subjects_inferred')).length,
+        1,
+      );
+
+      // Two unanswered inbound messages are both answered by the next turn.
+      await inbound('5527900000303', 4);
+      const c5 = await inbound('5527900000303', 5);
+      await service.recordEvent(
+        send(c5, 'c5', { subject_id: 'cp12-c-b', order_id: orderB.id }),
+      );
+      assert.deepEqual((await inboundLinks(c.conversation_id)).slice(2), [
+        [4, 'cp12-c-b', 'agent'],
+        [5, 'cp12-c-b', 'agent'],
+      ]);
+
+      // SUBJECT_AMBIGUOUS rolls back: the unlinked revision 6 stays unlinked.
+      await inbound('5527900000303', 6);
+      const c7 = await inbound('5527900000303', 7);
+      const source7 = await messageAt(c.conversation_id, 7);
+      for (const subjectId of ['cp12-c-a', 'cp12-c-b']) {
+        await pool.query(
+          `INSERT INTO crm.message_subject_links
+             (message_id, subject_id, conversation_id, assigned_by,
+              assigned_by_kind, assigned_at)
+           VALUES ($1, $2, $3, 'seller-test', 'human', $4)`,
+          [source7, subjectId, c.conversation_id, NOW],
+        );
+      }
+      await assert.rejects(
+        service.recordEvent(
+          send(c7, 'c7-ambiguous', {
+            subject_id: 'cp12-c-b',
+            order_id: orderB.id,
+          }),
+        ),
+        (error) => /** @type {any} */ (error)?.code === 'SUBJECT_AMBIGUOUS',
+      );
+      assert.equal(
+        (await inboundLinks(c.conversation_id)).some(
+          ([revision]) => revision === 6,
+        ),
+        false,
+      );
+      assert.equal(
+        (await audits('integration.n8n.message_subjects_inferred')).length,
+        2,
+      );
+
+      // A handoff with an explicit target records the same turn range.
+      await pool.query(
+        'DELETE FROM crm.message_subject_links WHERE message_id = $1',
+        [source7],
+      );
+      const targeted = await service.recordEvent(
+        handoff(c7, 'c7-target', 'briefing_complete', {
+          subject_id: 'cp12-c-b',
+          order_id: orderB.id,
+        }),
+      );
+      assert.match(targeted.handoff_id, /^handoff-/u);
+      assert.deepEqual((await inboundLinks(c.conversation_id)).slice(4), [
+        [6, 'cp12-c-b', 'agent'],
+        [7, 'cp12-c-b', 'agent'],
+      ]);
+      assert.equal(await reviewCount(c.conversation_id), 1);
+
+      // CP-16: low confidence without a target only asks the seller.
+      await insertSubjects(
+        e.conversation_id,
+        [
+          { id: 'cp12-e-a', order: orderA, position: 1, current: true },
+          { id: 'cp12-e-b', order: orderB, position: 2, current: false },
+        ],
+        a.contact_id,
+      );
+      const e2 = await inbound('5527900000305', 2);
+      const versions = [
+        (await orders.get(orderA.id)).version,
+        (await orders.get(orderB.id)).version,
+      ];
+      const lowConfidence = handoff(e2, 'e2', 'low_confidence');
+      const unsure = await service.recordEvent(lowConfidence);
+      const reviews = await pool.query(
+        `SELECT review.source_revision, review.reason, review.handoff_id,
+                review.resolved_at, message.inbound_revision
+         FROM crm.message_subject_reviews AS review
+         JOIN crm.messages AS message ON message.id = review.message_id
+         WHERE review.conversation_id = $1
+         ORDER BY message.inbound_revision`,
+        [e.conversation_id],
+      );
+      assert.deepEqual(
+        reviews.rows.map((/** @type {any} */ row) => [
+          Number(row.inbound_revision),
+          row.reason,
+          Number(row.source_revision),
+          row.handoff_id,
+          row.resolved_at,
+        ]),
+        [
+          [1, 'subject_ambiguous', 2, unsure.handoff_id, null],
+          [2, 'subject_ambiguous', 2, unsure.handoff_id, null],
+        ],
+      );
+      assert.deepEqual(await inboundLinks(e.conversation_id), []);
+      assert.deepEqual(
+        [
+          (await orders.get(orderA.id)).version,
+          (await orders.get(orderB.id)).version,
+        ],
+        versions,
+      );
+      assert.deepEqual(
+        await audits('integration.n8n.message_subject_review_requested'),
+        [
+          {
+            target_type: 'handoff',
+            target_id: unsure.handoff_id,
+            version: '2',
+            reason: 'AGENT_SUBJECT_AMBIGUOUS',
+          },
+        ],
+      );
+      assert.equal((await service.recordEvent(lowConfidence)).duplicate, true);
+      assert.equal(await reviewCount(e.conversation_id), 2);
+      const e1Message = await messageAt(e.conversation_id, 1);
+      const e2Message = await messageAt(e.conversation_id, 2);
+      assert.deepEqual(
+        (await subjectService.list(e.conversation_id)).needsSubjectMessageIds,
+        [e1Message, e2Message].sort(),
+      );
+
+      // The seller's decision resolves the review, keeps the handoff open
+      // and the conversation with the human (ADR 015).
+      await pool.query(
+        'UPDATE crm.conversations SET assigned_user_id = $2 WHERE id = $1',
+        [e.conversation_id, seller.id],
+      );
+      const automation = async () =>
+        (
+          await pool.query(
+            `SELECT automation_state, automation_epoch FROM crm.conversations
+             WHERE id = $1`,
+            [e.conversation_id],
+          )
+        ).rows[0];
+      const before = await automation();
+      for (const [messageId, subjectIds] of /** @type {const} */ ([
+        [e1Message, ['cp12-e-b']],
+        [e2Message, []],
+      ])) {
+        await subjectService.tagMessage({
+          actor: seller,
+          conversationId: e.conversation_id,
+          correlationId: `cp12-tag-${messageId}`,
+          idempotencyKey: `cp12-tag-${messageId}`,
+          messageId,
+          subjectIds: [...subjectIds],
+        });
+      }
+      const resolved = await pool.query(
+        `SELECT resolved_by FROM crm.message_subject_reviews
+         WHERE conversation_id = $1 AND resolved_at IS NOT NULL`,
+        [e.conversation_id],
+      );
+      assert.deepEqual(
+        resolved.rows.map((/** @type {any} */ row) => row.resolved_by),
+        [seller.id, seller.id],
+      );
+      const afterTag = await subjectService.list(e.conversation_id);
+      assert.deepEqual(afterTag.needsSubjectMessageIds, []);
+      assert.deepEqual(afterTag.links, [
+        {
+          messageId: e1Message,
+          subjectId: 'cp12-e-b',
+          assignedByKind: 'human',
+        },
+      ]);
+      const tagEvents = await pool.query(
+        `SELECT payload FROM crm.domain_events
+         WHERE aggregate_type = 'conversation' AND aggregate_id = $1
+           AND event_type = 'conversation.subjects_changed'
+         ORDER BY aggregate_version`,
+        [e.conversation_id],
+      );
+      assert.deepEqual(
+        tagEvents.rows.map((/** @type {any} */ row) => [
+          row.payload.messageId,
+          row.payload.reviewResolved,
+          row.payload.previousLinks,
+        ]),
+        [
+          [e1Message, true, []],
+          [e2Message, true, []],
+        ],
+      );
+      assert.deepEqual(await automation(), before);
+      assert.equal(
+        (
+          await pool.query('SELECT status FROM crm.handoffs WHERE id = $1', [
+            unsure.handoff_id,
+          ])
+        ).rows[0].status,
+        'pending',
+      );
+
+      // 'unsupported' is not about the subject: no review is opened.
+      await insertSubjects(
+        f.conversation_id,
+        [
+          { id: 'cp12-f-a', order: orderA, position: 1, current: true },
+          { id: 'cp12-f-b', order: orderB, position: 2, current: false },
+        ],
+        a.contact_id,
+      );
+      await service.recordEvent(handoff(f, 'f1', 'unsupported'));
+      assert.equal(await reviewCount(f.conversation_id), 0);
+
+      // open_order bootstrap: the only subject receives the opening turn.
+      await inbound('5527900000307', 1);
+      const g2 = await inbound('5527900000307', 2);
+      const opening = send(g2, 'g2', {
+        briefing_patch: { order_name: 'Pedido sintético', quantity: 20 },
+        open_order: true,
+      });
+      delete opening.target_contract;
+      const opened = await service.recordEvent(opening);
+      assert.equal(opened.order.opened, true);
+      assert.deepEqual(await inboundLinks(g2.conversation_id), [
+        [1, opened.order.subject_id, 'agent'],
+        [2, opened.order.subject_id, 'agent'],
+      ]);
+      const inferredAfterOpening = (
+        await audits('integration.n8n.message_subjects_inferred')
+      ).length;
+      // CP-29: replaying a bootstrap that already succeeded reuses the
+      // order and subject without a second link or audit row.
+      const replayedOpening = await service.recordEvent(opening);
+      assert.equal(replayedOpening.duplicate, true);
+      assert.equal(replayedOpening.order.opened, true);
+      assert.equal(replayedOpening.order.created, false);
+      assert.equal(replayedOpening.order.subject_id, opened.order.subject_id);
+      assert.deepEqual(await inboundLinks(g2.conversation_id), [
+        [1, opened.order.subject_id, 'agent'],
+        [2, opened.order.subject_id, 'agent'],
+      ]);
+      assert.equal(
+        (await audits('integration.n8n.message_subjects_inferred')).length,
+        inferredAfterOpening,
+      );
+      assert.equal(
+        (
+          await pool.query(
+            'SELECT 1 FROM crm.conversation_subjects WHERE conversation_id = $1',
+            [g2.conversation_id],
+          )
+        ).rows.length,
+        1,
+      );
+      const g3 = await inbound('5527900000307', 3);
+      // The legacy contract still reuses the conversation's one order.
+      const reused = send(g3, 'g3', {
+        briefing_patch: { quantity: 25 },
+        open_order: true,
+        technical: {
+          ...technical('send-cp12-g3'),
+          workflowVersion: 'mvp-simple-11',
+        },
+      });
+      delete reused.target_contract;
+      assert.equal((await service.recordEvent(reused)).order.created, false);
+      assert.deepEqual((await inboundLinks(g2.conversation_id)).at(-1), [
+        3,
+        opened.order.subject_id,
+        'agent',
+      ]);
+
+      // CP-29: a low-confidence handoff that still opens the order creates
+      // the subject, but the agent never links the turn it was unsure of.
+      await inbound('5527900000308', 1);
+      const h2 = await inbound('5527900000308', 2);
+      const inferredBeforeUnsure = (
+        await audits('integration.n8n.message_subjects_inferred')
+      ).length;
+      const unsureOpening = handoff(h2, 'h2', 'low_confidence', {
+        briefing_patch: { order_name: 'Pedido sintético', quantity: 10 },
+        open_order: true,
+      });
+      const unsureOpened = await service.recordEvent(unsureOpening);
+      assert.match(unsureOpened.handoff_id, /^handoff-/u);
+      assert.equal(unsureOpened.order.opened, true);
+      assert.equal(unsureOpened.order.created, true);
+      const unsureSubjects = await pool.query(
+        `SELECT id, order_id, is_current FROM crm.conversation_subjects
+         WHERE conversation_id = $1`,
+        [h2.conversation_id],
+      );
+      assert.deepEqual(unsureSubjects.rows, [
+        {
+          id: unsureOpened.order.subject_id,
+          order_id: unsureOpened.order.id,
+          is_current: true,
+        },
+      ]);
+      assert.deepEqual(await inboundLinks(h2.conversation_id), []);
+      assert.equal(
+        (await audits('integration.n8n.message_subjects_inferred')).length,
+        inferredBeforeUnsure,
+      );
+      const unsureReplay = await service.recordEvent(unsureOpening);
+      assert.equal(unsureReplay.duplicate, true);
+      assert.equal(
+        unsureReplay.order.subject_id,
+        unsureOpened.order.subject_id,
+      );
+      assert.deepEqual(await inboundLinks(h2.conversation_id), []);
+      assert.equal(
+        (await audits('integration.n8n.message_subjects_inferred')).length,
+        inferredBeforeUnsure,
+      );
     } finally {
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');

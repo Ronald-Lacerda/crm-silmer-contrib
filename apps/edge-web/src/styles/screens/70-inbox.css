@@ -636,45 +636,104 @@
   font-weight: 600;
 }
 
-/* Tagging a message is occasional: a quiet line until it is opened. */
-.message-subjects {
-  padding: 0;
-  font-size: var(--text-xs);
-  background: transparent;
-  border: 0;
-}
-
-.message-subjects[open] {
+/* CP-16/UXA-01: the question appears only on the message the agent stopped
+   on. A decision, not an error: the attention border is never red. */
+.subject-question {
+  display: grid;
   gap: var(--space-2);
-  padding: var(--space-2);
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2) var(--space-3) var(--space-3);
   background: var(--color-surface);
-  border: 1px solid var(--color-border-subtle);
+  border: 1px solid var(--status-warning-text);
+  border-radius: var(--radius-md);
 }
 
-.message-subjects summary {
-  inline-size: fit-content;
-  min-block-size: 0;
-  padding: var(--space-1) 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: 500;
-}
-
-.message-subjects summary:hover {
+.subject-question legend {
+  padding-inline: var(--space-1);
   color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 600;
 }
 
-.message-subjects fieldset {
-  margin: 0;
-  padding: 0;
-  border: 0;
+.subject-question-options,
+.subject-question-many {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
 }
 
-.message-subjects label {
+.subject-question-many {
+  padding-block-start: var(--space-2);
+  border-block-start: 1px solid var(--color-border-subtle);
+}
+
+.subject-question-many label {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin-block: var(--space-1);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.subject-question button {
+  min-block-size: var(--control-height-sm);
+  padding: var(--space-1) var(--space-3);
+}
+
+.subject-question button[aria-disabled='true'] {
+  cursor: progress;
+}
+
+.message .subject-question-error {
+  color: var(--status-error-text);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.message .subject-question-hint,
+.message .subject-chip,
+.message .subject-answer {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.message .subject-question-hint {
+  color: var(--status-warning-text);
+  font-weight: 600;
+}
+
+/* UXA-09: which order a customer message went to, and who linked it. */
+.message .subject-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+
+/* WCAG 2.5.8: a text-sized action still gets a 24 px target. */
+.subject-chip button.link-button {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--space-6);
+  font-size: var(--text-xs);
+}
+
+.message .subject-answer {
+  color: var(--status-success-text);
+  font-weight: 600;
+}
+
+/* UXA-08: each new control is a 44 px target on a phone. */
+@media (max-width: 768px) {
+  .subject-question button,
+  .subject-question-many label {
+    min-block-size: var(--target-min);
+  }
+
+  .subject-chip button.link-button {
+    min-block-size: var(--target-min);
+  }
 }
 
 /* The reply field is always in view at the bottom of the conversation. */

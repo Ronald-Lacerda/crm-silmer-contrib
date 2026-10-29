@@ -399,7 +399,8 @@ paths:
           application/json:
             schema: { $ref: '#/components/schemas/CreateConversationSubject' }
       responses:
-        '201': { description: Assunto criado e selecionado }
+        '201':
+          description: Assunto criado; atual só quando select não é false
         '400': { $ref: '#/components/responses/InvalidRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -431,6 +432,11 @@ paths:
     put:
       operationId: assignMessageSubjects
       summary: Substitui os vínculos de assuntos de uma mensagem
+      description: >-
+        A decisão humana, inclusive lista vazia, substitui vínculos humanos ou
+        do agente e resolve a revisão pendente da mensagem, sem resolver o
+        handoff nem devolver a Conversa ao bot. Turnos posteriores do agente
+        não sobrescrevem essa decisão.
       security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
       parameters:
         - $ref: '#/components/parameters/ConversationId'
@@ -2984,7 +2990,15 @@ components:
     ConversationSubjects:
       type: object
       additionalProperties: false
-      required: [currentSubjectId, subjects, orders, ordersHasMore, links]
+      required:
+        [
+          currentSubjectId,
+          subjects,
+          orders,
+          ordersHasMore,
+          links,
+          needsSubjectMessageIds,
+        ]
       properties:
         currentSubjectId: { type: [string, 'null'] }
         subjects:
@@ -3006,15 +3020,35 @@ components:
           items:
             type: object
             additionalProperties: false
-            required: [messageId, subjectId]
+            required: [messageId, subjectId, assignedByKind]
             properties:
               messageId: { type: string }
               subjectId: { type: string }
+              assignedByKind:
+                type: string
+                enum: [human, agent]
+                description: >-
+                  `agent` quando o agente registrou o assunto do turno que
+                  respondeu (CP-12); `human` quando uma pessoa salvou.
+        needsSubjectMessageIds:
+          type: array
+          description: >-
+            Mensagens recebidas que o agente marcou como ambíguas (CP-16),
+            com revisão aberta, ainda sem vínculo nem decisão humana. A
+            revisão só é aberta quando a Conversa já tem ao menos um Assunto.
+          items: { type: string }
     CreateConversationSubject:
       type: object
       additionalProperties: false
       properties:
         orderId: { type: [string, 'null'] }
+        select:
+          type: boolean
+          default: true
+          description: >-
+            CP-31: false cria o assunto sem torná-lo o atual nem mudar o
+            assunto que o agente usa ("separar como novo assunto"). Faz
+            parte da impressão digital da Idempotency-Key.
     HandoffView:
       type: object
       additionalProperties: false

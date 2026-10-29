@@ -262,6 +262,20 @@ auditados. A Inbox consulta até 100 Pedidos por vez, com filtro por trecho do
 número; a API confirma o vínculo Pedido/Contato. O vínculo de Assunto com
 Pedido manual não altera o dono nem a ficha do Pedido.
 
+ADR 048 / CP-29..31: quando um evento do agente com alvo explícito é aceito,
+as mensagens de entrada do turno (revisão maior que `claimed_revision` lida
+antes da cerca e até `source_revision`) recebem vínculo
+`assigned_by_kind='agent'`, sem sobrescrever vínculo existente nem revisão
+humana resolvida; o primeiro `open_order` liga o turno enquanto houver um só
+Assunto. Handoff `subject-v1` de `low_confidence` sem alvo, com Assunto na
+Conversa, abre linhas em `crm.message_subject_reviews` (migração 0045) para as
+mensagens sem vínculo. A leitura de Assuntos devolve `assignedByKind` e
+`needsSubjectMessageIds` (revisão aberta e sem vínculo); a atribuição humana
+resolve a revisão, inclusive com lista vazia, sem tocar handoff, epoch ou
+`automation_state`. Auditoria só com IDs e contagens
+(`AGENT_SUBJECT_ASSIGNMENT`, `AGENT_SUBJECT_AMBIGUOUS`). Instalar a 0045 antes
+da API; não há backfill.
+
 ADR 020 / PR #142 define Técnica por item (`tipo_servico`) e Arte por pedido.
 Gerar exige pontos obrigatórios dos itens, arte e entrega prometida. A edição
 parcial é permitida. `summary.aplicacao`, `modelo` e campos antigos seguem

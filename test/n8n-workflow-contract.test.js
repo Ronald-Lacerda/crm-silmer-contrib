@@ -2971,6 +2971,17 @@ test('CP-T04: the agent targets one order, switches briefing, and transfers ambi
   assert.equal(handoff.payload.target_contract, 'subject-v1');
   assert.equal('briefing_patch' in handoff.payload, false);
   assert.equal('subject_id' in handoff.payload, false);
+  assert.equal('order_id' in handoff.payload, false);
+  // CP-16: the CRM asks the seller to classify the turn only for a
+  // subject-v1 low_confidence handoff without a target; pin that mapping.
+  assert.equal(decision.trigger, 'subject_ambiguous');
+  assert.equal(decision.handoff_reason, 'low_confidence');
+  assert.equal(handoff.payload.handoff.reason, 'low_confidence');
+  assert.equal(newOrderDecision.trigger, 'subject_ambiguous');
+  const newOrderHandoff = runCodeNode(handoffCode, newOrderDecision, {});
+  assert.equal(newOrderHandoff.payload.handoff.reason, 'low_confidence');
+  assert.equal(newOrderHandoff.payload.target_contract, 'subject-v1');
+  assert.equal('subject_id' in newOrderHandoff.payload, false);
   const replay = runCodeNode(handoffCode, decision, {});
   assert.deepEqual(
     { ...replay, payload: { ...replay.payload, occurred_at: null } },

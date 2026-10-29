@@ -29,7 +29,14 @@ test('subject routes authorize reads and writes and keep explicit order and mess
         currentSubjectId: null,
         subjects: [],
         orders: [],
-        links: [],
+        links: [
+          {
+            messageId: 'message-1',
+            subjectId: 'subject-1',
+            assignedByKind: 'agent',
+          },
+        ],
+        needsSubjectMessageIds: ['message-2'],
         ordersHasMore: false,
       };
     },
@@ -57,6 +64,12 @@ test('subject routes authorize reads and writes and keep explicit order and mess
   assert.equal(read.statusCode, 200);
   assert.equal(calls[0][1].action, 'conversation.read');
   assert.deepEqual(calls[1], ['list', 'conversation-1', '12-CRM']);
+  // CP-12/CP-16: the route keeps who assigned each link and the messages
+  // the seller still has to classify.
+  assert.deepEqual(read.json().links, [
+    { messageId: 'message-1', subjectId: 'subject-1', assignedByKind: 'agent' },
+  ]);
+  assert.deepEqual(read.json().needsSubjectMessageIds, ['message-2']);
 
   const created = await api.inject({
     headers,
@@ -94,4 +107,48 @@ test('subject routes authorize reads and writes and keep explicit order and mess
   });
   assert.equal(invalid.statusCode, 400);
   assert.equal(calls.length, 8);
+});
+
+test('CP-31: creating a subject takes an optional boolean select and rejects anything else', async (t) => {
+  /** @type {any[]} */
+  const created = [];
+  const actor = { id: 'seller-1', kind: 'human', functionName: 'Vendedor' };
+  const subjects = {
+    async authorizeWrite() {
+      return { actor };
+    },
+    async create(/** @type {any} */ input) {
+      created.push(input);
+      return { subject: { id: `subject-${created.length}` } };
+    },
+  };
+  const api = createApi({}, { subjects });
+  t.after(() => api.close());
+  const url = '/api/v1/inbox/conversations/conversation-1/subjects';
+  const post = (/** @type {any} */ payload) =>
+    api.inject({ headers, method: 'POST', url, payload });
+
+  const separated = await post({ orderId: null, select: false });
+  assert.equal(separated.statusCode, 201);
+  // The Inbox reads the new subject id from the response body.
+  assert.equal(separated.json().subject.id, 'subject-1');
+  assert.equal(created[0].select, false);
+  assert.equal(created[0].orderId, null);
+
+  assert.equal((await post({ orderId: 'order-1' })).statusCode, 201);
+  assert.equal(created[1].select, true);
+  assert.equal((await post({ select: true })).statusCode, 201);
+  assert.equal(created[2].select, true);
+
+  for (const payload of [
+    { select: 'false' },
+    { select: null },
+    { select: 0 },
+    { orderId: null, select: false, current: false },
+  ]) {
+    const rejected = await post(payload);
+    assert.equal(rejected.statusCode, 400, JSON.stringify(payload));
+    assert.equal(rejected.json().error.code, 'INVALID_REQUEST');
+  }
+  assert.equal(created.length, 3);
 });
