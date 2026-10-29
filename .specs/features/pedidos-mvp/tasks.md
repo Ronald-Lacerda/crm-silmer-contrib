@@ -2178,3 +2178,19 @@ revisão.
   falha de rede em compra não é reenviada (pede reconciliação), produtos
   declarados somam o valor segurado de cada embalagem, saldo insuficiente só
   no checkout, CPF/CNPJ com dígito verificador (CNPJ alfanumérico incluído).
+
+- **Correção do CI da PR #238 (29/10/2026):** o classificador de dependências
+  reconhece o novo workspace privado sem dependências externas e a
+  sincronização de referências locais no lockfile v3. Confere os manifestos
+  nos commits comparados, as versões exatas e os links internos antes de
+  dispensar o serviço de dependency review indisponível neste repositório.
+  Pacotes externos, integridade, origem, flags, scripts, Actions e formatos
+  desconhecidos continuam exigindo revisão; `npm audit` permanece obrigatório.
+  Regressões incluem CLI com repositório sintético, mudanças externas
+  misturadas às locais e falha fechada para dados inválidos. Revisão de QA
+  sem achados bloqueantes. Sandbox do Melhor Envio permanece pendente.
+  Com Node 24.20.0 / npm 11.19.0 e dependências do lockfile, `npm run validate`
+  passou (1.400 testes aprovados, cinco ignorados) e E2E/axe passou
+  (335 aprovados, sete ignorados). `npm audit --audit-level=high` passou,
+  com uma vulnerabilidade baixa e duas moderadas preexistentes, sem mudança
+  de dependências externas nesta correção; `git diff --check` limpo.
