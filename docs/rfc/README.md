@@ -1,5 +1,11 @@
 # Request for Comments
 
+## Em revisão
+
+- [038 — Frete e etiqueta pelo Melhor Envio](038-frete-e-etiqueta-pelo-melhor-envio.md),
+  aberta em 29/10/2026. Tem retirada na loja ou Melhor Envio, etiqueta
+  pronta ao embalar e menu próprio. As decisões D1–D9 estão em aberto.
+
 ## Decisão de 28/10/2026
 
 - [037 — Aprendizados do Vendedor na Inbox real](037-aprendizados-do-vendedor-na-inbox-real.md),
