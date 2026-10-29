@@ -1,4 +1,4 @@
-# Imagens recebidas na Inbox
+# Imagens e áudios recebidos na Inbox
 
 Correção INBOX-IMG-01, vinculada a INBOX-2/3, INB-01..05, MSG-01/02 e
 PRV-03 do MVP. Preserva o monólito, o contrato de anexos e a retenção legada.
@@ -103,7 +103,32 @@ que um arquivo inválido, expirado ou em formato incompatível será exibido.
   expiração ou indisponibilidade anuncia erro sem salvar a resposta como
   imagem. A ação independe de pedido editável e preserva Anexar ao pedido.
 
-## Limites operacionais
+## Complemento autorizado em 29/10/2026 — áudio recebido
+
+Tarefa **INBOX-AUDIO-01**, EVOL-01D, INB-01 e MSG-01..04. O proprietário
+solicitou corrigir o player dos áudios recebidos e testar envio pela Inbox
+com recebimento e reprodução no WhatsApp de teste.
+
+- **AUD-IN-01:** áudio OGG/MP3 recebido deve atravessar o ramo independente
+  de persistência, tanto em atendimento humano quanto com IA, e vincular os
+  bytes à mensagem original pelo endpoint autenticado de anexos. O player
+  existente usa a URL privada; transcrição não substitui armazenamento.
+- **AUD-IN-02:** validar tipo/MIME do evento e do binário, limitar áudio a
+  16 MiB e conservar imagens em 5 MiB, scanner, hash, idempotência e retenção
+  original. Proxy permite multipart até 17 MiB somente no POST da coleção
+  exata de anexos da integração. Não ampliar outros endpoints.
+- **AUD-IN-03:** patch sobre exportação atual Evolution altera somente filtro
+  e medição do ramo existente; preserva IDs, conexões, credenciais e settings.
+  Contexto inesperado impede aplicação; reaplicação não duplica nós/efeitos.
+- **AUD-IN-04:** homologação exige nova entrada com player reproduzível e
+  envio único pela Inbox observado e reproduzido no WhatsApp de teste.
+  Resultado incerto não autoriza reenvio. Histórico anterior sem anexo exige
+  recuperação pontual, preservando identidade e prazo original, sem IA/envios.
+
+Estado operacional e recuperação em
+[runbook de áudio](../../../docs/runbooks/inbound-audio-inbox.md).
+
+## Limites operacionais de imagens
 
 Antes da ativação, verificar armazenamento transitório e scanner real da API.
 O socket do clamd pertence ao worker; não presumir que a API consegue usá-lo.

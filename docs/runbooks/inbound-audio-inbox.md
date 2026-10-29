@@ -83,3 +83,69 @@ Para reverter somente o proxy, reverter a PR 242 pelo fluxo normal de CI e
 Auto Deploy. Isso restaura o limite anterior e volta a bloquear anexos maiores
 que 1 MiB; não remove os anexos já recuperados. Não reverter a branch Evolution
 acumulada ou configurações independentes do atendimento.
+
+## Preparação INBOX-AUDIO-01 — 29/10/2026
+
+INBOX-AUDIO-01 · AUD-IN-01..04 · EVOL-01D · INB-01 · MSG-01..04.
+Registro da correção do workflow que antecedeu o aceite operacional acima.
+
+### Causa e correção
+
+A mensagem afetada aparecia como `Áudio`, sem player. O workflow registrava
+o inbound, mas seu ramo independente de anexos filtrava somente imagens.
+Download/transcrição no caminho da IA não salva um anexo reproduzível e esse
+caminho não executa depois da tomada humana.
+
+A API e o componente já suportam áudio privado OGG/MP3. O patch offline
+`ops/n8n/patch-evolution-inbound-audio.mjs` altera somente o filtro e a medição
+dos nós históricos `Inbox - Imagem recebida - Filtrar/Medir`. Os nomes e IDs
+ficam preservados. Áudio aceita até 16 MiB; imagem conserva 5 MiB. Tipo e MIME
+do evento devem coincidir com o MIME binário. Hash, scanner, vínculo, replay,
+retenção e falha sanitizada continuam no contrato existente.
+
+O edge precisa aceitar o multipart correspondente: `docker/nginx.conf`
+reserva 17 MiB somente para POST na rota exata
+`/api/v1/integrations/n8n/conversations/:id/attachments`, sem buffering de
+request e sem alterar autenticação da API. O limite genérico continua 1 MiB.
+Esse limite foi implantado em INBOX-AUDIO-PROXY-01 (PR 242), acima.
+
+### Publicação observada
+
+Exportação anterior privada: revisão `d53b60a6-a4d2-4c87-8689-6a78e94adca3`,
+110 nós e `active=true`. Backup e revisão preparada estão em
+`var/inbox-audio/`, ignorado pelo Git. Nunca publicar esses exports, que
+podem conter configuração privada.
+
+A edição pela interface foi exportada e comparada ao patch offline com
+igualdade estrutural: somente dois nós modificados; demais nós, conexões e
+settings iguais. A revisão `15d9ba9a-77e8-429b-bd43-e6dc2349ec5f` foi publicada
+como **INBOX-AUDIO-01 · Persistir áudios recebidos**. A interface confirmou
+`Published`. Não foram alterados workflows Meta, webhook ou credenciais.
+
+### Evidências locais da preparação
+
+76 testes focados passaram: patch Evolution, cadeia de imagem preservada,
+API de anexos, conteúdo privado/Range, retenção, volume e política do edge.
+Revisão independente de Backend/QA sem bloqueantes nos arquivos da entrega.
+Gate completo `npm run validate`: 1.434 testes, 1.429 aprovados, cinco skips,
+zero falhas, tipos, lint e build. A auditoria `npm audit --audit-level=high`
+passou, com três avisos existentes (um baixo e dois moderados), sem alterar
+dependências. Esses testes não comprovam WhatsApp real; a implantação do edge,
+a recuperação do áudio anterior e o teste nos dois sentidos estão no aceite
+operacional acima.
+
+### Aplicação do patch e rollback do workflow
+
+```powershell
+node ops/n8n/patch-evolution-inbound-audio.mjs <export-atual.json> <review-novo.json>
+```
+
+O comando é offline, recusa contexto inesperado e exige saída nova. Reaplicar
+o patch à mesma revisão retorna zero alterações. Comparar o export vivo antes
+de publicar; nunca substituir o principal por um snapshot Meta antigo. O
+export vivo atual também inclui o patch de imagens de INBOX-IMG-RELEASE-03;
+comparar cada delta com a revisão publicada antes de publicar.
+
+Rollback de workflow restaura somente filtro/medição da revisão anterior,
+preservando mensagens e anexos já vinculados. Não restaurar banco nem
+reenviar comandos como consequência de rollback.

@@ -133,6 +133,30 @@ INBOX-AUDIO-01, INB-01, MSG-01/02 e PRV-03.
 Implantação, limites e evidências no
 [runbook de áudio](../../../docs/runbooks/inbound-audio-inbox.md).
 
+## INBOX-AUDIO-01 — áudio recebido com player (29/10/2026)
+
+Requisitos AUD-IN-01..04, EVOL-01D, INB-01 e MSG-01..04.
+
+- [x] Diagnosticar mensagem sem bytes: filtro do ramo independente aceitava
+      somente imagem; player e API já suportavam OGG/MP3 privados.
+- [x] Patch offline idempotente de dois parâmetros, com testes de cadeia
+      Evolution, modo humano, MIME, tamanho, hash e replay.
+- [x] Preparar limite estrito de 17 MiB no POST de anexos inbound do edge;
+      implementação e regressão de isolamento de rotas aprovadas.
+- [x] Publicar workflow `15d9ba9a-77e8-429b-bd43-e6dc2349ec5f`, comparando
+      exportações: somente filtro/medição; conexões/settings e demais nós iguais.
+- [x] Gate local: 1.429 testes aprovados, cinco skips, tipos/lint/build;
+      E2E 344 aprovados + dois aprovados na repetição isolada e sete skips;
+      auditoria sem alertas high/critical e `git diff --check`.
+- [x] Implantar e verificar o limite maior do edge no ambiente remoto
+      (concluído em INBOX-AUDIO-PROXY-01, acima).
+- [x] Observar áudio novo com player e recuperar o áudio anterior afetado
+      (concluído em INBOX-AUDIO-OPS-01, acima).
+- [x] Enviar pela Inbox e observar recebimento/reprodução no WhatsApp de teste
+      (concluído em INBOX-AUDIO-OPS-01, acima).
+
+Evidência e limites no [runbook](../../../docs/runbooks/inbound-audio-inbox.md).
+
 ## INBOX-IMG-EVOL-02 — sintaxe da consulta de mídia (29/10/2026)
 
 Requisitos IMG-01/03/04, EVOL-01D, INB-01 e MSG-01/02.
