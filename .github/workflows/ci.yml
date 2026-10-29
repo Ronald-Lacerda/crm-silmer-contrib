@@ -112,8 +112,11 @@ jobs:
         run: npm audit --audit-level=high
       - name: Reject generated diff
         run: git diff --check && test -z "$(git status --short)"
+      # Dependency review needs the dependency graph, which a private repository
+      # only has with GitHub Advanced Security. Without it the step always fails
+      # and skips the image build/scan below; npm audit above still gates.
       - name: Review dependency changes
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && !github.event.repository.private
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
 
   images:
