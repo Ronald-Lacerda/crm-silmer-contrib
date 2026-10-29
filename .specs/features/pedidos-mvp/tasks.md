@@ -2152,3 +2152,29 @@ revisão.
   (309 aprovados, sete ignorados); audit sem vulnerabilidades; diff check
   limpo. Testes PostgreSQL de backfill e concorrência adicionados, execução
   real pendente no CI por ausência de PostgreSQL/Docker local.
+
+### T137: Fundação do Melhor Envio sem conta (fatia ME-0)
+
+- **Requisitos:** MEV-01, MEV-02, MEV-06–MEV-11 e MEV-14 propostos no
+  [RFC 038](../../../docs/rfc/038-frete-e-etiqueta-pelo-melhor-envio.md);
+  preserva RULES 5, 13 e 16.
+- **Arquivos:** novo workspace `modules/shipping` (domínio puro e adapters
+  HTTP, OAuth e webhook do Melhor Envio) e testes unitários com `fetch`
+  falso. Sem rota, migration, UI nem variável de ambiente nesta fatia.
+- **Aceite:** forma de entrega, CEP na conversa, tipos de embalagem e limites
+  da transportadora, estimativa de peso pela grade, validação das
+  embalagens contra a grade, rateio exato do valor declarado, corpos de
+  cotação e carrinho (um volume por item, `reminder` e `tags`), chave
+  idempotente de compra e decisão da diferença de frete. Cliente com erros
+  classificados, sem token nem dado pessoal nas mensagens; assinatura do
+  webhook em tempo constante.
+- **Gate:** `npm run validate`, `git diff --check`, commit e push. Pendente
+  com a conta: sandbox (OAuth, `document`/`company_document`, layout do PDF,
+  saldo insuficiente e assinatura do webhook).
+
+- **Evidência local (29/10/2026):** Node 24.20.0 / npm 11.19.0; `npm run
+  validate` passou (1.393 testes aprovados, cinco ignorados); diff check
+  limpo. Revisão adversarial de QA/segurança corrigida antes do commit:
+  falha de rede em compra não é reenviada (pede reconciliação), produtos
+  declarados somam o valor segurado de cada embalagem, saldo insuficiente só
+  no checkout, CPF/CNPJ com dígito verificador (CNPJ alfanumérico incluído).

@@ -18,6 +18,7 @@ COPY modules/inbox-channels/package.json modules/inbox-channels/package.json
 COPY modules/integration-reliability/package.json modules/integration-reliability/package.json
 COPY modules/n8n-integration/package.json modules/n8n-integration/package.json
 COPY modules/orders/package.json modules/orders/package.json
+COPY modules/shipping/package.json modules/shipping/package.json
 COPY modules/shared/package.json modules/shared/package.json
 RUN npm ci --ignore-scripts
 COPY apps apps
@@ -45,6 +46,7 @@ COPY modules/inbox-channels/package.json modules/inbox-channels/package.json
 COPY modules/integration-reliability/package.json modules/integration-reliability/package.json
 COPY modules/n8n-integration/package.json modules/n8n-integration/package.json
 COPY modules/orders/package.json modules/orders/package.json
+COPY modules/shipping/package.json modules/shipping/package.json
 COPY modules/shared/package.json modules/shared/package.json
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
