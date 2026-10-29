@@ -586,3 +586,42 @@ QR antes do resultado.
 A correção da renovação do QR não comprova recuperação da autenticação,
 estabilidade ou entrega. Confirmar `WORKING` e identidade esperada antes de
 testar entrada e resposta novas, uma vez, sem replay dos comandos anteriores.
+
+### Discriminante oficial e perfil limpo em 29/10/2026
+
+O proprietário confirmou que a mesma linha conectou no WhatsApp Web oficial
+em janela anônima. Isso confirma aquela autenticação e concentra a investigação
+no gateway/ambiente; não prova corrupção do perfil nem exclui rede ou diferenças
+do navegador remoto.
+
+Foi executado um teste reversível de perfil limpo, na mesma sessão `default`
+e imagem corrigida. A API estava em `SCAN_QR_CODE`, sem identidade, antes da
+parada; `stop` retornou `201` e o estado foi confirmado como `STOPPED`.
+A ausência do Chromium usando o caminho exato foi verificada por `/proc`.
+Somente `/app/.sessions/webjs/default/session-default` foi renomeado para
+`/app/.sessions/.silmer-recovery/20261029-clean-profile/session-default-original`.
+O destino exclusivo tem permissão `0700`, o perfil anterior e o tar permanecem
+preservados, e o hash de `.waha.session.config.json` permaneceu igual. O banco
+global, configuração da sessão, mídia, volumes e workflow não foram alterados.
+Não houve `logout`, exclusão, cópia de credenciais do navegador oficial ou replay.
+
+O início da sessão retornou `201`; um QR novo foi obtido pelo utilitário privado.
+A tentativa humana com esse perfil está pendente. O rollback exige parar a
+sessão, confirmar o encerramento do Chromium, preservar o perfil candidato em
+outro destino privado e devolver o original ao caminho exato, sem mesclar
+arquivos nem excluir qualquer uma das cópias.
+
+A consulta HTTPS ao WhatsApp Web retornou `200`, com diferença arredondada de
+zero segundos entre relógio local e cabeçalho Date. Esse teste não avalia o
+canal WebSocket. A [documentação de sessão do WAHA](https://waha.devlike.pro/docs/how-to/sessions/#get-qr)
+informa 60 segundos para o primeiro QR e 20 para os seguintes; artefatos
+estáticos podem expirar durante a apresentação.
+
+Para retirar esse atraso da tentativa, foi iniciada uma exibição temporária
+no console privado existente do gateway. O utilitário lê o QR atual do DOM do
+navegador já aberto por Puppeteer, renderiza com a dependência `qrcode` já
+instalada e atualiza somente quando o valor muda. Não cria endpoint, não envia
+QR a outro serviço, não imprime chave de API e não inicia outro consumidor.
+A conexão de diagnóstico é destacada ao terminar; não fecha o navegador WAHA.
+O QR e sua captura continuam privados, fora do Git. A exibição por si só não
+comprova validade no celular, autenticação ou recuperação da Inbox.
