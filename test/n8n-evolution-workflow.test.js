@@ -388,6 +388,73 @@ test('MSG-02: image/audio/video/document metadata keeps provider ID and drops ra
   }
 });
 
+test('EVOL-01/IMG-04: lookup JSON bodies survive n8n template boundaries before JavaScript evaluation', () => {
+  // Tournament's ExpressionSplitter terminates code at the first unescaped
+  // double close brace; unlike our general VM helper, it does not balance JS
+  // object braces. These generated bodies contain no escapes or mixed text.
+  // https://github.com/n8n-io/n8n/blob/master/packages/%40n8n/tournament/src/ExpressionSplitter.ts
+  /** @param {string} value */
+  function templateBody(value) {
+    assert.ok(value.startsWith('={{'));
+    const end = value.indexOf('}}', 3);
+    assert.equal(end, value.length - 2, 'template must close only at its end');
+    return value.slice(3, end);
+  }
+  const mediaBody = nodes.get('WhatsApp - Consultar mídia (MVP)').parameters
+    .jsonBody;
+  const identityBody = nodes.get('Evolution - Consultar identidade (MVP)')
+    .parameters.jsonBody;
+  const context = {
+    id: 'SYNTHETIC_LID_MESSAGE',
+    chat: '123456@lid',
+  };
+  /** @param {string} name */
+  const upstream = (name) => {
+    assert.equal(name, 'Normalizar evento WhatsApp (MVP)');
+    return { item: { json: { media_id: 'SYNTHETIC_MEDIA' } } };
+  };
+  const persisted = persistedImageWorkflow().result;
+  const clonedBody = persisted.nodes.find(
+    (/** @type {any} */ node) =>
+      node.name === 'Inbox - Imagem recebida - Consultar URL',
+  ).parameters.jsonBody;
+  assert.equal(clonedBody, mediaBody);
+  for (const body of [mediaBody, clonedBody]) {
+    const media = new Function('$json', '$', `return ${templateBody(body)};`)(
+      context,
+      upstream,
+    );
+    assert.deepEqual(media, {
+      message: { key: { id: 'SYNTHETIC_MEDIA' } },
+      convertToMp4: false,
+    });
+  }
+  const identity = new Function(
+    '$json',
+    '$',
+    `return ${templateBody(identityBody)};`,
+  )(context, upstream);
+  assert.deepEqual(identity, {
+    where: { key: { id: context.id, remoteJid: context.chat } },
+    offset: 2,
+    page: 1,
+  });
+  for (const broken of [
+    "={{ {message:{key:{id:$('Normalizar evento WhatsApp (MVP)').item.json.media_id}},convertToMp4:false} }}",
+    '={{ {where:{key:{id:$json.id,remoteJid:$json.chat}},offset:2,page:1} }}',
+  ]) {
+    assert.throws(
+      () => templateBody(broken),
+      /template must close only at its end/u,
+    );
+    const truncated = broken.slice(3, broken.indexOf('}}', 3));
+    assert.throws(
+      () => new Function('$json', '$', `return (${truncated});`),
+      SyntaxError,
+    );
+  }
+});
+
 test('MSG-02: download by authenticated stored key; no remote URL or embedded key accepted', async () => {
   const query = nodes.get('WhatsApp - Consultar mídia (MVP)');
   assert.equal(query.parameters.method, 'POST');

@@ -106,6 +106,58 @@ como documento, após scanner e dentro da retenção. Arquivo indisponível é
 sinalizado na Inbox. Não implica recuperar bytes expirados ou renderizar todo
 formato arbitrário como imagem.
 
+## INBOX-IMG-EVOL-02 — correção publicada em 29/10/2026
+
+O corpo JSON da consulta de mídia Evolution continha `}}` dentro da
+expressão. O parser do n8n encerrava o trecho nesse ponto e recusava o
+parâmetro com `invalid syntax`, antes da chamada HTTP. O teste anterior
+avaliava o JavaScript removendo somente os delimitadores externos e não
+detectava esse truncamento. A consulta de identidade apresentava o mesmo
+defeito.
+
+O gerador agora usa objetos entre parênteses e espaços entre fechamentos
+internos. O principal publicado recebeu a correção em três `jsonBody`:
+consulta de mídia da IA, consulta da Inbox e resolução de identidade.
+A versão `4581279c-3960-4ee9-af83-9923bc360727` foi publicada como
+**INBOX-IMG-EVOL-02 · Corrigir sintaxe de mídia**. A leitura do export
+confirmou `active=true`, revisão atual igual à publicada e os 110 nós.
+
+Gate final `npm run validate` aprovado: 1.426 testes, 1.421 aprovados,
+cinco skips, zero falhas, tipos, lint e build. A regressão cobre os dois
+corpos antigos inválidos e os três corpos gerados com a fronteira do parser.
+
+A comparação preservou IDs de nós, credenciais, conexões e settings.
+O editor omitiu defaults explícitos (`json`, `runOnceForAllItems` e
+`disabled=false`) e alinhou coordenadas à grade. A comparação normalizada
+confirmou somente os três corpos como delta funcional; a ordem `(y,x)` dos
+destinos de todos os fanouts permaneceu igual. A versão publicada anterior
+`48c1bc53-a57c-4d08-8550-04df116a49dd` continua disponível para rollback.
+
+Um workflow manual isolado, inativo e sem nós de IA ou envio reproduziu
+o erro no HTTP original. Com somente o corpo corrigido, passou por download,
+decodificação, tamanho, hash, multipart e upload, com replay de uma imagem
+já recuperada. Dados de execução manual/sucesso/erro não foram persistidos.
+O diagnóstico permanece inativo; as cópias temporárias de credenciais
+decriptadas foram removidas. Nenhuma credencial do serviço foi alterada.
+
+Recuperação pontual autorizada: dez imagens em duas conversas (quatro e
+seis) foram vinculadas às mensagens originais pelo endpoint de anexos,
+com scanner, hash, retenção original e idempotência. As dez imagens foram
+observadas carregadas na Inbox. Quatro originais foram enviados pelo botão
+existente de arquivos ao pedido 21-CRM; a interface confirmou **4 de 5**, e
+a leitura dos quatro objetos RustFS confirmou existência, tamanho e SHA256.
+Não houve reexecução de IA, confirmação comercial ou envio de WhatsApp.
+
+Oito imagens em duas outras conversas permanecem fora dessa recuperação:
+a revisão automática exigiu autorização específica adicional. O teste de
+POST sem autenticação ao webhook também foi recusado pela revisão automática;
+a verificação de publicação usou somente leitura. Não declarar um novo
+evento de canal homologado com o replay isolado. A próxima imagem recebida
+deve ser observada para concluir esse gate. Não houve deploy do CRM nesta
+operação: o atalho novo da imagem para o pedido ainda não estava implantado
+(entrou depois em INBOX-IMG-RELEASE-03, acima); o upload
+existente foi o controle usado na comprovação operacional.
+
 INBOX-IMG-01: INBOX-2/3, INB-01..05, MSG-01/02 e PRV-03.
 Critérios em [spec](../../.specs/features/inbound-media-inbox/spec.md).
 

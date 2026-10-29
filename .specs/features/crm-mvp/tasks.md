@@ -133,6 +133,26 @@ INBOX-AUDIO-01, INB-01, MSG-01/02 e PRV-03.
 Implantação, limites e evidências no
 [runbook de áudio](../../../docs/runbooks/inbound-audio-inbox.md).
 
+## INBOX-IMG-EVOL-02 — sintaxe da consulta de mídia (29/10/2026)
+
+Requisitos IMG-01/03/04, EVOL-01D, INB-01 e MSG-01/02.
+
+- [x] Reproduzir `invalid syntax` no HTTP do ramo real do n8n, isolado de IA/envios.
+- [x] Corrigir os dois corpos no gerador e o clone da Inbox, com regressão
+      da fronteira dos delimitadores; download até upload observado no n8n real.
+- [x] Publicar revisão `4581279c-3960-4ee9-af83-9923bc360727`, conferindo
+      três deltas funcionais, credenciais/conexões/settings e ordem dos fanouts.
+- [x] Gate final: tipos, lint, 1.421 testes aprovados, cinco skips, zero
+      falhas, build e `git diff --check`.
+- [x] Recuperar dez imagens autorizadas e conferir renderização; comprovar
+      quatro uploads ao pedido 21-CRM com leitura e hash dos objetos RustFS.
+- [ ] Recuperar oito imagens em duas outras conversas após autorização
+      específica exigida pela revisão automática.
+- [ ] Observar novo evento de imagem do canal após a publicação; replay
+      isolado e histórico recuperado não substituem essa homologação.
+
+Evidência e limites no [runbook](../../../docs/runbooks/inbound-images-inbox.md).
+
 ## EVOL-01 — ponte Evolution/Baileys e limpeza do n8n
 
 Autorizada em 29/10/2026 na [ADR 050](../../../docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md),

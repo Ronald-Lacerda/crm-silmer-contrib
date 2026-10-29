@@ -522,8 +522,10 @@ export function createEvolutionWorkflow(source, options) {
     sendBody: true,
     contentType: 'json',
     specifyBody: 'json',
+    // n8n closes a template at the first unescaped }}; adjacent object
+    // braces would truncate the expression before offset/page.
     jsonBody:
-      '={{ {where:{key:{id:$json.id,remoteJid:$json.chat}},offset:2,page:1} }}',
+      '={{ ({ where: { key: { id: $json.id, remoteJid: $json.chat } }, offset: 2, page: 1 }) }}',
   };
   find(CONVERT).parameters.jsCode =
     `const convert=${convertEvolutionEvent.toString()};\nconst input=$('${VALIDATE}').item.json;return {json:convert(input,input.needs_lid?$json:null,${configured})};`;
@@ -560,7 +562,7 @@ export function createEvolutionWorkflow(source, options) {
     sendBody: true,
     contentType: 'json',
     specifyBody: 'json',
-    jsonBody: `={{ {message:{key:{id:$('${NORMALIZE}').item.json.media_id}},convertToMp4:false} }}`,
+    jsonBody: `={{ ({ message: { key: { id: $('${NORMALIZE}').item.json.media_id } }, convertToMp4: false }) }}`,
     options: {
       timeout: 30000,
       redirect: { redirect: { followRedirects: false } },
