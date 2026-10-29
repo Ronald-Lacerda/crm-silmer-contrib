@@ -150,6 +150,10 @@ pedido pago da loja (seção [Pedido pago da loja](#pedido-pago-da-loja-adr-028)
    recebe uma mídia por streaming, valida tamanho, hash, MIME e malware e só a
    vincula depois da quarentena. O workflow ainda não envia a mídia por este
    endpoint: a IA a lê direto da Meta ou do chat (ADR 026).
+   A correção INBOX-IMG-01 prepara um ramo de persistência para a implantação
+   temporária WAHA, sem substituir esse snapshot Meta. Aplicação e recuperação
+   dos anexos anteriores seguem o
+   [runbook de imagens recebidas](../../runbooks/inbound-images-inbox.md).
 3. `POST /api/v1/integrations/n8n/events`
    recebe reserva de envio, callbacks de entrega, handoff, abertura do Pedido
    pendente (`open_order` na reserva ou no handoff) e falha do workflow.

@@ -14,6 +14,7 @@ import {
 import { objectStorageFromEnvironment } from '@crm-silmer/orders';
 import { createApi } from './app.js';
 import { createChatMediaApiRuntime } from './chat-media-runtime.js';
+import { createInboundMediaRuntime } from './inbound-media-runtime.js';
 import { createAutomationAuthRuntime } from './automation-auth-runtime.js';
 import { createCommercialRuntime } from './commercial-runtime.js';
 import { createConversationHandoffRuntime } from './conversation-handoff-runtime.js';
@@ -50,6 +51,7 @@ import { createSafeLogger, SERVICES } from '@crm-silmer/shared';
  *   operationalAuth?: Record<string, any>,
  *   conversations?: Record<string, any>,
  *   chatMedia?: Record<string, any>,
+ *   inboundMedia?: Record<string, any>,
  *   handoffs?: Record<string, any>,
  *   n8n?: Record<string, any>,
  *   operations?: Record<string, any>,
@@ -225,6 +227,16 @@ export function createServerApi(runtime = {}) {
           ),
         })
       : undefined);
+  const inboundMedia =
+    runtime.inboundMedia ??
+    (runtime.database && n8n?.mediaVolume && operations?.authorizeRead
+      ? createInboundMediaRuntime({
+          database: runtime.database,
+          access: operations,
+          mediaVolume: n8n.mediaVolume,
+          retained: chatMedia,
+        })
+      : undefined);
   const finance =
     runtime.finance ??
     (runtime.database && operations && orders
@@ -241,6 +253,7 @@ export function createServerApi(runtime = {}) {
       automationAuth,
       commercial,
       chatMedia,
+      inboundMedia,
       conversations,
       handoffs,
       logger,

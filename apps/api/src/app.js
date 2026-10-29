@@ -50,6 +50,7 @@ export const WEBHOOK_REQUESTS_PER_SECOND = 20;
  *   n8n?: any,
  *   conversations?: any,
  *   chatMedia?: any,
+ *   inboundMedia?: any,
  *   handoffs?: any,
  *   operations?: any,
  *   orders?: any,
@@ -261,6 +262,18 @@ export function createApi(options = {}, runtime = {}) {
     });
   }
 
+  if (runtime.inboundMedia || runtime.chatMedia) {
+    registerChatMediaContentRoutes(
+      api,
+      runtime.inboundMedia ?? runtime.chatMedia,
+      (/** @type {object} */ request) => {
+        const context = requests.get(request);
+        if (!context) throw new Error('Missing request context');
+        return context;
+      },
+    );
+  }
+
   if (runtime.chatMedia) {
     if (runtime.n8n?.readReservedMedia)
       registerN8nCommandMediaRoutes(
@@ -273,15 +286,6 @@ export function createApi(options = {}, runtime = {}) {
           return context;
         },
       );
-    registerChatMediaContentRoutes(
-      api,
-      runtime.chatMedia,
-      (/** @type {object} */ request) => {
-        const context = requests.get(request);
-        if (!context) throw new Error('Missing request context');
-        return context;
-      },
-    );
     registerChatMediaStatusRoutes(
       api,
       runtime.chatMedia,

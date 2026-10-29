@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 5,
+  "next_id": 8,
   "lessons": [
     {
       "id": "L-001",
@@ -76,6 +76,60 @@
       ],
       "created": "2026-10-10T16:12:05Z",
       "last_seen": "2026-10-10T16:12:05Z"
+    },
+    {
+      "id": "L-005",
+      "key": "surviving_mutant::nos testes de sha256 de midia corrompa bytes mantendo o mesmo tamanho para nao mascarar a verificacao pelo limite de comprimento",
+      "text": "Nos testes de SHA256 de mídia, corrompa bytes mantendo o mesmo tamanho para não mascarar a verificação pelo limite de comprimento.",
+      "signal": "surviving_mutant",
+      "scope": "media-integrity",
+      "status": "candidate",
+      "features": [
+        "inbound-media-inbox"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        ".specs/features/inbound-media-inbox/validation.md:1 (media-integrity)"
+      ],
+      "created": "2026-10-29T01:15:36Z",
+      "last_seen": "2026-10-29T01:15:36Z"
+    },
+    {
+      "id": "L-006",
+      "key": "ac_gap::valide o retry de midia desde unavailable ou quarantined ate available preservando retencao inspecao e uma unica copia",
+      "text": "Valide o retry de mídia desde unavailable ou quarantined até available, preservando retenção, inspeção e uma única cópia.",
+      "signal": "ac_gap",
+      "scope": "transient-media",
+      "status": "candidate",
+      "features": [
+        "inbound-media-inbox"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "MSG-02: retry transitório em validation.md (transient-media)"
+      ],
+      "created": "2026-10-29T01:15:36Z",
+      "last_seen": "2026-10-29T01:15:36Z"
+    },
+    {
+      "id": "L-007",
+      "key": "ac_gap::na midia recebida serialize descoberta scan e vinculo por mensagem e teste replays concorrentes a fila de arquivos sozinha nao protege o estado persistido",
+      "text": "Na mídia recebida, serialize descoberta, scan e vínculo por mensagem e teste replays concorrentes; a fila de arquivos sozinha não protege o estado persistido.",
+      "signal": "ac_gap",
+      "scope": "transient-media",
+      "status": "candidate",
+      "features": [
+        "inbound-media-inbox"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "MSG-01: concorrencia comprovada em .specs/features/inbound-media-inbox/validation.md (transient-media)"
+      ],
+      "created": "2026-10-29T01:35:27Z",
+      "last_seen": "2026-10-29T01:35:27Z"
     }
   ]
 }

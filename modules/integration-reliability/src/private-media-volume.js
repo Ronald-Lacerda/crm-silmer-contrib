@@ -102,6 +102,20 @@ export class PrivateMediaVolume {
    * @param {{mediaId: string, bytes: Buffer|Uint8Array|AsyncIterable<Uint8Array>, declaredMimeType?: string|null, expectedSha256?: string|null}} input
    */
   async store(input) {
+    return this.#serialize(() => this.#storeSerial(input));
+  }
+
+  /**
+   * Rechecks an existing quarantined copy without allocating storage or quota.
+   * The caller must first verify canonical binding, retryable state and TTL.
+   * @param {{mediaId: string, storageKey: string, expectedSha256: string, expectedSizeBytes: number, declaredMimeType: string}} input
+   */
+  async revalidate(input) {
+    return this.#serialize(() => this.#revalidateSerial(input));
+  }
+
+  /** @template T @param {() => Promise<T>} work */
+  async #serialize(work) {
     const previous = this.#tail;
     /** @type {() => void} */
     let release = () => {};
@@ -110,9 +124,126 @@ export class PrivateMediaVolume {
     });
     await previous;
     try {
-      return await this.#storeSerial(input);
+      return await work();
     } finally {
       release();
+    }
+  }
+
+  /** @param {{mediaId: string, storageKey: string, expectedSha256: string, expectedSizeBytes: number, declaredMimeType: string}} input */
+  async #revalidateSerial(input) {
+    const mediaId = boundedString(input.mediaId, 'mediaId', 128);
+    const declared = boundedString(
+      input.declaredMimeType,
+      'declaredMimeType',
+      255,
+    );
+    const expected = sha256Digest(input.expectedSha256, 'expectedSha256');
+    positiveInteger(input.expectedSizeBytes, 'expectedSizeBytes');
+    const limit = Math.min(
+      this.#maxFileBytes,
+      (declared.startsWith('image/') ? 5 : 16) * 1024 * 1024,
+    );
+    if (input.expectedSizeBytes > limit) throw new MediaQuotaExceededError();
+    const now = validDate(this.#now(), 'now');
+    const path = this.#storagePath(input.storageKey);
+    const common = {
+      mediaId,
+      storageKey: input.storageKey,
+      sizeBytes: input.expectedSizeBytes,
+      contentSha256: expected,
+      declaredMimeType: declared,
+      detectedMimeType: declared,
+      now,
+    };
+    try {
+      const file = await open(path, 'r');
+      let contentSha256;
+      try {
+        const metadata = await file.stat();
+        if (!metadata.isFile() || metadata.size !== input.expectedSizeBytes)
+          throw new MediaHashMismatchError();
+        const digest = createHash('sha256');
+        let size = 0;
+        for await (const chunk of file.createReadStream({ autoClose: false })) {
+          size += chunk.length;
+          if (size > input.expectedSizeBytes)
+            throw new MediaHashMismatchError();
+          digest.update(chunk);
+        }
+        contentSha256 = digest.digest('hex');
+      } finally {
+        await file.close();
+      }
+      if (contentSha256 !== expected) throw new MediaHashMismatchError();
+      const scan = await this.#scanner.scan(path);
+      const detectedMimeType = boundedString(
+        scan?.detectedMimeType,
+        'detectedMimeType',
+        255,
+      );
+      const signatureUpdatedAt = validDate(
+        scan?.signatureUpdatedAt,
+        'signatureUpdatedAt',
+      );
+      common.detectedMimeType = detectedMimeType;
+      if (
+        !scan.clean ||
+        !this.#allowedMimeTypes.has(detectedMimeType) ||
+        detectedMimeType !== declared
+      ) {
+        await rm(path, { force: true });
+        await this.#repository.markRejected({
+          ...common,
+          reason: scan.clean ? 'invalid_type' : 'infected',
+        });
+        return Object.freeze({
+          availabilityStatus: 'rejected',
+          contentSha256,
+          sizeBytes: common.sizeBytes,
+          storageKey: null,
+        });
+      }
+      if (
+        now.getTime() - signatureUpdatedAt.getTime() >
+        MAX_SCANNER_SIGNATURE_AGE_MS
+      ) {
+        await this.#repository.markQuarantined({
+          ...common,
+          reason: 'stale_signatures',
+        });
+        return Object.freeze({
+          availabilityStatus: 'quarantined',
+          contentSha256,
+          sizeBytes: common.sizeBytes,
+          storageKey: input.storageKey,
+        });
+      }
+      await this.#repository.markAvailable(common);
+      return Object.freeze({
+        availabilityStatus: 'available',
+        contentSha256,
+        sizeBytes: common.sizeBytes,
+        storageKey: input.storageKey,
+      });
+    } catch (error) {
+      if (error instanceof MediaHashMismatchError) {
+        await rm(path, { force: true });
+        await this.#repository.markRejected({
+          ...common,
+          reason: 'hash_mismatch',
+        });
+      } else {
+        await this.#repository.markUnavailable({
+          mediaId,
+          now,
+          reason:
+            /** @type {NodeJS.ErrnoException} */ (error).code === 'ENOENT'
+              ? 'lost'
+              : 'storage_or_scan_failed',
+        });
+      }
+      throw error;
     }
   }
 

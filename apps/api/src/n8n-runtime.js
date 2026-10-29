@@ -87,9 +87,16 @@ export function createN8nApiRuntime(database, options = {}) {
     envelopeKey,
     messageEnvelopeKey,
   });
+  // The approved pilot has one API process. Keep state discovery, storage and
+  // binding in one per-message critical section; the volume queue alone starts
+  // too late to prevent two retries from acting on the same obsolete state.
+  const attachmentWrites = /** @type {Map<string, Promise<void>>} */ (
+    new Map()
+  );
 
   return Object.freeze({
     commandOutbox,
+    mediaVolume,
     receiveInbound: service.receiveInbound,
     recordEvent: service.recordEvent,
     readSiteMessages: (/** @type {{sessionId: string}} */ input) =>
@@ -129,50 +136,104 @@ export function createN8nApiRuntime(database, options = {}) {
     },
     /** @param {any} input */
     async storeAttachment(input) {
-      const media = await prepareTransientMedia(database, input, clock());
-      if (media.availabilityStatus === 'available') {
-        if (
-          media.contentSha256 !== input.contentSha256 ||
-          Number(media.sizeBytes) !== input.size
-        ) {
-          throw new N8nMediaIngressError(409, 'IDEMPOTENCY_CONFLICT');
-        }
-      } else if (media.availabilityStatus !== 'metadata_only') {
-        throw new N8nMediaIngressError(409, 'ATTACHMENT_NOT_RETRYABLE');
-      } else {
-        let stored;
-        try {
-          stored = await mediaVolume.store({
-            bytes: input.stream,
-            declaredMimeType: input.mimeType,
-            expectedSha256: input.contentSha256,
-            mediaId: media.id,
+      return serializeAttachment(
+        attachmentWrites,
+        JSON.stringify([input.conversationId, input.externalId]),
+        async () => {
+          const media = await prepareTransientMedia(database, input, clock());
+          if (media.availabilityStatus === 'available') {
+            if (
+              media.contentSha256 !== input.contentSha256 ||
+              Number(media.sizeBytes) !== input.size
+            ) {
+              throw new N8nMediaIngressError(409, 'IDEMPOTENCY_CONFLICT');
+            }
+          } else if (!isRetryableAttachment(media)) {
+            throw new N8nMediaIngressError(409, 'ATTACHMENT_NOT_RETRYABLE');
+          } else {
+            let stored;
+            try {
+              if (media.storageKey) {
+                if (
+                  media.contentSha256 !== input.contentSha256 ||
+                  Number(media.sizeBytes) !== input.size ||
+                  media.detectedMimeType !== input.mimeType
+                )
+                  throw new N8nMediaIngressError(409, 'IDEMPOTENCY_CONFLICT');
+                stored = await mediaVolume.revalidate({
+                  mediaId: media.id,
+                  storageKey: media.storageKey,
+                  expectedSha256: input.contentSha256,
+                  expectedSizeBytes: input.size,
+                  declaredMimeType: input.mimeType,
+                });
+              } else {
+                stored = await mediaVolume.store({
+                  bytes: input.stream,
+                  declaredMimeType: input.mimeType,
+                  expectedSha256: input.contentSha256,
+                  mediaId: media.id,
+                });
+              }
+            } catch (error) {
+              if (error instanceof MediaHashMismatchError) {
+                throw new N8nMediaIngressError(400, 'CONTENT_SHA256_MISMATCH');
+              }
+              if (error instanceof MediaQuotaExceededError) {
+                throw new N8nMediaIngressError(413, 'MEDIA_QUOTA_EXCEEDED');
+              }
+              if (error instanceof MediaVolumeUnavailableError) {
+                throw new N8nMediaIngressError(503, 'MEDIA_VOLUME_UNAVAILABLE');
+              }
+              throw error;
+            }
+            if (stored.availabilityStatus === 'quarantined') {
+              throw new N8nMediaIngressError(503, 'MEDIA_QUARANTINED');
+            }
+            if (stored.availabilityStatus !== 'available') {
+              throw new N8nMediaIngressError(415, 'UNSUPPORTED_MEDIA_TYPE');
+            }
+          }
+          return service.storeAttachment({
+            ...input,
+            transientMediaId: media.id,
           });
-        } catch (error) {
-          if (error instanceof MediaHashMismatchError) {
-            throw new N8nMediaIngressError(400, 'CONTENT_SHA256_MISMATCH');
-          }
-          if (error instanceof MediaQuotaExceededError) {
-            throw new N8nMediaIngressError(413, 'MEDIA_QUOTA_EXCEEDED');
-          }
-          if (error instanceof MediaVolumeUnavailableError) {
-            throw new N8nMediaIngressError(503, 'MEDIA_VOLUME_UNAVAILABLE');
-          }
-          throw error;
-        }
-        if (stored.availabilityStatus === 'quarantined') {
-          throw new N8nMediaIngressError(503, 'MEDIA_QUARANTINED');
-        }
-        if (stored.availabilityStatus !== 'available') {
-          throw new N8nMediaIngressError(415, 'UNSUPPORTED_MEDIA_TYPE');
-        }
-      }
-      return service.storeAttachment({
-        ...input,
-        transientMediaId: media.id,
-      });
+        },
+      );
     },
   });
+}
+
+/** @template T @param {Map<string, Promise<void>>} writes @param {string} key @param {() => Promise<T>} work */
+async function serializeAttachment(writes, key, work) {
+  const previous = writes.get(key) ?? Promise.resolve();
+  let release = /** @type {() => void} */ (() => {});
+  const current = new Promise((resolveCurrent) => {
+    release = () => resolveCurrent(undefined);
+  });
+  writes.set(key, current);
+  await previous;
+  try {
+    return await work();
+  } finally {
+    release();
+    if (writes.get(key) === current) writes.delete(key);
+  }
+}
+
+/** @param {any} media */
+function isRetryableAttachment(media) {
+  return (
+    media.availabilityStatus === 'metadata_only' ||
+    (media.availabilityStatus === 'quarantined' &&
+      media.validationStatus === 'stale_signatures') ||
+    (media.availabilityStatus === 'unavailable' &&
+      [
+        'storage_or_scan_failed',
+        'quota_exceeded',
+        'volume_unavailable',
+      ].includes(media.unavailableReason))
+  );
 }
 
 /** @param {any} database @param {any} input @param {Date} now */
@@ -180,7 +241,8 @@ async function prepareTransientMedia(database, input, now) {
   return database.transaction(async (/** @type {any} */ transaction) => {
     const message = (
       await transaction.query(
-        `SELECT message.id, message.message_type, conversation.provider,
+        `SELECT message.id, message.message_type, message.created_at,
+                conversation.terminal_at, conversation.provider,
                 conversation.provider_account_id
          FROM crm.messages AS message
          JOIN crm.conversations AS conversation
@@ -195,6 +257,15 @@ async function prepareTransientMedia(database, input, now) {
       !['audio', 'document', 'image', 'video'].includes(message.message_type)
     ) {
       throw new N8nMediaIngressError(422, 'MESSAGE_DOES_NOT_ACCEPT_ATTACHMENT');
+    }
+    const receivedAt = new Date(message.created_at);
+    const expiresAt = new Date(receivedAt.getTime() + MEDIA_TTL_MS);
+    if (
+      message.terminal_at ||
+      !Number.isFinite(receivedAt.getTime()) ||
+      expiresAt <= now
+    ) {
+      throw new N8nMediaIngressError(410, 'ATTACHMENT_EXPIRED');
     }
     const fingerprint = createHash('sha256')
       .update(
@@ -217,7 +288,8 @@ async function prepareTransientMedia(database, input, now) {
        ON CONFLICT ON CONSTRAINT transient_media_external_identity_key
        DO NOTHING
        RETURNING id, availability_status, content_sha256, size_bytes,
-                 metadata_fingerprint`,
+                 metadata_fingerprint, storage_key, detected_mime_type,
+                 validation_status, unavailable_reason`,
       [
         mediaId,
         message.provider,
@@ -227,8 +299,8 @@ async function prepareTransientMedia(database, input, now) {
         input.mimeType,
         input.contentSha256,
         fingerprint,
-        now,
-        new Date(now.getTime() + MEDIA_TTL_MS),
+        receivedAt,
+        expiresAt,
       ],
     );
     const selected =
@@ -236,7 +308,8 @@ async function prepareTransientMedia(database, input, now) {
       (
         await transaction.query(
           `SELECT id, availability_status, content_sha256, size_bytes,
-                  metadata_fingerprint
+                  metadata_fingerprint, storage_key, detected_mime_type,
+                  validation_status, unavailable_reason
            FROM crm.transient_media
            WHERE provider = $1 AND provider_account_id = $2
              AND external_media_id = $3
@@ -250,6 +323,10 @@ async function prepareTransientMedia(database, input, now) {
     return Object.freeze({
       availabilityStatus: selected.availability_status,
       contentSha256: selected.content_sha256,
+      storageKey: selected.storage_key,
+      detectedMimeType: selected.detected_mime_type,
+      validationStatus: selected.validation_status,
+      unavailableReason: selected.unavailable_reason,
       id: selected.id,
       sizeBytes: selected.size_bytes,
     });

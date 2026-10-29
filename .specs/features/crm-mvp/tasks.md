@@ -339,3 +339,17 @@ Decisão ADR 044/RFC 032. Evidência em docs/integrations/n8n/auditoria-vendedor
 - [ ] Publicar no n8n com backup e verificação, após autorização do proprietário.
 
 Decisão ADR 049/RFC 037. Teste: `test/n8n-vendedor-aprendizados.test.js`.
+
+## Correção de imagens recebidas — 28/10/2026
+
+INBOX-IMG-01 (INBOX-2/3, INB-01..05, MSG-01/02, PRV-03): projetar e servir
+anexos transitórios na Inbox e preparar patch offline do workflow WAHA atual,
+preservando o atendimento existente. Critérios em
+[spec](../inbound-media-inbox/spec.md), aplicação e recuperação pontual no
+[runbook](../../../docs/runbooks/inbound-images-inbox.md).
+
+Estado: implementação, gates e revisão independente aprovados no escopo
+local; relatório em `../inbound-media-inbox/validation.md`. Nenhuma aplicação,
+ativação, recuperação de dados ou alteração
+operacional em produção concluída. Leitura do ambiente confirmou duas imagens
+sem anexos e recursos do scanner indisponíveis para a API; o worker os possui.

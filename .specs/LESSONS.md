@@ -38,6 +38,24 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: .specs/features/inbox-media-rustfs/validation-clamd.md:48 (runtime-image)
 - last seen: 2026-10-10T16:12:05Z
 
+### L-005 - Nos testes de SHA256 de mídia, corrompa bytes mantendo o mesmo tamanho para não mascarar a verificação pelo limite de comprimento.
+- signal: `surviving_mutant` · recurrence: 1 feature(s) · scope: `media-integrity` · harmful: 0
+- features: inbound-media-inbox
+- evidence: .specs/features/inbound-media-inbox/validation.md:1 (media-integrity)
+- last seen: 2026-10-29T01:15:36Z
+
+### L-006 - Valide o retry de mídia desde unavailable ou quarantined até available, preservando retenção, inspeção e uma única cópia.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `transient-media` · harmful: 0
+- features: inbound-media-inbox
+- evidence: MSG-02: retry transitório em validation.md (transient-media)
+- last seen: 2026-10-29T01:15:36Z
+
+### L-007 - Na mídia recebida, serialize descoberta, scan e vínculo por mensagem e teste replays concorrentes; a fila de arquivos sozinha não protege o estado persistido.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `transient-media` · harmful: 0
+- features: inbound-media-inbox
+- evidence: MSG-01: concorrencia comprovada em .specs/features/inbound-media-inbox/validation.md (transient-media)
+- last seen: 2026-10-29T01:35:27Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

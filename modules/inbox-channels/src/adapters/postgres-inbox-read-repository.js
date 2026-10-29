@@ -2,16 +2,35 @@ import { decryptSiteContactClaim } from '@crm-silmer/contacts';
 import { decryptContactIdentityEnvelope } from '@crm-silmer/contacts/identity-envelope';
 import { decryptInboxMessageEnvelope } from './postgres-inbox-repository.js';
 
-const MEDIA_PROJECTION = `media.id media_id, media.kind media_kind,
-  media.state media_state, media.detected_mime_type media_mime_type,
-  media.size_bytes media_size_bytes, media.duration_ms media_duration_ms,
-  media.validation_status media_validation_status,
+const MEDIA_PROJECTION = `COALESCE(media.id::text, inbound_media.id) media_id,
+  COALESCE(media.kind, inbound_media.media_type) media_kind,
+  CASE WHEN media.id IS NOT NULL THEN media.state
+    WHEN inbound_media.availability_status='lost' THEN 'lost'
+    WHEN inbound_media.availability_status='available'
+      AND inbound_media.validation_status='clean'
+      AND inbound_media.expires_at > now()
+      AND inbound_media.terminal_at IS NULL THEN 'attached'
+    ELSE 'unavailable' END media_state,
+  COALESCE(media.detected_mime_type, inbound_media.detected_mime_type) media_mime_type,
+  COALESCE(media.size_bytes, inbound_media.size_bytes) media_size_bytes,
+  media.duration_ms media_duration_ms,
+  COALESCE(media.validation_status, inbound_media.validation_status) media_validation_status,
   reservation.workflow_version reserved_workflow_version`;
 // Persisted binding, never a payload URL or a storage request. One original
 // reservation is authoritative; contradictory provenance fails closed.
 const MEDIA_JOIN = `LEFT JOIN crm.chat_media media
   ON media.message_id=message.id AND media.conversation_id=message.conversation_id
     AND media.kind=message.message_type
+  LEFT JOIN LATERAL (
+    SELECT transient.*, inbound_conversation.terminal_at
+    FROM crm.attachments attachment
+    JOIN crm.transient_media transient ON transient.id=attachment.transient_media_id
+    JOIN crm.conversations inbound_conversation ON inbound_conversation.id=message.conversation_id
+    WHERE attachment.message_id=message.id AND message.direction='inbound'
+      AND transient.media_type=message.message_type
+      AND message.message_type IN ('image','audio','video')
+    ORDER BY attachment.created_at DESC, transient.id DESC LIMIT 1
+  ) inbound_media ON media.id IS NULL
   LEFT JOIN LATERAL (
     SELECT CASE WHEN count(*)=1 THEN max(workflow_version) END workflow_version
     FROM crm.n8n_events

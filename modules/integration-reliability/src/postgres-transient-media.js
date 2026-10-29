@@ -355,7 +355,12 @@ export class PostgresTransientMediaRepository {
            storage_key = $4, size_bytes = $5, content_sha256 = $6,
            detected_mime_type = $7, stored_at = $8,
            unavailable_reason = NULL
-       WHERE id = $1 AND availability_status IN ('metadata_only', 'quarantined')
+       WHERE id = $1 AND (
+         availability_status IN ('metadata_only', 'quarantined')
+         OR (availability_status = 'unavailable' AND unavailable_reason IN (
+           'storage_or_scan_failed', 'quota_exceeded', 'volume_unavailable'
+         ))
+       )
        RETURNING id`,
       [
         boundedString(input.mediaId, 'mediaId', 128),
