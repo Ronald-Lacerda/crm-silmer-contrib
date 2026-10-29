@@ -54,6 +54,41 @@ export function decodeInboxImage(response, source) {
   };
 }
 
+/** Preserve n8n binary metadata while bounding a raster document like an image.
+ * @param {any} source @param {any} file @param {Buffer} bytes
+ */
+export function measureInboxImage(source, file, bytes) {
+  const formats = /** @type {Record<string,string>} */ ({
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+  });
+  const mime = String(source.media_mime_type ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  const ext = formats[mime];
+  if (
+    !file ||
+    !ext ||
+    !bytes.length ||
+    bytes.length > 5 * 1024 * 1024 ||
+    String(file.mimeType ?? '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase() !== mime
+  )
+    throw new Error('INBOUND_IMAGE_INVALID');
+  const filename = 'imagem.' + ext;
+  return {
+    json: { mime_type: mime, filename },
+    binary: {
+      data: { ...file, mimeType: mime, fileName: filename, fileExtension: ext },
+    },
+  };
+}
+
 /** Narrow, offline patch for the existing Evolution Inbox branch.
  * Commercial routing, canonical message types, credentials and IDs stay intact.
  * @param {Record<string, any>} source
@@ -140,13 +175,7 @@ export function patchEvolutionInboundImages(source) {
   // predicate and decoder as the non-raster path instead of reverting it.
   condition[0].leftValue = `={{ (${originalFilter.slice(3, -2)}) || (() => { const n = $('Normalizar evento WhatsApp (MVP)').item.json; return n.channel === 'whatsapp' && ['image','document'].includes(n.message_type) && ['image/jpeg','image/png','image/webp','image/gif'].includes(String(n.media_mime_type ?? '').split(';')[0].trim().toLowerCase()); })() }}`;
   download.parameters.jsCode = `if (['image','document'].includes($('Normalizar evento WhatsApp (MVP)').item.json.message_type)) { const decodeInboxImage=${decodeInboxImage.toString()}; return decodeInboxImage($json,$('Normalizar evento WhatsApp (MVP)').item.json); }\n${download.parameters.jsCode}`;
-  const original = "'image/webp': 'webp'";
-  if (!measure.parameters.jsCode.includes(original))
-    throw new Error('EXPECTED_IMAGE_MEASURE');
-  measure.parameters.jsCode = measure.parameters.jsCode.replace(
-    original,
-    original + ", 'image/gif': 'gif'",
-  );
+  measure.parameters.jsCode = `if (['image','document'].includes($('Normalizar evento WhatsApp (MVP)').item.json.message_type)) { const measureInboxImage=${measureInboxImage.toString()}; return measureInboxImage($('Normalizar evento WhatsApp (MVP)').item.json,$input.item.binary?.data,await this.helpers.getBinaryDataBuffer($itemIndex,'data')); }\n${measure.parameters.jsCode}`;
   // n8n v1 schedules fanout destinations by (y,x), not array order. Persist
   // first so a later commercial/AI failure cannot prevent the Inbox upload.
   const fanout =

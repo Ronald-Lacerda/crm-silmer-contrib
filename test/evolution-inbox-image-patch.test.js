@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   decodeInboxImage,
+  measureInboxImage,
   patchEvolutionInboundImages,
 } from '../ops/n8n/patch-evolution-inbound-images.mjs';
 
@@ -250,6 +251,35 @@ test('IMG-02/04: decoder rejects URL-only, mismatched MIME, oversized/noncanonic
     assert.throws(() => decodeInboxImage(bad, source), /INBOUND_IMAGE_INVALID/);
   assert.throws(() =>
     decodeInboxImage(good, { ...source, message_type: 'text' }),
+  );
+});
+
+test('IMG-04: raster measurement validates GIF/doc bytes and keeps n8n binary data', () => {
+  const source = { message_type: 'document', media_mime_type: 'image/gif' },
+    bytes = Buffer.from('GIF89a');
+  const file = {
+    data: bytes.toString('base64'),
+    mimeType: 'image/gif',
+    id: 'filesystem-synthetic',
+  };
+  const result = measureInboxImage(source, file, bytes);
+  assert.equal(result.binary.data.id, file.id);
+  assert.equal(result.binary.data.data, file.data);
+  assert.equal(result.json.filename, 'imagem.gif');
+  assert.throws(() =>
+    measureInboxImage(source, { ...file, mimeType: 'text/html' }, bytes),
+  );
+  assert.throws(() =>
+    measureInboxImage(source, file, Buffer.alloc(5 * 1024 * 1024 + 1)),
+  );
+  assert.throws(() => measureInboxImage(source, null, bytes));
+  const original = fixture().nodes.find(
+    (/** @type {any} */ n) => n.name === prefix + 'Medir',
+  ).parameters.jsCode;
+  assert.ok(
+    patchEvolutionInboundImages(fixture())
+      .nodes.find((/** @type {any} */ n) => n.name === prefix + 'Medir')
+      .parameters.jsCode.endsWith(original),
   );
 });
 
