@@ -54,6 +54,7 @@ OPS-1 e INT-1/2. [Runbook e evidências](../../../docs/runbooks/waha-webjs.md).
 - [ ] WAHA-01D (homologação restante) — mídia, matriz de status/falhas,
       reentrega, resultado incerto e reinício/reconexão do canal ainda exigem
       evidências próprias; não declarar a matriz inteira homologada.
+- [ ] WAHA-01F — recuperar a autenticação após o incidente de 29/10; corrigir a chamada de renovação de QR incompatível, validar a imagem e comprovar nova entrada/resposta sem replay. Evidências no runbook; gerar QR/código não conclui esta tarefa.
 - [x] WAHA-01E — registrar evidências, checks e entrega atômica no Git.
 
 O transporte WAHA está publicado no ID principal preservado; candidatos

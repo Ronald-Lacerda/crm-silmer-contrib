@@ -1,0 +1,66 @@
+'use strict';
+
+// WAHA-01D / MSG-01..04 / OPS-1 / INT-1/2: one compatibility change.
+const { createHash } = require('node:crypto');
+const fs = require('node:fs');
+const { Script } = require('node:vm');
+
+const EXPECTED_SOURCE_SHA256 =
+  '2b047b691a7aca07581302daae041f8199802925447cd2bb9264fdb7de59dd5e';
+const CLIENT_PATH = '/app/node_modules/whatsapp-web.js/src/Client.js';
+const OLD_CALL = "window.require('WAWebCmd').Cmd.refreshQR();";
+const NEW_CALL = "window.require('WAWebLaunchSocketUtils').refreshQR();";
+const AUTH_CONTEXT =
+  /await exposeFunctionIfAbsent\(\s*this\.pupPage,\s*'onAuthAppStateChangedEvent',\s*async \(state\) => \{\s*if \(\s*state == 'UNPAIRED_IDLE' &&\s*!pairWithPhoneNumber\.phoneNumber\s*\) \{\s*\/\/ refresh qr code\s*await this\.pupPage\.evaluate\(\(\) => \{\s*window\.require\('WAWebCmd'\)\.Cmd\.refreshQR\(\);\s*\}\);\s*\}\s*\},\s*\);/g;
+
+/** @param {string} source */
+function sha256(source) {
+  return createHash('sha256').update(source, 'utf8').digest('hex');
+}
+
+/** @param {string} source */
+function checkSyntax(source) {
+  try {
+    new Script(source, { filename: 'Client.js' });
+  } catch {
+    throw new Error('WAHA_CLIENT_SYNTAX_INVALID');
+  }
+}
+
+// Test fixtures may supply their own digest. CLI/build never accept an override.
+/** @param {unknown} source @param {string} [expectedSha256] */
+function patchWebjsQr(source, expectedSha256 = EXPECTED_SOURCE_SHA256) {
+  if (
+    typeof source !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(expectedSha256) ||
+    sha256(source) !== expectedSha256
+  ) {
+    throw new Error('WAHA_CLIENT_SOURCE_HASH_MISMATCH');
+  }
+  if (source.split(OLD_CALL).length !== 2) {
+    throw new Error('WAHA_CLIENT_QR_CALL_COUNT_INVALID');
+  }
+  if ([...source.matchAll(AUTH_CONTEXT)].length !== 1) {
+    throw new Error('WAHA_CLIENT_AUTH_CONTEXT_INVALID');
+  }
+  checkSyntax(source);
+  const patched = source.replace(OLD_CALL, NEW_CALL);
+  checkSyntax(patched);
+  return patched;
+}
+
+function patchFile() {
+  const source = fs.readFileSync(CLIENT_PATH, 'utf8');
+  const patched = patchWebjsQr(source);
+  fs.writeFileSync(CLIENT_PATH, patched, 'utf8');
+  process.stdout.write('WAHA_WEBJS_QR_PATCH_SHA256=' + sha256(patched) + '\n');
+}
+
+module.exports = {
+  EXPECTED_SOURCE_SHA256,
+  OLD_CALL,
+  NEW_CALL,
+  patchWebjsQr,
+};
+
+if (require.main === module) patchFile();

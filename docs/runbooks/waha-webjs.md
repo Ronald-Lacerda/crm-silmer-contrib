@@ -1,6 +1,6 @@
 # WAHA com WEBJS — piloto da Inbox Silmer
 
-Atualização: 28/10/2026, America/Sao_Paulo.
+Atualização: 29/10/2026, America/Sao_Paulo.
 Decisão: [ADR 043](../adr/043-piloto-whatsapp-waha-webjs.md) e
 [RFC 031](../rfc/031-piloto-whatsapp-waha-webjs.md).
 Rastreabilidade: WAHA-01, INBOX-2/3, AGENTE-6, OPS-1, INT-1/2;
@@ -14,11 +14,12 @@ As evidências observadas estão registradas abaixo. A criação do serviço e o
 testes do adapter não comprovam sessão conectada, tráfego real, mídia homologada
 ou recuperação.
 
-Estado atual em 28/10: nova identidade confirmada em `WORKING`, transporte
-WAHA publicado no mesmo workflow principal e texto real de ida e volta
-verificado, com transferência e takeover. WAHA-01D continua aberta para os
-gates restantes do canal. O registro mais recente ao final deste
-runbook prevalece sobre os estados históricos de preparação abaixo.
+Estado atual em 29/10: canal desconectado, em `SCAN_QR_CODE`, sem identidade
+autenticada. A correção pontual da renovação do QR foi implantada e verificada,
+mas a tentativa real posterior ainda falhou. WAHA-01F permanece aberta.
+A prova de texto nos dois sentidos de 28/10 é histórica; não comprova a
+recuperação atual. O registro mais recente ao final deste runbook prevalece
+sobre os estados históricos de preparação abaixo.
 
 O número e a identidade da conta esperada ficam na configuração privada do
 ambiente. Não registrar telefone real, chave de API, QR code, código de
@@ -507,3 +508,81 @@ A conferência final das configurações de ausência e resposta automática Met
 mostrou o novo destino persistido, botão de salvar desabilitado e os dois
 canais selecionados. Não houve alteração na autorização ou na solicitação
 de análise do app.
+
+### Incidente de autenticação e correção pontual em 29/10/2026
+
+Rastreabilidade: WAHA-01F, WAHA-01D, MSG-01..04, INBOX-2/3, OPS-1 e INT-1/2.
+
+A Inbox passou a exibir `N8N_COMMAND_TIMEOUT` para novos envios humanos.
+O gateway estava em `FAILED`, inicialmente ainda com a identidade esperada.
+A retomada preservando o perfil passou a exigir autenticação. Pareamento por
+QR e por código não concluiu; gerar o artefato não comprovou conexão. Nenhum
+comando de resultado incerto foi reexecutado.
+
+A inspeção limitada do navegador interno confirmou Chrome `152.0.7977.82`,
+WhatsApp Web `2.3000.105207594`, documento carregado, `Debug.VERSION`
+disponível e Socket em `UNPAIRED`. Cache efetivo `none`, sem override de
+versão ou proxy; os contadores `oom` e `oom_kill` permaneceram zerados.
+Esses sinais não comprovam a causa original da desconexão nem bloqueio da
+conta. A mensagem de timeout após navegação continua sendo um sinal distinto.
+
+Foi confirmado um defeito de compatibilidade: a biblioteca tenta executar
+`WAWebCmd.Cmd.refreshQR`, ausente no Web carregado, enquanto
+`WAWebLaunchSocketUtils.refreshQR` existe e já é usada pela própria biblioteca
+em outra operação de pareamento. A correção altera somente essa chamada
+no ramo `UNPAIRED_IDLE`; não altera reservas, envios, autenticação do webhook,
+engine, sessão, volumes ou identidade esperada.
+
+A imagem derivada é autocontida em
+[`ops/waha/Dockerfile.inline`](../../ops/waha/Dockerfile.inline), sobre o mesmo
+digest original. O build exige o SHA256 observado do `Client.js`
+`2b047b691a7aca07581302daae041f8199802925447cd2bb9264fdb7de59dd5e`, uma única
+ocorrência no contexto esperado e sintaxe válida antes e depois. Divergência
+impede o build. O script versionado e o inline são verificados pelo mesmo teste.
+
+Antes do build, a sessão foi parada (`STOPPED`). Uma cópia do perfil foi
+validada no próprio volume privado, em
+`/app/.sessions/.silmer-recovery/20261029-before-qr-fix.tar.gz`, com arquivo
+`0600` e diretório `0700`; nenhum byte da sessão foi exportado ao repositório.
+A configuração anterior da fonte foi preservada. O rollback da imagem é
+retornar a fonte ao digest original registrado na instalação e implantar
+novamente, preservando os volumes. Restaurar o perfil é uma ação separada,
+com serviço parado e validação do alvo, sem remover a única cópia.
+
+Gate local: `npm run validate` passou com 1.411 testes aprovados, cinco
+ignorados e nenhuma falha, incluindo seis regressões da correção; build do CRM
+e `git diff --check` passaram. A máquina usou Node `24.22.1` e npm `11.19.1`,
+diferentes dos pins do projeto; a imagem candidata conserva o runtime da
+base original. O build Docker e o pareamento real têm evidências independentes.
+
+O build remoto concluiu com sucesso em 29/10 às 12:12:33 UTC. A imagem em
+execução tem ID `sha256:ad2f713ca9f2222a5fcc70ec414443c4605d4c98784cea50225881f23dc448e5`;
+o `Client.js` implantado tem SHA256
+`b660cf97f4816ed250e11590baac6344f3028e4b2a8f124ac490981f13aee44f`.
+Fonte, ambiente, mounts, recursos e política de deploy foram comparados;
+apenas a fonte da imagem mudou para o Dockerfile derivado.
+
+No navegador real, Web `2.3000.1052208262`, o callback do ramo corrigido
+executou sem a função ausente e alterou a referência do QR. Essa prova foi
+feita antes de obter o novo QR para a tentativa humana. A revisão independente
+não encontrou problemas no patch; os seis testes focados passaram novamente.
+
+A execução E2E geral terminou com 341 aprovados, sete ignorados e duas falhas
+fora dos arquivos alterados: `audio-recorder.spec.js:294` não encontrou o botão
+Gravar áudio dentro do timeout; `crm-ui.spec.js:967` usou um seletor de texto que
+resolveu em dois elementos. Não foi feita uma execução da base para atribuir
+essas falhas, portanto o gate E2E geral permanece reprovado. O audit não
+apontou vulnerabilidades altas (uma baixa e duas moderadas existentes).
+
+Estado após a tentativa humana com a imagem corrigida: o proprietário relatou
+novo erro de conexão. A API respondeu `SCAN_QR_CODE`, sem identidade, e o
+navegador permaneceu `UNPAIRED`, sem aviso de versão não suportada. O monitor
+limitado não registrou transição de estado nem falha de request nesse intervalo;
+isso não exclui falhas anteriores ou de WebSocket. A causa do pareamento ainda
+não está demonstrada. O próximo discriminante é testar a mesma linha no
+WhatsApp Web oficial em janela anônima, sem alterar o gateway nem gerar outro
+QR antes do resultado.
+
+A correção da renovação do QR não comprova recuperação da autenticação,
+estabilidade ou entrega. Confirmar `WORKING` e identidade esperada antes de
+testar entrada e resposta novas, uma vez, sem replay dos comandos anteriores.
