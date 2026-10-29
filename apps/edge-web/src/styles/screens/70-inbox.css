@@ -739,19 +739,50 @@
 /* The reply field is always in view at the bottom of the conversation. */
 .inbox-composer {
   container-type: inline-size;
+  display: flex;
   flex: none;
+  flex-direction: column;
+  min-block-size: 0;
   padding: var(--space-3) var(--space-4) var(--space-4);
   border-block-start: 1px solid var(--color-border-subtle);
 }
 
+/* MED-31: a tall attachment scrolls inside its review, leaving both the
+   conversation and the send toolbar available in the bounded workspace. */
+.inbox-composer:has(.media-composer__review) {
+  flex: 0 1 auto;
+  max-block-size: 65%;
+}
+
+.inbox-composer .audio-recorder {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
 .inbox-composer .audio-recorder .media-composer {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-2);
+  min-block-size: 0;
   padding: 0;
   background: transparent;
   border: 0;
 }
 
+.inbox-composer .media-composer__review {
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+}
+
+.inbox-composer .media-composer > [role='status'] {
+  margin: 0;
+}
+
 .inbox-composer .audio-recorder .media-composer__toolbar {
+  flex: none;
   padding-block-start: 0;
   border-block-start: 0;
 }

@@ -1,5 +1,31 @@
 # Execução INBOX-MEDIA-1
 
+## T25: regressão de altura ao anexar imagem (29/10/2026)
+
+Requisitos MED-01/25/31. O composer crescia sem limite dentro da conversa
+com altura fixa; imagem, legenda e toolbar ultrapassavam a borda inferior.
+O CSS da Inbox limita a composição a 65% do painel e permite redução quando
+o cabeçalho ocupa mais espaço. Somente a revisão tem rolagem, preservando
+histórico e ações; sem alteração de upload, autorização ou envio.
+
+Regressão integrada com PNG sintético 1200×1800 e nome longo em 1366×768,
+1090×689, 390×667 e 390×440: os quatro cenários falharam antes da correção
+por toolbar fora do painel e passaram após o patch. Conferem histórico com
+ao menos 48px, geometria sem sobreposição/overflow horizontal, controles de
+44px, legenda → anexar → gravar → enviar por teclado e remoção restaurando
+foco e altura do histórico, sem envio automático. Capturas anexadas ao
+resultado Playwright. A revisão independente confirmou a causa e a lacuna
+dos testes anteriores, que mediam apenas o composer de texto.
+
+Gates finais: `npm run validate` aprovado (1429 testes, 5 skips, build e
+checks); `npm run test:e2e -- --workers=4` aprovado (346 testes, 7 skips);
+regressão focal 4/4 após salvar capturas, com inspeção visual em 1090×689 e
+390×440; Prettier, ESLint e `git diff --check` aprovados. A execução inicial
+no sandbox bloqueou hard links temporários com EPERM; o gate completo passou
+fora dele. `npm audit --audit-level=high` aprovado, com 1 ocorrência baixa e
+2 moderadas preexistentes; nenhuma dependência alterada. Evidência local
+sintética, sem alterar os gates externos de T24.
+
 ## T32: pipeline remoto para testes internos
 
 Premissas confirmadas pelo operador: somente testes internos n8n; autorizados

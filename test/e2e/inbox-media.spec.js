@@ -559,3 +559,99 @@ test('T25/MED-31: one contextual send preserves unsent text when a draft is remo
     expect(send.x + send.width).toBeGreaterThanOrEqual(mic.x + mic.width);
   }
 });
+
+for (const viewport of [
+  { width: 1366, height: 768 },
+  { width: 1090, height: 689 },
+  { width: 390, height: 667 },
+  { width: 390, height: 440 },
+]) {
+  test(`T25/MED-01/25/31: large image keeps history and actions visible at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }, testInfo) => {
+    const state = await setup(page);
+    await page.locator('.conversation-row[aria-current="true"]').click();
+    await page.setViewportSize(viewport);
+    const thread = page.locator('.thread');
+    const originalHeight = (await thread.boundingBox())?.height ?? 0;
+    const image = await page.evaluate(() => {
+      const canvas = globalThis.document.createElement('canvas');
+      canvas.width = 1200;
+      canvas.height = 1800;
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Canvas unavailable');
+      context.fillStyle = '#345678';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/png').split(',')[1];
+    });
+    await page.getByLabel('Arquivo para anexar').setInputFiles({
+      name: `${'imagem-sintetica'.repeat(12)}.png`,
+      mimeType: 'image/png',
+      buffer: Buffer.from(image, 'base64'),
+    });
+    const send = page.getByRole('button', {
+      name: 'Enviar anexo',
+      exact: true,
+    });
+    await expect(send).toBeEnabled();
+    await expect(page.getByAltText('Prévia do anexo')).toBeVisible();
+    const caption = page.getByLabel('Legenda');
+    await caption.fill('Legenda sintética');
+    await caption.press('Tab');
+    await expect(
+      page.getByRole('button', { name: 'Anexar arquivo', exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(
+      page.getByRole('button', { name: 'Gravar áudio', exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(send).toBeFocused();
+
+    const panelBox = await page.locator('.inbox-conversation').boundingBox();
+    const threadBox = await thread.boundingBox();
+    const toolbarBox = await page
+      .locator('.media-composer__toolbar')
+      .boundingBox();
+    const reviewBox = await page
+      .locator('.media-composer__review')
+      .boundingBox();
+    const sendBox = await send.boundingBox();
+    if (!panelBox || !threadBox || !toolbarBox || !reviewBox || !sendBox)
+      throw new Error('Conversation and attachment controls must be visible');
+    expect(threadBox.height).toBeGreaterThanOrEqual(48);
+    expect(threadBox.y + threadBox.height).toBeLessThanOrEqual(reviewBox.y);
+    expect(reviewBox.y + reviewBox.height).toBeLessThanOrEqual(toolbarBox.y);
+    expect(toolbarBox.y + toolbarBox.height).toBeLessThanOrEqual(
+      panelBox.y + panelBox.height,
+    );
+    expect(sendBox.y + sendBox.height).toBeLessThanOrEqual(viewport.height);
+    expect(sendBox.width).toBeGreaterThanOrEqual(44);
+    expect(sendBox.height).toBeGreaterThanOrEqual(44);
+    expect(
+      await page.evaluate(
+        () =>
+          globalThis.document.documentElement.scrollWidth <=
+          globalThis.innerWidth,
+      ),
+    ).toBe(true);
+    expect(state.sends).toHaveLength(0);
+    const screenshotPath = testInfo.outputPath('attachment-layout.png');
+    await page.screenshot({ path: screenshotPath });
+    await testInfo.attach('attachment-layout', {
+      path: screenshotPath,
+      contentType: 'image/png',
+    });
+
+    await caption.focus();
+    await caption.press('Shift+Tab');
+    const remove = page.getByRole('button', { name: 'Remover anexo' });
+    await expect(remove).toBeFocused();
+    await remove.press('Enter');
+    await expect(page.getByLabel('Responder', { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Anexar arquivo', exact: true }),
+    ).toBeFocused();
+    expect((await thread.boundingBox())?.height).toBe(originalHeight);
+  });
+}

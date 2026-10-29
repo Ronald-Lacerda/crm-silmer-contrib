@@ -413,6 +413,11 @@ do upload e subprocesso Linux resistente a TERM. Evidência em execution.md.
 
 ### T25: Corrigir a experiência de composição e a demo da UAT
 
+Correção de regressão em 29/10/2026 (MED-01/25/31): limitar a altura do
+composer na Inbox, rolar somente a revisão do anexo e preservar histórico e
+toolbar. Imagem grande, nome longo e teclado cobertos em 1366×768, 1090×689,
+390×667 e 390×440; evidência em [execution.md](execution.md).
+
 **What**: Disponibilizar composer integrado com validação automática e envio explícito no chat DEV habilitado, corrigindo os cinco problemas reportados pelo usuário.
 **Where**: apps/edge-web/src/views/InboxView.vue
 **Supporting files**: apps/edge-web/src/components/inbox/MediaComposer.vue; apps/edge-web/src/components/inbox/AudioRecorder.vue; test/e2e/media-composer.spec.js; test/e2e/inbox-media.spec.js; test/e2e/audio-recorder.spec.js; fixtures existentes de gravação; docs/runbooks/chat-media-uat.md; .specs/STATE.md; .specs/features/inbox-media-rustfs/spec.md; .specs/features/inbox-media-rustfs/context.md; .specs/features/inbox-media-rustfs/design.md; .specs/features/inbox-media-rustfs/execution.md; .specs/features/inbox-media-rustfs/validation-ux.md.
