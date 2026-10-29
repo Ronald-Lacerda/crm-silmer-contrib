@@ -62,3 +62,13 @@ ao mesmo Contato, preservando Conversas separadas e a propriedade dos Pedidos.
 Tratar duplicatas, ausência de consentimento, indisponibilidade, falha ou
 resultado incerto de envio, replay e resposta de outro número. O piloto CP-T06
 continua atendendo pelo chat do site até esses gates estarem homologados.
+
+## CP-T08 — Cadastro completo do cliente
+
+**Status:** concluída em 28/10/2026.
+
+**Requisitos:** CP-25..28. Migration expand com envelope cifrado próprio e
+estado completo/incompleto, comando autorizado, versionado e idempotente,
+leitura no detalhe e estado na lista, consulta de CEP pela API com falha
+tratada, seção “Cadastro” acessível na ficha do Contato e testes positivos,
+negativos, de replay, de concorrência e de teclado. Commit e push atômicos.

@@ -231,6 +231,20 @@ consulta e a correção do legado permanecem disponíveis. A busca por telefone
 usa números normalizados das identidades confirmadas e do cadastro manual;
 duplicatas são apresentadas para escolha humana sem união automática.
 
+Cadastro completo do cliente (ADR 047, CP-25..28): a migration
+`0044_contact_registration.expand.sql` adiciona `registration_envelope`
+(AES-256-GCM, AAD `crm.contacts.registration.v1`) e
+`registration_fields_complete`. `PUT /api/v1/contacts/:id/registration`, com
+`expectedVersion` e Idempotency-Key, substitui o cadastro, incrementa a versão
+do Contato e audita sem valores pessoais; erro de campo responde
+`{error: {code, field}}`. Só o detalhe devolve `registration`; lista e busca
+devolvem `registrationStatus`, completo quando os campos obrigatórios, o
+celular e o e-mail existem. `POST /api/v1/postal-codes/lookup` recebe o CEP no
+corpo, fora de URL e logs de proxy, consulta o ViaCEP pela API (HTTPS, 3 s,
+16 KB, sem redirect, 30/min) e responde 404/503 para cair no preenchimento
+manual. A idempotência guarda só id, versão e estado, e respostas com cadastro
+usam `no-store`. Rollback de aplicação ignora as colunas novas.
+
 Encerrar Conversa usa comando humano com versão e chave idempotente. A
 transação registra `state = encerrada`, `terminal_at`, `closed_by`, motivo
 `concluido`/`sem_pedido`, auditoria e comando de fechamento ao n8n. Com Pedido

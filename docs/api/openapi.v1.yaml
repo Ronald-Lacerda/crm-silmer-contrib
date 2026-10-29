@@ -638,6 +638,106 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /contacts/{contactId}/registration:
+    put:
+      operationId: replaceContactRegistration
+      summary: Substitui o cadastro completo opcional do contato (CP-25..27, ADR 047)
+      description: >-
+        Ação contact.rename. Substitui o cadastro inteiro; campos ausentes,
+        nulos ou vazios ficam nulos. Exige versão esperada e Idempotency-Key:
+        a mesma chave com o mesmo conteúdo devolve o mesmo resultado e com
+        outro conteúdo responde 409 IDEMPOTENCY_KEY_REUSED. Os valores ficam
+        cifrados; auditoria contact.registration.updated e evento de domínio
+        carregam apenas o id do contato. Celular e e-mail seguem em
+        /contacts/{contactId}/details.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ContactId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              { $ref: '#/components/schemas/ContactRegistrationUpdateRequest' }
+      responses:
+        '200':
+          description: Cadastro substituído ou replay da mesma chave
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'private, no-store' }
+          content:
+            application/json:
+              schema:
+                { $ref: '#/components/schemas/ContactRegistrationResponse' }
+        '400':
+          description: >-
+            Corpo inválido (INVALID_REQUEST) ou primeiro campo inválido na
+            ordem do formulário, com o nome do campo e sem eco do valor
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/ContactRegistrationError' }
+                  - { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: Versão desatualizada (CONTACT_CONFLICT) ou chave idempotente reutilizada com outro conteúdo (IDEMPOTENCY_KEY_REUSED)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /postal-codes/lookup:
+    post:
+      operationId: lookupPostalCode
+      summary: Sugere endereço para um CEP consultando o ViaCEP pela API (CP-28, ADR 047)
+      description: >-
+        Ação contact.read com sessão, Origin e CSRF, como a busca privada de
+        contatos. O CEP vai no corpo para não ficar em URLs nem em logs de
+        acesso do proxy. Somente o CEP sai do CRM, com tempo limite de 3
+        segundos. A sugestão é editável. CEP inexistente responde 404
+        POSTAL_CODE_NOT_FOUND e falha, tempo esgotado ou resposta inesperada
+        do ViaCEP responde 503 POSTAL_CODE_UNAVAILABLE; em ambos o
+        preenchimento manual continua disponível.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [postalCode]
+              properties:
+                postalCode: { type: string, pattern: '^\d{5}-?\d{3}$' }
+      responses:
+        '200':
+          description: Sugestão de endereço; campos vazios no ViaCEP vêm nulos
+          headers:
+            Cache-Control:
+              schema: { type: string, const: 'private, no-store' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PostalCodeSuggestion' }
+        '400':
+          description: CEP fora do formato (INVALID_POSTAL_CODE) ou corpo inválido (INVALID_REQUEST)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404':
+          description: CEP inexistente (POSTAL_CODE_NOT_FOUND)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { description: Limite temporário de consultas de CEP excedido }
+        '503':
+          description: ViaCEP indisponível (POSTAL_CODE_UNAVAILABLE)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /events:
     get:
       operationId: streamInboxEvents
@@ -2687,6 +2787,20 @@ components:
           enum: [manual, whatsapp, site_unverified, null]
           description: site_unverified é um telefone informado pela pessoa no chat, sem prova de posse ou correlação com outro contato.
         email: { type: [string, 'null'] }
+        registrationStatus:
+          type: string
+          enum: [complete, incomplete]
+          description: >-
+            CP-26. complete exige os campos obrigatórios do cadastro, celular
+            e e-mail. É o único dado do cadastro exposto na lista.
+        registration:
+          description: >-
+            Somente no detalhe (GET /contacts/{contactId}, servido com
+            Cache-Control private, no-store); nunca na lista nem na busca. null
+            quando o cadastro nunca foi preenchido.
+          oneOf:
+            - { $ref: '#/components/schemas/ContactRegistration' }
+            - { type: 'null' }
         provisional: { type: boolean }
         version: { type: integer, minimum: 1 }
         identities:
@@ -3008,6 +3122,173 @@ components:
           type: array
           items: { type: object }
         activeDealCount: { type: integer, minimum: 0 }
+    ContactRegistration:
+      type: object
+      additionalProperties: false
+      description: >-
+        ADR 047. Cadastro opcional, cifrado em repouso. Todos os campos são
+        opcionais na escrita e voltam normalizados (documento sem máscara,
+        Instagram sem @ e minúsculo, “ISENTO” e “S/N” canônicos).
+      required:
+        [
+          personType,
+          document,
+          legalName,
+          instagram,
+          stateRegistration,
+          postalCode,
+          city,
+          state,
+          street,
+          district,
+          number,
+          complement,
+        ]
+      properties:
+        personType:
+          { type: [string, 'null'], enum: [individual, company, null] }
+        document:
+          type: [string, 'null']
+          description: CPF (11 dígitos) para individual ou CNPJ numérico/alfanumérico (14 posições) para company, validado por dígito verificador. Não é chave única.
+        legalName: { type: [string, 'null'], minLength: 2, maxLength: 150 }
+        instagram:
+          type: [string, 'null']
+          pattern: '^[a-z0-9._]{1,30}$'
+          description: Aceita @handle, handle ou URL do perfil na escrita.
+        stateRegistration:
+          type: [string, 'null']
+          description: ISENTO ou 2 a 18 caracteres [0-9A-Z] sem pontuação. Obrigatória para company no cadastro completo.
+        postalCode: { type: [string, 'null'], pattern: '^\d{8}$' }
+        city: { type: [string, 'null'], maxLength: 80 }
+        state:
+          type: [string, 'null']
+          enum:
+            [
+              AC,
+              AL,
+              AM,
+              AP,
+              BA,
+              CE,
+              DF,
+              ES,
+              GO,
+              MA,
+              MG,
+              MS,
+              MT,
+              PA,
+              PB,
+              PE,
+              PI,
+              PR,
+              RJ,
+              RN,
+              RO,
+              RR,
+              RS,
+              SC,
+              SE,
+              SP,
+              TO,
+              null,
+            ]
+        street: { type: [string, 'null'], maxLength: 150 }
+        district: { type: [string, 'null'], maxLength: 80 }
+        number:
+          { type: [string, 'null'], maxLength: 10, description: Aceita S/N. }
+        complement: { type: [string, 'null'], maxLength: 80 }
+    ContactRegistrationUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, registration]
+      properties:
+        expectedVersion: { type: integer, minimum: 1 }
+        registration:
+          type: object
+          additionalProperties: false
+          description: Os mesmos 12 campos de ContactRegistration, todos opcionais.
+          properties:
+            personType: { type: [string, 'null'] }
+            document: { type: [string, 'null'] }
+            legalName: { type: [string, 'null'] }
+            instagram: { type: [string, 'null'] }
+            stateRegistration: { type: [string, 'null'] }
+            postalCode: { type: [string, 'null'] }
+            city: { type: [string, 'null'] }
+            state: { type: [string, 'null'] }
+            street: { type: [string, 'null'] }
+            district: { type: [string, 'null'] }
+            number: { type: [string, 'null'] }
+            complement: { type: [string, 'null'] }
+    ContactRegistrationResponse:
+      type: object
+      additionalProperties: false
+      required: [contact]
+      properties:
+        contact:
+          type: object
+          additionalProperties: false
+          required: [id, version, registration, registrationStatus]
+          properties:
+            id: { type: string }
+            version: { type: integer, minimum: 1 }
+            registration: { $ref: '#/components/schemas/ContactRegistration' }
+            registrationStatus: { type: string, enum: [complete, incomplete] }
+    ContactRegistrationError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, field]
+          properties:
+            code:
+              type: string
+              enum:
+                [
+                  INVALID_PERSON_TYPE,
+                  INVALID_DOCUMENT,
+                  INVALID_LEGAL_NAME,
+                  INVALID_INSTAGRAM,
+                  INVALID_STATE_REGISTRATION,
+                  INVALID_POSTAL_CODE,
+                  INVALID_CITY,
+                  INVALID_STATE,
+                  INVALID_STREET,
+                  INVALID_DISTRICT,
+                  INVALID_ADDRESS_NUMBER,
+                  INVALID_COMPLEMENT,
+                ]
+            field:
+              type: string
+              enum:
+                [
+                  personType,
+                  document,
+                  legalName,
+                  instagram,
+                  stateRegistration,
+                  postalCode,
+                  city,
+                  state,
+                  street,
+                  district,
+                  number,
+                  complement,
+                ]
+    PostalCodeSuggestion:
+      type: object
+      additionalProperties: false
+      required: [postalCode, street, district, city, state]
+      properties:
+        postalCode: { type: string, pattern: '^\d{8}$' }
+        street: { type: [string, 'null'], maxLength: 150 }
+        district: { type: [string, 'null'], maxLength: 80 }
+        city: { type: [string, 'null'], maxLength: 80 }
+        state: { type: [string, 'null'], minLength: 2, maxLength: 2 }
     DealStage:
       type: string
       enum: [produto, especificacao, estampa, logistica, fechamento]

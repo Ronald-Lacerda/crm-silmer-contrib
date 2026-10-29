@@ -23,6 +23,7 @@ function streamHarness() {
         if (path === '/api/v1/events') handler = routeHandler ?? options;
       },
       post() {},
+      put() {},
     }),
     {
       async authorizeRead() {

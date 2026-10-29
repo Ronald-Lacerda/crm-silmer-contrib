@@ -4,6 +4,7 @@ import {
   decryptContactDetails,
   normalizeContactPhone,
 } from '../domain/contact-details.js';
+import { decryptContactRegistration } from '../domain/contact-registration-envelope.js';
 import { decryptSiteContactClaim } from '../domain/site-contact-claim.js';
 
 export class PostgresContactReadRepository {
@@ -68,8 +69,14 @@ export class PostgresContactReadRepository {
       values.push(input.limit + 1);
       const [page, count] = await Promise.all([
         database.query(
+          // ADR 047: the list never reads the registration envelope, only
+          // its non-sensitive completeness flag.
           `WITH contact_page AS (
-             SELECT contact.* FROM crm.contacts AS contact
+             SELECT contact.id, contact.display_name, contact.provisional,
+                    contact.version, contact.created_at, contact.updated_at,
+                    contact.contact_details_envelope,
+                    contact.registration_fields_complete
+             FROM crm.contacts AS contact
              WHERE ${afterPredicate} AND ${searchPredicate}
              ORDER BY contact.updated_at DESC, contact.id DESC
              LIMIT $${values.length}
@@ -168,7 +175,8 @@ export class PostgresContactReadRepository {
           () =>
             database.query(
               `SELECT id, display_name, provisional, version, created_at,
-                    updated_at, contact_details_envelope
+                    updated_at, contact_details_envelope,
+                    registration_envelope, registration_fields_complete
              FROM crm.contacts WHERE id=$1`,
               [contactId],
             ),
@@ -225,6 +233,11 @@ export class PostgresContactReadRepository {
                 this.envelopeKey,
               )
             : null,
+          false,
+          decryptContactRegistration(
+            row.registration_envelope,
+            this.envelopeKey,
+          ),
         ),
         conversations: conversations.rows.map(
           (/** @type {any} */ conversation) => ({
@@ -281,6 +294,7 @@ function groupContacts(rows, key, matchedSitePhone) {
           : null,
         latestActivityAt: iso(row.latest_activity_at),
         provisional: Boolean(row.provisional),
+        registration_fields_complete: row.registration_fields_complete === true,
         updatedAt: iso(row.updated_at),
         version: Number(row.version),
       };
@@ -309,6 +323,10 @@ function mapContact(
   }),
   siteClaim = /** @type {{name: string, phone: string}|null} */ (null),
   matchedSitePhone = false,
+  /** Only the detail passes it; `undefined` keeps it out of the list view. */
+  registration = /** @type {Readonly<Record<string, string|null>>|null|undefined} */ (
+    undefined
+  ),
 ) {
   const primary =
     identities.find((identity) => identity.channel === 'whatsapp') ??
@@ -336,6 +354,12 @@ function mapContact(
           : siteClaim
             ? 'site_unverified'
             : null;
+  const email = details.email ?? null;
+  // CP-26: registration fields plus the celular and e-mail already resolved.
+  const registrationStatus =
+    row.registration_fields_complete === true && phone && email
+      ? 'complete'
+      : 'incomplete';
   return Object.freeze({
     createdAt: row.createdAt ?? iso(row.created_at),
     displayName: row.displayName ?? row.display_name ?? null,
@@ -343,7 +367,7 @@ function mapContact(
     identities: Object.freeze([...identities]),
     phone,
     phoneSource,
-    email: details.email ?? null,
+    email,
     // Operator-chosen name wins; the channel handle is only the fallback.
     label:
       row.displayName ??
@@ -355,6 +379,8 @@ function mapContact(
     latestActivityAt:
       row.latestActivityAt ?? row.updatedAt ?? iso(row.updated_at),
     provisional: Boolean(row.provisional),
+    ...(registration !== undefined ? { registration } : {}),
+    registrationStatus,
     updatedAt: row.updatedAt ?? iso(row.updated_at),
     version: Number(row.version),
   });

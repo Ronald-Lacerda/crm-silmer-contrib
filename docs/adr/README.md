@@ -5,6 +5,8 @@
 - [049 — Aprendizados do Vendedor na Inbox real](049-aprendizados-do-vendedor-na-inbox-real.md),
   pergunta do cliente primeiro, modelo livre, bandeira com tamanho, datas
   relativas, empresa, aviso fora do horário e quantidade do item único.
+- [047 — Cadastro completo do cliente](047-cadastro-completo-do-cliente.md),
+  cadastro opcional cifrado, estado completo/incompleto e CEP pelo ViaCEP.
 - [046 — Retomar WAHA para atendimento da nova linha](046-retomar-waha-para-atendimento-da-nova-linha.md),
   pausa WPPConnect sem pareamento e retoma WAHA/WEBJS para a Inbox real,
   com volumes novos e sem reutilizar a conta bloqueada; identidade confirmada,

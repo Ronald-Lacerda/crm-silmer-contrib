@@ -9,6 +9,7 @@ import {
   watch,
 } from 'vue';
 import { useRouter } from 'vue-router';
+import ClientRegistration from '../components/ClientRegistration.vue';
 import { request } from '../lib/api-client.js';
 import {
   CHANNEL_LABELS,
@@ -263,6 +264,38 @@ async function saveName() {
   }
 }
 
+/**
+ * CP-25: the registration form saved. Show the answer at once, then reload
+ * the list so its "Cadastro completo" mark follows. With `partial` only the
+ * phone and e-mail were saved; the form stays open and says so itself.
+ *
+ * @param {Record<string, any>} patch @param {boolean} [partial]
+ */
+function onRegistrationSaved(patch, partial = false) {
+  const current = detail.value?.contact;
+  if (current?.id === patch.id) {
+    const changes = Object.fromEntries(
+      Object.entries(patch).filter(([, value]) => value !== undefined),
+    );
+    detail.value = { ...detail.value, contact: { ...current, ...changes } };
+  }
+  if (patch.registrationStatus) {
+    contacts.value = contacts.value.map((contact) =>
+      contact.id === patch.id
+        ? { ...contact, registrationStatus: patch.registrationStatus }
+        : contact,
+    );
+  }
+  if (!partial) actionMessage.value = 'Cadastro do cliente salvo.';
+  void loadContacts(true);
+}
+
+/** @param {Record<string, any>} data */
+function onRegistrationLoaded(data) {
+  if (data?.contact?.id && data.contact.id === selected.value?.id)
+    detail.value = data;
+}
+
 /** Collapses bursts of live events into one silent refresh. */
 function scheduleLiveRefresh() {
   if (refreshTimer) globalThis.clearTimeout(refreshTimer);
@@ -401,6 +434,11 @@ onBeforeUnmount(() => {
                   <RouterLink class="row-link" :to="`/clientes/${contact.id}`">
                     {{ contact.label }}
                   </RouterLink>
+                  <span
+                    v-if="contact.registrationStatus === 'complete'"
+                    class="registration-mark"
+                    >Cadastro completo</span
+                  >
                 </td>
                 <td>
                   <span v-if="contact.phone">{{
@@ -524,6 +562,13 @@ onBeforeUnmount(() => {
             </div>
           </dl>
 
+          <ClientRegistration
+            :key="selected.id"
+            :contact="selected"
+            @saved="onRegistrationSaved"
+            @loaded="onRegistrationLoaded"
+          />
+
           <div class="panel-head subsection-heading">
             <h3>Canais de contato</h3>
           </div>
@@ -621,5 +666,14 @@ onBeforeUnmount(() => {
 .contact-channels li {
   padding-inline-start: 0;
   border-inline-start: 0;
+}
+
+/* CP-26: only a complete registration is marked, so the list stays quiet. */
+.registration-mark {
+  display: block;
+  margin-block-start: 0.2rem;
+  color: var(--status-success-text);
+  font-size: var(--text-xs);
+  font-weight: 600;
 }
 </style>

@@ -2,6 +2,40 @@ import { LiveEventDispatcher } from './live-event-dispatcher.js';
 
 export const EVENT_STREAMS_PER_MINUTE = 60;
 
+const REGISTRATION_FIELDS = [
+  'personType',
+  'document',
+  'legalName',
+  'instagram',
+  'stateRegistration',
+  'postalCode',
+  'city',
+  'state',
+  'street',
+  'district',
+  'number',
+  'complement',
+];
+
+/** Validation codes of the registration form; only these carry `field`. */
+const REGISTRATION_CODES = new Set([
+  'INVALID_ADDRESS_NUMBER',
+  'INVALID_CITY',
+  'INVALID_COMPLEMENT',
+  'INVALID_DISTRICT',
+  'INVALID_DOCUMENT',
+  'INVALID_INSTAGRAM',
+  'INVALID_LEGAL_NAME',
+  'INVALID_PERSON_TYPE',
+  'INVALID_POSTAL_CODE',
+  'INVALID_STATE',
+  'INVALID_STATE_REGISTRATION',
+  'INVALID_STREET',
+]);
+
+/** 5xx codes the client must tell apart to keep the form usable. */
+const PUBLIC_UNAVAILABLE_CODES = new Set(['POSTAL_CODE_UNAVAILABLE']);
+
 class OperationReadRequestError extends Error {
   /** @param {number} statusCode @param {string} code */
   constructor(statusCode, code) {
@@ -337,11 +371,67 @@ export function registerOperationRoutes(api, operations, contextFor) {
     }),
   );
 
+  // ADR 047 / CP-25..27: PUT replaces the whole optional registration.
+  api.put('/api/v1/contacts/:contactId/registration', async (request, reply) =>
+    respond(reply, async () => {
+      const params = requireObject(request.params);
+      const body = requireObject(request.body);
+      rejectUnknownKeys(body, ['expectedVersion', 'registration']);
+      const registration = requireObject(body.registration);
+      rejectUnknownKeys(registration, REGISTRATION_FIELDS);
+      const principal = await operations.authorizeWrite({
+        action: 'contact.rename',
+        authorization: request.headers.authorization,
+        cookie: request.headers.cookie,
+        csrfToken: request.headers['x-csrf-token'],
+        origin: request.headers.origin,
+      });
+      const result = await operations.setContactRegistration({
+        actor: principal.actor,
+        contactId: requireIdentifier(params.contactId, 'CONTACT_ID'),
+        correlationId: contextFor(request).correlationId,
+        expectedVersion: body.expectedVersion,
+        idempotencyKey: requireIdentifier(
+          request.headers['idempotency-key'],
+          'IDEMPOTENCY_KEY',
+        ),
+        registration,
+      });
+      privateNoStoreHeaders(reply);
+      return reply.code(200).send({ contact: result });
+    }),
+  );
+
+  // ADR 047 / CP-28: the API, not the browser, asks ViaCEP for a suggestion.
+  // The CEP travels in the body so proxy access logs never record it.
+  api.post(
+    '/api/v1/postal-codes/lookup',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (request, reply) =>
+      respond(reply, async () => {
+        const body = requireObject(request.body);
+        rejectUnknownKeys(body, ['postalCode']);
+        await operations.authorizeWrite({
+          action: 'contact.read',
+          authorization: request.headers.authorization,
+          cookie: request.headers.cookie,
+          csrfToken: request.headers['x-csrf-token'],
+          origin: request.headers.origin,
+        });
+        const suggestion = await operations.lookupPostalCode({
+          postalCode: body.postalCode,
+        });
+        privateNoStoreHeaders(reply);
+        return reply.code(200).send(suggestion);
+      }),
+  );
+
   api.get('/api/v1/contacts/:contactId', async (request, reply) =>
     respond(reply, async () => {
       const params = requireObject(request.params);
       await authorizeRead(request, operations, 'contact.read');
-      privateReadHeaders(reply);
+      // The detail carries the encrypted-at-rest registration (ADR 047).
+      privateNoStoreHeaders(reply);
       return reply.code(200).send(
         await operations.getContact({
           contactId: requireIdentifier(params.contactId, 'CONTACT_ID'),
@@ -436,14 +526,25 @@ function privateReadHeaders(reply) {
   reply.header('vary', 'Origin, Cookie');
 }
 
+/**
+ * ADR 047: responses with the customer registration or a postal-code lookup
+ * must not be kept by the browser or an intermediary cache.
+ * @param {import('fastify').FastifyReply} reply
+ */
+function privateNoStoreHeaders(reply) {
+  reply.header('cache-control', 'private, no-store');
+  reply.header('vary', 'Origin, Cookie');
+}
+
 /** @param {import('fastify').FastifyReply} reply @param {() => Promise<unknown>} operation */
 async function respond(reply, operation) {
   try {
     return await operation();
   } catch (error) {
-    const normalized = /** @type {{code?: unknown, statusCode?: unknown}} */ (
-      error
-    );
+    const normalized =
+      /** @type {{code?: unknown, field?: unknown, statusCode?: unknown}} */ (
+        error
+      );
     const statusCode = Number(normalized?.statusCode);
     if (!Number.isSafeInteger(statusCode) || statusCode < 400) throw error;
     const publicStatus = statusCode >= 500 ? 503 : statusCode;
@@ -453,18 +554,33 @@ async function respond(reply, operation) {
       'CONTACT_NOT_FOUND',
       'CONVERSATION_NOT_FOUND',
       'FORBIDDEN',
+      'IDEMPOTENCY_KEY_REUSED',
       'INVALID_CURSOR',
       'INVALID_DISPLAY_NAME',
       'INVALID_FILTER',
       'INVALID_LIMIT',
       'INVALID_REQUEST',
+      'POSTAL_CODE_NOT_FOUND',
+      ...REGISTRATION_CODES,
     ]);
+    const rawCode = String(normalized.code);
     const code =
-      statusCode >= 500 || !allowed.has(String(normalized.code))
-        ? statusCode >= 500
-          ? 'SERVICE_UNAVAILABLE'
-          : 'INVALID_REQUEST'
-        : String(normalized.code);
-    return reply.code(publicStatus).send({ error: { code } });
+      statusCode >= 500
+        ? PUBLIC_UNAVAILABLE_CODES.has(rawCode)
+          ? rawCode
+          : 'SERVICE_UNAVAILABLE'
+        : allowed.has(rawCode)
+          ? rawCode
+          : 'INVALID_REQUEST';
+    const field =
+      statusCode === 400 &&
+      REGISTRATION_CODES.has(code) &&
+      typeof normalized.field === 'string' &&
+      REGISTRATION_FIELDS.includes(normalized.field)
+        ? normalized.field
+        : undefined;
+    return reply
+      .code(publicStatus)
+      .send({ error: field ? { code, field } : { code } });
   }
 }

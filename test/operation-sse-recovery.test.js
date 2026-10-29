@@ -17,6 +17,7 @@ function streamHarness(readLiveEvents) {
       if (path === '/api/v1/events') streamHandler = handler ?? options;
     },
     post() {},
+    put() {},
   };
   registerOperationRoutes(
     /** @type {any} */ (api),

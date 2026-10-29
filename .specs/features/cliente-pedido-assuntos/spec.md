@@ -95,3 +95,32 @@ Decisão: [RFC 019](../../../docs/rfc/019-cliente-pedido-manual-e-assuntos.md) /
   continuam separadas por canal, mas o histórico e os Pedidos passam a
   pertencer ao cliente correto no CRM. Antes dessa confirmação, o número
   digitado no site não libera histórico nem altera Pedido anterior.
+
+## Cadastro completo do cliente
+
+Decidido em 28/10/2026 a pedido do cliente Silmer
+([RFC 035](../../../docs/rfc/035-cadastro-completo-do-cliente.md),
+[ADR 047](../../../docs/adr/047-cadastro-completo-do-cliente.md)).
+
+- **CP-25:** A ficha do Contato permite registrar tipo de pessoa (física ou
+  jurídica), CPF ou CNPJ, nome completo ou razão social, @ do Instagram,
+  inscrição estadual, CEP, cidade, UF, endereço, bairro, número, complemento,
+  celular e e-mail. Cada campo é validado quando preenchido: CPF e CNPJ por
+  dígito verificador (CNPJ numérico ou alfanumérico), CEP com 8 dígitos, UF
+  entre as 27 unidades, número aceita “S/N” e inscrição estadual aceita
+  “ISENTO”. Celular e e-mail continuam sendo os dados de contato já existentes.
+- **CP-26:** O cadastro é opcional e não bloqueia Contato, Conversa ou Pedido.
+  A ficha e a lista mostram “Cadastro completo” somente quando tipo de pessoa,
+  documento, nome ou razão social, CEP, cidade, UF, endereço, bairro, número,
+  celular e e-mail estão preenchidos; pessoa jurídica também exige inscrição
+  estadual ou “ISENTO”. Complemento e Instagram são sempre opcionais.
+- **CP-27:** O cadastro é dado pessoal: fica cifrado em repouso, só aparece no
+  detalhe do Contato para quem tem `contact.read`, só é alterado por quem pode
+  editar o Contato, usa versão esperada e chave de idempotência e gera
+  auditoria e evento sem valores pessoais. A lista expõe apenas o estado
+  completo/incompleto, nunca documento ou endereço.
+- **CP-28:** Ao informar o CEP, a API consulta o ViaCEP e sugere endereço,
+  bairro, cidade e UF, que continuam editáveis. Somente o CEP sai do CRM;
+  a consulta é feita pela API, com tempo limite curto e limite de taxa. Falha,
+  CEP inexistente ou indisponibilidade mantêm o preenchimento manual com
+  mensagem acessível.

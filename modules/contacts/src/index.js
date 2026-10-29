@@ -23,3 +23,21 @@ export {
   normalizeContactEmail,
   normalizeContactPhone,
 } from './domain/contact-details.js';
+export {
+  BRAZILIAN_STATES,
+  CONTACT_REGISTRATION_FIELDS,
+  CONTACT_REGISTRATION_LIMITS,
+  isContactRegistrationFieldsComplete,
+  isValidCnpj,
+  isValidCpf,
+  normalizeContactRegistration,
+  normalizePostalCode,
+} from './domain/contact-registration.js';
+export {
+  decryptContactRegistration,
+  encryptContactRegistration,
+} from './domain/contact-registration-envelope.js';
+export {
+  PostalCodeLookupError,
+  ViaCepPostalCodeClient,
+} from './adapters/viacep-postal-code-client.js';

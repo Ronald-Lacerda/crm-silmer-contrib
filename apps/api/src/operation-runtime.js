@@ -8,13 +8,18 @@ import {
 import { PostgresAuditTrail } from '@crm-silmer/audit-privacy';
 import { PostgresIdempotencyRecordStore } from '@crm-silmer/integration-reliability';
 import {
+  CONTACT_REGISTRATION_FIELDS,
+  PostalCodeLookupError,
   PostgresContactReadRepository,
+  ViaCepPostalCodeClient,
   contactPhoneHash,
   decryptContactIdentityEnvelope,
   decryptContactDetails,
   encryptContactDetails,
+  encryptContactRegistration,
   normalizeContactEmail,
   normalizeContactPhone,
+  normalizeContactRegistration,
 } from '@crm-silmer/contacts';
 import { PostgresInboxReadRepository } from '@crm-silmer/inbox-channels';
 import { PostgresHandoffReadRepository } from '@crm-silmer/work-management';
@@ -37,12 +42,14 @@ const AUTOMATION_STATES = new Set(['assistant', 'human']);
 export const ASSISTANT_STALL_MINUTES = 10;
 
 export class OperationReadError extends Error {
-  /** @param {number} statusCode @param {string} code */
-  constructor(statusCode, code) {
+  /** @param {number} statusCode @param {string} code @param {string} [field] */
+  constructor(statusCode, code, field) {
     super(code);
     this.name = 'OperationReadError';
     this.code = code;
     this.statusCode = statusCode;
+    // Only a form field name (never its value) may accompany the code.
+    if (field !== undefined) this.field = field;
   }
 }
 
@@ -277,10 +284,13 @@ export function createOperationReadService({
 
 /**
  * @param {any} database
- * @param {{identity?: any, environment?: Record<string, string|undefined>}} [options]
+ * @param {{identity?: any, environment?: Record<string, string|undefined>, postalCodeClient?: {lookup: (postalCode: string) => Promise<any>}}} [options]
  */
 export function createOperationReadRuntime(database, options = {}) {
   const environment = options.environment ?? process.env;
+  // ADR 047 / CP-28: created lazily so a runtime without lookups never needs fetch.
+  /** @type {{lookup: (postalCode: string) => Promise<any>}|undefined} */
+  let postalCodeClient = options.postalCodeClient;
   const contactKey = readKey(
     environment.CONTACT_IDENTITY_ENVELOPE_KEY,
     'CONTACT_IDENTITY_ENVELOPE_KEY',
@@ -332,6 +342,38 @@ export function createOperationReadRuntime(database, options = {}) {
   });
 
   const auditPort = new PostgresAuditTrail(database);
+
+  /**
+   * CP-26 also needs celular and e-mail, resolved as the Contact read does:
+   * e-mail only from the details envelope; celular from it, from a confirmed
+   * WhatsApp identity or from a site declaration.
+   * @param {any} transaction @param {string} contactId @param {unknown} detailsEnvelope
+   */
+  async function hasRegistrationContactData(
+    transaction,
+    contactId,
+    detailsEnvelope,
+  ) {
+    const details = decryptContactDetails(detailsEnvelope, contactKey);
+    if (!details.email) return false;
+    if (details.phone) return true;
+    const phone = await transaction.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM crm.contact_identities
+         WHERE current_contact_id = $1 AND channel = 'whatsapp'
+           AND identity_kind = 'phone' AND phone_status = 'confirmed'
+         UNION ALL
+         SELECT 1 FROM crm.site_contact_claims claim
+         JOIN crm.conversations conversation
+           ON conversation.id = claim.conversation_id
+         JOIN crm.contact_identities identity
+           ON identity.id = conversation.contact_identity_id
+         WHERE identity.current_contact_id = $1
+       ) AS found`,
+      [contactId],
+    );
+    return phone.rows[0]?.found === true;
+  }
 
   return Object.freeze({
     ...service,
@@ -668,6 +710,176 @@ export function createOperationReadRuntime(database, options = {}) {
         if (/** @type {any} */ (cause)?.code === '23505')
           throw new OperationReadError(409, 'CONTACT_CONFLICT');
         throw cause;
+      }
+    },
+
+    /**
+     * ADR 047 / CP-25..27: replaces the whole optional registration. The
+     * values live only in their envelope; the immutable idempotency record
+     * keeps just id, version and status, and audit, event, logs and errors
+     * carry identifiers and codes.
+     * @param {{actor: {id: string}, contactId: unknown, correlationId: string, expectedVersion: unknown, idempotencyKey: unknown, registration: unknown}} input
+     */
+    async setContactRegistration(input) {
+      const contactId = requireId(input.contactId, 'CONTACT_ID');
+      const expectedVersion = Number(input.expectedVersion);
+      if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+        throw new OperationReadError(400, 'INVALID_REQUEST');
+      }
+      const submitted = input.registration;
+      if (
+        !submitted ||
+        typeof submitted !== 'object' ||
+        Array.isArray(submitted) ||
+        Object.keys(submitted).some(
+          (field) => !CONTACT_REGISTRATION_FIELDS.includes(field),
+        )
+      ) {
+        throw new OperationReadError(400, 'INVALID_REQUEST');
+      }
+      const normalized = normalizeContactRegistration(submitted);
+      if (!normalized.ok) {
+        const [field, code] = Object.entries(normalized.errors)[0];
+        throw new OperationReadError(400, code, field);
+      }
+      if (!input.actor?.id) throw new OperationReadError(403, 'FORBIDDEN');
+      const key = requireId(input.idempotencyKey, 'IDEMPOTENCY_KEY');
+      const registration = normalized.value;
+      const stored = await contactDetailsIdempotency.execute(
+        {
+          scope: 'contact.registration.update',
+          key,
+          // Keyed digest: the idempotency row never holds the values in clear.
+          fingerprint: createHmac('sha256', contactLookupKey)
+            .update(
+              JSON.stringify({
+                actorId: input.actor.id,
+                contactId,
+                expectedVersion,
+                registration,
+              }),
+            )
+            .digest('hex'),
+          actor: input.actor.id,
+          action: 'contact.registration.update',
+          target: { type: 'contact', id: contactId },
+          version: expectedVersion,
+          reason: 'CONTACT_REGISTRATION',
+          correlationId: input.correlationId,
+        },
+        async (/** @type {any} */ transaction) => {
+          const current = (
+            await transaction.query(
+              `SELECT id, version, contact_details_envelope
+               FROM crm.contacts WHERE id = $1 FOR UPDATE`,
+              [contactId],
+            )
+          ).rows[0];
+          if (!current) throw new OperationReadError(404, 'CONTACT_NOT_FOUND');
+          if (Number(current.version) !== expectedVersion) {
+            throw new OperationReadError(409, 'CONTACT_CONFLICT');
+          }
+          const occurredAt = new Date().toISOString();
+          const row = (
+            await transaction.query(
+              `UPDATE crm.contacts
+               SET registration_envelope = $2::jsonb,
+                   registration_fields_complete = $3,
+                   version = version + 1, updated_at = $4
+               WHERE id = $1 RETURNING id, version`,
+              [
+                contactId,
+                JSON.stringify(
+                  encryptContactRegistration(registration, contactKey),
+                ),
+                normalized.fieldsComplete,
+                occurredAt,
+              ],
+            )
+          ).rows[0];
+          const version = Number(row.version);
+          await auditPort.append(
+            {
+              action: 'contact.registration.updated',
+              actor: input.actor.id,
+              correlationId: input.correlationId,
+              occurredAt,
+              reason: 'CONTACT_REGISTRATION',
+              target: { id: contactId, type: 'contact' },
+              version,
+            },
+            { transaction },
+          );
+          await transaction.query(
+            `INSERT INTO crm.domain_events
+               (id, aggregate_type, aggregate_id, aggregate_version,
+                event_type, payload, correlation_id, occurred_at)
+             VALUES ($1, 'contact', $2, $3, 'contact.registration.updated', $4::jsonb, $5, $6)`,
+            [
+              `event-${randomUUID()}`,
+              contactId,
+              version,
+              JSON.stringify({ contactId }),
+              input.correlationId,
+              occurredAt,
+            ],
+          );
+          const complete =
+            normalized.fieldsComplete &&
+            (await hasRegistrationContactData(
+              transaction,
+              contactId,
+              current.contact_details_envelope,
+            ));
+          return {
+            id: contactId,
+            registrationStatus: complete ? 'complete' : 'incomplete',
+            version,
+          };
+        },
+      );
+      // Same key => same fingerprint => same normalized registration, so the
+      // first answer and every replay rebuild the body from the request.
+      return {
+        id: stored.id,
+        registration,
+        registrationStatus: stored.registrationStatus,
+        version: stored.version,
+      };
+    },
+
+    /**
+     * ADR 047 / CP-28: only the 8-digit postal code leaves the CRM; any
+     * failure keeps the address editable by hand.
+     * @param {{postalCode: unknown}} input
+     */
+    async lookupPostalCode(input) {
+      const raw = input?.postalCode;
+      if (typeof raw !== 'string' || !/^\d{5}-?\d{3}$/u.test(raw)) {
+        throw new OperationReadError(400, 'INVALID_POSTAL_CODE');
+      }
+      const postalCode = raw.replace('-', '');
+      if (postalCode === '00000000') {
+        throw new OperationReadError(400, 'INVALID_POSTAL_CODE');
+      }
+      postalCodeClient ??= new ViaCepPostalCodeClient();
+      try {
+        const suggestion = await postalCodeClient.lookup(postalCode);
+        return {
+          city: suggestion.city ?? null,
+          district: suggestion.district ?? null,
+          postalCode,
+          state: suggestion.state ?? null,
+          street: suggestion.street ?? null,
+        };
+      } catch (cause) {
+        if (
+          cause instanceof PostalCodeLookupError &&
+          cause.code === 'POSTAL_CODE_NOT_FOUND'
+        ) {
+          throw new OperationReadError(404, 'POSTAL_CODE_NOT_FOUND');
+        }
+        throw new OperationReadError(503, 'POSTAL_CODE_UNAVAILABLE');
       }
     },
 
