@@ -335,8 +335,9 @@ Decisão ADR 044/RFC 032. Evidência em docs/integrations/n8n/auditoria-vendedor
 - [x] Empresa com marcador explícito em `order_name` e Dica ao vendedor (AGT-02).
 - [x] Aviso de horário comercial em toda transferência fora do horário (AGT-03).
 - [x] Quantidade dita para item único em `quantidade_informada` (AGT-07, AGT-08, ADR 025).
-- [ ] Atualizar `docs/integrations/n8n/README.md` quando a frente de Assuntos liberar o arquivo.
-- [ ] Publicar no n8n com backup e verificação, após autorização do proprietário.
+- [x] Atualizar `docs/integrations/n8n/README.md` (seção VND-L01).
+- [x] Publicar no n8n com backup e verificação, autorizado pelo proprietário: versão `799b0a92`, rollback `a107910d`.
+- [ ] Observar as primeiras conversas reais após a publicação (o principal não salva execuções).
 
 Decisão ADR 049/RFC 037. Teste: `test/n8n-vendedor-aprendizados.test.js`.
 

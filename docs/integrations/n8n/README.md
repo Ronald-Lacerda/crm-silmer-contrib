@@ -73,7 +73,7 @@ combinado com a Silmer; ADR 013); duas respostas incompreensíveis ou indecisas
 para o mesmo item; reclamação; urgência; conteúdo não suportado; e o teto de
 15 mensagens. O resumo de todo handoff traz "Ficha: X de N (Y%)", o indicador
 da meta de 50% da ficha, com N igual ao nome, enquanto o bot o pede, mais os
-pontos do produto (7 para roupa, boné ou bolsa; 6 para outro produto); o
+pontos do produto (7 para roupa, boné, bolsa ou bandeira; 6 para outro produto); o
 [roteiro do indicador da ficha](roteiro-indicador-da-ficha.md) tem as
 mensagens para testá-lo.
 `briefing_status` e `next_required_field` guardam o estado desses gatilhos e
@@ -899,3 +899,38 @@ Destino de atendimento corrigido pelo proprietário: WhatsApp do CRM
 `https://wa.me/5527936180599`. O telefone institucional da loja não deve ser
 usado como fallback das entradas genéricas. Conservar contatos explicitamente
 nomeados e o fluxo de pós-pagamento da loja na fronteira correspondente.
+
+## VND-L01 — Aprendizados da Inbox real (28/10/2026)
+
+A [ADR 049](../../adr/049-aprendizados-do-vendedor-na-inbox-real.md) ajusta o
+agente a partir de cinco conversas reais. Regras no SDK, cobertas por
+`test/n8n-vendedor-aprendizados.test.js`:
+
+- Pergunta de viabilidade ("vocês fazem…?", "conseguem fazer igual?") recebe
+  "Vou anotar para o vendedor confirmar isso." antes da próxima pergunta; o nó
+  de decisão acrescenta a frase quando o modelo esquece.
+- Camisa de futebol, futsal, vôlei, basquete, handebol, e-sports, esportiva e
+  jersey são modelos de roupa; resposta fora da lista é "outro" com as palavras
+  do cliente, e a mesma pergunta não se repete com as mesmas palavras.
+- A mensagem pronta "Vi no site a referência X e quero algo parecido" vira
+  `notes` ("Referência do site: X") e não conta como pergunta ignorada.
+- `bandeira` (faixa, banner, estandarte, flâmula) é tipo próprio: o ponto de
+  modelo pergunta o tamanho, gravado em `product_model` com o nome do produto e
+  exibido em `items[].tipo` da Ficha; gola `NAO APLICAVEL`.
+- O contexto informa a data de hoje em Brasília pela hora da mensagem
+  (`occurred_at` do evento normalizado). `needed_by` recebe a data calculada;
+  data ambígua é confirmada uma vez.
+- Empresa com marcador explícito de organização vai para `order_name` e para a
+  Dica do resumo; perfil de compra não é deduzido.
+- `BUSINESS_HOURS` (segunda a sexta 9h–18h, sábado 9h–12h, UTC−3, espelho de
+  `business.ts` do site; sem feriados) acrescenta a todo aviso de transferência
+  fora do horário quando o vendedor responde.
+
+Publicado em 28/10/2026 no workflow principal: versão `799b0a92`, só os nós
+"Montar contexto da IA", "Atendente virtual Silmer", "Normalizar decisão da IA"
+e "Preparar handoff de conteúdo" alterados; os demais 97 nós e as conexões
+conferidos iguais ao backup. Rollback: publicar a versão `a107910d`.
+
+Armadilha do conector MCP: ao enviar parâmetros, um `\uXXXX` literal no código
+chega ao n8n como o próprio caractere. Codifique a barra (`\\u005Cu200B`) e
+confira o `jsCode` gravado; para rollback, prefira publicar a versão anterior.
