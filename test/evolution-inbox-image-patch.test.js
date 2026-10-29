@@ -20,7 +20,8 @@ function fixture() {
           conditions: {
             conditions: [
               {
-                leftValue: 'old',
+                leftValue:
+                  "={{ (() => { const n = $('Normalizar evento WhatsApp (MVP)').item.json; return n.channel === 'whatsapp' && n.message_type === 'audio'; })() }}",
                 operator: { type: 'boolean', operation: 'true' },
               },
             ],
@@ -44,7 +45,7 @@ function fixture() {
         parameters: {
           mode: 'runOnceForEachItem',
           jsCode:
-            'const decodeEvolutionMedia = () => {}; return decodeEvolutionMedia();',
+            'const decodeEvolutionMedia = response => ({json:{preservedAudio:true,response}}); return decodeEvolutionMedia($json);',
         },
       },
       {
@@ -207,6 +208,11 @@ test('IMG-04: actual generated decoder handles every image/document type and pre
     (/** @type {any} */ n) => n.name === prefix + 'Baixar',
   ).parameters.jsCode;
   const decode = new Function('$json', '$', code);
+  const audio = { mimetype: 'audio/ogg', base64: 'U1lOVEhFVElD' };
+  assert.deepEqual(
+    decode(audio, () => ({ item: { json: { message_type: 'audio' } } })),
+    { json: { preservedAudio: true, response: audio } },
+  );
   const bytes = Buffer.from(
     'synthetic bytes checked by API content detector and scanner',
   );

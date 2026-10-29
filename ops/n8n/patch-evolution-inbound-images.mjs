@@ -129,9 +129,17 @@ export function patchEvolutionInboundImages(source) {
     requireEdge(name, 'Preparar falha', 1);
   }
   requireEdge('Preparar falha', 'Registrar falha', 0);
-  condition[0].leftValue =
-    "={{ (() => { const n = $('Normalizar evento WhatsApp (MVP)').item.json; return n.channel === 'whatsapp' && ['image','document'].includes(n.message_type) && ['image/jpeg','image/png','image/webp','image/gif'].includes(String(n.media_mime_type ?? '').split(';')[0].trim().toLowerCase()); })() }}";
-  download.parameters.jsCode = `const decodeInboxImage=${decodeInboxImage.toString()};\nreturn decodeInboxImage($json,$('Normalizar evento WhatsApp (MVP)').item.json);`;
+  const originalFilter = condition[0].leftValue;
+  if (
+    typeof originalFilter !== 'string' ||
+    !originalFilter.startsWith('={{') ||
+    originalFilter.indexOf('}}', 3) !== originalFilter.length - 2
+  )
+    throw new Error('EXPECTED_IMAGE_EXPRESSION');
+  // The shared persistence branch can already support audio. Keep that exact
+  // predicate and decoder as the non-raster path instead of reverting it.
+  condition[0].leftValue = `={{ (${originalFilter.slice(3, -2)}) || (() => { const n = $('Normalizar evento WhatsApp (MVP)').item.json; return n.channel === 'whatsapp' && ['image','document'].includes(n.message_type) && ['image/jpeg','image/png','image/webp','image/gif'].includes(String(n.media_mime_type ?? '').split(';')[0].trim().toLowerCase()); })() }}`;
+  download.parameters.jsCode = `if (['image','document'].includes($('Normalizar evento WhatsApp (MVP)').item.json.message_type)) { const decodeInboxImage=${decodeInboxImage.toString()}; return decodeInboxImage($json,$('Normalizar evento WhatsApp (MVP)').item.json); }\n${download.parameters.jsCode}`;
   const original = "'image/webp': 'webp'";
   if (!measure.parameters.jsCode.includes(original))
     throw new Error('EXPECTED_IMAGE_MEASURE');

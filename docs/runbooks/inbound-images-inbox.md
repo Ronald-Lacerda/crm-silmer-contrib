@@ -22,7 +22,9 @@ Documentos antigos sem MIME nem anexo não permitem inferir se eram imagens.
 `ops/n8n/patch-evolution-inbound-images.mjs` prepara somente o filtro da Inbox,
 decoder, medição GIF, prioridade do filtro e continuação após erro do relatório.
 Exige export Evolution compatível, scheduler v1, cadeia e credenciais já
-vinculadas. Não altera os caminhos de IA/envio, o tipo da mensagem ou conexões.
+vinculadas. Preserva a condição e o decoder existentes para áudio, inclusive
+o suporte publicado em paralelo por INBOX-AUDIO-01; acrescenta somente o caso
+raster. Não altera os caminhos de IA/envio, o tipo da mensagem ou conexões.
 O scheduler ordena destinos por `(y,x)`; a imagem passa primeiro para que uma
 falha posterior de IA não suprima a persistência. Trata-se de execução sequencial:
 timeouts e retries de mídia podem atrasar o caminho comercial e o recibo.
