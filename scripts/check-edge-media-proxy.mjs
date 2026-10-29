@@ -131,6 +131,32 @@ try {
     ['/api/v1/conversations/synthetic-t31/messages', mib + 1, 413],
     ['/api/v1/orders/synthetic-t31/files', 10 * mib + 1024, 200],
     ['/api/v1/orders/synthetic-t31/files', 11 * mib + 1, 413],
+    [
+      '/api/v1/integrations/n8n/conversations/synthetic-audio/attachments',
+      16 * mib + 1024,
+      200,
+    ],
+    [
+      '/api/v1/integrations/n8n/conversations/synthetic-audio/attachments?source=test',
+      16 * mib + 1024,
+      200,
+    ],
+    [
+      '/api/v1/integrations/n8n/conversations/synthetic-audio/attachments',
+      17 * mib + 1,
+      413,
+    ],
+    [
+      '/api/v1/integrations/n8n/conversations/synthetic-audio/attachments/',
+      mib + 1,
+      413,
+    ],
+    [
+      '/api/v1/integrations/n8n/conversations/synthetic-audio/attachments/content',
+      mib + 1,
+      413,
+    ],
+    ['/api/v1/integrations/n8n/messages/inbound', mib + 1, 413],
   ];
   for (const [path, bytes, expected] of cases) {
     const response = await globalThis.fetch(origin + path, {
@@ -149,7 +175,17 @@ try {
     }
     console.log(JSON.stringify({ path, bytes, status: response.status }));
   }
-  console.log('PASS: 8/8 routes/limits, actual response headers, nginx syntax');
+  const inboundPath =
+    '/api/v1/integrations/n8n/conversations/synthetic-audio/attachments';
+  for (const method of ['GET', 'PUT', 'DELETE']) {
+    const response = await globalThis.fetch(origin + inboundPath, { method });
+    assert.equal(response.status, 403, `${inboundPath} ${method}`);
+    await response.arrayBuffer();
+  }
+  console.log(
+    `PASS: ${cases.length}/` +
+      `${cases.length} routes/limits, inbound methods, actual response headers, nginx syntax`,
+  );
 } finally {
   const failures = [];
   for (const id of containers.toReversed()) {

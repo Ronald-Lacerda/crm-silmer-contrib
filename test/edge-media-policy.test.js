@@ -46,8 +46,8 @@ test('MED-01/02/03 edge reserves the larger body budget for the chat upload rout
   );
   assert.equal(
     enlarged.length,
-    2,
-    'only art and chat uploads may exceed the default body budget',
+    3,
+    'only art, chat and authenticated inbound uploads may exceed the default body budget',
   );
   const chat = enlarged.find(
     ([, selector]) =>

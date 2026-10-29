@@ -20,6 +20,21 @@ IMG-01/02/06–11, ARQ-02/04, PRV-03. Solicitação de 29/10/2026.
 Produção em `ad3001f` (PR #240); prova sintética dos quatro formatos no pedido
 28-CRM, quatro hashes originais e replay sem duplicação. Estado operacional no [runbook](../../../docs/runbooks/inbound-images-inbox.md).
 
+## INBOX-AUDIO-PROXY-01 — limite de anexo recebido (29/10/2026)
+
+INBOX-AUDIO-01 / AUD-IN-02, INB-01, MSG-01/02 e INT-3.
+
+- [x] Backport isolado do proxy: multipart até 17 MiB somente no POST da
+      coleção exata de anexos n8n; demais rotas mantêm orçamento anterior.
+- [x] Cinco testes de política, formato, lint e diff aprovados; smoke Docker
+      do CI ampliado a 14 casos de rota/tamanho e negativas de método.
+- [ ] CI com Nginx real, integração por rebase e Auto Deploy existente.
+- [ ] Conferir SHA/saúde remotos e POST sintético acima de 1 MiB.
+
+Não altera API, banco, frontend, credenciais ou o workflow publicado.
+Recuperação do áudio antigo e teste Inbox/WhatsApp são evidências próprias;
+os testes do proxy não comprovam reprodução ou entrega de áudio.
+
 ## WPP-01 — preparação WPPConnect pausada
 
 Preparação: [ADR 045](../../../docs/adr/045-piloto-whatsapp-wppconnect.md).
