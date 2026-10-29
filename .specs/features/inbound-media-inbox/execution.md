@@ -94,3 +94,18 @@ diff check passaram. A comparação real da feature e a comparação do workflow
 base com a alteração local não identificaram mudanças de dependência.
 
 A implantação continua condicionada aos gates do PR após essa correção.
+
+## INBOX-IMG-CI-02 — confirmação por teclado no gate T136
+
+O CI 40805065722 aprovou 323 cenários E2E e falhou somente no retry de
+confirmação de entrega. O componente remove o checkbox após o sucesso;
+`check()` exige observar o estado marcado depois do clique, criando uma
+pós-condição incompatível com essa remoção. A falha não se reproduziu nas
+três execuções locais anteriores ao ajuste.
+
+O teste agora confirma por foco e Espaço, como o cenário de teclado já
+existente. Preserva conflito, atualização e retry e acrescenta verificações
+de leitura, estado desmarcado, anúncio de sucesso e duas requisições exatas
+com a versão esperada. Não houve alteração no produto ou redução do gate.
+Os quatro testes do arquivo passaram três vezes (12/12), assim como lint
+focal, formatação e diff check. O CI completo deve passar antes do deploy.

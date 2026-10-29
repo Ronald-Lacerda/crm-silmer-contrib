@@ -138,9 +138,20 @@ test('stale confirmation keeps the task unchecked, asks to refresh, and then per
   await page.keyboard.press('Enter');
   await expect(tasks.getByRole('alert')).toHaveCount(0);
   await expect(tasks.getByRole('heading')).toBeFocused();
-  await first.check();
+  await expect(first).not.toBeChecked();
+  expect(mock.reads()).toBe(2);
+  // The successful request removes this checkbox, so check() cannot reliably
+  // verify its checked postcondition after triggering the change event.
+  await first.focus();
+  await page.keyboard.press('Space');
   await expect(first).toHaveCount(0);
-  expect(mock.writes).toHaveLength(2);
+  await expect(tasks.getByRole('status')).toHaveText(
+    'Entrega do pedido 12-CRM confirmada.',
+  );
+  expect(mock.writes.map(({ body, orderId }) => ({ body, orderId }))).toEqual([
+    { orderId: 'manual-12', body: { expectedVersion: 4 } },
+    { orderId: 'manual-12', body: { expectedVersion: 4 } },
+  ]);
 });
 
 test('unavailable tasks never claim that there are no deliveries and recover by keyboard (T136)', async ({
