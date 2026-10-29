@@ -148,10 +148,22 @@ existente de arquivos ao pedido 21-CRM; a interface confirmou **4 de 5**, e
 a leitura dos quatro objetos RustFS confirmou existência, tamanho e SHA256.
 Não houve reexecução de IA, confirmação comercial ou envio de WhatsApp.
 
-Oito imagens em duas outras conversas permanecem fora dessa recuperação:
-a revisão automática exigiu autorização específica adicional. O teste de
-POST sem autenticação ao webhook também foi recusado pela revisão automática;
-a verificação de publicação usou somente leitura. Não declarar um novo
+Após autorização específica adicional do proprietário, as oito imagens
+restantes em duas outras conversas também foram recuperadas: seis e duas
+respostas `201`, com vínculo às mensagens originais e sem duplicatas.
+A conferência na Inbox selecionou somente imagens recebidas e confirmou
+**6/6** e **2/2** carregadas (`complete` e `naturalWidth > 0`), além de uma
+imagem enviada pelo vendedor que já existia na primeira conversa.
+O total recuperado nesta operação chegou a dezoito imagens em quatro
+conversas. O identificador de uma conversa e uma impressão digital tinham
+erro de transcrição; foram conferidos por consulta somente leitura aos
+registros canônicos antes da gravação. Todas as correspondências foram
+validadas antes do primeiro upload. As cópias temporárias de credenciais
+foram removidas no encerramento, inclusive nas tentativas sem correspondência.
+Não houve IA, envio de WhatsApp ou alteração comercial nessa recuperação.
+
+O teste de POST sem autenticação ao webhook foi recusado pela revisão
+automática; a verificação de publicação usou somente leitura. Não declarar um novo
 evento de canal homologado com o replay isolado. A próxima imagem recebida
 deve ser observada para concluir esse gate. Não houve deploy do CRM nesta
 operação: o atalho novo da imagem para o pedido ainda não estava implantado

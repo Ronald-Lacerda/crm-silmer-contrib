@@ -146,8 +146,9 @@ Requisitos IMG-01/03/04, EVOL-01D, INB-01 e MSG-01/02.
       falhas, build e `git diff --check`.
 - [x] Recuperar dez imagens autorizadas e conferir renderização; comprovar
       quatro uploads ao pedido 21-CRM com leitura e hash dos objetos RustFS.
-- [ ] Recuperar oito imagens em duas outras conversas após autorização
-      específica exigida pela revisão automática.
+- [x] Após autorização específica, recuperar oito imagens em duas outras
+      conversas: oito respostas 201 e renderização de seis e duas imagens
+      recebidas, todas carregadas na Inbox; sem IA ou envios.
 - [ ] Observar novo evento de imagem do canal após a publicação; replay
       isolado e histórico recuperado não substituem essa homologação.
 
