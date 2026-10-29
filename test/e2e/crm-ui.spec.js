@@ -980,8 +980,8 @@ test('a conversation with one subject shows no subject control on its messages',
     subjects: [subjectRow('subject-order', '01-CRM', 1)],
   }));
   await page.goto('/inbox');
-  await expect(page.getByText('Preciso de 120 camisetas.')).toBeVisible();
   const thread = page.getByRole('list', { name: 'Histórico da conversa' });
+  await expect(thread.getByText('Preciso de 120 camisetas.')).toBeVisible();
   await expect(thread.locator('details, fieldset')).toHaveCount(0);
   await expect(thread.getByText(/Pedido 01-CRM/u)).toHaveCount(0);
   await expect(thread.getByRole('button', { name: 'Corrigir' })).toHaveCount(0);
