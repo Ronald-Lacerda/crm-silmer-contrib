@@ -633,7 +633,7 @@ test('records who makes the art next to an empty file area (TEC-03, ARQ-01)', as
     artwork.getByRole('button', { name: 'Enviar arte final' }),
   ).toBeEnabled();
   await expect(artwork).toContainText('0 de 5');
-  await expect(artwork).toContainText('PNG, JPEG, WebP, CDR');
+  await expect(artwork).toContainText('PNG, JPEG, WebP, GIF, CDR');
 
   // PFI-20: one control adds files; with none yet, the drop area's button.
   await expect(addFileControls(artwork)).toHaveCount(1);
