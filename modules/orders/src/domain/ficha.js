@@ -18,7 +18,8 @@ import { parseSizes } from './sizes.js';
 //
 // ADR 025: an item may also say its audience (`publico`) and the quantity the
 // customer said for it (`quantidade_informada`); both are optional, never
-// block the order, and the quantity is only a reference next to the grade.
+// block the order, and the quantity is only a reference next to the grade:
+// it is never added to the total of pieces, which stays the sum of grades.
 
 export const NOT_APPLICABLE = 'NAO APLICAVEL';
 // What the bot records when the customer leaves a point to the seller. It is
@@ -589,6 +590,83 @@ function briefingGrade(value) {
   return parseSizes(value) ?? undefined;
 }
 
+// Words that only name the pieces next to the quantity said ("18 peças").
+const PIECE_WORDS = new Set([
+  'peca',
+  'pecas',
+  'pc',
+  'pcs',
+  'unidade',
+  'unidades',
+  'un',
+  'und',
+  'unid',
+]);
+// A product text that names more than one product ("camisetas e bonés"):
+// the quantity said may be for all of them, so it is not the item's.
+const SEVERAL_PRODUCTS = /[,;+/&]|\be\b/u;
+
+/**
+ * The quantity the customer said for an order of one item, when it reads
+ * without doubt: one whole number from 1 to 100000, alone or followed by one
+ * word that names the pieces — "peças", "unidades" or a word of the item's
+ * own type ("18 coletes" for "coletes"). "Cerca de 18", "18 a 20", "2
+ * dúzias", "18 por tamanho" or the seller's placeholder read as nothing, and
+ * the text stays only as service data.
+ *
+ * @param {unknown} value
+ * @param {string[]} typeWords the folded words of the item's type
+ * @returns {number|undefined}
+ */
+function saidQuantity(value, typeWords) {
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) &&
+      value > 0 &&
+      value <= MAX_INFORMED_QUANTITY
+      ? value
+      : undefined;
+  }
+  if (typeof value !== 'string' || value.length > MAX_TEXT) return undefined;
+  const words = foldText(value)
+    .replace(/[.!]+$/u, '')
+    .split(/\s+/u);
+  const [digits, unit, ...rest] = words;
+  if (rest.length > 0 || !/^\d{1,6}$/u.test(digits ?? '')) return undefined;
+  if (unit !== undefined) {
+    const piece =
+      PIECE_WORDS.has(unit) ||
+      typeWords.some((word) => word === unit || `${word}s` === unit);
+    if (!piece) return undefined;
+  }
+  const count = Number(digits);
+  return count > 0 && count <= MAX_INFORMED_QUANTITY ? count : undefined;
+}
+
+/**
+ * The folded words of the briefing's product texts, or null when they name
+ * more than one product.
+ *
+ * @param {Record<string, unknown>} source
+ * @returns {string[]|null}
+ */
+function productWords(source) {
+  /** @type {string[]} */
+  const words = [];
+  for (const key of ['product_model', 'product_type']) {
+    const text = fichaText(source[key]);
+    if (!text) continue;
+    const folded = foldText(text);
+    if (SEVERAL_PRODUCTS.test(folded)) return null;
+    words.push(
+      ...folded
+        .split(/\s+/u)
+        .map((word) => word.replace(/s$/u, ''))
+        .filter((word) => word.length > 2),
+    );
+  }
+  return words;
+}
+
 /**
  * ADR 016/020: maps the agent pre-ficha onto the order without guessing. The
  * item points land on the first item — type of garment (`product_model`,
@@ -600,7 +678,10 @@ function briefingGrade(value) {
  * so it keeps blocking the order, and the text stays as service data. So
  * does anything else the bot collected, including the quantity the customer
  * said. ADR 025: a split by audience read without doubt gives one item per
- * audience instead, each with its audience and quantity said.
+ * audience instead, each with its audience and quantity said. Without a
+ * split, a quantity said for one product that reads without doubt ("18",
+ * "18 coletes") is also the quantity said of the one item; it never fills
+ * the grade.
  *
  * @param {Record<string, unknown>|null|undefined} briefing
  * @returns {Ficha}
@@ -652,10 +733,23 @@ export function briefingToFicha(briefing) {
       (key) => source[key] !== undefined && source[key] !== null,
     );
   if (hasItem) item.estampa = take('artwork_locations', artworkPlaces) ?? '';
+  // The quantity said for an order of one item, without a split by audience
+  // (said or still to read) and for one product, is that item's quantity
+  // said. The text stays as service data too: it keeps the customer's words
+  // and the order-wide check of PIT-09.
+  const typeWords = productWords(source);
+  const audiencesSaid =
+    source.audiences !== undefined &&
+    source.audiences !== null &&
+    !(typeof source.audiences === 'string' && source.audiences.trim() === '');
+  const quantidade =
+    split || audiencesSaid || typeWords === null
+      ? null
+      : (saidQuantity(source.quantity, typeWords) ?? null);
   /** @type {FichaItem[]} */
   const items = !hasItem
     ? []
-    : (split ?? [{ publico: '', quantidade: null }]).map((part) => ({
+    : (split ?? [{ publico: '', quantidade }]).map((part) => ({
         ...structuredClone(item),
         publico: part.publico,
         quantidade_informada: part.quantidade,

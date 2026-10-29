@@ -323,3 +323,19 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
 - [ ] Opcional: adicionar link direto/botão WhatsApp pelo aplicativo Instagram (edição web indisponível).
 
 Decisão ADR 044/RFC 032. Evidência em docs/integrations/n8n/auditoria-vendedor-2026-10-27.md.
+
+## VND-L01 — Aprendizados do Vendedor na Inbox real (28/10/2026)
+
+- [x] Analisar 5 conversas reais transferidas e as pré-fichas geradas.
+- [x] Reconhecer pergunta de viabilidade antes da próxima pergunta (AGT-02).
+- [x] Aceitar modelo livre e camisa esportiva; não repetir pergunta idêntica (AGT-02).
+- [x] Tratar a mensagem de referência do site como nota de pedido do zero (AGT-02, CHAN-WA-01).
+- [x] Bandeira como tipo próprio, tamanho em `items[].tipo` da Ficha (AGT-02, AGT-07).
+- [x] Datas relativas com data calculada e confirmação única (AGT-02).
+- [x] Empresa com marcador explícito em `order_name` e Dica ao vendedor (AGT-02).
+- [x] Aviso de horário comercial em toda transferência fora do horário (AGT-03).
+- [x] Quantidade dita para item único em `quantidade_informada` (AGT-07, AGT-08, ADR 025).
+- [ ] Atualizar `docs/integrations/n8n/README.md` quando a frente de Assuntos liberar o arquivo.
+- [ ] Publicar no n8n com backup e verificação, após autorização do proprietário.
+
+Decisão ADR 049/RFC 037. Teste: `test/n8n-vendedor-aprendizados.test.js`.

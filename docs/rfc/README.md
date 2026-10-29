@@ -2,6 +2,8 @@
 
 ## Decisão de 28/10/2026
 
+- [037 — Aprendizados do Vendedor na Inbox real](037-aprendizados-do-vendedor-na-inbox-real.md),
+  decidida na ADR 049; cinco conversas reais de 28/10 e correções aprovadas.
 - [034 — Retomar WAHA para atendimento da nova linha](034-retomar-waha-para-atendimento-da-nova-linha.md),
   decidida na ADR 046; WPPConnect parado e pareamento WAHA da nova linha
   destinado à Inbox real; identidade confirmada e principal publicado,

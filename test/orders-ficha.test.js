@@ -406,6 +406,7 @@ test('maps the points onto item 1, the art onto the order and keeps the rest as 
         { quantidade: 16, tamanho: 'M' },
       ],
       malhas: ['dry fit'],
+      quantidade_informada: 20,
       tipo: 'camiseta comum',
       tipo_servico: 'sublimação total',
     },
@@ -682,15 +683,218 @@ test('sizes become the grade only when they read without doubt', () => {
   assert.equal(unclear.serviceData.sizes, '10 de cada');
 });
 
-test('colour and quantity: colour fills the item, quantity stays as service data', () => {
+test('colour and quantity: colour fills the item, the quantity is said, never typed in', () => {
   const ficha = briefingToFicha({ colors: ['azul', 'branco'], quantity: '30' });
   assert.equal(ficha.items[0].cor, 'azul, branco');
-  assert.equal(ficha.serviceData.quantity, '30');
+  assert.equal(ficha.items[0].quantidade_informada, 30);
+  assert.equal(ficha.serviceData.quantity, '30', 'the words stay as said');
   assert.equal(itemTotal(ficha.items[0]), 0, 'the quantity is never typed in');
+  assert.equal(orderTotal(ficha.items), 0, 'nor added to the total');
   assert.deepEqual(
     briefingToFicha({ quantity: 30 }).items,
-    [blankItem()],
+    [{ ...blankItem(), quantidade_informada: 30 }],
     'the quantity alone opens the item',
+  );
+});
+
+test('the quantity said for an order of one item is the item quantity said (ADR 025)', () => {
+  /** @param {Record<string, unknown>} briefing */
+  const said = (briefing) => briefingToFicha(briefing).items[0];
+
+  const vests = briefingToFicha({ product_type: 'coletes', quantity: '18' });
+  assert.equal(vests.items.length, 1);
+  assert.equal(vests.items[0].quantidade_informada, 18);
+  assert.deepEqual(vests.items[0].grade, []);
+  assert.equal(orderTotal(vests.items), 0, 'the grade alone makes the total');
+  assert.equal(vests.serviceData.quantity, '18');
+
+  for (const [quantity, expected] of /** @type {const} */ ([
+    [1, 1],
+    ['1', 1],
+    [' 18. ', 18],
+    ['18 peças', 18],
+    ['18 PEÇAS', 18],
+    ['18 unidades', 18],
+    ['18 coletes', 18],
+    ['18 colete', 18],
+    [100000, 100000],
+  ])) {
+    assert.equal(
+      said({ product_type: 'coletes', quantity }).quantidade_informada,
+      expected,
+      `"${quantity}" reads ${expected}`,
+    );
+  }
+  assert.equal(
+    said({ product_model: 'bandeira de mastro', quantity: '1 bandeira' })
+      .quantidade_informada,
+    1,
+  );
+  assert.equal(
+    said({ product_type: 'bonés', quantity: '50 bonés' }).quantidade_informada,
+    50,
+  );
+
+  // Anything with doubt stays only as the text the customer said.
+  for (const quantity of [
+    '18 a 20',
+    'entre 18 e 20',
+    'cerca de 18',
+    'umas 18',
+    '18 ou 20',
+    '2 dúzias',
+    '18 mil',
+    '18 por tamanho',
+    '10 de cada',
+    '18 camisas',
+    '18,5',
+    '1.000',
+    '0',
+    '100001',
+    'dezoito',
+    DEFERRED,
+    '',
+    18.5,
+    0,
+    -3,
+    100001,
+    Number.NaN,
+    ['18'],
+    { total: 18 },
+  ]) {
+    const ficha = briefingToFicha({ product_type: 'coletes', quantity });
+    assert.equal(
+      ficha.items[0].quantidade_informada,
+      null,
+      `${JSON.stringify(quantity)} reads as nothing`,
+    );
+  }
+  assert.equal(
+    briefingToFicha({ product_type: 'coletes', quantity: '18 a 20' })
+      .serviceData.quantity,
+    '18 a 20',
+  );
+});
+
+test('the quantity said stays with the order when it may not be the item one (ADR 025)', () => {
+  // A split read without doubt says each item's quantity; the total does not
+  // replace it.
+  const split = briefingToFicha({
+    product_type: 'camisetas',
+    quantity: '10',
+    audiences: '4 masculinas e 6 femininas',
+  });
+  assert.deepEqual(
+    split.items.map((entry) => entry.quantidade_informada),
+    [4, 6],
+  );
+  const one = briefingToFicha({
+    product_type: 'camisetas',
+    quantity: '18',
+    audiences: '10 femininas',
+  });
+  assert.equal(one.items[0].quantidade_informada, 10);
+
+  // A split still to read means the seller will share the total out.
+  const doubtful = briefingToFicha({
+    product_type: 'camisetas',
+    quantity: '18',
+    audiences: 'metade masculina e metade feminina',
+  });
+  assert.equal(doubtful.items.length, 1);
+  assert.equal(doubtful.items[0].quantidade_informada, null);
+  assert.equal(doubtful.serviceData.quantity, '18');
+
+  // Several products share the quantity said.
+  for (const productType of [
+    'camisetas e bonés',
+    'camisetas, bonés',
+    'camiseta + boné',
+    'camiseta/boné',
+  ]) {
+    const several = briefingToFicha({
+      product_type: productType,
+      quantity: '18',
+    });
+    assert.equal(
+      several.items[0].quantidade_informada,
+      null,
+      `"${productType}" names several products`,
+    );
+    assert.equal(several.serviceData.quantity, '18');
+  }
+  assert.equal(
+    said({
+      product_type: 'camisetas',
+      product_model: 'camiseta e regata',
+      quantity: '18',
+    }).quantidade_informada,
+    null,
+  );
+  // Two numbers are never one quantity.
+  assert.equal(
+    said({ quantity: '10 camisetas e 5 bonés' }).quantidade_informada,
+    null,
+  );
+
+  /** @param {Record<string, unknown>} briefing */
+  function said(briefing) {
+    return briefingToFicha(briefing).items[0];
+  }
+});
+
+test('the bot quantity said lands on item 1 and a later doubt keeps it (ADR 025)', () => {
+  const opened = briefingToFicha({ product_type: 'coletes' });
+  assert.equal(opened.items[0].quantidade_informada, null);
+
+  const said = projectBriefingOntoFicha(opened, {
+    product_type: 'coletes',
+    quantity: '18',
+  });
+  assert.equal(said.items[0].quantidade_informada, 18);
+
+  // The seller wrote a quantity said; a briefing whose quantity reads with
+  // doubt, or no longer says one, never erases it.
+  const seller = structuredClone(said);
+  seller.items[0].quantidade_informada = 20;
+  for (const quantity of ['18 a 20', 'cerca de 20', DEFERRED, undefined]) {
+    const next = projectBriefingOntoFicha(seller, {
+      product_type: 'coletes',
+      ...(quantity === undefined ? {} : { quantity }),
+    });
+    assert.equal(next.items[0].quantidade_informada, 20, String(quantity));
+  }
+  // Nor does a quantity said for several products, or a split to read.
+  assert.equal(
+    projectBriefingOntoFicha(seller, {
+      product_type: 'coletes e bonés',
+      quantity: '18',
+    }).items[0].quantidade_informada,
+    20,
+  );
+  assert.equal(
+    projectBriefingOntoFicha(seller, {
+      product_type: 'coletes',
+      quantity: '18',
+      audiences: 'metade masculina e metade feminina',
+    }).items[0].quantidade_informada,
+    20,
+  );
+
+  // Items the seller added keep theirs.
+  const withSecond = structuredClone(said);
+  withSecond.items.push({
+    ...blankItem(),
+    tipo: 'boné',
+    quantidade_informada: 5,
+  });
+  const reprojected = projectBriefingOntoFicha(withSecond, {
+    product_type: 'coletes',
+    quantity: '18',
+  });
+  assert.deepEqual(
+    reprojected.items.map((entry) => entry.quantidade_informada),
+    [18, 5],
   );
 });
 

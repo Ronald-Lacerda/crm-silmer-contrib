@@ -8,11 +8,12 @@ Desde a [ADR 024](../../adr/024-atendimento-comeca-pelo-produto.md), o bot
 pede o nome e o que o cliente quer personalizar na saudação e, depois,
 pergunta só o que o produto precisa:
 
-| Produto                             | Pontos que o bot pergunta                                         | Ficha |
-| ----------------------------------- | ----------------------------------------------------------------- | ----- |
-| Ainda não informado                 | produto, cor, quantidade, onde vai a estampa, para quando         | 6     |
-| Roupa, boné, mochila ou bolsa       | produto, modelo, cor, quantidade, onde vai a estampa, para quando | 7     |
-| Outro produto (caneca, chaveiro...) | produto, cor, quantidade, onde vai a estampa, para quando         | 6     |
+| Produto                             | Pontos que o bot pergunta                                          | Ficha |
+| ----------------------------------- | ------------------------------------------------------------------ | ----- |
+| Ainda não informado                 | produto, cor, quantidade, onde vai a estampa, para quando          | 6     |
+| Roupa, boné, mochila ou bolsa       | produto, modelo, cor, quantidade, onde vai a estampa, para quando  | 7     |
+| Bandeira, faixa ou banner           | produto, tamanho, cor, quantidade, onde vai a estampa, para quando | 7     |
+| Outro produto (caneca, chaveiro...) | produto, cor, quantidade, onde vai a estampa, para quando          | 6     |
 
 A ficha é o nome mais os pontos. O nome sai da conta depois de pedido duas
 vezes sem resposta (na saudação e logo em seguida). "Definir com o vendedor"
@@ -20,7 +21,10 @@ não conta. Conta o que o workflow grava sozinho: o modelo quando o produto já
 o diz ("abadás", "camisas polo", "ecobags") e a cor dos kits (abadá e
 sublimação total gravam "branca"). Arte, técnica, tecido, tamanhos, gola,
 personalização individual e divisão por público nunca são perguntados nem
-contam: o bot só grava o que o cliente disser.
+contam: o bot só grava o que o cliente disser. A exceção é a bandeira (faixa,
+banner ou estandarte), cujo modelo é o tamanho: ele vai em `product_model` com
+o nome do produto ("bandeira 1 x 1,5 m") e aparece no tipo do item da Ficha,
+nunca na grade de tamanhos.
 
 ## Como rodar
 
