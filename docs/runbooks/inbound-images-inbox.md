@@ -2,8 +2,8 @@
 
 ## INBOX-IMG-RELEASE-03 — implantação solicitada em 29/10/2026
 
-Release preparado sobre a revisão publicada `a94b5be`, com CP-T09 e migrações
-preservados. Não implantar a branch Evolution divergente inteira. A autorização
+Release preparado sobre `a94b5be` e atualizado sobre a revisão publicada
+`83560c0` antes da integração, com CP-T09, layout e migrações preservados. Não implantar a branch Evolution divergente inteira. A autorização
 do proprietário inclui implantar e testar a ação direta da imagem para o pedido.
 
 O botão **Anexar ao pedido** exige escolha explícita de pedido pendente
@@ -34,14 +34,58 @@ não importar o principal ativo pela CLI, que pode desativar os webhooks.
 Histórico desta sessão: dezoito imagens antigas foram recuperadas com autorização
 e conferidas na Inbox; quatro foram copiadas pelo upload existente ao pedido
 21-CRM e tiveram existência/tamanho/hash conferidos no RustFS. Isso não substitui
-a prova do novo botão nem de uma nova imagem do canal. A revisão n8n anterior
-ao release é `4581279c-3960-4ee9-af83-9923bc360727`, com 110 nós.
+a prova do novo botão nem de uma nova imagem do canal. O export imediatamente
+anterior ao release foi `15d9ba9a-77e8-429b-bd43-e6dc2349ec5f`, com 110 nós
+e o suporte INBOX-AUDIO-01 preservado.
 
 Preparação local: gate `validate` aprovado com 1.436 testes, cinco skips e zero
 falhas, incluindo tipos, lint, fronteiras e build; 36 E2E de interface aprovados
 e cinco testes do patch offline (estes últimos integram a contagem do gate).
 CI passou a executar também o teste PostgreSQL dedicado de mídia recebida.
-Publicação, implantação e prova operacional devem ser registrados após execução.
+
+### Implantação e prova operacional — 29/10/2026
+
+PR [#240](https://github.com/romulosutil/crm-silmer/pull/240) integrada; API e
+edge publicados na revisão `ad3001f52a6d14048f58125f3ee0ae33f95c567c`.
+CI da PR e da revisão de produção aprovados, incluindo PostgreSQL dedicado,
+358 E2E aprovados e sete skips. O patch offline terminou com seis testes.
+Containers saudáveis, `/api/health/live` e `/api/health/ready` com HTTP 200;
+source, env, mounts, portas, build e deploy preservados.
+
+Docker ImageIDs observados (não são RepoDigests do registry):
+
+| Serviço | Publicado                                                                 | Anterior, revisão `83560c0`                                               |
+| ------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| API     | `sha256:002395b8da4e9bf140dc625a137a81e1d0c15b6f7967842ffba855451cbebd74` | `sha256:9b54b165c2f2d0644ec4c6e608d042719410c77d9e9deb260278a5747573e023` |
+| edge    | `sha256:866c81b80a66c1f2fa5149307def6c8c213d46addfa304c69f1b2d07cc1f1cc9` | `sha256:7718f5156d3dba424816dec91ff781161c8fc5d8e56f137e57ccd795c5f8b02c` |
+
+n8n publicado pelo editor na revisão `8cd3ccf7-95e0-485c-bc38-34b65c2bc02c`,
+ativo, com 110 nós. Comparação com o export anterior confirmou somente quatro
+nós alterados; IDs, credenciais, conexões, settings e ramo de áudio preservados.
+Filtro de imagem em `(0,-976)`, antes de recibo e comercial no scheduler v1.
+Arquivo temporário de autenticação removido após o teste. Rollback preparado:
+retornar primeiro à revisão n8n anterior preservada e restaurar ambos os serviços
+na revisão `83560c0`, sem alterar configurações; não foi necessário executá-lo.
+
+Prova autorizada com quatro imagens sintéticas 20×20, JPEG/PNG como `image` e
+WebP/GIF como `document`: quatro entradas HTTP 200 e quatro anexos HTTP 201.
+As quatro miniaturas carregaram na Inbox. Pelo novo botão, cada arquivo foi
+anexado ao pedido pendente **28-CRM**, do contato **Teste de anexos — sintético**.
+Repetir o primeiro clique manteve quatro referências. Leitura dos quatro objetos
+RustFS confirmou existência, tamanho, hash armazenado e SHA256 dos bytes originais.
+Consulta somente leitura confirmou zero comandos e zero mensagens de saída.
+O pedido permanece pendente, identificado como teste, para conferência.
+
+Um workflow separado, manual e inativo, `SilmerImageRelease240`, executou os nós
+reais de decoder, SHA256 e multipart contra os mesmos quatro anexos sintéticos:
+quatro replays idempotentes, sem duplicação, IA ou WhatsApp. Ele usa resposta
+sintética do gateway; não comprova um novo evento real do provedor WhatsApp após
+a publicação. Não foi ativado, não possui webhook público nem caminho de envio.
+
+A garantia de exibição cobre JPEG/PNG/WebP/GIF válidos até cinco MB, inclusive
+como documento, após scanner e dentro da retenção. Arquivo indisponível é
+sinalizado na Inbox. Não implica recuperar bytes expirados ou renderizar todo
+formato arbitrário como imagem.
 
 INBOX-IMG-01: INBOX-2/3, INB-01..05, MSG-01/02 e PRV-03.
 Critérios em [spec](../../.specs/features/inbound-media-inbox/spec.md).

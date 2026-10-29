@@ -11,13 +11,14 @@ IMG-01/02/06–11, ARQ-02/04, PRV-03. Solicitação de 29/10/2026.
 - [x] Preparar suporte privado a JPEG/PNG/WebP/GIF e documento raster, sem
       alterar tipo canônico, autorização, retenção, scanner ou infraestrutura.
 - [x] Preparar patch offline do ramo Evolution e regressões de decoder,
-      filtro, preservação e prioridade; cinco testes aprovados.
-- [ ] Gate integrado, PostgreSQL sintético e CI aprovados.
-- [ ] Integrar e implantar frontend/API; conferir revisão, saúde e rollback.
-- [ ] Publicar patch mínimo do n8n sobre export atual preservado.
-- [ ] Provar imagem na Inbox → botão → arquivo do pedido → hash original.
+      filtro, preservação e prioridade; seis testes aprovados.
+- [x] Gate integrado, PostgreSQL sintético e CI aprovados.
+- [x] Integrar e implantar frontend/API; conferir revisão, saúde e rollback.
+- [x] Publicar patch mínimo do n8n sobre export atual preservado.
+- [x] Provar imagem na Inbox → botão → arquivo do pedido → hash original.
 
-Estado operacional no [runbook](../../../docs/runbooks/inbound-images-inbox.md).
+Produção em `ad3001f` (PR #240); prova sintética dos quatro formatos no pedido
+28-CRM, quatro hashes originais e replay sem duplicação. Estado operacional no [runbook](../../../docs/runbooks/inbound-images-inbox.md).
 
 ## WPP-01 — preparação WPPConnect pausada
 
