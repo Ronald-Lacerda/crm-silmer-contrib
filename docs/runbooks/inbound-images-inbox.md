@@ -81,14 +81,35 @@ vigente continua responsável por publicar freshness após confirmar o motor.
 | --- | --- | --- | --- |
 | API | `inbound-media` | `/tmp/crm-silmer-media` | leitura/escrita |
 | worker | `inbound-media` | `/tmp/crm-silmer-media` | leitura/escrita, retenção |
-| API | `inbound-scanner-socket` | `/tmp/crm-clamd` | somente leitura do mount; conexão ao socket privado |
+| API | `inbound-scanner-socket` | `/tmp/crm-clamd` | leitura/escrita; conexão ao socket privado |
 | worker | `inbound-scanner-socket` | `/tmp/crm-clamd` | leitura/escrita |
-| API | `inbound-signatures` | `/var/lib/clamav` | somente leitura |
+| API | `inbound-signatures` | `/var/lib/clamav` | leitura/escrita |
 | worker | `inbound-signatures` | `/var/lib/clamav` | leitura/escrita |
 
-Conservar o mount atual do spool e os modos `0600` do socket/marcador. Testar
-a conexão `fdpass` com uma imagem sintética e o bind da API somente leitura;
-sem essa prova, não ativar o workflow de anexos.
+O EasyPanel 2.38 inspecionado oferece apenas origem e destino para binds,
+sem opção de somente leitura. Além disso, a API já monta a origem completa
+do spool com escrita: aliases somente leitura não isolariam os mesmos
+arquivos acessíveis por `/var/lib/crm-chat-media/inbound-*`. API e worker
+compartilham UID 1000; `0700`/`0600` restringem outros usuários, mas não
+protegem esses arquivos contra um processo de API comprometido. Não alegar
+isolamento entre esses dois serviços nem adicionar privilégios ou TCP.
+
+Conservar o mount atual do spool e os modos `0600` do socket/marcador, sem
+chmod/chown recursivo no spool. O painel pode reaplicar `0777` no diretório
+raiz de um bind: os comandos de partida devem conferir UID/GID `1000:1000`
+e restaurar `0700` em cada diretório específico antes de iniciar o processo;
+confirmar novamente depois do deploy. Testar `fdpass` com uma imagem sintética a
+partir da API; sem essa prova, não ativar o workflow de anexos. Uma cópia
+com o worker ativo é apenas preparação: exigir ausência de freshclam e
+igualdade dos hashes, metadados e marcador antes/depois. Rejeitar qualquer
+divergência. Após montar, exigir atualização confirmada pelo próprio worker,
+marcador posterior ao reinício e scan real antes de aceitar anexos.
+
+O worker usa uma réplica e tinha Zero Downtime marcado. Desmarcar esse
+modo para impedir sobreposição de daemons no socket compartilhado. Antes do
+merge, controlar o autodeploy durante a troca; restaurar a política após
+validar a revisão implantada. Verificar filas sem jobs em processamento e
+shutdown gracioso. Health/PING sozinho não comprova frescor nem scan.
 Preparar/reiniciar primeiro o worker e confirmar seu health antes de implantar
 a API. Os diretórios são exclusivos desta mídia e não substituem o spool ou
 os buckets existentes. Esse plano precisa de validação operacional antes da

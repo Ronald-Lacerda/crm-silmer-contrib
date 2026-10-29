@@ -109,3 +109,26 @@ de leitura, estado desmarcado, anúncio de sucesso e duas requisições exatas
 com a versão esperada. Não houve alteração no produto ou redução do gate.
 Os quatro testes do arquivo passaram três vezes (12/12), assim como lint
 focal, formatação e diff check. O CI completo deve passar antes do deploy.
+
+## Reconciliação com a migração WAHA integrada
+
+Durante a espera do CI, o PR #224 entrou em master (`c7e6ca2`) e o painel
+mostrou deploys concorrentes de API, worker e edge. A feature foi reaplicada
+por rebase sobre essa revisão. Os conflitos eram adições ao inventário de
+tarefas e a condição da revisão de dependências: tarefas dos dois lados
+foram preservadas, e a revisão continua obrigatória quando dependências
+mudam, incluindo repositórios privados. O npm audit permanece incondicional.
+O Dockerfile atualizado e os contratos WAHA integrados foram preservados.
+O validate completo após rebase aprovou 1.268 testes, sem falhas e com os
+cinco skips condicionais existentes, além de tipos, lint, formatação e build.
+
+A inspeção real confirmou Zero Downtime marcado no worker e ausência de
+opção somente leitura no formulário de bind do EasyPanel 2.38. O runbook
+explicita a substituição sem sobreposição e os acessos reais pelo spool já
+montado. Nenhum serviço foi reiniciado ou reconfigurado por esta tarefa.
+
+O n8n em produção é 2.43.7. Importar um arquivo acrescenta nós ao canvas;
+portanto aplicar somente os nove nós novos e conectar o ramo ao inbound,
+preservando os 101 nós antigos. Save e Publish são ações distintas. O
+recovery preparado é manual e inativo, sem webhook ou nós de envio; valida
+as duas identidades, horários, hashes e tipos antes de enviar qualquer anexo.

@@ -95,3 +95,28 @@ não tem o volume transitório nem os recursos de scanner presentes no worker.
 Preparação de mounts, aplicação do CRM, publicação do ramo WAHA, scan real,
 recuperação pontual dos anexos e confirmação visual continuam pendentes de
 procedimento autorizado. Não foi realizada mutação de produção pelo verificador.
+
+## INBOX-IMG-CI-01 — escopo da revisão de dependências
+
+Revisão independente estreita de `217adeb`: **PASS**. Foram lidos o workflow,
+`scripts/check-pr-dependency-scope.mjs` e seus testes; nenhuma operação de
+produção foi executada. O filtro npm-only inicial foi recusado porque omitia
+alterações de referências GitHub Actions. O helper final também compara
+referências completas de Actions e exige revisão quando não reconhece a sintaxe.
+
+- `test/pr-dependency-scope.test.js:110`: `assert.equal(needsReview(changes), expected, name)`
+  cobre 15 cenários, incluindo troca do pin `actions/checkout` para `true`,
+  manifests/locks adicionados ou removidos para `true`, mudanças somente em
+  código/run/if para `false`, além de sintaxes de Actions não reconhecidas.
+- `test/pr-dependency-scope.test.js:127`: comparação Git inválida exige exit
+  diferente de zero e não emite `required=false`.
+- Reexecução independente: 2/2 testes aprovados, zero skips; comparação real
+  `dbbb762..HEAD` retornou `required=false`, coerente com ausência de alterações
+  de dependências. `git diff --check` passou.
+- O helper usa somente módulos nativos, depois do setup do Node, sem `eval`.
+  `.github/workflows/ci.yml:119` mantém `npm audit --audit-level=high`
+  incondicional. A condição da revisão depende da saída do helper; erro no
+  helper falha o job, preservando o bloqueio.
+
+O aceite é da seleção local do gate; não habilita GitHub Advanced Security,
+não altera permissões e não substitui a conclusão do CI remoto antes do deploy.
