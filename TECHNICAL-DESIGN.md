@@ -12,6 +12,10 @@ Persistência antes do ACK, reservas, epoch, resultado incerto e Inbox mantêm
 seus contratos. Meta e terceiros são preservados. Preparação, pareamento,
 cutover e homologação são gates distintos no
 [runbook](docs/runbooks/evolution-baileys.md), EVOL-01. Estado WAHA abaixo é histórico.
+Em 29/10, identidade da nova conta e publicação do principal foram confirmadas;
+texto de entrada, handoff e resposta humana pela Inbox chegaram ao WhatsApp Web
+uma vez. Os sete workflows Meta foram preservados. Recibos `delivered`/`read`,
+mídia e recuperação permanecem pendentes em EVOL-01D.
 
 ## Transporte atual da nova linha — WAHA/WEBJS; WPPConnect pausado
 

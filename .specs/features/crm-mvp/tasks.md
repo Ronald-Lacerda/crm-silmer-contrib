@@ -144,13 +144,18 @@ Requisitos ORC-01..08, INB-01 e MSG-01..04; OPS-1 / INT-1/2.
 - [x] EVOL-01B (provisionamento) — gateway/banco EasyPanel criados, backup privado
       e inventário n8n por CLI sem outro servidor/consumidor.
 - [x] EVOL-01B (verificação) — imagem/build, perfil não root, health privado `200`
-      e recusa sem chave `401`; instância sem conta, QR não solicitado.
-- [x] EVOL-01C — candidato importado e principal convertido no mesmo ID, ainda
-      inativo; seis candidatos WAHA/WPP e duplicado Evolution arquivados após
+      e recusa sem chave `401`; preparação concluída antes do pareamento.
+- [x] EVOL-01C — candidato importado e principal convertido no mesmo ID,
+      inicialmente inativo; seis candidatos WAHA/WPP e duplicado Evolution arquivados após
       verificar referências. Sete workflows Meta e terceiros preservados por
       fingerprints; volumes e credenciais dos arquivados permanecem recuperáveis.
-- [ ] EVOL-01D — parear conta disponível, confirmar identidade e homologar entrada
-      Inbox, resposta, mídia/status, takeover, replay, reconexão e recuperação.
+- [x] EVOL-01D (pareamento e texto) — identidade privada confirmada, principal
+      publicado, entrada única na Inbox, handoff, tomada humana e resposta
+      recebida no WhatsApp Web. Sete fluxos Meta intactos; backlog antigo sem
+      entrega automática elegível, resultados incertos preservados sem retry.
+      Backups conferidos e auxiliares temporários removidos.
+- [ ] EVOL-01D (homologação restante) — mídia, recibos `delivered`/`read`, replay,
+      reconexão e recuperação. Recebimento visual não homologa recibos do provider.
 
 Estado e limites no [runbook Evolution](../../../docs/runbooks/evolution-baileys.md).
 

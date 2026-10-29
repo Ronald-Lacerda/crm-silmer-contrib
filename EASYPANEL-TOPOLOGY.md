@@ -13,6 +13,11 @@ exportar/importar workflows com a mesma imagem do n8n sem iniciar servidor;
 seu diagnóstico autenticado não expõe payloads nem credenciais e deve ser
 retirado após a operação. Backup permanece privado. Estado operacional e
 limpeza em [EVOL-01](docs/runbooks/evolution-baileys.md); seções abaixo são históricas.
+Após o pareamento de 29/10, a instância privada permanece conectada e o
+principal n8n está publicado. Texto de entrada e resposta pela Inbox foram
+verificados no WhatsApp Web; os auxiliares de pareamento e consulta somente
+leitura foram removidos após conferir backups privados. Os sete fluxos Meta
+permaneceram inalterados; os gates restantes constam no runbook.
 
 ## Transporte da nova linha — WAHA retomado; WPPConnect parado
 

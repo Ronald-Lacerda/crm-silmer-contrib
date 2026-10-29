@@ -97,6 +97,53 @@ os bytes dos backups ou os dados de execução.
 
 ## Verificações e gates
 
+### Pareamento e texto operacional em 29/10/2026
+
+O proprietário forneceu uma nova conta em canal privado e leu o QR exibido
+no utilitário manual autenticado do n8n, sem persistência da execução.
+A Evolution confirmou `open` e identidade exatamente igual à configuração
+privada. No principal de 110 nós, somente os dois campos `ownNumber` da
+fronteira Evolution e o destino `wa.me` do nó de encaminhamento do site foram
+ajustados. Variáveis e workflows da Meta não foram alterados.
+
+O principal foi publicado pela interface n8n com a versão
+`48c1bc53-a57c-4d08-8550-04df116a49dd`, nome
+**EVOL-01D · Conta Evolution pareada**. A exportação final confirmou versão
+atual publicada e todos os outros workflows inalterados, incluindo os sete
+Meta protegidos. Não havia colisão de webhooks ativos.
+
+Antes da publicação, uma consulta agregada, transacional e somente leitura
+verificou o backlog antigo: nenhum comando elegível para entrega automática
+ou em processamento. Os 12 comandos com resultado incerto permaneceram
+preservados, sem retry. Essa consulta foi feita por auxiliar separado no
+projeto CRM; o n8n não acessou seu banco.
+
+O callback recusou requisição sem o header exclusivo com `403`. Depois foi
+habilitado somente para `MESSAGES_UPSERT` e `MESSAGES_UPDATE`, no destino
+exato, com `byEvents=false` e `base64=false`.
+
+Uma mensagem de texto enviada da outra conta já aberta no WhatsApp Web gerou
+uma única entrada na Inbox e o aviso de transferência para vendedor. Após
+**Assumir atendimento**, uma única resposta humana foi enviada pela Inbox e
+observada na conversa do WhatsApp Web. A conferência agregada registrou uma
+entrada `received`, um aviso automático `sent` e uma resposta humana `sent`,
+cada mensagem com um único ID do provider. O comando humano ficou `sent`,
+com um único ID e sem retry autorizado. A tomada humana manteve a conversa
+em estado `human`, com atribuição, epoch 1 e revisão de entrada 1.
+
+Essa observação comprova texto bidirecional e recebimento visual no teste.
+Os recibos do provider ainda constavam como `sent`: `delivered`/`read`, mídia,
+replay, reconexão e recuperação continuam sem homologação nesta etapa.
+
+Os exports privados anterior/posterior ao pareamento foram baixados para
+`var/evolution/pairing/backups/` e verificados por tamanho e SHA-256. Os
+auxiliares `schedule/silmer-evolution-pair-ops` e
+`espectro-mvp/silmer-evolution-cutover-check`, incluindo seus domínios
+temporários, foram removidos após guardar as evidências privadas. Evolution,
+seu banco e o n8n permanecem operacionais.
+
+### Checklist acumulado
+
 - [x] Serviços dedicados criados pelo conector EasyPanel.
 - [x] Backup privado e inventário de workflows obtidos por CLI da mesma versão
       do n8n, sem iniciar outro servidor, worker ou consumidor de eventos.
@@ -105,9 +152,10 @@ os bytes dos backups ou os dados de execução.
 - [x] Imagem/build, perfil não root, HTTP autenticado e recusa sem chave confirmados.
 - [x] Candidato e principal preparados, rotas/referências verificadas; limpeza
       recuperável dos candidatos e gateways antigos suspensos.
-- [ ] Identidade da conta pareada corresponde à configuração privada.
-- [ ] Entrada real na Inbox, IA/handoff e resposta humana entregue uma vez.
-- [ ] Mídia, status, replay, takeover, reconexão e recuperação homologados.
+- [x] Identidade da conta pareada corresponde à configuração privada.
+- [x] Entrada real na Inbox, handoff, tomada humana e resposta recebida uma vez
+      no WhatsApp Web.
+- [ ] Mídia, recibos `delivered`/`read`, replay, reconexão e recuperação homologados.
 
 Não promover um `200` de health ou evento ignorado a prova de entrega real.
 
