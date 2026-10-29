@@ -1,5 +1,46 @@
 # Imagens recebidas na Inbox
 
+## INBOX-IMG-RELEASE-03 — implantação solicitada em 29/10/2026
+
+Release preparado sobre a revisão publicada `a94b5be`, com CP-T09 e migrações
+preservados. Não implantar a branch Evolution divergente inteira. A autorização
+do proprietário inclui implantar e testar a ação direta da imagem para o pedido.
+
+O botão **Anexar ao pedido** exige escolha explícita de pedido pendente
+vinculado à conversa, pessoa responsável ou administrador e conversa aberta.
+Usa a leitura privada e o upload existente da arte, com CSRF e chave estável
+em retry. A ação não envia WhatsApp. Após sucesso, abrir o pedido e baixar o
+arquivo em **Arte do pedido → Arquivos da arte**, comparando os bytes/SHA256.
+
+Imagens JPEG, PNG, WebP e GIF de até cinco MB usam o mesmo pipeline, inclusive
+as enviadas como documento. O scanner e a detecção do conteúdo continuam
+obrigatórios; documentos mantêm o tipo histórico. A cópia ao pedido preserva
+o limite de cinco referências e dez MB por arquivo. Nenhuma URL do provedor
+ou caminho de disco é exposto. Arquivo ausente, inválido ou expirado gera aviso.
+Documentos antigos sem MIME nem anexo não permitem inferir se eram imagens.
+
+`ops/n8n/patch-evolution-inbound-images.mjs` prepara somente o filtro da Inbox,
+decoder, medição GIF, prioridade do filtro e continuação após erro do relatório.
+Exige export Evolution compatível, scheduler v1, cadeia e credenciais já
+vinculadas. Não altera os caminhos de IA/envio, o tipo da mensagem ou conexões.
+O scheduler ordena destinos por `(y,x)`; a imagem passa primeiro para que uma
+falha posterior de IA não suprima a persistência. Trata-se de execução sequencial:
+timeouts e retries de mídia podem atrasar o caminho comercial e o recibo.
+Guardar export/revisão anterior, comparar cada delta e publicar pelo editor;
+não importar o principal ativo pela CLI, que pode desativar os webhooks.
+
+Histórico desta sessão: dezoito imagens antigas foram recuperadas com autorização
+e conferidas na Inbox; quatro foram copiadas pelo upload existente ao pedido
+21-CRM e tiveram existência/tamanho/hash conferidos no RustFS. Isso não substitui
+a prova do novo botão nem de uma nova imagem do canal. A revisão n8n anterior
+ao release é `4581279c-3960-4ee9-af83-9923bc360727`, com 110 nós.
+
+Preparação local: gate `validate` aprovado com 1.436 testes, cinco skips e zero
+falhas, incluindo tipos, lint, fronteiras e build; 36 E2E de interface aprovados
+e cinco testes do patch offline (estes últimos integram a contagem do gate).
+CI passou a executar também o teste PostgreSQL dedicado de mídia recebida.
+Publicação, implantação e prova operacional devem ser registrados após execução.
+
 INBOX-IMG-01: INBOX-2/3, INB-01..05, MSG-01/02 e PRV-03.
 Critérios em [spec](../../.specs/features/inbound-media-inbox/spec.md).
 
@@ -77,14 +118,14 @@ atuais para `inbound-signatures` antes de cobrir `/var/lib/clamav` com o mount;
 o diretório vazio ocultaria as definições da imagem. O processo de atualização
 vigente continua responsável por publicar freshness após confirmar o motor.
 
-| Serviço | Subdiretório da origem base | Destino | Acesso |
-| --- | --- | --- | --- |
-| API | `inbound-media` | `/tmp/crm-silmer-media` | leitura/escrita |
-| worker | `inbound-media` | `/tmp/crm-silmer-media` | leitura/escrita, retenção |
-| API | `inbound-scanner-socket` | `/tmp/crm-clamd` | leitura/escrita; conexão ao socket privado |
-| worker | `inbound-scanner-socket` | `/tmp/crm-clamd` | leitura/escrita |
-| API | `inbound-signatures` | `/var/lib/clamav` | leitura/escrita |
-| worker | `inbound-signatures` | `/var/lib/clamav` | leitura/escrita |
+| Serviço | Subdiretório da origem base | Destino                 | Acesso                                     |
+| ------- | --------------------------- | ----------------------- | ------------------------------------------ |
+| API     | `inbound-media`             | `/tmp/crm-silmer-media` | leitura/escrita                            |
+| worker  | `inbound-media`             | `/tmp/crm-silmer-media` | leitura/escrita, retenção                  |
+| API     | `inbound-scanner-socket`    | `/tmp/crm-clamd`        | leitura/escrita; conexão ao socket privado |
+| worker  | `inbound-scanner-socket`    | `/tmp/crm-clamd`        | leitura/escrita                            |
+| API     | `inbound-signatures`        | `/var/lib/clamav`       | leitura/escrita                            |
+| worker  | `inbound-signatures`        | `/var/lib/clamav`       | leitura/escrita                            |
 
 O EasyPanel 2.38 inspecionado oferece apenas origem e destino para binds,
 sem opção de somente leitura. Além disso, a API já monta a origem completa

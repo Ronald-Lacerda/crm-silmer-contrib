@@ -19,6 +19,7 @@ import {
   PrivateMediaVolume,
 } from '../modules/integration-reliability/src/index.js';
 import { createSafeLogger } from '../modules/shared/src/index.js';
+import { SYNTHETIC_GIF } from './fixtures/inbound-raster.js';
 
 const connectionString = process.env.TEST_DATABASE_URL;
 
@@ -38,11 +39,11 @@ if (connectionString) {
     let currentTime = now;
     let scanMode = 'fresh';
     let scans = 0;
+    let detectedMimeType = 'image/png';
     const key = Buffer.alloc(32, 91);
     const bytes = await readFile(
       new URL('./fixtures/media-composer.png', import.meta.url),
     );
-    const digest = createHash('sha256').update(bytes).digest('hex');
     const volume = new PrivateMediaVolume({
       rootDirectory: directory,
       maxBytes: 10 * 1024 * 1024,
@@ -56,7 +57,7 @@ if (connectionString) {
             throw new Error('synthetic scanner offline');
           return {
             clean: scanMode !== 'infected',
-            detectedMimeType: 'image/png',
+            detectedMimeType,
             signatureUpdatedAt:
               scanMode === 'stale'
                 ? new Date(currentTime.getTime() - 48 * 60 * 60 * 1000)
@@ -115,8 +116,11 @@ if (connectionString) {
       workflowKey: 'synthetic-inbound',
       workflowVersion: 'synthetic-1',
     });
-    /** @param {string} suffix @param {boolean} [persist] */
-    async function image(suffix, persist = true) {
+    /** @param {string} suffix @param {boolean} [persist] @param {{type?: string, mime?: string, bytes?: Buffer}} [options] */
+    async function image(suffix, persist = true, options = {}) {
+      const content = options.bytes ?? bytes;
+      const mime = options.mime ?? 'image/png';
+      detectedMimeType = mime;
       const messageId = `message-${suffix}`;
       const received = await integration.receiveInbound({
         schema_version: '1.0',
@@ -127,11 +131,11 @@ if (connectionString) {
         contact: { name: 'Synthetic', wa_id: `5527900000${suffix}` },
         message: {
           external_id: messageId,
-          type: 'image',
+          type: options.type ?? 'image',
           text: 'Referência sintética',
           attachment: {
             external_id: `provider-media-${suffix}`,
-            mime_type: 'image/png',
+            mime_type: mime,
           },
         },
         technical: technical(messageId),
@@ -139,11 +143,11 @@ if (connectionString) {
       const input = {
         conversationId: received.conversation_id,
         externalId: messageId,
-        filename: 'synthetic.png',
-        mimeType: 'image/png',
-        size: bytes.length,
-        contentSha256: digest,
-        stream: bytes,
+        filename: mime === 'image/gif' ? 'synthetic.gif' : 'synthetic.png',
+        mimeType: mime,
+        size: content.length,
+        contentSha256: createHash('sha256').update(content).digest('hex'),
+        stream: content,
         technical: technical(`attachment-${suffix}`),
       };
       const stored = persist ? await integration.storeAttachment(input) : null;
@@ -195,6 +199,141 @@ if (connectionString) {
       JSON.stringify(details),
       /storage_key|content_envelope|provider-media-|https:\/\//u,
     );
+
+    // Preserve document history while presenting only detected raster images.
+    let sequence = 110;
+    for (const type of ['image', 'document']) {
+      for (const [mime, content] of [
+        ['image/png', bytes],
+        ['image/gif', SYNTHETIC_GIF],
+      ]) {
+        const uploaded = await image(String(sequence++), true, {
+          type,
+          mime: String(mime),
+          bytes: /** @type {Buffer} */ (content),
+        });
+        const replay = await integration.storeAttachment(uploaded.input);
+        assert.equal(replay.duplicate, true);
+        const shown = await inbox.get(uploaded.received.conversation_id);
+        assert.equal(shown.messages[0].type, type);
+        assert.equal(shown.messages[0].media.kind, 'image');
+        assert.equal(shown.messages[0].media.state, 'attached');
+        assert.equal(shown.messages[0].media.mimeType, mime);
+        const listed = await inbox.list({ limit: 20 });
+        assert.deepEqual(
+          listed.items.find(
+            (/** @type {any} */ item) =>
+              item.id === uploaded.received.conversation_id,
+          ).lastMessage.media,
+          shown.messages[0].media,
+        );
+        const served = await get(
+          uploaded.received.conversation_id,
+          uploaded.stored.attachment_id,
+        );
+        assert.equal(served.statusCode, 200);
+        assert.equal(served.headers['content-type'], mime);
+        assert.deepEqual(served.rawPayload, content);
+        assert.equal(
+          (
+            await get(
+              first.received.conversation_id,
+              uploaded.stored.attachment_id,
+            )
+          ).statusCode,
+          404,
+        );
+        if (type === 'document') {
+          const counts = await pool.query(
+            'SELECT count(*)::int total FROM crm.attachments WHERE message_id=(SELECT id FROM crm.messages WHERE conversation_id=$1)',
+            [uploaded.received.conversation_id],
+          );
+          assert.equal(counts.rows[0].total, 1);
+        }
+      }
+    }
+    const missingDocument = await image('117', false, {
+      type: 'document',
+      mime: 'image/png',
+    });
+    const missingDocumentDetail = await inbox.get(
+      missingDocument.received.conversation_id,
+    );
+    assert.deepEqual(missingDocumentDetail.messages[0].media, {
+      mediaId: null,
+      kind: 'image',
+      state: 'unavailable',
+      mimeType: 'image/png',
+      sizeBytes: null,
+      durationMs: null,
+      contentUrl: null,
+    });
+    assert.equal(missingDocumentDetail.messages[0].type, 'document');
+    const missingList = await inbox.list({ limit: 20 });
+    assert.deepEqual(
+      missingList.items.find(
+        (/** @type {any} */ item) =>
+          item.id === missingDocument.received.conversation_id,
+      ).lastMessage.media,
+      missingDocumentDetail.messages[0].media,
+    );
+    // A claimed MIME only explains unavailable content. It never provides a URL
+    // or bypasses scanning, even when the submitted bytes are a different type.
+    detectedMimeType = 'text/html';
+    await assert.rejects(
+      integration.storeAttachment(missingDocument.input),
+      (error) => /** @type {any} */ (error).code === 'UNSUPPORTED_MEDIA_TYPE',
+    );
+    const rejectedDocumentMedia = (
+      await pool.query(
+        'SELECT id FROM crm.transient_media WHERE external_media_id=$1',
+        [missingDocument.input.externalId],
+      )
+    ).rows[0];
+    assert.equal(
+      (
+        await get(
+          missingDocument.received.conversation_id,
+          rejectedDocumentMedia.id,
+        )
+      ).statusCode,
+      404,
+    );
+    assert.equal(
+      (await inbox.get(missingDocument.received.conversation_id)).messages[0]
+        .media.contentUrl,
+      null,
+    );
+    const missingPdf = await image('118', false, {
+      type: 'document',
+      mime: 'application/pdf',
+    });
+    assert.equal(
+      (await inbox.get(missingPdf.received.conversation_id)).messages[0].media,
+      null,
+    );
+    const pdf = await image('119', true, {
+      type: 'document',
+      mime: 'application/pdf',
+      bytes: Buffer.from('%PDF-1.7\nsynthetic\n'),
+    });
+    assert.equal(
+      (await inbox.get(pdf.received.conversation_id)).messages[0].media,
+      null,
+    );
+    assert.equal(
+      (await get(pdf.received.conversation_id, pdf.stored.attachment_id))
+        .statusCode,
+      404,
+    );
+    const pdfList = await inbox.list({ limit: 20 });
+    assert.equal(
+      pdfList.items.find(
+        (/** @type {any} */ item) => item.id === pdf.received.conversation_id,
+      ).lastMessage.media,
+      null,
+    );
+    detectedMimeType = 'image/png';
 
     await pool.query(
       "UPDATE crm.transient_media SET availability_status='quarantined',validation_status='stale_signatures' WHERE id=$1",

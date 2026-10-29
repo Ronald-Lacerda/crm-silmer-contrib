@@ -509,6 +509,10 @@ function normalizeMessageContent(message, type) {
     }
     return { text: message.text };
   }
+  const documentMime =
+    type === 'document' && typeof message?.attachment?.mime_type === 'string'
+      ? message.attachment.mime_type.split(';')[0].trim().toLowerCase()
+      : null;
   return {
     attachmentId: identifier(
       message?.attachment?.external_id,
@@ -516,6 +520,12 @@ function normalizeMessageContent(message, type) {
       512,
     ),
     caption: typeof message?.text === 'string' ? message.text : null,
+    // Metadata can announce missing bytes, never authorize a content read.
+    ...(['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(
+      documentMime,
+    )
+      ? { mimeType: documentMime }
+      : {}),
   };
 }
 

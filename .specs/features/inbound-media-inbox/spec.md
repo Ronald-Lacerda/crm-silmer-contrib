@@ -59,6 +59,38 @@ fronteiras, build, regressão e E2E de mídia, `git diff --check`. SQL deve ser
 validado em PostgreSQL dedicado com dados sintéticos. Verificador independente
 registra evidências e mutações isoladas em `validation.md`.
 
+## Complemento de implantação autorizado em 29/10/2026
+
+O proprietário pediu implantar a ação direta de imagem para pedido e garantir
+exibição das imagens recebidas. Tarefa **INBOX-IMG-RELEASE-03**, incluindo a
+entrega de **INBOX-IMG-ORDER-01** preparada anteriormente.
+
+- **IMG-06 / ARQ-02:** imagem recebida disponível oferece escolha explícita
+  de um pedido pendente vinculado à conversa e cópia como referência.
+  Somente responsável ou administrador, em conversa aberta, vê a ação.
+- **IMG-07 / ARQ-04:** leitura privada e upload existente preservam os bytes,
+  CSRF, autorização, scanner, cinco referências e dez MB por arquivo do pedido.
+  Uma resposta incerta reutiliza o mesmo formulário e chave idempotente;
+  sucesso só é anunciado após resposta positiva do upload.
+- **IMG-08 / PRV-03:** mensagens enviadas, conversa encerrada, pedido confirmado,
+  mídia perdida, rejeitada ou vencida não autorizam a cópia.
+- **IMG-09:** JPEG, PNG, WebP e GIF válidos, de até cinco MB, são exibidos
+  também quando enviados como documento. O tipo canônico `document` permanece;
+  o MIME detectado e o scanner determinam se os bytes podem ser servidos.
+  PDF e outros documentos não se tornam imagens por nome ou extensão.
+- **IMG-10:** imagem recebida sem arquivo disponível mostra aviso explícito.
+  Documentos novos preservam apenas MIME raster permitido no conteúdo cifrado
+  para esse aviso; históricos sem MIME nem anexo não são inferidos como imagem.
+- **IMG-11:** no scheduler v1 do n8n, a persistência da imagem precede os
+  demais destinos do inbound. Erro posterior da IA não impede o anexo já salvo;
+  falha no relatório de mídia não interrompe o caminho comercial preservado.
+  Esse ramo é sequencial: timeouts e retries de mídia podem atrasar o atendimento.
+
+Implantação deve partir da baseline publicada, preservar CP-T09 e migrações,
+passar pelos gates e ser conferida no ambiente alvo com bytes e hash.
+Nenhum requisito autoriza dispensar scanner, retenção ou limites para prometer
+que um arquivo inválido, expirado ou em formato incompatível será exibido.
+
 ## Limites operacionais
 
 Antes da ativação, verificar armazenamento transitório e scanner real da API.

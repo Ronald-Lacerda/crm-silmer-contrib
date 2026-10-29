@@ -32,6 +32,13 @@ const isRiff = (content, form) =>
   startsWith(content, 'RIFF') && startsWith(content, form, 8);
 /** @param {Buffer} content */
 const isJpeg = (content) => startsWith(content, 'ÿØÿ');
+/** @param {Buffer} content */
+const isGif = (content) =>
+  content.length >= 14 &&
+  (startsWith(content, 'GIF87a') || startsWith(content, 'GIF89a')) &&
+  content.readUInt16LE(6) > 0 &&
+  content.readUInt16LE(8) > 0 &&
+  content.at(-1) === 0x3b;
 
 /** @param {Buffer} content */
 function isSvg(content) {
@@ -69,6 +76,11 @@ export const ORDER_FILE_FORMATS = Object.freeze({
     contentType: 'application/postscript',
     matches: (content) => isPostScript(content) || startsWith(content, 'ÅÐÓÆ'),
     thumbnail: false,
+  },
+  gif: {
+    contentType: 'image/gif',
+    matches: isGif,
+    thumbnail: true,
   },
   jpeg: {
     contentType: 'image/jpeg',

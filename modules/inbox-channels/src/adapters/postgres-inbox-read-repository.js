@@ -2,8 +2,17 @@ import { decryptSiteContactClaim } from '@crm-silmer/contacts';
 import { decryptContactIdentityEnvelope } from '@crm-silmer/contacts/identity-envelope';
 import { decryptInboxMessageEnvelope } from './postgres-inbox-repository.js';
 
+const DOCUMENT_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+]);
+
 const MEDIA_PROJECTION = `COALESCE(media.id::text, inbound_media.id) media_id,
-  COALESCE(media.kind, inbound_media.media_type) media_kind,
+  COALESCE(media.kind, CASE WHEN inbound_media.media_type='document'
+    AND inbound_media.detected_mime_type IN ('image/jpeg','image/png','image/webp','image/gif')
+    THEN 'image' ELSE inbound_media.media_type END) media_kind,
   CASE WHEN media.id IS NOT NULL THEN media.state
     WHEN inbound_media.availability_status='lost' THEN 'lost'
     WHEN inbound_media.availability_status='available'
@@ -28,7 +37,9 @@ const MEDIA_JOIN = `LEFT JOIN crm.chat_media media
     JOIN crm.conversations inbound_conversation ON inbound_conversation.id=message.conversation_id
     WHERE attachment.message_id=message.id AND message.direction='inbound'
       AND transient.media_type=message.message_type
-      AND message.message_type IN ('image','audio','video')
+      AND (message.message_type IN ('image','audio','video')
+        OR (message.message_type='document' AND transient.detected_mime_type
+          IN ('image/jpeg','image/png','image/webp','image/gif')))
     ORDER BY attachment.created_at DESC, transient.id DESC LIMIT 1
   ) inbound_media ON media.id IS NULL
   LEFT JOIN LATERAL (
@@ -553,6 +564,20 @@ function mapMessage(row, repository) {
     row.id,
     repository.messageEnvelopeKey,
   );
+  const missingDocumentImage =
+    row.direction === 'inbound' &&
+    row.message_type === 'document' &&
+    DOCUMENT_IMAGE_MIME_TYPES.has(content.mimeType)
+      ? Object.freeze({
+          mediaId: null,
+          kind: 'image',
+          state: 'unavailable',
+          mimeType: content.mimeType,
+          sizeBytes: null,
+          durationMs: null,
+          contentUrl: null,
+        })
+      : null;
   return Object.freeze({
     authorId: row.author_id,
     authorKind: row.author_kind,
@@ -584,7 +609,7 @@ function mapMessage(row, repository) {
               ? `/api/v1/conversations/${encodeURIComponent(row.conversation_id)}/media/${encodeURIComponent(row.media_id)}/content`
               : null,
         })
-      : null,
+      : missingDocumentImage,
     deliveryMode: row.reserved_workflow_version
       ? /^dev-mvp-simple-\d+$/u.test(row.reserved_workflow_version)
         ? 'dev'

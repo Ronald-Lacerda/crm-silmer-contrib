@@ -101,6 +101,22 @@ test('MSG-02/INBOX-2: received image returns original bytes through private rout
   assert.equal(Number(response.headers['content-length']), bytes.length);
 });
 
+for (const type of ['image', 'document']) {
+  for (const mime of ['image/jpeg', 'image/png', 'image/webp', 'image/gif']) {
+    test(`IMG-01/EVOL-02: ${mime} received as ${type} serves only validated original bytes`, async (t) => {
+      const response = await (
+        await harness(t, {
+          row: { media_type: type, detected_mime_type: mime },
+        })
+      ).get();
+      assert.equal(response.statusCode, 200);
+      assert.deepEqual(response.rawPayload, bytes);
+      assert.equal(response.headers['content-type'], mime);
+      assert.equal(response.headers['cache-control'], 'private, no-store');
+    });
+  }
+}
+
 for (const [
   name,
   options,
@@ -179,6 +195,47 @@ for (const [
     {},
     undefined,
     503,
+  ],
+  [
+    'PDF document cannot be served as an image',
+    { row: { media_type: 'document', detected_mime_type: 'application/pdf' } },
+    {},
+    undefined,
+    503,
+  ],
+  [
+    'SVG document cannot be served inline',
+    { row: { media_type: 'document', detected_mime_type: 'image/svg+xml' } },
+    {},
+    undefined,
+    503,
+  ],
+  [
+    'image document exceeds five MB',
+    { row: { media_type: 'document', size_bytes: 5 * 1024 * 1024 + 1 } },
+    {},
+    undefined,
+    503,
+  ],
+  [
+    'image document is unscanned',
+    { row: { media_type: 'document', validation_status: 'pending' } },
+    {},
+    undefined,
+    503,
+  ],
+  [
+    'GIF document has expired',
+    {
+      row: {
+        media_type: 'document',
+        detected_mime_type: 'image/gif',
+        expires_at: NOW.toISOString(),
+      },
+    },
+    {},
+    undefined,
+    410,
   ],
   [
     'image exceeds five MB',

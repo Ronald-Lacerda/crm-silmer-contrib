@@ -12,6 +12,7 @@ const KINDS = Object.freeze({
   ai: 'vector',
   cdr: 'vector',
   eps: 'vector',
+  gif: 'raster',
   jpeg: 'raster',
   jpg: 'raster',
   pdf: 'pdf',
@@ -25,13 +26,13 @@ const KINDS = Object.freeze({
   zip: 'archive',
 });
 
-const THUMBNAILABLE = new Set(['jpeg', 'jpg', 'png', 'webp']);
+const THUMBNAILABLE = new Set(['gif', 'jpeg', 'jpg', 'png', 'webp']);
 
 export const ACCEPT = Object.keys(KINDS)
   .map((extension) => `.${extension}`)
   .join(',');
 export const FORMATS_LABEL =
-  'PNG, JPEG, WebP, CDR, PDF, SVG, AI, EPS, PSD, TIFF, ZIP e RAR';
+  'PNG, JPEG, WebP, GIF, CDR, PDF, SVG, AI, EPS, PSD, TIFF, ZIP e RAR';
 
 /** @param {string} name */
 export function extensionOf(name) {

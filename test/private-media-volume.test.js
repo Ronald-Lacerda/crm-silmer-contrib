@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { setImmediate } from 'node:timers';
+import { SYNTHETIC_GIF } from './fixtures/inbound-raster.js';
 
 import {
   MediaHashMismatchError,
@@ -85,6 +86,74 @@ test('writes clean media atomically with an opaque path and content hash', async
     assert.equal(repository.events[0][0], 'available');
     assert.equal(repository.events[0][1].sizeBytes, 16);
   });
+});
+
+for (const [fault, state] of [
+  ['clean', 'available'],
+  ['infected', 'rejected'],
+  ['stale', 'quarantined'],
+  ['mismatch', 'rejected'],
+]) {
+  test(`EVOL-02 GIF storage keeps scanner and MIME gates (${fault})`, async () => {
+    await withVolume(
+      {
+        scanner: {
+          async scan() {
+            return {
+              clean: fault !== 'infected',
+              detectedMimeType:
+                fault === 'mismatch' ? 'text/html' : 'image/gif',
+              signatureUpdatedAt:
+                fault === 'stale'
+                  ? '2026-08-01T11:00:00Z'
+                  : '2026-09-02T11:00:00Z',
+            };
+          },
+        },
+      },
+      async ({ volume, repository }) => {
+        const stored = await volume.store({
+          mediaId: 'synthetic-gif',
+          bytes: SYNTHETIC_GIF,
+          declaredMimeType: 'image/gif',
+        });
+        assert.equal(stored.availabilityStatus, state);
+        assert.equal(repository.events.at(-1)[0], state);
+        assert.equal(
+          stored.contentSha256,
+          createHash('sha256').update(SYNTHETIC_GIF).digest('hex'),
+        );
+      },
+    );
+  });
+}
+
+test('EVOL-02 GIF keeps the five MiB inbound limit even with a larger volume', async () => {
+  let scans = 0;
+  await withVolume(
+    {
+      maxBytes: 20 * 1024 * 1024,
+      maxFileBytes: 16 * 1024 * 1024,
+      scanner: {
+        async scan() {
+          scans++;
+          throw new Error('oversized GIF must not reach the scanner');
+        },
+      },
+    },
+    async ({ volume, rootDirectory }) => {
+      await assert.rejects(
+        volume.store({
+          mediaId: 'oversized-gif',
+          declaredMimeType: 'image/gif',
+          bytes: Buffer.alloc(5 * 1024 * 1024 + 1),
+        }),
+        MediaQuotaExceededError,
+      );
+      assert.equal(scans, 0);
+      assert.deepEqual(await readdir(rootDirectory), []);
+    },
+  );
 });
 
 test('fails quota closed and removes every partial file', async () => {

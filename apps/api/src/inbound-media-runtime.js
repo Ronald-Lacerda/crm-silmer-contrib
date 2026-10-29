@@ -3,7 +3,7 @@ import { open } from 'node:fs/promises';
 import { mediaError } from './chat-media-runtime.js';
 
 const MIME_TYPES = /** @type {Record<string, string[]>} */ ({
-  image: ['image/jpeg', 'image/png', 'image/webp'],
+  image: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
   audio: ['audio/mpeg', 'audio/ogg'],
   video: ['video/mp4'],
 });
@@ -36,7 +36,9 @@ export function createInboundMediaRuntime({
            JOIN crm.transient_media media ON media.id=attachment.transient_media_id
            WHERE media.id=$1 AND message.conversation_id=$2
              AND message.direction='inbound' AND media.media_type=message.message_type
-             AND message.message_type IN ('image','audio','video')`,
+             AND (message.message_type IN ('image','audio','video')
+               OR (message.message_type='document' AND media.detected_mime_type
+                 IN ('image/jpeg','image/png','image/webp','image/gif')))`,
           [input.mediaId, input.conversationId],
         )
       ).rows[0];
@@ -49,14 +51,21 @@ export function createInboundMediaRuntime({
       )
         throw mediaError(410);
       const size = Number(row.size_bytes);
+      // A raster image sent as a document keeps its historical message type;
+      // only its private presentation and byte limit follow the detected MIME.
+      const kind =
+        row.media_type === 'document' &&
+        MIME_TYPES.image.includes(row.detected_mime_type)
+          ? 'image'
+          : row.media_type;
       if (
         row.availability_status !== 'available' ||
         row.validation_status !== 'clean' ||
         !Number.isFinite(new Date(row.expires_at).getTime()) ||
         !Number.isSafeInteger(size) ||
         size < 1 ||
-        size > (row.media_type === 'image' ? 5 : 16) * 1024 * 1024 ||
-        !MIME_TYPES[row.media_type]?.includes(row.detected_mime_type) ||
+        size > (kind === 'image' ? 5 : 16) * 1024 * 1024 ||
+        !MIME_TYPES[kind]?.includes(row.detected_mime_type) ||
         !/^[a-f0-9]{64}$/u.test(row.content_sha256 ?? '')
       )
         throw mediaError(503);

@@ -32,7 +32,15 @@ createApp({
           },
           'Marcar arquivo perdido',
         ),
-        h(MediaMessage, { media: media.value }),
+        h(MediaMessage, {
+          media: media.value,
+          orders: params.has('orders')
+            ? [
+                { id: 'order-one', number: '01-CRM' },
+                { id: 'order-two', number: '02-CRM' },
+              ]
+            : [],
+        }),
       ]);
   },
 }).mount('#app');

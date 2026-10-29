@@ -75,6 +75,48 @@ test('normalizes WhatsApp buttons inside canonical text content', async () => {
   assert.equal(normalized.technical.actor, 'AUTOMATION_EXECUTOR');
 });
 
+test('EVOL-02 document image metadata stays optional and restricted to raster placeholders', async () => {
+  for (const mime of [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    ' IMAGE/PNG; charset=binary',
+    'application/pdf',
+    'image/svg+xml',
+    null,
+  ]) {
+    const { calls, service } = harness();
+    await service.receiveInbound({
+      channel: 'whatsapp',
+      contact: { name: 'Synthetic', wa_id: '5511000000000' },
+      event_id: 'synthetic-image-document',
+      message: {
+        external_id: 'synthetic-image-document',
+        type: 'document',
+        text: 'Synthetic',
+        attachment: { external_id: 'synthetic-attachment', mime_type: mime },
+      },
+      metadata: { phone_number_id: 'synthetic-account' },
+      occurred_at: NOW.toISOString(),
+      schema_version: '1.0',
+      technical: TECHNICAL,
+    });
+    const normalized = calls[0].input.message;
+    assert.equal(normalized.type, 'document');
+    const supported =
+      typeof mime === 'string' &&
+      !['application/pdf', 'image/svg+xml'].includes(mime);
+    assert.deepEqual(normalized.content, {
+      attachmentId: 'synthetic-attachment',
+      caption: 'Synthetic',
+      ...(supported
+        ? { mimeType: mime.trim().toLowerCase().split(';')[0] }
+        : {}),
+    });
+  }
+});
+
 test('site chat keeps its synthetic identity apart from the claimed phone', async () => {
   const { calls, service } = harness();
   const payload = {

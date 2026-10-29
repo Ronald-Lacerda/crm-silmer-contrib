@@ -10,6 +10,13 @@ let origin = '';
 const reads = [];
 /** @type {Record<string, {bytes: Buffer, mime: string}>} */
 const assets = {
+  gif: {
+    bytes: Buffer.from(
+      'R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+      'base64',
+    ),
+    mime: 'image/gif',
+  },
   image: {
     bytes: await readFile('test/fixtures/media-composer.png'),
     mime: 'image/png',
@@ -60,7 +67,10 @@ test.beforeAll(async () => {
                 new URL(req.headers.referer || origin).searchParams.get(
                   'kind',
                 ) || 'image';
-              const asset = assets[kind];
+              const format = new URL(
+                req.headers.referer || origin,
+              ).searchParams.get('format');
+              const asset = assets[format || kind];
               const cookie = req.headers.cookie || '';
               let status = cookie.includes('crm_session=synthetic-media-reader')
                 ? 200
@@ -127,6 +137,179 @@ test('MED-17/25 image decodes real private bytes with session', async ({
     .toBeGreaterThan(0);
   expect(reads[0].cookie).toContain('crm_session=synthetic-media-reader');
   expect(reads[0].status).toBe(200);
+});
+
+test('IMG-01/ARQ-02 explicitly selects the order and attaches original image bytes by keyboard with retry', async ({
+  page,
+  context,
+}) => {
+  await context.addCookies([
+    { name: 'crm_csrf', value: 'csrf-image-order', url: origin },
+  ]);
+  const attempts = /** @type {import('@playwright/test').Request[]} */ ([]);
+  await page.route('**/api/v1/orders/*/files', async (route) => {
+    const request = route.request();
+    attempts.push(request);
+    if (attempts.length === 1)
+      return route.fulfill({
+        status: 503,
+        json: { code: 'FILE_STORAGE_UNAVAILABLE' },
+      });
+    return route.fulfill({
+      json: { references: [{ id: 'reference-one' }], final: null },
+    });
+  });
+  await page.goto(`${origin}/__media-message?orders`);
+  const button = page.getByRole('button', {
+    name: 'Anexar ao pedido',
+    exact: true,
+  });
+  await button.focus();
+  await page.keyboard.press('Enter');
+  expect(attempts).toHaveLength(0);
+  await page.getByLabel('Anexar imagem ao pedido').selectOption('order-two');
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('alert')).toContainText('Arquivos indisponíveis');
+  await expect(button).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('status')).toHaveText(
+    'Imagem anexada ao pedido 02-CRM.',
+  );
+  expect(attempts).toHaveLength(2);
+  for (const attempt of attempts) {
+    expect(new URL(attempt.url()).pathname).toBe(
+      '/api/v1/orders/order-two/files',
+    );
+    expect(attempt.method()).toBe('POST');
+    expect(attempt.headers()['x-csrf-token']).toBe('csrf-image-order');
+    const bytes = attempt.postDataBuffer();
+    expect(bytes?.includes(assets.image.bytes)).toBe(true);
+    expect(bytes?.toString()).toContain('name="slot"\r\n\r\nreference');
+    expect(bytes?.toString()).toContain('filename="imagem-media-1.png"');
+  }
+  expect(attempts[0].headers()['idempotency-key']).toBeTruthy();
+  expect(attempts[1].headers()['idempotency-key']).toBe(
+    attempts[0].headers()['idempotency-key'],
+  );
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test('IMG-02 expired content never uploads an order file', async ({ page }) => {
+  await page.goto(`${origin}/__media-message?orders`);
+  await expect(
+    page.getByRole('img', { name: 'Imagem da conversa' }),
+  ).toBeVisible();
+  const uploads = /** @type {import('@playwright/test').Route[]} */ ([]);
+  await page.route('**/api/v1/orders/*/files', (route) => {
+    uploads.push(route);
+    return route.fulfill({ json: {} });
+  });
+  await page.route('**/api/v1/conversations/**/content', (route) =>
+    route.fulfill({ status: 410, body: '' }),
+  );
+  await page.getByLabel('Anexar imagem ao pedido').selectOption('order-one');
+  await page
+    .getByRole('button', { name: 'Anexar ao pedido', exact: true })
+    .click();
+  await expect(page.getByRole('alert')).toHaveText(
+    'Esta imagem não está mais disponível para anexar.',
+  );
+  expect(uploads).toHaveLength(0);
+});
+
+test('IMG-02 no editable order or lost image offers no attachment command', async ({
+  page,
+}) => {
+  await page.goto(`${origin}/__media-message`);
+  await expect(
+    page.getByRole('button', { name: 'Anexar ao pedido', exact: true }),
+  ).toHaveCount(0);
+  await page.goto(`${origin}/__media-message?orders&state=lost`);
+  await expect(
+    page.getByRole('button', { name: 'Anexar ao pedido', exact: true }),
+  ).toHaveCount(0);
+});
+
+test('IMG-06 GIF renders and attaches its original bytes', async ({ page }) => {
+  const uploads = /** @type {import('@playwright/test').Request[]} */ ([]);
+  await page.route('**/api/v1/orders/*/files', (route) => {
+    uploads.push(route.request());
+    return route.fulfill({
+      json: { references: [{ id: 'gif-reference' }], final: null },
+    });
+  });
+  await page.goto(origin + '/__media-message?orders&format=gif');
+  const image = page.getByRole('img', { name: 'Imagem da conversa' });
+  await expect
+    .poll(() =>
+      image.evaluate((el) => /** @type {HTMLImageElement} */ (el).naturalWidth),
+    )
+    .toBe(1);
+  await page.getByLabel('Anexar imagem ao pedido').selectOption('order-one');
+  await page
+    .getByRole('button', { name: 'Anexar ao pedido', exact: true })
+    .click();
+  await expect(page.getByRole('status')).toHaveText(
+    'Imagem anexada ao pedido 01-CRM.',
+  );
+  expect(uploads).toHaveLength(1);
+  expect(uploads[0].postDataBuffer()?.includes(assets.gif.bytes)).toBe(true);
+  expect(uploads[0].postDataBuffer()?.toString()).toContain(
+    'filename="imagem-media-1.gif"',
+  );
+});
+
+test('IMG-07 full order announces the five-file limit and preserves keyboard retry', async ({
+  page,
+}) => {
+  await page.route('**/api/v1/orders/*/files', (route) =>
+    route.fulfill({
+      status: 409,
+      json: { error: { code: 'FILE_LIMIT_REACHED' } },
+    }),
+  );
+  await page.goto(origin + '/__media-message?orders');
+  await page.getByLabel('Anexar imagem ao pedido').selectOption('order-one');
+  const button = page.getByRole('button', {
+    name: 'Anexar ao pedido',
+    exact: true,
+  });
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('alert')).toHaveText(
+    'Limite de 5 arquivos atingido. Remova um para enviar outro.',
+  );
+  await expect(button).toBeFocused();
+  await expect(page.getByText('Imagem anexada', { exact: false })).toHaveCount(
+    0,
+  );
+});
+
+test('IMG-08 image bytes with unsupported MIME are never uploaded', async ({
+  page,
+}) => {
+  await page.goto(origin + '/__media-message?orders');
+  await expect(
+    page.getByRole('img', { name: 'Imagem da conversa' }),
+  ).toBeVisible();
+  await page.route('**/api/v1/conversations/**/content', (route) =>
+    route.fulfill({
+      contentType: 'application/octet-stream',
+      body: assets.image.bytes,
+    }),
+  );
+  const uploads = /** @type {import('@playwright/test').Request[]} */ ([]);
+  await page.route('**/api/v1/orders/*/files', (route) => {
+    uploads.push(route.request());
+    return route.fulfill({ json: {} });
+  });
+  await page.getByLabel('Anexar imagem ao pedido').selectOption('order-one');
+  await page
+    .getByRole('button', { name: 'Anexar ao pedido', exact: true })
+    .click();
+  await expect(page.getByRole('alert')).toContainText('o formato não é aceito');
+  expect(uploads).toHaveLength(0);
 });
 
 for (const kind of ['audio', 'video']) {

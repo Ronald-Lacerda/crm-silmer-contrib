@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
+import { readFile } from 'node:fs/promises';
 
 /** @param {import('@playwright/test').Page} page @param {any} [options] */
 async function setup(page, options = {}) {
@@ -11,6 +12,15 @@ async function setup(page, options = {}) {
     automationState: 'human',
     automationEpoch: 2,
     assignedUser: { id: 'seller-1', functionName: 'Vendedor' },
+    ...(options.receivedImage
+      ? {
+          order: {
+            id: `order-${number}`,
+            number: `0${number}-CRM`,
+            status: options.orderStatus ?? 'pendente',
+          },
+        }
+      : {}),
     handoff: null,
     contact: {
       id: `contact-${number}`,
@@ -31,6 +41,27 @@ async function setup(page, options = {}) {
       [conversation.lastMessage],
     ]),
   );
+  if (options.receivedImage) {
+    messages.get('conversation-1')?.push(
+      /** @type {any} */ ({
+        id: 'received-image',
+        type: 'image',
+        preview: 'Imagem',
+        direction: options.direction ?? 'inbound',
+        occurredAt: '2026-10-29T10:00:00Z',
+        media: options.missingMedia
+          ? null
+          : {
+              mediaId: 'media-inbound',
+              kind: 'image',
+              state: 'attached',
+              contentUrl:
+                '/api/v1/conversations/conversation-1/media/media-inbound/content',
+            },
+      }),
+    );
+  }
+  const orderUploads = /** @type {import('@playwright/test').Request[]} */ ([]);
   const uploads = /** @type {import('@playwright/test').Request[]} */ ([]);
   const sends = /** @type {import('@playwright/test').Request[]} */ ([]);
   /** @type {import('@playwright/test').Route | null} */ let eventRoute = null;
@@ -54,6 +85,21 @@ async function setup(page, options = {}) {
       eventRoute = route;
       return;
     }
+    if (
+      path ===
+      '/api/v1/conversations/conversation-1/media/media-inbound/content'
+    ) {
+      return route.fulfill({
+        contentType: 'image/png',
+        body: await readFile('test/fixtures/media-composer.png'),
+      });
+    }
+    if (/^\/api\/v1\/orders\/order-[12]\/files$/.test(path)) {
+      orderUploads.push(request);
+      return route.fulfill({
+        json: { references: [{ id: 'reference-one' }], final: null },
+      });
+    }
     if (path === '/api/v1/users/assignable')
       return route.fulfill({
         json: {
@@ -71,6 +117,7 @@ async function setup(page, options = {}) {
       return route.fulfill({
         json: {
           currentSubjectId: null,
+          needsSubjectMessageIds: [],
           links: [],
           orders: [],
           ordersHasMore: false,
@@ -151,6 +198,7 @@ async function setup(page, options = {}) {
   ).toBeVisible();
   return {
     uploads,
+    orderUploads,
     sends,
     conversations,
     async sse(changed = true) {
@@ -175,6 +223,62 @@ async function setup(page, options = {}) {
       });
     },
   };
+}
+
+test('IMG-01/ARQ-02 Inbox owner attaches a received image to the explicitly selected pending order', async ({
+  page,
+}) => {
+  const state = await setup(page, { receivedImage: true });
+  const image = page.getByRole('img', { name: 'Imagem da conversa' });
+  await expect(image).toBeVisible();
+  await page.getByLabel('Anexar imagem ao pedido').selectOption('order-1');
+  const attach = page.getByRole('button', {
+    name: 'Anexar ao pedido',
+    exact: true,
+  });
+  await attach.focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByText('Imagem anexada ao pedido 01-CRM.', { exact: true }),
+  ).toBeVisible();
+  expect(state.orderUploads).toHaveLength(1);
+  expect(new URL(state.orderUploads[0].url()).pathname).toBe(
+    '/api/v1/orders/order-1/files',
+  );
+  expect(state.orderUploads[0].headers()['x-csrf-token']).toBe('csrf-media');
+  expect(state.sends).toHaveLength(0);
+});
+
+test('IMG-08 received image without attachment announces unavailable bytes', async ({
+  page,
+}) => {
+  const state = await setup(page, { receivedImage: true, missingMedia: true });
+  await expect(
+    page.getByText(
+      'Imagem recebida sem arquivo disponível. O histórico foi preservado.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(page.getByLabel('Anexar imagem ao pedido')).toHaveCount(0);
+  expect(state.orderUploads).toHaveLength(0);
+  expect(state.sends).toHaveLength(0);
+});
+
+for (const options of [
+  { otherOwner: true },
+  { orderStatus: 'confirmado' },
+  { direction: 'outbound' },
+]) {
+  test(`IMG-02 Inbox does not offer attach for ${JSON.stringify(options)}`, async ({
+    page,
+  }) => {
+    const state = await setup(page, { receivedImage: true, ...options });
+    await expect(
+      page.getByRole('img', { name: 'Imagem da conversa' }),
+    ).toBeVisible();
+    await expect(page.getByLabel('Anexar imagem ao pedido')).toHaveCount(0);
+    expect(state.orderUploads).toHaveLength(0);
+  });
 }
 
 /** @param {import('@playwright/test').Page} page */

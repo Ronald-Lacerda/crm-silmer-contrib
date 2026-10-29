@@ -7,6 +7,7 @@ const DEFAULT_ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
   'audio/mpeg',
   'audio/ogg',
+  'image/gif',
   'image/jpeg',
   'image/png',
   'image/webp',
@@ -258,6 +259,9 @@ export class PrivateMediaVolume {
     const declared = declaredMimeType
       ? boundedString(declaredMimeType, 'declaredMimeType', 255)
       : null;
+    const fileLimit = declared?.startsWith('image/')
+      ? Math.min(this.#maxFileBytes, 5 * 1024 * 1024)
+      : this.#maxFileBytes;
     const expectedDigest =
       expectedSha256 === null
         ? null
@@ -295,10 +299,7 @@ export class PrivateMediaVolume {
       for await (const value of toAsyncIterable(bytes)) {
         const chunk = Buffer.from(value);
         sizeBytes += chunk.length;
-        if (
-          sizeBytes > this.#maxFileBytes ||
-          usedBytes + sizeBytes > this.#maxBytes
-        ) {
+        if (sizeBytes > fileLimit || usedBytes + sizeBytes > this.#maxBytes) {
           throw new MediaQuotaExceededError();
         }
         digest.update(chunk);

@@ -1,5 +1,24 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## INBOX-IMG-RELEASE-03 — implantação da imagem para pedido
+
+IMG-01/02/06–11, ARQ-02/04, PRV-03. Solicitação de 29/10/2026.
+
+- [x] Preparar release restrito sobre a baseline publicada `a94b5be`, preservando
+      CP-T09, demais telas e migrações.
+- [x] Portar botão, escolha explícita do pedido e retry idempotente; 36 E2E
+      focados aprovados, incluindo GIF, teclado, limite e indisponibilidade.
+- [x] Preparar suporte privado a JPEG/PNG/WebP/GIF e documento raster, sem
+      alterar tipo canônico, autorização, retenção, scanner ou infraestrutura.
+- [x] Preparar patch offline do ramo Evolution e regressões de decoder,
+      filtro, preservação e prioridade; cinco testes aprovados.
+- [ ] Gate integrado, PostgreSQL sintético e CI aprovados.
+- [ ] Integrar e implantar frontend/API; conferir revisão, saúde e rollback.
+- [ ] Publicar patch mínimo do n8n sobre export atual preservado.
+- [ ] Provar imagem na Inbox → botão → arquivo do pedido → hash original.
+
+Estado operacional no [runbook](../../../docs/runbooks/inbound-images-inbox.md).
+
 ## WPP-01 — preparação WPPConnect pausada
 
 Preparação: [ADR 045](../../../docs/adr/045-piloto-whatsapp-wppconnect.md).

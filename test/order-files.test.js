@@ -20,6 +20,7 @@ import {
 } from '../modules/orders/src/domain/order-files.js';
 import { syntheticItems } from './fixtures/order-items.js';
 import { orderContextsFrom } from './fixtures/order-contexts.js';
+import { SYNTHETIC_GIF } from './fixtures/inbound-raster.js';
 
 // ADR 023: art files of an order — five references plus one final art,
 // 10 MB each, content checked against the extension.
@@ -286,6 +287,55 @@ test('the domain accepts listed formats by content and refuses the rest', () => 
       code: 'EMPTY_FILE',
     },
   );
+});
+
+test('EVOL-02 GIF reference checks content and preserves original bytes and idempotency', async () => {
+  assert.equal(
+    describeOrderFile({ content: SYNTHETIC_GIF, name: 'synthetic.gif' })
+      .contentType,
+    'image/gif',
+  );
+  const gif87 = Buffer.from(
+    'R0lGODdhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==',
+    'base64',
+  );
+  assert.equal(
+    describeOrderFile({ content: gif87, name: 'legacy.gif' }).extension,
+    'gif',
+  );
+  for (const content of [
+    PNG,
+    EXE,
+    Buffer.from('GIF89a'),
+    SYNTHETIC_GIF.subarray(0, -1),
+  ])
+    assert.throws(() => describeOrderFile({ content, name: 'invalid.gif' }), {
+      code: 'FILE_CONTENT_MISMATCH',
+    });
+  const { api, runtime } = harness();
+  const order = await createPending(runtime);
+  const headers = writeHeaders('synthetic-gif-replay');
+  const input = {
+    content: SYNTHETIC_GIF,
+    filename: 'synthetic.gif',
+    thumbnail: WEBP,
+    headers,
+  };
+  const sent = await upload(api, order.id, input);
+  assert.equal(sent.statusCode, 201);
+  assert.deepEqual((await upload(api, order.id, input)).json(), sent.json());
+  assert.equal(sent.json().references.length, 1);
+  const file = sent.json().references[0];
+  assert.equal(file.contentType, 'image/gif');
+  assert.equal(file.thumbnail, true);
+  const downloaded = await api.inject({
+    headers: readHeaders,
+    method: 'GET',
+    url: `/api/v1/orders/${order.id}/files/${file.id}/content`,
+  });
+  assert.equal(downloaded.statusCode, 200);
+  assert.deepEqual(downloaded.rawPayload, SYNTHETIC_GIF);
+  assert.equal(downloaded.headers['content-type'], 'image/gif');
 });
 
 test('file names lose paths and control characters but keep accents', () => {
