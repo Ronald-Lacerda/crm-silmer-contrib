@@ -71,6 +71,7 @@ if (connectionString) {
         contactEnvelopeKey: CONTACT_KEY,
         database,
         handoffEnvelopeKey: Buffer.alloc(32, 45),
+        n8nEnvelopeKey: Buffer.alloc(32, 46),
       }),
       inboxRepository: new PostgresInboxReadRepository({
         contactEnvelopeKey: CONTACT_KEY,
@@ -406,7 +407,7 @@ if (connectionString) {
             encryptJson(
               summary,
               `${summarized}:handoff:summary`,
-              Buffer.alloc(32, 45),
+              Buffer.alloc(32, 46),
             ),
           ),
           '2026-09-08T11:00:00.000Z',

@@ -340,6 +340,12 @@ export function createOperationReadRuntime(database, options = {}) {
         environment.HANDOFF_ENVELOPE_KEY,
         'HANDOFF_ENVELOPE_KEY',
       ),
+      n8nEnvelopeKey: environment.N8N_INTEGRATION_ENVELOPE_KEY
+        ? readKey(
+            environment.N8N_INTEGRATION_ENVELOPE_KEY,
+            'N8N_INTEGRATION_ENVELOPE_KEY',
+          )
+        : undefined,
     }),
     inboxRepository: new PostgresInboxReadRepository({
       contactEnvelopeKey: readKey(

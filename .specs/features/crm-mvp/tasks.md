@@ -19,6 +19,26 @@ VND-L02 (ADR 051). Não muda o n8n nem o banco.
       E2E com mock (teclado, axe, troca de conversa, 403, nada em URL/storage).
 - [ ] Conferir em produção com um handoff real depois do deploy.
 
+### INBOX-HANDOFF-01-FIX — chave de leitura do resumo (30/10/2026)
+
+AGT-03, AGT-05 e PCX-03. O n8n cifra o resumo com
+`N8N_INTEGRATION_ENVELOPE_KEY`; a leitura usava `HANDOFF_ENVELOPE_KEY` e
+falhava quando as chaves eram distintas. O leitor seleciona chave e AAD pelo
+escritor: sem Deal usa n8n; com Deal preserva o contrato humano legado.
+Não muda os envelopes existentes nem exige migração ou reenvio do handoff.
+
+- [x] Runtime injeta a chave n8n na leitura do resumo e da fila.
+- [x] Regressão com chaves distintas, runtime real e fila; chave incorreta
+      e AAD de outra conversa continuam rejeitadas, com ACL antes da leitura.
+- [x] `npm run validate`: 1.483 aprovados, cinco ignorados, nenhuma falha;
+      tipos, lint, contratos e build passaram. E2E completo: 364 aprovados,
+      sete ignorados, nenhuma falha, incluindo teclado e axe do resumo.
+      `npm audit --audit-level=high` passou (um alerta baixo e dois moderados
+      existentes). Revisão independente sem bloqueantes; `git diff --check`
+      passou. Testes executados fora do sandbox após bloqueio local de arquivos
+      temporários. PostgreSQL live não executado nesta correção.
+- [ ] Conferir a correção no ambiente implantado com handoff real.
+
 ## INBOX-UX-01 — área útil e clareza da Inbox (29/10/2026)
 
 Complementa INBOX-4, PCX-10/12/13/14 e preserva contexto de AGT-03/05.

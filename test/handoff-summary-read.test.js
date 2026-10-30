@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createOperationReadService } from '../apps/api/src/operation-runtime.js';
+import {
+  createOperationReadRuntime,
+  createOperationReadService,
+} from '../apps/api/src/operation-runtime.js';
 import { handoffSummaryLines } from '../apps/edge-web/src/lib/handoff-summary.js';
 import { encryptJson } from '../modules/n8n-integration/src/crypto.js';
 import { PostgresHandoffReadRepository } from '../modules/work-management/src/index.js';
 import { createHandoffCipher } from '../modules/work-management/src/cipher.js';
 
 const HANDOFF_KEY = Buffer.alloc(32, 45);
+const N8N_KEY = Buffer.alloc(32, 46);
 const SUMMARY =
   'Motivo: Perguntou o valor. Atenção: Bordado em dry fit pede teste; arte em alta. ' +
   'Faltam: quantidade. Ficha: 5 de 9 (56%). ' +
@@ -23,10 +27,12 @@ function repositoryWith(row) {
     database: {
       async query(/** @type {string} */ sql, /** @type {unknown[]} */ values) {
         queries.push({ sql, values });
+        if (sql.includes('count(*)')) return { rows: [{ count: row ? 1 : 0 }] };
         return { rows: row ? [row] : [] };
       },
     },
     handoffEnvelopeKey: HANDOFF_KEY,
+    n8nEnvelopeKey: N8N_KEY,
   });
   return { queries, repository };
 }
@@ -51,7 +57,7 @@ test('INBOX-HANDOFF-01: reads the n8n summary as the plain text the agent wrote'
       summary_envelope: encryptJson(
         SUMMARY,
         'conversation-1:handoff:summary',
-        HANDOFF_KEY,
+        N8N_KEY,
       ),
     }),
   );
@@ -86,9 +92,91 @@ test('INBOX-HANDOFF-01: reads the summary a person wrote for a Deal handoff', as
   assert.equal(handoff?.summary, '"Cliente" pediu retorno amanhã.');
 });
 
+test('INBOX-HANDOFF-01: pending queue reads the n8n summary with its own key', async () => {
+  const { repository } = repositoryWith(
+    handoffRow({
+      automation_epoch: 2,
+      contact_id: 'contact-1',
+      conversation_version: 3,
+      due_at: new Date('2026-10-29T16:00:00.000Z'),
+      updated_at: new Date('2026-10-29T12:00:00.000Z'),
+      external_identity_lookup_hash: 'synthetic-identity',
+      identity_envelope: encryptJson(
+        { externalIdentityId: 'synthetic-customer' },
+        JSON.stringify(['crm.contact_identities', 1, 'synthetic-identity']),
+        Buffer.alloc(32, 42),
+      ),
+      summary_envelope: encryptJson(
+        SUMMARY,
+        'conversation-1:handoff:summary',
+        N8N_KEY,
+      ),
+    }),
+  );
+  const page = await repository.listOpen({ after: null, limit: 20 });
+  assert.equal(page.totalCount, 1);
+  assert.equal(page.items[0].summary, SUMMARY);
+  assert.doesNotMatch(JSON.stringify(page), /ciphertext|summary_envelope/u);
+});
+
 test('INBOX-HANDOFF-01: returns null without an open handoff', async () => {
   const { repository } = repositoryWith(null);
   assert.equal(await repository.getOpenForConversation('conversation-1'), null);
+});
+
+test('INBOX-HANDOFF-01: runtime reads existing n8n summaries with the integration key', async () => {
+  const key = HANDOFF_KEY.toString('base64url');
+  const operations = createOperationReadRuntime(
+    {
+      async transaction(/** @type {(client: any) => Promise<any>} */ work) {
+        return work({ query: this.query });
+      },
+      async query() {
+        return {
+          rows: [
+            handoffRow({
+              summary_envelope: encryptJson(
+                SUMMARY,
+                'conversation-1:handoff:summary',
+                N8N_KEY,
+              ),
+            }),
+          ],
+        };
+      },
+    },
+    {
+      environment: {
+        CONTACT_IDENTITY_ENVELOPE_KEY: key,
+        CONTACT_IDENTITY_LOOKUP_KEY: key,
+        IDEMPOTENCY_ENVELOPE_KEY: key,
+        INBOX_MESSAGE_ENVELOPE_KEY: key,
+        HANDOFF_ENVELOPE_KEY: key,
+        OPERATION_CURSOR_HMAC_KEY: key,
+        N8N_INTEGRATION_ENVELOPE_KEY: N8N_KEY.toString('base64url'),
+      },
+    },
+  );
+  const result = await operations.getConversationHandoff({
+    conversationId: 'conversation-1',
+  });
+  assert.equal(result.handoff?.summary, SUMMARY);
+});
+
+test('INBOX-HANDOFF-01: never tries the human key for a n8n summary', async () => {
+  const { repository } = repositoryWith(
+    handoffRow({
+      summary_envelope: encryptJson(
+        SUMMARY,
+        'conversation-1:handoff:summary',
+        HANDOFF_KEY,
+      ),
+    }),
+  );
+  await assert.rejects(
+    repository.getOpenForConversation('conversation-1'),
+    /Unable to authenticate handoff envelope/u,
+  );
 });
 
 test('INBOX-HANDOFF-01: a summary bound to another conversation never decrypts', async () => {
@@ -97,7 +185,7 @@ test('INBOX-HANDOFF-01: a summary bound to another conversation never decrypts',
       summary_envelope: encryptJson(
         SUMMARY,
         'conversation-2:handoff:summary',
-        HANDOFF_KEY,
+        N8N_KEY,
       ),
     }),
   );

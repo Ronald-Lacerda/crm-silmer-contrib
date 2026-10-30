@@ -867,6 +867,11 @@ incertos para reconciliação. A rota direta não é reativada automaticamente.
 
 ## Diagnóstico rápido
 
+- erro ao carregar o resumo da transferência na Inbox: a API deve ler os
+  resumos sem Deal com `N8N_INTEGRATION_ENVELOPE_KEY`, a mesma chave usada na
+  gravação n8n. `HANDOFF_ENVELOPE_KEY` pertence ao handoff humano legado com
+  Deal. Não igualar ou rotacionar chaves para contornar o erro; implantar a
+  correção INBOX-HANDOFF-01-FIX na API, preservando os envelopes existentes.
 - `401/403`: conferir credencial e capacidade do `AUTOMATION_EXECUTOR`.
 - `409 STALE_AUTOMATION_FENCE`: a pessoa assumiu, chegou mensagem nova ou a
   revisão já foi respondida; não enviar.

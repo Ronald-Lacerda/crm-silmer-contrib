@@ -3,8 +3,13 @@ import { decryptContactIdentityEnvelope } from '@crm-silmer/contacts/identity-en
 import { decryptHandoffSummary } from './cipher.js';
 
 export class PostgresHandoffReadRepository {
-  /** @param {{contactEnvelopeKey: Buffer, database: {query: Function, transaction?: Function}, handoffEnvelopeKey: Buffer}} options */
-  constructor({ contactEnvelopeKey, database, handoffEnvelopeKey }) {
+  /** @param {{contactEnvelopeKey: Buffer, database: {query: Function, transaction?: Function}, handoffEnvelopeKey: Buffer, n8nEnvelopeKey?: Buffer}} options */
+  constructor({
+    contactEnvelopeKey,
+    database,
+    handoffEnvelopeKey,
+    n8nEnvelopeKey,
+  }) {
     if (!database || typeof database.query !== 'function') {
       throw new TypeError('database.query is required');
     }
@@ -19,6 +24,13 @@ export class PostgresHandoffReadRepository {
     this.contactEnvelopeKey = Buffer.from(contactEnvelopeKey);
     this.database = database;
     this.handoffEnvelopeKey = Buffer.from(handoffEnvelopeKey);
+    if (
+      n8nEnvelopeKey !== undefined &&
+      (!Buffer.isBuffer(n8nEnvelopeKey) || n8nEnvelopeKey.length !== 32)
+    ) {
+      throw new TypeError('n8nEnvelopeKey must be a 32-byte Buffer');
+    }
+    this.n8nEnvelopeKey = n8nEnvelopeKey && Buffer.from(n8nEnvelopeKey);
   }
 
   /** @param {{after: null|{id: string, updatedAt: string}, limit: number}} input */
@@ -96,7 +108,7 @@ export class PostgresHandoffReadRepository {
         id: row.id,
         reasonCode: row.reason_code,
         status: row.status,
-        summary: summaryText(row, this.handoffEnvelopeKey),
+        summary: summaryText(row, this),
         version: Number(row.version),
       });
     });
@@ -142,7 +154,7 @@ function mapHandoff(row, repository) {
     reasonCode: row.reason_code,
     slaMinutes: Number(row.sla_minutes),
     status: row.status,
-    summary: summaryText(row, repository.handoffEnvelopeKey),
+    summary: summaryText(row, repository),
     targetRole: row.target_role,
     updatedAt: iso(row.updated_at),
     version: Number(row.version),
@@ -152,24 +164,28 @@ function mapHandoff(row, repository) {
 /**
  * The work-management service binds the plain summary to its Deal. The n8n
  * handoff exists before a Deal does (`deal_id` NULL): it binds the summary to
- * the conversation and stores it JSON-encoded (`encryptJson`), so the quotes
+ * the conversation with the integration key and stores it JSON-encoded
+ * (`encryptJson`), so the quotes
  * and escapes are removed here instead of reaching the seller.
  *
  * @param {{conversation_id: string, deal_id?: string|null, summary_envelope: unknown}} row
- * @param {Buffer} key
+ * @param {PostgresHandoffReadRepository} repository
  */
-function summaryText(row, key) {
+function summaryText(row, repository) {
   if (row.deal_id) {
     return decryptHandoffSummary(
       row.summary_envelope,
       `${row.deal_id}:${row.conversation_id}:handoff:summary`,
-      key,
+      repository.handoffEnvelopeKey,
     );
+  }
+  if (!repository.n8nEnvelopeKey) {
+    throw new Error('The n8n integration key is required to read its handoff');
   }
   const text = decryptHandoffSummary(
     row.summary_envelope,
     `${row.conversation_id}:handoff:summary`,
-    key,
+    repository.n8nEnvelopeKey,
   );
   try {
     const value = JSON.parse(text);
