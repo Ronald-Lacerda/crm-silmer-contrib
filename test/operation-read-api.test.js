@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createApi } from '../apps/api/src/app.js';
+import { authorize } from '../modules/identity-access/src/authorization.js';
 import { createSafeLogger } from '../modules/shared/src/index.js';
 
 function harness(overrides = {}) {
@@ -357,4 +358,93 @@ test('Painel: the Inbox summary is read for the session user and takes no query'
   assert.equal(denied.calls.length, 0);
   await api.close();
   await denied.api.close();
+});
+
+test('INBOX-HANDOFF-01: publishes the open handoff summary under handoff.read, never cached', async () => {
+  const { api, calls, headers } = harness({
+    async getConversationHandoff(/** @type {any} */ input) {
+      calls.push(['conversation-handoff', input]);
+      return {
+        handoff: {
+          createdAt: '2026-10-29T12:00:00.000Z',
+          id: 'handoff-1',
+          reasonCode: 'price_before_quote',
+          status: 'pending',
+          summary: 'Motivo: Perguntou o valor. Ficha: 5 de 9 (56%).',
+          version: 1,
+        },
+      };
+    },
+  });
+  const response = await api.inject({
+    headers,
+    method: 'GET',
+    url: '/api/v1/inbox/conversations/conversation-1/handoff',
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers['cache-control'], 'private, no-store');
+  assert.equal(response.headers.vary, 'Origin, Cookie');
+  assert.equal(calls[0][0], 'authorize');
+  assert.equal(calls[0][1].action, 'handoff.read');
+  assert.deepEqual(calls[1], [
+    'conversation-handoff',
+    { conversationId: 'conversation-1' },
+  ]);
+  assert.equal(
+    response.json().handoff.summary,
+    'Motivo: Perguntou o valor. Ficha: 5 de 9 (56%).',
+  );
+  await api.close();
+});
+
+test('INBOX-HANDOFF-01: refuses the handoff summary without handoff.read before decrypting it', async () => {
+  for (const actor of [
+    {
+      capabilities: [],
+      functionName: 'Financeiro',
+      id: 'finance-1',
+      kind: 'human',
+    },
+    {
+      capabilities: [],
+      functionName: 'Vendedor',
+      id: 'n8n',
+      kind: 'assistant',
+    },
+  ]) {
+    let decrypted = false;
+    const { api, headers } = harness({
+      async authorizeRead(/** @type {any} */ input) {
+        authorize(/** @type {any} */ (actor), input.action);
+        return { actor };
+      },
+      async getConversationHandoff() {
+        decrypted = true;
+        return { handoff: null };
+      },
+    });
+    const response = await api.inject({
+      headers,
+      method: 'GET',
+      url: '/api/v1/inbox/conversations/conversation-1/handoff',
+    });
+    assert.equal(response.statusCode, 403);
+    assert.equal(response.json().error.code, 'FORBIDDEN');
+    assert.doesNotMatch(response.body, /Motivo|summary/u);
+    assert.equal(decrypted, false);
+    await api.close();
+  }
+});
+
+test('INBOX-HANDOFF-01: rejects query parameters on the handoff summary route', async () => {
+  const { api, calls, headers } = harness();
+  const response = await api.inject({
+    headers,
+    method: 'GET',
+    url: '/api/v1/inbox/conversations/conversation-1/handoff?summary=1',
+  });
+  assert.equal(response.statusCode, 400);
+  assert.equal(response.json().error.code, 'INVALID_REQUEST');
+  assert.deepEqual(calls, []);
+  await api.close();
 });

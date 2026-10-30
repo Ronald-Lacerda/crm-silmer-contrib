@@ -13,6 +13,7 @@ import { brand } from '../brand/index.js';
 import AppIcon from '../components/AppIcon.vue';
 import FilterSheet from '../components/FilterSheet.vue';
 import AudioRecorder from '../components/inbox/AudioRecorder.vue';
+import ConversationHandoffSummary from '../components/inbox/ConversationHandoffSummary.vue';
 import ConversationOrderSummary from '../components/inbox/ConversationOrderSummary.vue';
 import MediaMessage from '../components/inbox/MediaMessage.vue';
 import { commandKey, request } from '../lib/api-client.js';
@@ -2356,6 +2357,11 @@ onBeforeUnmount(() => {
               Nenhum outro vendedor disponível para receber o atendimento.
             </p>
           </form>
+
+          <ConversationHandoffSummary
+            :conversation-id="active.id"
+            :handoff="active.handoff ?? null"
+          />
 
           <div v-if="detailLoading" class="loading-state thread" role="status">
             Carregando histórico…

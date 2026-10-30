@@ -365,6 +365,46 @@ paths:
               schema: { $ref: '#/components/schemas/InboxConversationDetail' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /inbox/conversations/{conversationId}/handoff:
+    get:
+      operationId: getInboxConversationHandoff
+      summary: Retorna o handoff aberto da conversa com o resumo
+      description: >-
+        INBOX-HANDOFF-01 / AGT-03. Handoff pendente ou aceito da conversa, com
+        o resumo que o agente gravou (Ficha, Atenção, Dica, perguntas do
+        cliente). Exige handoff.read; o resumo é decifrado somente depois da
+        autorização e a resposta é private, no-store. handoff é null quando a
+        conversa não tem handoff aberto.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/HumanReadOrigin'
+      responses:
+        '200':
+          description: Handoff aberto da conversa, ou null
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [handoff]
+                properties:
+                  handoff:
+                    oneOf:
+                      - type: 'null'
+                      - type: object
+                        additionalProperties: false
+                        required:
+                          [id, status, version, reasonCode, summary, createdAt]
+                        properties:
+                          id: { type: string }
+                          status: { type: string, enum: [pending, accepted] }
+                          version: { type: integer, minimum: 1 }
+                          reasonCode: { type: string }
+                          summary: { type: string, maxLength: 8192 }
+                          createdAt: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /inbox/conversations/{conversationId}/subjects:
     get:
       operationId: listConversationSubjects

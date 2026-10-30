@@ -36,7 +36,7 @@ export class PostgresHandoffReadRepository {
       values.push(input.limit + 1);
       const [page, count] = await Promise.all([
         database.query(
-          `SELECT handoff.id, handoff.conversation_id,
+          `SELECT handoff.id, handoff.deal_id, handoff.conversation_id,
                   handoff.status, handoff.version, handoff.reason_code,
                   handoff.summary_envelope, handoff.target_role, handoff.due_at,
                   handoff.sla_minutes, handoff.created_at, handoff.updated_at,
@@ -71,6 +71,37 @@ export class PostgresHandoffReadRepository {
     });
   }
 
+  /**
+   * INBOX-HANDOFF-01: the summary of the conversation's open handoff (pending
+   * or accepted), for the Inbox. At most one is open per conversation; null
+   * when there is none.
+   *
+   * @param {string} conversationId
+   */
+  async getOpenForConversation(conversationId) {
+    return this.#snapshot(async (database) => {
+      const result = await database.query(
+        `SELECT id, deal_id, conversation_id, status, version, reason_code,
+                summary_envelope, created_at
+         FROM crm.handoffs
+         WHERE conversation_id = $1 AND status IN ('pending', 'accepted')
+         ORDER BY created_at DESC, id DESC
+         LIMIT 1`,
+        [conversationId],
+      );
+      const row = result.rows[0];
+      if (!row) return null;
+      return Object.freeze({
+        createdAt: iso(row.created_at),
+        id: row.id,
+        reasonCode: row.reason_code,
+        status: row.status,
+        summary: summaryText(row, this.handoffEnvelopeKey),
+        version: Number(row.version),
+      });
+    });
+  }
+
   /** @template T @param {(database: any) => Promise<T>} work */
   async #snapshot(work) {
     if (typeof this.database.transaction !== 'function') {
@@ -92,7 +123,6 @@ function mapHandoff(row, repository) {
     row.external_identity_lookup_hash,
     repository.contactEnvelopeKey,
   );
-  const pointer = `${row.conversation_id}:handoff:summary`;
   return Object.freeze({
     automationEpoch: Number(row.automation_epoch),
     contact: {
@@ -112,15 +142,41 @@ function mapHandoff(row, repository) {
     reasonCode: row.reason_code,
     slaMinutes: Number(row.sla_minutes),
     status: row.status,
-    summary: decryptHandoffSummary(
-      row.summary_envelope,
-      pointer,
-      repository.handoffEnvelopeKey,
-    ),
+    summary: summaryText(row, repository.handoffEnvelopeKey),
     targetRole: row.target_role,
     updatedAt: iso(row.updated_at),
     version: Number(row.version),
   });
+}
+
+/**
+ * The work-management service binds the plain summary to its Deal. The n8n
+ * handoff exists before a Deal does (`deal_id` NULL): it binds the summary to
+ * the conversation and stores it JSON-encoded (`encryptJson`), so the quotes
+ * and escapes are removed here instead of reaching the seller.
+ *
+ * @param {{conversation_id: string, deal_id?: string|null, summary_envelope: unknown}} row
+ * @param {Buffer} key
+ */
+function summaryText(row, key) {
+  if (row.deal_id) {
+    return decryptHandoffSummary(
+      row.summary_envelope,
+      `${row.deal_id}:${row.conversation_id}:handoff:summary`,
+      key,
+    );
+  }
+  const text = decryptHandoffSummary(
+    row.summary_envelope,
+    `${row.conversation_id}:handoff:summary`,
+    key,
+  );
+  try {
+    const value = JSON.parse(text);
+    return typeof value === 'string' ? value : text;
+  } catch {
+    return text;
+  }
 }
 
 /** @param {any} value */

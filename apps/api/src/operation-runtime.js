@@ -99,6 +99,19 @@ export function createOperationReadService({
         requireId(input?.conversationId, 'CONVERSATION_ID'),
       );
     },
+    /**
+     * INBOX-HANDOFF-01 / AGT-03: the open handoff's summary, read apart from
+     * the conversation so only `handoff.read` decrypts it.
+     *
+     * @param {any} input
+     */
+    async getConversationHandoff(input) {
+      return Object.freeze({
+        handoff: await handoffRepository.getOpenForConversation(
+          requireId(input?.conversationId, 'CONVERSATION_ID'),
+        ),
+      });
+    },
     /** @param {any} input */
     async listContacts(input = {}) {
       rejectUnknownKeys(input, ['cursor', 'limit', 'q']);

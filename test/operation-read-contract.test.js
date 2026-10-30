@@ -12,6 +12,7 @@ test('documents the authorized Inbox and Contact read contracts', async () => {
   for (const operation of [
     'listInboxConversations',
     'getInboxConversation',
+    'getInboxConversationHandoff',
     'listContacts',
     'getContact',
   ]) {

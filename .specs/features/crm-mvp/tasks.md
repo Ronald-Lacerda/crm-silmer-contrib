@@ -1,5 +1,24 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## INBOX-HANDOFF-01 — resumo da transferência na Inbox (29/10/2026)
+
+AGT-03, AGT-05 e PCX-03; item "Exibir o resumo do handoff na Inbox" de
+VND-L02 (ADR 051). Não muda o n8n nem o banco.
+
+- [x] `GET /api/v1/inbox/conversations/{id}/handoff` com `handoff.read`:
+      handoff pendente ou aceito da conversa com o resumo decifrado só depois
+      da autorização, `private, no-store`, sem query e `null` sem handoff.
+- [x] Resumo do n8n lido como texto (o envelope guarda JSON) e resumo do
+      Deal pela AAD do Deal, também na fila `GET /api/v1/inbox/handoffs`.
+- [x] "Resumo da transferência" acima do histórico: uma linha por frase
+      (Motivo, Atenção, Ficha, Dica…), perguntas do cliente em lista, aberto
+      enquanto pendente e recolhido depois de aceito; botão dentro do título
+      com `aria-expanded`, foco não muda ao carregar, some sem permissão.
+- [x] Testes: API positiva e negativas (Financeiro, assistente, query),
+      repositório com cifra real dos dois escritores, PostgreSQL 17 real e
+      E2E com mock (teclado, axe, troca de conversa, 403, nada em URL/storage).
+- [ ] Conferir em produção com um handoff real depois do deploy.
+
 ## INBOX-UX-01 — área útil e clareza da Inbox (29/10/2026)
 
 Complementa INBOX-4, PCX-10/12/13/14 e preserva contexto de AGT-03/05.
@@ -427,7 +446,7 @@ Decisão ADR 049/RFC 037. Teste: `test/n8n-vendedor-aprendizados.test.js`.
 - [x] Parceria e revenda com perguntas no resumo (AGT-03, AGT-05).
 - [x] Tom sem elogio e aviso perto do fechamento (ORC-03).
 - [ ] Publicar no n8n com backup e verificação.
-- [ ] Exibir o resumo do handoff na Inbox (tarefa separada do CRM).
+- [x] Exibir o resumo do handoff na Inbox (INBOX-HANDOFF-01).
 
 Decisão ADR 051/RFC 040. Teste: `test/n8n-vendedor-aprendizados-l02.test.js`.
 

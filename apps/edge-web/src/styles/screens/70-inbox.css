@@ -516,6 +516,104 @@
 
 /* The history fills the space between header and reply, opens on the latest
    message and keeps a short conversation next to the reply field. */
+/* INBOX-HANDOFF-01: what the agent handed over, above the history. Its
+   height is capped so the history keeps the room; past it, the summary
+   scrolls on its own. */
+.handoff-summary {
+  flex: none;
+  margin: var(--space-2) var(--space-4) 0;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.handoff-summary-title {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.handoff-summary-title button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: 100%;
+  min-block-size: var(--target-min);
+  padding: var(--space-2) var(--space-3);
+  font-weight: 600;
+  text-align: start;
+}
+
+.handoff-summary-title button svg {
+  margin-inline-start: auto;
+  transition: transform var(--duration-fast) var(--easing-standard);
+}
+
+.handoff-summary-title button[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.handoff-summary-body {
+  max-block-size: 12rem;
+  padding: 0 var(--space-3) var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  font-size: var(--text-sm);
+}
+
+.handoff-summary-body:focus-visible {
+  outline-offset: -2px;
+}
+
+.handoff-summary-body p {
+  margin: 0;
+}
+
+.handoff-summary-lines {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.handoff-summary-lines > li {
+  padding-inline: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.handoff-summary-lines > li[data-tone] {
+  padding-block: var(--space-1);
+  border-radius: var(--radius-sm);
+}
+
+.handoff-summary-lines > li[data-tone='warning'] {
+  color: var(--status-warning-text);
+  background: var(--status-warning-surface);
+}
+
+.handoff-summary-lines > li[data-tone='info'] {
+  color: var(--status-info-text);
+  background: var(--status-info-surface);
+}
+
+.handoff-summary-questions {
+  margin: var(--space-1) 0 0;
+  padding-inline-start: var(--space-5);
+}
+
+.handoff-summary-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .handoff-summary-title button svg {
+    transition: none;
+  }
+}
+
 .thread {
   display: flex;
   flex: 1;

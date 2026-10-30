@@ -240,6 +240,26 @@ export function registerOperationRoutes(api, operations, contextFor) {
       }),
   );
 
+  // INBOX-HANDOFF-01: the summary the agent wrote is PII; never cached.
+  api.get(
+    '/api/v1/inbox/conversations/:conversationId/handoff',
+    async (request, reply) =>
+      respond(reply, async () => {
+        const params = requireObject(request.params);
+        rejectUnknownKeys(requireObject(request.query ?? {}), []);
+        await authorizeRead(request, operations, 'handoff.read');
+        privateNoStoreHeaders(reply);
+        return reply.code(200).send(
+          await operations.getConversationHandoff({
+            conversationId: requireIdentifier(
+              params.conversationId,
+              'CONVERSATION_ID',
+            ),
+          }),
+        );
+      }),
+  );
+
   api.get('/api/v1/inbox/handoffs', async (request, reply) =>
     respond(reply, async () => {
       const input = parseListQuery(request.query, ['cursor', 'limit']);

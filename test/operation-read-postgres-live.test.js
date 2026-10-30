@@ -20,6 +20,7 @@ import {
   PostgresInboxRepository,
   createInboxService,
 } from '../modules/inbox-channels/src/index.js';
+import { encryptJson } from '../modules/n8n-integration/src/crypto.js';
 import { PostgresHandoffReadRepository } from '../modules/work-management/src/index.js';
 
 const connectionString = process.env.TEST_DATABASE_URL;
@@ -382,6 +383,59 @@ if (connectionString) {
         status: 'pendente',
       });
       assert.equal(detail.conversation.handoff.reasonCode, 'briefing_complete');
+
+      // INBOX-HANDOFF-01: the summary the n8n agent stored, as it stores it.
+      const summarized = await openConversation(
+        'summarized',
+        '2026-09-08T12:20:00.000Z',
+      );
+      const summary =
+        'Motivo: Perguntou o valor. Ficha: 5 de 9 (56%). Dica: Possível parceria/revenda.';
+      await pool.query(
+        `INSERT INTO crm.handoffs
+           (id, conversation_id, status, version, reason_code,
+            summary_envelope, due_at, sla_minutes, sla_policy_version,
+            created_at, updated_at, target_role)
+         VALUES ($1, $2, 'pending', 1, 'price_before_quote', $3::jsonb,
+                 $4::timestamptz + interval '4 hours', 240, 'n8n-mvp-1',
+                 $4, $4, 'Vendedor')`,
+        [
+          `handoff-summarized-${runId}`,
+          summarized,
+          JSON.stringify(
+            encryptJson(
+              summary,
+              `${summarized}:handoff:summary`,
+              Buffer.alloc(32, 45),
+            ),
+          ),
+          '2026-09-08T11:00:00.000Z',
+        ],
+      );
+      const open = await reads.getConversationHandoff({
+        conversationId: summarized,
+      });
+      assert.equal(open.handoff.id, `handoff-summarized-${runId}`);
+      assert.equal(open.handoff.status, 'pending');
+      assert.equal(open.handoff.summary, summary);
+      const withoutHandoff = await openConversation(
+        'nohandoff',
+        '2026-09-08T12:25:00.000Z',
+      );
+      assert.deepEqual(
+        await reads.getConversationHandoff({ conversationId: withoutHandoff }),
+        { handoff: null },
+      );
+      await pool.query(
+        `UPDATE crm.handoffs SET status = 'resolved', assigned_user_id = $2,
+             resolved_at = updated_at
+         WHERE id = $1`,
+        [`handoff-summarized-${runId}`, sellerId],
+      );
+      assert.deepEqual(
+        await reads.getConversationHandoff({ conversationId: summarized }),
+        { handoff: null },
+      );
     } finally {
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
