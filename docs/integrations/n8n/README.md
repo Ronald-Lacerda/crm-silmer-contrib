@@ -974,3 +974,13 @@ SDK, cobertas por `test/n8n-vendedor-aprendizados-l02.test.js`:
 - **Tom.** `withoutPraise` remove elogios à escolha do cliente.
 - **Fechamento.** O aviso de horário vale também nos últimos 30 minutos do
   expediente (seg–sex 17h30, sáb 11h30).
+
+Publicado em 29/10/2026 no workflow principal, já adaptado ao Evolution e às
+mídias: versão `cd0de4e8`. Mudaram 6 nós ("Montar contexto da IA", "Validar
+saída", "Atendente virtual Silmer", "Normalizar decisão da IA", "Preparar
+handoff de conteúdo" e "Site - Responder no chat") e entraram 3 ("Aguardar
+mensagens seguidas", "CRM - Reler conversa", com a mesma URL e credencial do
+"CRM - Registrar inbound", e "Ainda é a última mensagem?"). Os outros 104 nós,
+os settings e as conexões, exceto a religação prevista, foram conferidos iguais
+ao backup; a confirmação ao provedor segue antes da espera. Rollback: publicar a
+versão `8cd3ccf7`.

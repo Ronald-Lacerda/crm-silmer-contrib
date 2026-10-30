@@ -445,7 +445,8 @@ Decisão ADR 049/RFC 037. Teste: `test/n8n-vendedor-aprendizados.test.js`.
 - [x] Prazo hoje ou amanhã transfere com urgência (AGT-03).
 - [x] Parceria e revenda com perguntas no resumo (AGT-03, AGT-05).
 - [x] Tom sem elogio e aviso perto do fechamento (ORC-03).
-- [ ] Publicar no n8n com backup e verificação.
+- [x] Publicar no n8n com backup e verificação, autorizado pelo proprietário: versão `cd0de4e8`, rollback `8cd3ccf7`.
+- [ ] Observar as primeiras conversas reais após a publicação (rajada, preço adiado, arte e tecido).
 - [x] Exibir o resumo do handoff na Inbox (INBOX-HANDOFF-01).
 
 Decisão ADR 051/RFC 040. Teste: `test/n8n-vendedor-aprendizados-l02.test.js`.
