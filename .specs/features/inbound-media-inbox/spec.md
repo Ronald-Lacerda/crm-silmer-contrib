@@ -91,6 +91,18 @@ passar pelos gates e ser conferida no ambiente alvo com bytes e hash.
 Nenhum requisito autoriza dispensar scanner, retenção ou limites para prometer
 que um arquivo inválido, expirado ou em formato incompatível será exibido.
 
+## Ampliação e download — INBOX-IMG-VIEW-01 (30/10/2026)
+
+- **IMG-12 / MED-25:** imagem disponível permite clique ou teclado para
+  ampliar em diálogo nomeado e responsivo, com foco contido, Escape/Fechar
+  e retorno à foto. Perda da mídia fecha o diálogo e foca o aviso; troca ou
+  saída da conversa fecha a ampliação e cancela downloads pendentes.
+- **IMG-13 / MED-16/19:** Baixar imagem na conversa ou na ampliação usa os
+  bytes originais pela rota privada existente, sem redirect externo, com
+  nome sintético e extensão do MIME JPEG/PNG/WebP/GIF. Falha de acesso,
+  expiração ou indisponibilidade anuncia erro sem salvar a resposta como
+  imagem. A ação independe de pedido editável e preserva Anexar ao pedido.
+
 ## Limites operacionais
 
 Antes da ativação, verificar armazenamento transitório e scanner real da API.

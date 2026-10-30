@@ -1,5 +1,25 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## INBOX-IMG-VIEW-01 — ampliar e baixar fotos na Inbox (30/10/2026)
+
+IMG-12/13, MED-16/19/25 e regra técnica 3. Correção solicitada pelo operador;
+somente interface, sem alteração de API, retenção ou fluxo n8n.
+
+- [x] Clique ou Enter/Espaço na foto abre diálogo responsivo nomeado, com
+      foco contido, fechamento por Escape/botão e retorno à foto.
+- [x] Baixar imagem na conversa e na ampliação usa leitura autenticada,
+      bytes originais e extensão do MIME raster permitido, com nome sintético.
+- [x] Erro de acesso, expiração e indisponibilidade são anunciados sem salvar
+      resposta de erro; troca/saída da conversa aborta download pendente.
+- [x] Preservar anexar ao pedido e seus retries idempotentes.
+- [x] Gates integrados: Node 24.20.0/npm 11.19.0; `npm run validate`
+      passou (1.483 testes aprovados, cinco ignorados), E2E/axe completo
+      passou (377 aprovados, sete ignorados), incluindo 27 cenários de mídia.
+      E2E isolado na porta 4197, sem alterar configuração versionada.
+      Auditoria sem high/critical (um alerta baixo e dois moderados existentes);
+      revisão independente sem findings e `git diff --check` aprovado.
+- [ ] Conferir em produção depois do deploy.
+
 ## INBOX-HANDOFF-01 — resumo da transferência na Inbox (29/10/2026)
 
 AGT-03, AGT-05 e PCX-03; item "Exibir o resumo do handoff na Inbox" de

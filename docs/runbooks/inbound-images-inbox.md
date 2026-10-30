@@ -1,5 +1,24 @@
 # Imagens recebidas na Inbox
 
+## Ampliar e baixar — INBOX-IMG-VIEW-01 (30/10/2026)
+
+Clique na foto ou use Enter/Espaço em **Ampliar imagem**. A visualização maior
+oferece **Fechar imagem** e **Baixar imagem**; Escape fecha e devolve o foco
+à foto. **Baixar imagem** também está disponível diretamente na conversa,
+mesmo sem pedido editável. O arquivo conserva os bytes originais e recebe
+nome sintético com a extensão do MIME validado. Não altera a retenção.
+
+Expiração, falta de permissão e falha de leitura mostram aviso e permitem
+tentar novamente; uma resposta de erro não é salva como imagem. Ao trocar
+ou sair da conversa, downloads ainda pendentes são cancelados. A perda do
+arquivo fecha a ampliação e direciona o foco ao aviso do histórico.
+
+Depois do deploy do frontend, conferir com imagem sintética disponível:
+abrir por teclado, fechar por Escape, baixar de ambos os locais, comparar
+SHA256 e verificar **Anexar ao pedido**. Rollback: restaurar a revisão
+anterior do edge; não exige alteração da API, banco, storage ou workflow.
+Testes locais não comprovam essa conferência em produção.
+
 ## INBOX-IMG-RELEASE-03 — implantação solicitada em 29/10/2026
 
 Release preparado sobre `a94b5be` e atualizado sobre a revisão publicada

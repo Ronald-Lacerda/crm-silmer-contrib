@@ -139,6 +139,189 @@ test('MED-17/25 image decodes real private bytes with session', async ({
   expect(reads[0].status).toBe(200);
 });
 
+test('INBOX-IMG-VIEW-01 / MED-25 expands by keyboard, traps focus and returns to the image', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto(`${origin}/__media-message`);
+  const preview = page.getByRole('button', { name: 'Ampliar imagem' });
+  await preview.focus();
+  await page.keyboard.press('Enter');
+  const viewer = page.getByRole('dialog', { name: 'Imagem ampliada' });
+  const close = viewer.getByRole('button', { name: 'Fechar imagem' });
+  await expect(viewer).toBeVisible();
+  await expect(close).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(
+    viewer.getByRole('button', { name: 'Baixar imagem' }),
+  ).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(close).toBeFocused();
+  await expect(viewer.getByRole('img')).toBeVisible();
+  expect(await viewer.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(
+    true,
+  );
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({ path: 'test-results/inbox-image-viewer-mobile.png' });
+  await page.keyboard.press('Escape');
+  await expect(viewer).not.toBeVisible();
+  await expect(preview).toBeFocused();
+  await preview.click();
+  await close.click();
+  await expect(preview).toBeFocused();
+});
+
+for (const format of ['image', 'gif']) {
+  test(`INBOX-IMG-VIEW-01 / MED-16 downloads original ${format} privately from preview and viewer`, async ({
+    page,
+  }) => {
+    await page.goto(`${origin}/__media-message?format=${format}`);
+    for (const expanded of [false, true]) {
+      if (expanded)
+        await page.getByRole('button', { name: 'Ampliar imagem' }).click();
+      const downloadPromise = page.waitForEvent('download');
+      await (expanded ? page.getByRole('dialog') : page)
+        .getByRole('button', { name: 'Baixar imagem', exact: true })
+        .click();
+      const download = await downloadPromise;
+      expect(download.suggestedFilename()).toBe(
+        `imagem-media-1.${format === 'gif' ? 'gif' : 'png'}`,
+      );
+      expect(
+        await readFile(/** @type {string} */ (await download.path())),
+      ).toEqual(assets[format].bytes);
+      expect(
+        reads.every((read) =>
+          read.cookie.includes('crm_session=synthetic-media-reader'),
+        ),
+      ).toBe(true);
+    }
+  });
+}
+
+for (const status of [403, 410, 503]) {
+  test(`INBOX-IMG-VIEW-01 / MED-16/19 download ${status} announces error and allows retry`, async ({
+    page,
+  }) => {
+    await page.goto(`${origin}/__media-message`);
+    await expect
+      .poll(() =>
+        page
+          .locator('img')
+          .evaluate((el) => /** @type {HTMLImageElement} */ (el).naturalWidth),
+      )
+      .toBeGreaterThan(0);
+    const downloads = /** @type {import('@playwright/test').Download[]} */ ([]);
+    page.on('download', (download) => downloads.push(download));
+    await page.route('**/api/v1/conversations/**/content', (route) =>
+      route.fulfill({ status, json: { detail: 'synthetic' } }),
+    );
+    const button = page.getByRole('button', {
+      name: 'Baixar imagem',
+      exact: true,
+    });
+    await button.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('alert')).toContainText(
+      status === 403
+        ? 'Sem permissão'
+        : status === 410
+          ? 'não está mais disponível'
+          : 'Tente novamente',
+    );
+    await expect(button).toBeFocused();
+    expect(downloads).toHaveLength(0);
+    await page.unroute('**/api/v1/conversations/**/content');
+    const downloaded = page.waitForEvent('download');
+    await button.click();
+    await downloaded;
+    await expect(page.getByRole('alert')).toHaveCount(0);
+  });
+}
+
+test('INBOX-IMG-VIEW-01 rejects non-image download responses', async ({
+  page,
+}) => {
+  await page.goto(`${origin}/__media-message`);
+  await expect
+    .poll(() =>
+      page
+        .locator('img')
+        .evaluate((el) => /** @type {HTMLImageElement} */ (el).naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  const downloads = /** @type {import('@playwright/test').Download[]} */ ([]);
+  page.on('download', (download) => downloads.push(download));
+  await page.route('**/api/v1/conversations/**/content', (route) =>
+    route.fulfill({ json: { detail: 'synthetic' } }),
+  );
+  await page
+    .getByRole('button', { name: 'Baixar imagem', exact: true })
+    .click();
+  await expect(page.getByRole('alert')).toContainText(
+    'Não foi possível baixar',
+  );
+  expect(downloads).toHaveLength(0);
+});
+
+test('INBOX-IMG-VIEW-01 / MED-19/25 lost image closes the viewer and focuses the notice', async ({
+  page,
+}) => {
+  await page.goto(`${origin}/__media-message`);
+  await page.getByRole('button', { name: 'Ampliar imagem' }).click();
+  await page
+    .getByRole('button', {
+      name: 'Marcar arquivo perdido',
+      includeHidden: true,
+    })
+    .evaluate((el) => /** @type {HTMLButtonElement} */ (el).click());
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('status')).toContainText('Arquivo perdido');
+  await expect(page.getByRole('status')).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Baixar imagem' })).toHaveCount(
+    0,
+  );
+});
+
+for (const action of ['Trocar conversa', 'Sair da conversa']) {
+  test(`INBOX-IMG-VIEW-01 / MED-16 ${action} cancels the pending download and closes the viewer`, async ({
+    page,
+  }) => {
+    await page.goto(`${origin}/__media-message`);
+    await page.getByRole('button', { name: 'Ampliar imagem' }).click();
+    let release = () => {};
+    const held = new Promise((resolve) => {
+      release = () => resolve(null);
+    });
+    const downloads = /** @type {import('@playwright/test').Download[]} */ ([]);
+    page.on('download', (download) => downloads.push(download));
+    let started = false;
+    await page.route(
+      '**/api/v1/conversations/conversation-1/media/media-1/content',
+      async (route) => {
+        started = true;
+        await held;
+        await route.fulfill({
+          contentType: 'image/png',
+          body: assets.image.bytes,
+        });
+      },
+    );
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Baixar imagem', exact: true })
+      .click();
+    await expect.poll(() => started).toBe(true);
+    await page
+      .getByRole('button', { name: action, includeHidden: true })
+      .evaluate((el) => /** @type {HTMLButtonElement} */ (el).click());
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    release();
+    await page.unrouteAll({ behavior: 'wait' });
+    expect(downloads).toHaveLength(0);
+  });
+}
+
 test('IMG-01/ARQ-02 explicitly selects the order and attaches original image bytes by keyboard with retry', async ({
   page,
   context,
