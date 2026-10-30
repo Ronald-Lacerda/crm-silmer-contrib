@@ -322,7 +322,10 @@ test('item 2: each answer is recorded as a phrase the CRM projection reads', () 
       ...shirtWithout('artwork_status'),
       ...result.briefing_patch,
     });
-    assert.equal(ficha.artwork[origin], true, origin);
+    const artwork = /** @type {Record<string, boolean>} */ (
+      ficha.artwork ?? {}
+    );
+    assert.equal(artwork[origin], true, origin);
   }
 });
 
@@ -348,7 +351,7 @@ test('item 2: "não tenho" is left to the seller with a note, never "Silmer cria
     ...shirtWithout('artwork_status'),
     ...result.briefing_patch,
   });
-  assert.equal(ficha.artwork.feito_pela_silmer, false);
+  assert.equal(ficha.artwork?.feito_pela_silmer, false);
 
   // The seller sees it in the summary of the handoff.
   const handoff = decide(
