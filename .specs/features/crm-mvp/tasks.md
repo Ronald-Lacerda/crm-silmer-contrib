@@ -51,12 +51,28 @@ INBOX-AUDIO-01 / AUD-IN-02, INB-01, MSG-01/02 e INT-3.
       coleção exata de anexos n8n; demais rotas mantêm orçamento anterior.
 - [x] Cinco testes de política, formato, lint e diff aprovados; smoke Docker
       do CI ampliado a 14 casos de rota/tamanho e negativas de método.
-- [ ] CI com Nginx real, integração por rebase e Auto Deploy existente.
-- [ ] Conferir SHA/saúde remotos e POST sintético acima de 1 MiB.
+- [x] CI com Nginx real, integração por rebase e Auto Deploy existente.
+- [x] Conferir SHA/saúde remotos e POST sintético acima de 1 MiB.
 
 Não altera API, banco, frontend, credenciais ou o workflow publicado.
 Recuperação do áudio antigo e teste Inbox/WhatsApp são evidências próprias;
 os testes do proxy não comprovam reprodução ou entrega de áudio.
+
+## INBOX-AUDIO-OPS-01 — aceite operacional (29/10/2026)
+
+INBOX-AUDIO-01, INB-01, MSG-01/02 e PRV-03.
+
+- [x] Recuperar somente o áudio antigo autorizado, com seleção única no
+      provedor, upload autenticado e vínculo à conversa original.
+- [x] Conferir player e reprodução completa do áudio recuperado na Inbox.
+- [x] Enviar OGG sintético pela Inbox, conferir recebimento e player no WhatsApp.
+- [x] Enviar o mesmo OGG pelo WhatsApp, conferir player e reprodução completa
+      na Inbox, sem alterar responsável ou atendimento humano.
+- [x] Manter utilitário manual inativo, sem salvar payloads de execução, e
+      limpar os dados temporários do editor após o aceite.
+
+Implantação, limites e evidências no
+[runbook de áudio](../../../docs/runbooks/inbound-audio-inbox.md).
 
 ## WPP-01 — preparação WPPConnect pausada
 
