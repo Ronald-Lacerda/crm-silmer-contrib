@@ -111,7 +111,10 @@ function shirtWithout(...without) {
     product_model: 'camiseta comum',
     colors: 'branca',
     quantity: 30,
+    // VND-L02 items 2 and 3: the fabric and the artwork are points of a shirt.
+    fabrics: 'algodão',
     artwork_locations: 'frente',
+    artwork_status: 'cliente envia a arte',
     needed_by: '20/11',
   };
   for (const field of without) delete briefing[field];
@@ -203,8 +206,9 @@ test('item 2 negative: "futebol" as a purpose is not a model when the model is n
 
 test('item 2: a football or e-sports shirt names its model and hints full sublimation to the seller only', () => {
   const result = decide(
+    // VND-L02 item 1: the price was asked before, so this one hands off.
     context('Quero 20 camisas de futebol, quanto custa?', {
-      briefing: { customer_name: 'Rafa' },
+      briefing: { customer_name: 'Rafa', briefing_status: 'price_collecting' },
     }),
     {
       asks_price: true,
@@ -421,7 +425,8 @@ test('item 4: the flag size reaches the Ficha item type through the CRM projecti
   });
   assert.equal(result.briefing_patch.product_model, 'bandeira 1 x 1,5 m');
   assert.equal(result.briefing_patch.collar, 'NAO APLICAVEL');
-  assert.equal(result.ficha_total, 7);
+  // VND-L02 item 2: the artwork is a point of the flag too.
+  assert.equal(result.ficha_total, 8);
 
   // The field the CRM shows: briefingToFicha makes items[].tipo from
   // product_model (falling back to product_type), so the size is on item 1.
@@ -603,7 +608,12 @@ test('item 7: a customer introduced by a company names the order and hints the s
   // Later, at the handoff, the seller sees the hint.
   const later = decide(
     context('Quanto custa?', {
-      briefing: { customer_name: 'Bia', ...result.briefing_patch },
+      // VND-L02 item 1: the price was asked before, so this one hands off.
+      briefing: {
+        customer_name: 'Bia',
+        ...result.briefing_patch,
+        briefing_status: 'quote_price_collecting',
+      },
       recent_messages: [
         {
           sender_type: 'customer',
@@ -654,7 +664,11 @@ test('item 7: other introductions; an order name already given and a city are ke
     assert.equal(orderName(text), undefined, text);
     const handoff = decide(
       context('Quanto custa?', {
-        briefing: { product_type: 'camisetas' },
+        // VND-L02 item 1: the price was asked before, so this one hands off.
+        briefing: {
+          product_type: 'camisetas',
+          briefing_status: 'price_collecting',
+        },
         recent_messages: [
           { sender_type: 'customer', text },
           { sender_type: 'customer', text: 'Quanto custa?' },
@@ -678,7 +692,13 @@ test('item 9: a transfer outside the opening hours says when a seller answers', 
     decide(
       context(
         'Quanto custa?',
-        { briefing: shirtWithout('colors') },
+        // VND-L02 item 1: the price was asked before, so this one hands off.
+        {
+          briefing: {
+            ...shirtWithout('colors'),
+            briefing_status: 'quote_price_collecting',
+          },
+        },
         occurred_at ? { occurred_at } : {},
       ),
       { asks_price: true },
@@ -710,9 +730,13 @@ test('item 9: a transfer outside the opening hours says when a seller answers', 
     notice('2026-10-30T22:00:00.000Z'),
     /a partir de amanhã às 9h\.$/u,
   );
-  // Inside the hours (Wednesday 10:00, Saturday 11:59) and at the closing edge.
+  // Inside the hours (Wednesday 10:00) and at the closing edge. VND-L02 item 10: Saturday 11:59
+  // is in the last 30 minutes, so the notice says a seller may answer only on Monday.
   assert.equal(notice('2026-10-28T13:00:00.000Z'), plain);
-  assert.equal(notice('2026-10-31T14:59:00.000Z'), plain);
+  assert.match(
+    notice('2026-10-31T14:59:00.000Z'),
+    /Se não der tempo hoje, um vendedor te responde a partir de segunda-feira às 9h\.$/u,
+  );
   assert.match(notice('2026-10-28T21:00:00.000Z'), /amanhã às 9h\.$/u);
 });
 

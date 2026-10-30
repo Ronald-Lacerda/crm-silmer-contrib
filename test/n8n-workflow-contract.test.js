@@ -189,7 +189,8 @@ test('keeps the simplified workflow inactive and free of removed runtime concept
   assert.equal(workflow.source.active, false);
   assert.equal(workflow.source.activeVersionId, null);
   // Baseline includes the static site redirect; legacy nodes stay disconnected.
-  assert.equal(workflow.nodes.length, 87);
+  // VND-L02 item 5: the burst window, the reread and the newest-message check.
+  assert.equal(workflow.nodes.length, 90);
   const serialized = JSON.stringify(workflow);
   assert.doesNotMatch(serialized, /claim_token|claim_id|ai-turns\/claim/u);
   assert.doesNotMatch(serialized, /silmer_failures|windowBufferMemory/u);
@@ -611,11 +612,22 @@ test('decision normalizer applies the handoff rules of ADR 009', async () => {
       },
     );
 
-  const price = decide({}, { current_text: 'e quanto fica isso tudo?' });
+  // VND-L02 item 1 (supersedes ADR 009 item 4): the first price question is deferred with the
+  // next point, and only a second one hands off as negotiation.
+  const firstPrice = decide({}, { current_text: 'e quanto fica isso tudo?' });
+  assert.equal(firstPrice.handoff_required, false);
+  assert.match(firstPrice.reply_text, /^Quem passa o valor é o vendedor/u);
+  assert.match(firstPrice.briefing_patch.briefing_status, /price_/u);
+  const askedBefore = { briefing: { briefing_status: 'price_collecting' } };
+  const price = decide(
+    {},
+    { ...askedBefore, current_text: 'e quanto fica isso tudo?' },
+  );
   assert.equal(price.handoff_reason, 'negotiation');
   assert.match(price.reply_text, /vendedores/u);
   assert.equal(
-    decide({}, { current_text: 'aceitam pix? parcelam?' }).trigger,
+    decide({}, { ...askedBefore, current_text: 'aceitam pix? parcelam?' })
+      .trigger,
     'price',
   );
   assert.equal(
@@ -709,9 +721,18 @@ test('decision normalizer applies the handoff rules of ADR 009', async () => {
   assert.equal(cap.trigger, 'message_limit');
   assert.match(cap.reasoning, /Limite de 15 mensagens/u);
   assert.equal(decide({}, { turn: 14 }).handoff_required, false);
+  // VND-L02 item 1: a first price question at the cap is the cap, and the summary says it.
+  const capPrice = decide(
+    { asks_price: true },
+    { turn: 15, current_text: 'qual o valor?' },
+  );
+  assert.equal(capPrice.trigger, 'message_limit');
+  assert.match(capPrice.reasoning, /Perguntou o valor\./u);
   assert.equal(
-    decide({ asks_price: true }, { turn: 15, current_text: 'qual o valor?' })
-      .trigger,
+    decide(
+      { asks_price: true },
+      { ...askedBefore, turn: 15, current_text: 'qual o valor?' },
+    ).trigger,
     'price',
   );
 
@@ -745,14 +766,17 @@ test('decision normalizer applies the handoff rules of ADR 009', async () => {
     false,
   );
 
-  // The name and the ficha points of a shirt (ADR 012, ADR 024).
+  // The name and the ficha points of a shirt (ADR 012, ADR 024; VND-L02 adds
+  // the fabric and the artwork).
   const complete = {
     customer_name: 'Ana',
     product_type: 'camisetas',
     product_model: 'camiseta comum',
     colors: 'branca',
     quantity: 10,
+    fabrics: 'algodão',
     artwork_locations: 'frente',
+    artwork_status: 'cliente envia a arte',
     needed_by: '20/11',
   };
   const done = decide({ briefing_patch: complete });
@@ -1061,7 +1085,14 @@ test('the bot neither asks to build the quote nor asks the order name (PO, 01/10
   );
 
   const notices = [
-    decide({}, { current_text: 'quanto custa?' }),
+    // VND-L02 item 1: the second price question is the one that hands off.
+    decide(
+      {},
+      {
+        current_text: 'quanto custa?',
+        briefing: { briefing_status: 'price_collecting' },
+      },
+    ),
     decide(
       { person_request: 'generic' },
       { current_text: 'quero falar com alguém' },
@@ -1328,14 +1359,17 @@ test('a question ignored twice hands off, and news for the ficha is welcome (PO,
   );
 });
 
-// ADR 024: the points the bot asks, in one rhythm. Artwork origin, fabric,
-// technique, sizes and collar are only recorded.
+// ADR 024: the points the bot asks, in one rhythm. VND-L02 items 2 and 3: the
+// fabric (clothing only) and the artwork origin are asked too; technique,
+// sizes and collar are only recorded.
 const RHYTHM = [
   'product_type',
   'product_model',
   'colors',
   'quantity',
+  'fabrics',
   'artwork_locations',
+  'artwork_status',
   'needed_by',
 ];
 // A shirt asks every point of the rhythm.
@@ -1344,7 +1378,9 @@ const SHIRT_POINTS = Object.freeze({
   product_model: 'camiseta comum',
   colors: 'branca',
   quantity: 30,
+  fabrics: 'algodão',
   artwork_locations: 'frente',
+  artwork_status: 'cliente envia a arte',
   needed_by: '20/11',
 });
 const GREETING = {
@@ -1447,6 +1483,7 @@ test('confirmed front print is stored and never followed by a print-or-plain que
         product_model: 'camiseta comum',
         colors: 'branca',
         quantity: 30,
+        fabrics: 'algodão',
         next_required_field: 'artwork_locations',
       },
       current_text: 'Quero estampa na frente.',
@@ -1455,8 +1492,9 @@ test('confirmed front print is stored and never followed by a print-or-plain que
   assert.equal(current.briefing_patch.artwork_locations, 'frente');
   assert.equal(current.briefing_patch.artwork_status, undefined);
   assert.equal(current.briefing_patch.artwork_technique, 'com estampa');
-  assert.equal(current.briefing_patch.next_required_field, 'needed_by');
-  assert.equal(current.reply_text, 'Para quando você precisa?');
+  // VND-L02 item 2: where the art comes from is the next point.
+  assert.equal(current.briefing_patch.next_required_field, 'artwork_status');
+  assert.equal(current.reply_text, 'Você já tem a arte (ou logo) pronta?');
 
   const previous = await rhythmDecision(
     {
@@ -1519,8 +1557,6 @@ test('the ficha is the name plus the product points in one rhythm, kept in one p
   assert.deepEqual(schema.properties.asked_field.enum, [
     'customer_name',
     ...RHYTHM,
-    'artwork_status',
-    'fabrics',
     'sizes',
     'collar',
     'artwork_technique',
@@ -1562,14 +1598,20 @@ test('the ficha is the name plus the product points in one rhythm, kept in one p
     prompt,
     /needed_by: para quando o cliente precisa\. É desejo do cliente, nunca prazo confirmado/u,
   );
-  // Artwork, fabric, technique, sizes and collar are only recorded.
+  // Technique, sizes and collar are only recorded. VND-L02 items 2 and 3: the
+  // fabric and whether the customer has the art are asked, never an offer to
+  // create it (PRD-03).
   assert.match(
     prompt,
     /O QUE SÓ GRAVAR \(nunca pergunte; o vendedor completa\)/u,
   );
   assert.match(
     prompt,
-    /artwork_status: de onde vem a arte[^\n]*Nunca ofereça criar a arte nem pergunte se ele já tem/u,
+    /- artwork_status: se o cliente já tem a arte \("Você já tem a arte \(ou logo\) pronta\?"\)\. Nunca ofereça criar a arte\./u,
+  );
+  assert.match(
+    prompt,
+    /- fabrics: o tecido, só para roupa \("Qual tecido você prefere: algodão, poliéster ou dry fit, ou outro\?"\)/u,
   );
   assert.match(
     prompt,
@@ -1638,7 +1680,7 @@ test('the context node asks the name first, then the points of the product (ADR 
   );
   assert.match(
     askedTwice.prompt,
-    /Pontos que ainda faltam, nesta ordem: product_model \(modelo\), colors \(cor\), quantity \(quantidade\), artwork_locations \(onde vai a estampa\), needed_by \(para quando\)\n/u,
+    /Pontos que ainda faltam, nesta ordem: product_model \(modelo\), colors \(cor\), quantity \(quantidade\), fabrics \(tecido\), artwork_locations \(onde vai a estampa\), artwork_status \(arte\), needed_by \(para quando\)\n/u,
     'the name no longer waits in line',
   );
 
@@ -1652,7 +1694,7 @@ test('the context node asks the name first, then the points of the product (ADR 
   );
   assert.match(
     start.prompt,
-    /Pontos que ainda faltam, nesta ordem: product_type \(produto\), colors \(cor\), quantity \(quantidade\), artwork_locations \(onde vai a estampa\), needed_by \(para quando\)\n/u,
+    /Pontos que ainda faltam, nesta ordem: product_type \(produto\), colors \(cor\), quantity \(quantidade\), artwork_locations \(onde vai a estampa\), artwork_status \(arte\), needed_by \(para quando\)\n/u,
   );
 
   const asked = await rhythmContext({
@@ -1717,7 +1759,8 @@ test('the context node asks the name first, then the points of the product (ADR 
   );
   assert.match(
     abada.prompt,
-    /Pontos que ainda faltam, nesta ordem: quantity \(quantidade\), artwork_locations \(onde vai a estampa\), needed_by \(para quando\)\n/u,
+    // VND-L02: the abadá kit gives the fabric, so only the artwork is added.
+    /Pontos que ainda faltam, nesta ordem: quantity \(quantidade\), artwork_locations \(onde vai a estampa\), artwork_status \(arte\), needed_by \(para quando\)\n/u,
   );
 
   const bag = await rhythmContext({
@@ -1757,7 +1800,8 @@ test('the context node asks the name first, then the points of the product (ADR 
   });
   assert.equal(
     filled.next_point,
-    'artwork_locations',
+    // VND-L02 item 3: a shirt asks the fabric after the quantity.
+    'fabrics',
     'filled and deferred points are skipped, and the model says the product',
   );
   assert.match(filled.prompt, /Nome do cliente: já informado/u);
@@ -1787,7 +1831,7 @@ test('the context node asks the name first, then the points of the product (ADR 
   );
   assert.match(
     skipped.prompt,
-    /Pontos que ainda faltam, nesta ordem: quantity \(quantidade\), artwork_locations \(onde vai a estampa\), needed_by \(para quando\), product_type \(produto\)\n/u,
+    /Pontos que ainda faltam, nesta ordem: quantity \(quantidade\), artwork_locations \(onde vai a estampa\), artwork_status \(arte\), needed_by \(para quando\), product_type \(produto\)\n/u,
   );
 
   const complete = await rhythmContext({
@@ -1819,7 +1863,7 @@ test('the decision node requires only the name and the points of the product (AD
   assert.deepEqual(
     done.missing_briefing_fields,
     [],
-    'artwork, fabric, technique, sizes and collar are never required',
+    'technique, sizes and collar are never required',
   );
   assert.equal(
     done.briefing_patch.delivery_mode,
@@ -1844,6 +1888,8 @@ test('the decision node requires only the name and the points of the product (AD
       briefing: {
         ...shirtPointsWithout('artwork_locations', 'needed_by'),
         fabrics: 'Definir com o vendedor',
+        // VND-L02 item 1: the price was asked before, so this one hands off.
+        briefing_status: 'quote_price_collecting',
       },
     },
   );
@@ -1896,6 +1942,7 @@ test('a cap or another product asks its own points, and removed bags transfer (C
       colors: 'preto',
       quantity: 50,
       artwork_locations: 'frente',
+      artwork_status: 'cliente envia a arte',
       needed_by: '10/12',
     },
   });
@@ -1911,8 +1958,9 @@ test('a cap or another product asks its own points, and removed bags transfer (C
     'NAO APLICAVEL',
     'a cap has no collar, and the order item needs one',
   );
-  assert.equal(cap.ficha_total, 7);
-  assert.match(cap.reasoning, /Ficha: 7 de 7 \(100%\)/u);
+  // VND-L02 item 2: the artwork is a point of the cap too; the fabric is not.
+  assert.equal(cap.ficha_total, 8);
+  assert.match(cap.reasoning, /Ficha: 8 de 8 \(100%\)/u);
   assert.match(cap.reasoning, /Dica: boné costuma ser bordado\./u);
 
   const bagStart = await rhythmDecision(
@@ -1989,6 +2037,7 @@ test('a cap or another product asks its own points, and removed bags transfer (C
       colors: 'branca',
       quantity: 100,
       artwork_locations: 'um lado',
+      artwork_status: 'cliente envia a arte',
       needed_by: 'dezembro',
     },
   });
@@ -2002,7 +2051,8 @@ test('a cap or another product asks its own points, and removed bags transfer (C
     false,
     'nor a collar it guesses',
   );
-  assert.equal(mugs.ficha_total, 6);
+  // VND-L02 item 2: the artwork is a point of any product.
+  assert.equal(mugs.ficha_total, 7);
   assert.match(
     mugs.reasoning,
     /Dica: caneca, squeeze, garrafa e mouse pad costumam ser sublimação\./u,
@@ -2016,10 +2066,13 @@ test('a cap or another product asks its own points, and removed bags transfer (C
     },
   });
   assert.equal('collar' in mixed.briefing_patch, false);
+  // VND-L02: clothing in the order asks its fabric, and every order its artwork.
   assert.deepEqual(mixed.missing_briefing_fields, [
     'product_model',
     'quantity',
+    'fabrics',
     'artwork_locations',
+    'artwork_status',
     'needed_by',
   ]);
 
@@ -2073,7 +2126,12 @@ test('a kit fills what the product or the technique defines, and the seller gets
     { asks_price: true },
     {
       current_text: 'quanto fica?',
-      briefing: { product_type: 'abadás', colors: 'preto' },
+      // VND-L02 item 1: price_ marks a price asked before, so this one hands off.
+      briefing: {
+        product_type: 'abadás',
+        colors: 'preto',
+        briefing_status: 'price_collecting',
+      },
     },
   );
   assert.equal(blackAbada.briefing_patch.colors, undefined);
@@ -2100,6 +2158,7 @@ test('a kit fills what the product or the technique defines, and the seller gets
         product_type: 'camisetas',
         artwork_technique: 'sublimação total',
         fabrics: 'algodão',
+        briefing_status: 'price_collecting',
       },
     },
   );
@@ -2159,6 +2218,7 @@ test('a kit fills what the product or the technique defines, and the seller gets
         product_type: 'camisetas',
         customizations: 'nome e número nas costas',
         notes: 'Divisão por público: 4 masculinas, 3 femininas, 3 infantis',
+        briefing_status: 'price_collecting',
       },
     },
   );
@@ -2190,6 +2250,7 @@ test('a kit fills what the product or the technique defines, and the seller gets
       briefing: {
         product_type: 'camisetas',
         audiences: '5 masculinas e 5 femininas',
+        briefing_status: 'price_collecting',
       },
     },
   );
@@ -2210,6 +2271,7 @@ test('a kit fills what the product or the technique defines, and the seller gets
       briefing: {
         product_type: 'bonés',
         artwork_technique: 'bordado com foto',
+        briefing_status: 'price_collecting',
       },
     },
   );
@@ -2375,8 +2437,9 @@ test('a skipped point waits at the end of the rhythm (ADR 011 item 8, ADR 012)',
     'then the bot comes back to the skipped point',
   );
 
+  // VND-L02: the fabric is a point now; the news is the sizes, only recorded.
   const onlyOneLeft = await rhythmDecision(
-    { answer_status: 'other', briefing_patch: { fabrics: 'algodão' } },
+    { answer_status: 'other', briefing_patch: { sizes: '10 M, 20 G' } },
     {
       briefing: {
         ...shirtPointsWithout('needed_by'),
@@ -2430,14 +2493,14 @@ test('quantity and sizes sent together keep both, and the sizes are only recorde
   );
   assert.equal(together.briefing_patch.quantity, 30);
   assert.equal(together.briefing_patch.sizes, '5 P, 10 M, 15 G');
+  // VND-L02 items 2 and 3: the fabric comes right after the quantity.
   assert.deepEqual(together.missing_briefing_fields, [
+    'fabrics',
     'artwork_locations',
+    'artwork_status',
     'needed_by',
   ]);
-  assert.equal(
-    together.briefing_patch.next_required_field,
-    'artwork_locations',
-  );
+  assert.equal(together.briefing_patch.next_required_field, 'fabrics');
 });
 
 test('something already going on elsewhere calls a seller at once (ADR 013)', async () => {
@@ -2479,8 +2542,9 @@ test('something already going on elsewhere calls a seller at once (ADR 013)', as
     );
     assert.match(
       decision.reasoning,
-      // ADR 024: before the product is known, the ficha has the common points and the name.
-      /Não é um pedido do zero[\s\S]*Ficha: 0 de 6 \(0%\)/u,
+      // ADR 024: before the product is known, the ficha has the common points and the name
+      // (VND-L02: the artwork is one of them).
+      /Não é um pedido do zero[\s\S]*Ficha: 0 de 7 \(0%\)/u,
       text,
     );
   }
@@ -2505,9 +2569,23 @@ test('something already going on elsewhere calls a seller at once (ADR 013)', as
     assert.equal(decision.trigger, null, text);
   }
 
+  // VND-L02 item 1: a first price question is deferred, so the post calls the
+  // seller; a second one keeps its reason.
+  assert.equal(
+    (
+      await rhythmDecision(
+        { external_context: true },
+        { current_text: 'quanto custa a camisa do post?' },
+      )
+    ).trigger,
+    'external_context',
+  );
   const price = await rhythmDecision(
     { external_context: true },
-    { current_text: 'quanto custa a camisa do post?' },
+    {
+      current_text: 'quanto custa a camisa do post?',
+      briefing: { briefing_status: 'price_collecting' },
+    },
   );
   assert.equal(price.trigger, 'price', 'a price question keeps its reason');
 
@@ -2531,7 +2609,8 @@ test('something already going on elsewhere calls a seller at once (ADR 013)', as
     'an order already opened stays open for the seller',
   );
   // The model says the product, which the workflow records; the name was asked twice (ADR 024).
-  assert.match(midway.reasoning, /Ficha: 4 de 6 \(67%\)/u);
+  // VND-L02: a shirt has 8 points (fabric and artwork added).
+  assert.match(midway.reasoning, /Ficha: 4 de 8 \(50%\)/u);
 });
 
 test('the summary measures how much of the ficha the bot filled (ADR 013, ADR 024)', async () => {
@@ -2539,10 +2618,11 @@ test('the summary measures how much of the ficha the bot filled (ADR 013, ADR 02
     { answer_status: 'answered' },
     { briefing: { ...SHIRT_POINTS, customer_name: 'Ana' } },
   );
+  // VND-L02 items 2 and 3: the name plus 8 points of a shirt.
   assert.equal(complete.trigger, 'briefing_complete');
-  assert.equal(complete.ficha_filled, 7);
-  assert.equal(complete.ficha_total, 7);
-  assert.match(complete.reasoning, /Ficha: 7 de 7 \(100%\)/u);
+  assert.equal(complete.ficha_filled, 9);
+  assert.equal(complete.ficha_total, 9);
+  assert.match(complete.reasoning, /Ficha: 9 de 9 \(100%\)/u);
 
   const deferred = await rhythmDecision(
     { answer_status: 'answered' },
@@ -2557,22 +2637,26 @@ test('the summary measures how much of the ficha the bot filled (ADR 013, ADR 02
   assert.equal(deferred.trigger, 'briefing_complete');
   assert.equal(
     deferred.ficha_filled,
-    6,
+    8,
     'a point left to the seller is not filled by the bot',
   );
-  assert.match(deferred.reasoning, /Ficha: 6 de 7 \(86%\)/u);
+  assert.match(deferred.reasoning, /Ficha: 8 de 9 \(89%\)/u);
 
   const half = await rhythmDecision(
     { asks_price: true },
     {
       current_text: 'quanto fica?',
       name_asks: 1,
-      briefing: shirtPointsWithout('artwork_locations', 'needed_by'),
+      // VND-L02 item 1: the price was asked before, so this one hands off.
+      briefing: {
+        ...shirtPointsWithout('artwork_locations', 'needed_by'),
+        briefing_status: 'quote_price_collecting',
+      },
     },
   );
   assert.equal(half.trigger, 'price');
-  assert.equal(half.ficha_filled, 4);
-  assert.match(half.reasoning, /Ficha: 4 de 7 \(57%\)/u);
+  assert.equal(half.ficha_filled, 6);
+  assert.match(half.reasoning, /Ficha: 6 de 9 \(67%\)/u);
 
   const reply = await rhythmDecision(
     { answer_status: 'answered', briefing_patch: { colors: 'preta' } },
@@ -2589,11 +2673,17 @@ test('the summary measures how much of the ficha the bot filled (ADR 013, ADR 02
     { asks_price: true },
     {
       current_text: 'quanto fica?',
-      briefing: { product_type: 'bonés', colors: 'preto', quantity: 50 },
+      briefing: {
+        product_type: 'bonés',
+        colors: 'preto',
+        quantity: 50,
+        briefing_status: 'price_collecting',
+      },
     },
   );
-  assert.equal(cap.ficha_total, 6, 'a cap counts its own points');
-  assert.match(cap.reasoning, /Ficha: 3 de 6 \(50%\)/u);
+  // VND-L02: a cap asks its artwork, never a fabric.
+  assert.equal(cap.ficha_total, 7, 'a cap counts its own points');
+  assert.match(cap.reasoning, /Ficha: 3 de 7 \(43%\)/u);
 });
 
 test('"com estampa" is the technique, never where the art comes from, and neither is asked (ADR 012, ADR 024)', async () => {
@@ -2621,8 +2711,8 @@ test('"com estampa" is the technique, never where the art comes from, and neithe
   assert.equal(typeAnswer.briefing_patch.artwork_technique, 'estampada');
   assert.equal(
     typeAnswer.missing_briefing_fields.includes('artwork_status'),
-    false,
-    'the origin of the art is only recorded (ADR 024)',
+    true,
+    'VND-L02 item 2: where the art comes from is still asked in its turn',
   );
   assert.equal(typeAnswer.briefing_patch.next_required_field, 'colors');
 
@@ -2649,19 +2739,22 @@ test('"com estampa" is the technique, never where the art comes from, and neithe
   );
   assert.equal(keepsTechnique.briefing_patch.artwork_technique, undefined);
 
-  for (const origin of [
-    'já tem a logo',
-    'vai mandar a arte depois',
-    'quer que a Silmer crie',
-    'precisa de arte',
-    'sem aplicação',
-    'não quer estampa',
-    'Definir com o vendedor',
+  // VND-L02 item 2: the origin is kept as one of the phrases both parsers (this
+  // node and the CRM briefingToFicha) read; not having the art yet is the
+  // seller's call, never "Silmer cria a arte" (PRD-03).
+  for (const [origin, canonical] of [
+    ['já tem a logo', 'cliente envia a arte'],
+    ['vai mandar a arte depois', 'cliente envia a arte'],
+    ['quer que a Silmer crie', 'Silmer cria a arte'],
+    ['precisa de arte', 'Definir com o vendedor'],
+    ['sem aplicação', 'sem estampa'],
+    ['não quer estampa', 'sem estampa'],
+    ['Definir com o vendedor', 'Definir com o vendedor'],
   ]) {
     const decision = await rhythmDecision({
       briefing_patch: { artwork_status: origin },
     });
-    assert.equal(decision.briefing_patch.artwork_status, origin, origin);
+    assert.equal(decision.briefing_patch.artwork_status, canonical, origin);
   }
 });
 
@@ -2741,9 +2834,13 @@ test('the pending order opens at the first real point of the ficha (ADR 014)', a
   assert.equal(external.open_order, false);
 
   // ...but any other handoff opens it when the ficha holds a point.
+  // VND-L02 item 1: the second price question hands off.
   const price = await rhythmDecision(
     { briefing_patch: { quantity: 100 } },
-    { current_text: 'Umas 100. Quanto fica cada?' },
+    {
+      current_text: 'Umas 100. Quanto fica cada?',
+      briefing: { briefing_status: 'price_collecting' },
+    },
   );
   assert.equal(price.trigger, 'price');
   assert.equal(price.open_order, true);

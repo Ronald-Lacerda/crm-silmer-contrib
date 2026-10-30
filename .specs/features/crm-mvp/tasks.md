@@ -416,6 +416,21 @@ Decisão ADR 044/RFC 032. Evidência em docs/integrations/n8n/auditoria-vendedor
 
 Decisão ADR 049/RFC 037. Teste: `test/n8n-vendedor-aprendizados.test.js`.
 
+## VND-L02 — Vendedor aprende com os atendentes humanos (29/10/2026)
+
+- [x] Analisar 9 conversas reais de 29/10 e as respostas da vendedora.
+- [x] Adiar a primeira pergunta de preço; transferir na insistência (AGT-04).
+- [x] Perguntar arte e tecido com valores que a Ficha lê (AGT-02, PRD-02/03/06).
+- [x] Imagem sem falha nem pergunta ignorada (AGT-02, AGT-05).
+- [x] Agrupar mensagens seguidas antes de responder (AGT-01).
+- [x] Prazo hoje ou amanhã transfere com urgência (AGT-03).
+- [x] Parceria e revenda com perguntas no resumo (AGT-03, AGT-05).
+- [x] Tom sem elogio e aviso perto do fechamento (ORC-03).
+- [ ] Publicar no n8n com backup e verificação.
+- [ ] Exibir o resumo do handoff na Inbox (tarefa separada do CRM).
+
+Decisão ADR 051/RFC 040. Teste: `test/n8n-vendedor-aprendizados-l02.test.js`.
+
 ## Correção de imagens recebidas — 28/10/2026
 
 INBOX-IMG-01 (INBOX-2/3, INB-01..05, MSG-01/02, PRV-03): projetar e servir

@@ -112,12 +112,20 @@ for (const local of [false, true])
       ],
       ['none', 'none', false, false],
     );
-    assert.equal(
-      dev.nodes.some(
-        (/** @type {any} */ n) => n.type === 'n8n-nodes-base.wait',
-      ),
-      false,
+    // VND-L02 item 5: the only wait is the burst window, a timed wait under
+    // 65 seconds that n8n keeps in memory, so it offloads no execution data.
+    const waits = dev.nodes.filter(
+      (/** @type {any} */ n) => n.type === 'n8n-nodes-base.wait',
     );
+    assert.deepEqual(
+      waits.map((/** @type {any} */ n) => n.name),
+      ['Aguardar mensagens seguidas (MVP)'],
+    );
+    for (const wait of waits) {
+      assert.equal(wait.parameters.resume, 'timeInterval');
+      assert.equal(wait.parameters.unit, 'seconds');
+      assert.ok(wait.parameters.amount > 0 && wait.parameters.amount < 65);
+    }
     assert.equal(dev.pinData, undefined);
     assert.equal(dev.staticData, undefined);
   });
@@ -181,7 +189,8 @@ for (const local of [false, true])
     );
     assert.deepEqual(snapshot, createDevTestWorkflow(source, { local }));
     // ADR 026 inbound reading adds nodes; outbound seller transports stay simulated.
-    assert.equal(snapshot.nodes.length, 93);
+    // VND-L02 item 5 adds the burst window, the reread and its check.
+    assert.equal(snapshot.nodes.length, 96);
     const metaRequests = snapshot.nodes.filter((/** @type {any} */ node) =>
       node.parameters?.url?.includes('graph.facebook.com'),
     );

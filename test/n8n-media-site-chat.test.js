@@ -458,7 +458,10 @@ test('site handoff notices keep the visitor in the chat (ADR 034)', async () => 
         'Montar contexto da IA (MVP)': {
           json: {
             conversation_id: 'conversation-1',
-            briefing: {},
+            // VND-L02 item 1: only a second price question hands off.
+            briefing: output.asks_price
+              ? { briefing_status: 'price_collecting' }
+              : {},
             recent_messages: [],
             current_text: text,
             profile_name: '',
@@ -663,9 +666,22 @@ test('the public site chat redirects statically without entering CRM or AI (CHAN
   assert.doesNotMatch(normal.json.output, /5500000000000|synthetic-untrusted/u);
   assert.doesNotMatch(redirectCode, /\$json|\$\(|fetch\(|briefing|open_order/u);
 
-  // WhatsApp still goes through its media step before the model.
+  // WhatsApp still goes through its media step before the model, after the
+  // burst window and the check that the message is still the newest (VND-L02).
   assert.deepEqual(targets('Rotear conversa registrada (MVP)', 0), [
+    'Aguardar mensagens seguidas (MVP)',
+  ]);
+  assert.deepEqual(targets('Aguardar mensagens seguidas (MVP)'), [
+    'CRM - Reler conversa (MVP)',
+  ]);
+  assert.deepEqual(targets('CRM - Reler conversa (MVP)'), [
+    'Ainda é a última mensagem? (MVP)',
+  ]);
+  assert.deepEqual(targets('Ainda é a última mensagem? (MVP)', 0), [
     'Ler mídia da mensagem? (MVP)',
+  ]);
+  assert.deepEqual(targets('Ainda é a última mensagem? (MVP)', 1), [
+    'Responder no chat do site? (MVP)',
   ]);
   assert.deepEqual(targets('Ler mídia da mensagem? (MVP)', 2), [
     'Montar contexto da IA (MVP)',
@@ -700,7 +716,8 @@ test('the public site chat redirects statically without entering CRM or AI (CHAN
       ).some((edge) => edge?.node === gate),
     )
     .map(([name]) => name);
-  assert.equal(parents.length, 5);
+  // VND-L02 item 5: a message superseded during the burst window ends here too.
+  assert.equal(parents.length, 6);
   for (const parent of parents) {
     for (const sibling of /** @type {any[]} */ (
       workflow.connections[parent].main.flat()

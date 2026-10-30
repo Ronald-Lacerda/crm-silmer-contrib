@@ -452,7 +452,8 @@ test('abandoned collection resumes its partial CRM briefing', () => {
   });
   assert.equal(result.open_order, true);
   assert.equal(result.briefing_patch.quantity, 24);
-  assert.equal(result.briefing_patch.next_required_field, 'artwork_locations');
+  // VND-L02 item 3: a shirt asks the fabric after the quantity.
+  assert.equal(result.briefing_patch.next_required_field, 'fabrics');
   assert.equal(partial.quantity, undefined);
 });
 
@@ -512,7 +513,10 @@ test('complete pre-ficha transfers, without confirming a sale', () => {
         product_model: 'camiseta comum',
         colors: 'azul',
         quantity: 18,
+        // VND-L02 items 2 and 3: the fabric and the artwork complete a shirt.
+        fabrics: 'algodão',
         artwork_locations: 'frente',
+        artwork_status: 'cliente envia a arte',
       },
     }),
     { briefing_patch: { needed_by: '20 de novembro' } },
@@ -520,7 +524,7 @@ test('complete pre-ficha transfers, without confirming a sale', () => {
   assert.equal(result.trigger, 'briefing_complete');
   assert.equal(result.handoff_required, true);
   assert.equal(result.open_order, true);
-  assert.equal(result.ficha_filled, 7);
+  assert.equal(result.ficha_filled, 9);
   assert.equal(result.briefing_patch.status, undefined);
 });
 

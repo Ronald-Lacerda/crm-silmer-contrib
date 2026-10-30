@@ -6,6 +6,12 @@
   aberta em 29/10/2026. Tem retirada na loja ou Melhor Envio, etiqueta
   pronta ao embalar e menu próprio. As decisões D1–D9 estão em aberto.
 
+## Decisão de 29/10/2026
+
+- [040 — Vendedor aprende com os atendentes humanos](040-vendedor-aprende-com-os-atendentes-humanos.md),
+  decidida na ADR 051; nove conversas reais de 29/10 e o que a vendedora
+  perguntou e respondeu.
+
 ## Decisão de 28/10/2026
 
 - [037 — Aprendizados do Vendedor na Inbox real](037-aprendizados-do-vendedor-na-inbox-real.md),

@@ -6,25 +6,31 @@ zero, o bot preenche pelo menos **50% da ficha** antes de transferir.
 
 Desde a [ADR 024](../../adr/024-atendimento-comeca-pelo-produto.md), o bot
 pede o nome e o que o cliente quer personalizar na saudação e, depois,
-pergunta só o que o produto precisa:
+pergunta só o que o produto precisa. Desde a VND-L02 (conversas reais de
+29/10/2026), ele também pergunta o tecido, só para roupa, e se o cliente já tem
+a arte, sem nunca oferecer criá-la:
 
-| Produto                             | Pontos que o bot pergunta                                          | Ficha |
-| ----------------------------------- | ------------------------------------------------------------------ | ----- |
-| Ainda não informado                 | produto, cor, quantidade, onde vai a estampa, para quando          | 6     |
-| Roupa, boné, mochila ou bolsa       | produto, modelo, cor, quantidade, onde vai a estampa, para quando  | 7     |
-| Bandeira, faixa ou banner           | produto, tamanho, cor, quantidade, onde vai a estampa, para quando | 7     |
-| Outro produto (caneca, chaveiro...) | produto, cor, quantidade, onde vai a estampa, para quando          | 6     |
+| Produto                             | Pontos que o bot pergunta                                                       | Ficha |
+| ----------------------------------- | ------------------------------------------------------------------------------- | ----- |
+| Ainda não informado                 | produto, cor, quantidade, onde vai a estampa, arte, para quando                 | 7     |
+| Roupa                               | produto, modelo, cor, quantidade, tecido, onde vai a estampa, arte, para quando | 9     |
+| Boné                                | produto, modelo, cor, quantidade, onde vai a estampa, arte, para quando         | 8     |
+| Bandeira, faixa ou banner           | produto, tamanho, cor, quantidade, onde vai a estampa, arte, para quando        | 8     |
+| Outro produto (caneca, chaveiro...) | produto, cor, quantidade, onde vai a estampa, arte, para quando                 | 7     |
 
 A ficha é o nome mais os pontos. O nome sai da conta depois de pedido duas
 vezes sem resposta (na saudação e logo em seguida). "Definir com o vendedor"
 não conta. Conta o que o workflow grava sozinho: o modelo quando o produto já
-o diz ("abadás", "camisas polo", "ecobags") e a cor dos kits (abadá e
-sublimação total gravam "branca"). Arte, técnica, tecido, tamanhos, gola,
-personalização individual e divisão por público nunca são perguntados nem
-contam: o bot só grava o que o cliente disser. A exceção é a bandeira (faixa,
-banner ou estandarte), cujo modelo é o tamanho: ele vai em `product_model` com
-o nome do produto ("bandeira 1 x 1,5 m") e aparece no tipo do item da Ficha,
-nunca na grade de tamanhos.
+o diz ("abadás", "camisas polo"), a cor e o tecido dos kits (abadá e
+sublimação total gravam "branca" e "poliéster"), o tecido que o cliente já
+disse ("camisa em dry fit") e a arte de peça lisa ("sem aplicação"). A arte é
+gravada como "cliente envia a arte", "Silmer cria a arte" (só quando o cliente
+pede) ou "sem estampa"; "ainda não tenho" fica "Definir com o vendedor", com a
+nota "Cliente ainda não tem a arte". Técnica, tamanhos, gola, personalização
+individual e divisão por público nunca são perguntados nem contam: o bot só
+grava o que o cliente disser. A bandeira (faixa, banner ou estandarte) tem como
+modelo o tamanho: ele vai em `product_model` com o nome do produto ("bandeira 1
+x 1,5 m") e aparece no tipo do item da Ficha, nunca na grade de tamanhos.
 
 ## Como rodar
 
@@ -33,8 +39,11 @@ nunca na grade de tamanhos.
   uma conversa independente: abra outra sessão isolada do navegador no chat
   manual ou use o webhook DEV com um `wa_id` sintético inédito. Recarregar a
   página não garante um novo `sessionId` e pode continuar a conversa no CRM.
-- Mande as mensagens na ordem, uma por vez, e espere a resposta. Se o bot
-  perguntar outra coisa, responda com o fato do roteiro que couber.
+- Mande as mensagens na ordem, uma por vez, e espere a resposta. Desde a
+  VND-L02, o bot espera cerca de 8 segundos depois de cada mensagem para
+  juntar as que chegarem em sequência; mensagens mandadas juntas recebem uma
+  resposta só. Se o bot perguntar outra coisa, responda com o fato do roteiro
+  que couber.
 - Depois da transferência, mande a última mensagem do roteiro: o bot deve ficar
   calado, porque a conversa está com um vendedor.
 - Na Inbox do CRM, abra a transferência e confira o motivo, o resumo com
@@ -49,13 +58,14 @@ nunca na grade de tamanhos.
   `opened: false` é uma falha, registrada como `ORDER_OPEN_FAILED`, e deve ser
   anotada.
 - O indicador da rodada é a média da coluna "Ficha" dos roteiros KPI na hora
-  da transferência, menos o KPI-05; a meta é cada um chegar a 50% ou mais. O
-  KPI-05 e os roteiros EXT são transferidos pela regra do pedido do zero e
-  ficam fora da conta.
+  da transferência, menos o KPI-05 e o KPI-07; a meta é cada um chegar a 50%
+  ou mais. O KPI-05, o KPI-07 e os roteiros EXT são transferidos por regras
+  próprias e ficam fora da conta.
 - Em todos os roteiros, anote como falha: pergunta de camisa para quem não
-  pediu roupa, pergunta sobre arte, tecido, técnica, tamanho ou gola, oferta
-  de criar a arte, termo técnico que o cliente não usou e o nome pedido mais
-  de duas vezes.
+  pediu roupa, pergunta de tecido para boné, bandeira ou outro produto,
+  pergunta sobre técnica, tamanho ou gola, oferta de criar a arte, elogio à
+  escolha do cliente ("ótima escolha", "combinam bem"), termo técnico que o
+  cliente não usou e o nome pedido mais de duas vezes.
 
 ## Pedido do zero
 
@@ -64,46 +74,50 @@ da ficha naquele momento.
 
 ### KPI-01 — Cliente que responde uma coisa por vez
 
-| #   | Você manda                                                          | O bot deve                                                                                                                                                             | Ficha  |
-| --- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| 1   | Oi, boa tarde!                                                      | Apresentar-se como assistente virtual da Silmer e pedir o nome e o que você quer personalizar (camisetas ou outras roupas, bonés, mochilas e bolsas, ou outro produto) | 0/6    |
-| 2   | Sou a Carla. Queria fazer uns uniformes pro time de vôlei da escola | Reagir bem e perguntar o modelo: camiseta comum, manga longa, polo, regata, abadá, baby look ou outro. O produto abre o Pedido pendente                                | 2/7    |
-| 3   | Camiseta comum, com estampa                                         | Perguntar a cor; "com estampa" fica gravado, sem pergunta sobre a arte                                                                                                 | 3/7    |
-| 4   | Azul marinho                                                        | Perguntar a quantidade                                                                                                                                                 | 4/7 ✅ |
-| 5   | 25                                                                  | Perguntar onde vai a estampa: só na frente, ou também nas costas ou na manga?                                                                                          | 5/7    |
-| 6   | Na frente, com a logo da escola                                     | Perguntar para quando você precisa                                                                                                                                     | 6/7    |
-| 7   | Qual a diferença entre algodão e dry fit?                           | Explicar em palavras simples, sem dizer que a Silmer tem, e perguntar a data de novo; não transfere                                                                    | 6/7    |
-| 8   | Dry fit. Preciso até 15 de novembro                                 | Dizer que anotou tudo e transferir (Pré-ficha completa); o tecido fica gravado                                                                                         | 7/7    |
-| 9   | Obrigada!                                                           | Ficar calado                                                                                                                                                           | —      |
+| #   | Você manda                                                          | O bot deve                                                                                                                                         | Ficha  |
+| --- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 1   | Oi, boa tarde!                                                      | Apresentar-se como assistente virtual da Silmer e pedir o nome e o que você quer personalizar (camisetas ou outras roupas, bonés ou outro produto) | 0/7    |
+| 2   | Sou a Carla. Queria fazer uns uniformes pro time de vôlei da escola | Reagir bem e perguntar o modelo: camiseta comum, manga longa, polo, regata, abadá, baby look ou outro. O produto abre o Pedido pendente            | 2/9    |
+| 3   | Camiseta comum, com estampa                                         | Perguntar a cor; "com estampa" fica gravado como técnica                                                                                           | 3/9    |
+| 4   | Azul marinho                                                        | Perguntar a quantidade                                                                                                                             | 4/9    |
+| 5   | 25                                                                  | Perguntar o tecido: algodão, poliéster ou dry fit, ou outro                                                                                        | 5/9 ✅ |
+| 6   | Qual a diferença entre algodão e dry fit?                           | Explicar em palavras simples, sem dizer que a Silmer tem, e perguntar o tecido de novo; não transfere                                              | 5/9    |
+| 7   | Dry fit                                                             | Perguntar onde vai a estampa: só na frente, ou também nas costas ou na manga?                                                                      | 6/9    |
+| 8   | Na frente, com a logo da escola                                     | Perguntar "Você já tem a arte (ou logo) pronta?", sem oferecer criar                                                                               | 7/9    |
+| 9   | Já tenho, mando depois                                              | Perguntar para quando você precisa                                                                                                                 | 8/9    |
+| 10  | Preciso até 15 de novembro                                          | Dizer que anotou tudo e transferir (Pré-ficha completa)                                                                                            | 9/9    |
+| 11  | Obrigada!                                                           | Ficar calado                                                                                                                                       | —      |
 
 ### KPI-02 — Cliente que manda quase tudo de uma vez
 
 | #   | Você manda                                                                                    | O bot deve                                                                                                                        | Ficha  |
 | --- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| 1   | Oi! Me chamo Paulo, preciso de 40 regatas brancas de dry fit pra uma corrida, já tenho a arte | Gravar nome, regatas como produto e modelo, branca, 40, dry fit, arte e gola "regata" sem perguntar; perguntar onde vai a estampa | 5/7 ✅ |
-| 2   | Na frente e nas costas                                                                        | Perguntar para quando                                                                                                             | 6/7    |
-| 3   | Dia 8 de dezembro                                                                             | Dizer que anotou tudo e transferir (Pré-ficha completa)                                                                           | 7/7    |
+| 1   | Oi! Me chamo Paulo, preciso de 40 regatas brancas de dry fit pra uma corrida, já tenho a arte | Gravar nome, regatas como produto e modelo, branca, 40, dry fit, arte e gola "regata" sem perguntar; perguntar onde vai a estampa | 7/9 ✅ |
+| 2   | Na frente e nas costas                                                                        | Perguntar para quando                                                                                                             | 8/9    |
+| 3   | Dia 8 de dezembro                                                                             | Dizer que anotou tudo e transferir (Pré-ficha completa)                                                                           | 9/9    |
 | 4   | Valeu                                                                                         | Ficar calado                                                                                                                      | —      |
 
-### KPI-03 — Cliente que pula o nome e deixa a data para o vendedor
+### KPI-03 — Cliente que pula o nome e deixa pontos para o vendedor
 
-| #   | Você manda                                       | O bot deve                                                                                                                       | Ficha  |
-| --- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| 1   | Bom dia, quero fazer camisas polo pra minha loja | Apresentar-se e pedir o nome; não perguntar o modelo (polo já é o modelo)                                                        | 2/7    |
-| 2   | Preta                                            | Reagir ao que você contou e pedir só o nome ("Que legal que você quer camisas polo! Qual é o seu nome?")                         | 3/7    |
-| 3   | 20                                               | Não pedir mais o nome; perguntar onde vai a estampa. O nome sai da conta                                                         | 4/6 ✅ |
-| 4   | Bordado no peito, a logo eu mando depois         | Perguntar para quando                                                                                                            | 5/6    |
-| 5   | Isso o vendedor vê comigo                        | Aceitar sem insistir e transferir (Pré-ficha completa); no resumo, "Nome: não informado." e "Para o vendedor definir: needed_by" | 5/6    |
-| 6   | Ok                                               | Ficar calado                                                                                                                     | —      |
+| #   | Você manda                                       | O bot deve                                                                                                                                | Ficha  |
+| --- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 1   | Bom dia, quero fazer camisas polo pra minha loja | Apresentar-se e pedir o nome; não perguntar o modelo (polo já é o modelo)                                                                 | 2/9    |
+| 2   | Preta                                            | Reagir ao que você contou e pedir só o nome ("Que legal que você quer camisas polo! Qual é o seu nome?")                                  | 3/9    |
+| 3   | 20                                               | Não pedir mais o nome; perguntar o tecido. O nome sai da conta                                                                            | 4/8 ✅ |
+| 4   | Tanto faz                                        | Aceitar sem insistir e perguntar onde vai a estampa                                                                                       | 4/8    |
+| 5   | Bordado no peito, a logo eu mando depois         | Perguntar para quando                                                                                                                     | 6/8    |
+| 6   | Isso o vendedor vê comigo                        | Aceitar sem insistir e transferir (Pré-ficha completa); no resumo, "Nome: não informado." e "Para o vendedor definir: fabrics, needed_by" | 6/8    |
+| 7   | Ok                                               | Ficar calado                                                                                                                              | —      |
 
 ### KPI-04 — Abadá, com pergunta de preço
 
-| #   | Você manda                                      | O bot deve                                                                                                                 | Ficha  |
-| --- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------ |
-| 1   | Oi, queria ver uns abadás pro bloco de carnaval | Apresentar-se e pedir o nome; não perguntar modelo nem cor (abadá é sublimação total em poliéster branco, com gola regata) | 3/7    |
-| 2   | Juliana                                         | Perguntar a quantidade                                                                                                     | 4/7 ✅ |
-| 3   | Umas 100. Quanto fica cada?                     | Dizer que os valores são com os vendedores e transferir (Perguntou o valor); a quantidade fica gravada                     | 5/7    |
-| 4   | Tá bom                                          | Ficar calado                                                                                                               | —      |
+| #   | Você manda                                      | O bot deve                                                                                                                                          | Ficha  |
+| --- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 1   | Oi, queria ver uns abadás pro bloco de carnaval | Apresentar-se e pedir o nome; não perguntar modelo, cor nem tecido (abadá é sublimação total em poliéster branco, com gola regata)                  | 4/9    |
+| 2   | Juliana                                         | Perguntar a quantidade                                                                                                                              | 5/9 ✅ |
+| 3   | Umas 100. Quanto fica cada?                     | Não transferir: "Quem passa o valor é o vendedor, e pra ele já te mandar o preço certinho me conta: onde vai a estampa…"; a quantidade fica gravada | 6/9    |
+| 4   | Mas quanto fica?                                | Dizer que os valores são com os vendedores e transferir (Perguntou o valor)                                                                         | 6/9    |
+| 5   | Tá bom                                          | Ficar calado                                                                                                                                        | —      |
 
 ### KPI-05 — Cliente que começa do zero e depois cita o post
 
@@ -112,64 +126,87 @@ transfere na hora.
 
 | #   | Você manda                                            | O bot deve                                                                                                                     | Ficha  |
 | --- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| 1   | Oi, sou a Bia, quero fazer camisetas pra minha equipe | Perguntar o modelo                                                                                                             | 2/7    |
-| 2   | Camiseta comum, branca                                | Perguntar a quantidade                                                                                                         | 4/7 ✅ |
-| 3   | 15                                                    | Perguntar onde vai a estampa                                                                                                   | 5/7    |
-| 4   | Na verdade quero igual à que vocês postaram ontem     | Avisar que vai chamar um vendedor e transferir na hora; resumo "Não é um pedido do zero"; o Pedido pendente já aberto continua | 5/7    |
+| 1   | Oi, sou a Bia, quero fazer camisetas pra minha equipe | Perguntar o modelo                                                                                                             | 2/9    |
+| 2   | Camiseta comum, branca                                | Perguntar a quantidade                                                                                                         | 4/9    |
+| 3   | 15                                                    | Perguntar o tecido                                                                                                             | 5/9 ✅ |
+| 4   | Na verdade quero igual à que vocês postaram ontem     | Avisar que vai chamar um vendedor e transferir na hora; resumo "Não é um pedido do zero"; o Pedido pendente já aberto continua | 5/9    |
 | 5   | Ok, obrigada                                          | Ficar calado                                                                                                                   | —      |
 
 ### KPI-06 — Boné
 
 | #   | Você manda                               | O bot deve                                                                                                                            | Ficha  |
 | --- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| 1   | Oi! Queria fazer bonés pra minha empresa | Apresentar-se e pedir o nome; nada de camisa                                                                                          | 1/7    |
-| 2   | Marcos                                   | Perguntar o modelo do boné: trucker (com tela atrás), aba curva, aba reta ou outro                                                    | 2/7    |
-| 3   | Trucker                                  | Perguntar a cor do boné                                                                                                               | 3/7    |
-| 4   | Preto com a tela branca                  | Perguntar quantas unidades                                                                                                            | 4/7 ✅ |
-| 5   | 50                                       | Perguntar onde vai a personalização: na frente, na lateral ou atrás                                                                   | 5/7    |
-| 6   | Na frente, bordado                       | Perguntar para quando                                                                                                                 | 6/7    |
-| 7   | Para o fim do mês                        | Transferir (Pré-ficha completa). No Pedido: tipo "bonés trucker" e gola "NÃO APLICÁVEL"; no resumo, "Dica: boné costuma ser bordado." | 7/7    |
-| 8   | Valeu                                    | Ficar calado                                                                                                                          | —      |
+| 1   | Oi! Queria fazer bonés pra minha empresa | Apresentar-se e pedir o nome; nada de camisa                                                                                          | 1/8    |
+| 2   | Marcos                                   | Perguntar o modelo do boné: trucker (com tela atrás), aba curva, aba reta ou outro                                                    | 2/8    |
+| 3   | Trucker                                  | Perguntar a cor do boné                                                                                                               | 3/8    |
+| 4   | Preto com a tela branca                  | Perguntar quantas unidades                                                                                                            | 4/8 ✅ |
+| 5   | 50                                       | Perguntar onde vai a personalização: na frente, na lateral ou atrás; nunca o tecido                                                   | 5/8    |
+| 6   | Na frente, bordado                       | Perguntar se você já tem a arte (ou logo) pronta                                                                                      | 6/8    |
+| 7   | Sim, tenho a logo                        | Perguntar para quando                                                                                                                 | 7/8    |
+| 8   | Para o fim do mês                        | Transferir (Pré-ficha completa). No Pedido: tipo "bonés trucker" e gola "NÃO APLICÁVEL"; no resumo, "Dica: boné costuma ser bordado." | 8/8    |
+| 9   | Valeu                                    | Ficar calado                                                                                                                          | —      |
 
 ### KPI-07 — Ecobag
 
-| #   | Você manda                                                 | O bot deve                                                             | Ficha  |
-| --- | ---------------------------------------------------------- | ---------------------------------------------------------------------- | ------ |
-| 1   | Boa tarde, sou a Lia. Preciso de 200 ecobags pra um evento | Perguntar a cor; não perguntar o modelo, porque "ecobag" já é o modelo | 4/7 ✅ |
-| 2   | Cru                                                        | Perguntar onde vai a estampa                                           | 5/7    |
-| 3   | Só de um lado                                              | Perguntar para quando                                                  | 6/7    |
-| 4   | Dia 30                                                     | Dizer que anotou tudo e transferir (Pré-ficha completa)                | 7/7    |
-| 5   | Obrigada                                                   | Ficar calado                                                           | —      |
+Mochilas, bolsas e similares estão fora da coleta automática (CHAN-WA-01): o
+roteiro confere que o bot transfere sem oferecer opções e fica fora do
+indicador.
+
+| #   | Você manda                                                 | O bot deve                                                         | Ficha |
+| --- | ---------------------------------------------------------- | ------------------------------------------------------------------ | ----- |
+| 1   | Boa tarde, sou a Lia. Preciso de 200 ecobags pra um evento | Transferir na hora (Conteúdo não suportado), sem perguntar a ficha | —     |
+| 2   | Obrigada                                                   | Ficar calado                                                       | —     |
 
 ### KPI-08 — Outro produto
 
-| #   | Você manda                                  | O bot deve                                                                                                        | Ficha  |
-| --- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------ |
-| 1   | Oi, sou o Davi. Vocês personalizam canecas? | Não dizer que a Silmer faz: dizer que anota para o vendedor confirmar, e perguntar a cor (sem modelo)             | 2/6    |
-| 2   | Brancas, umas 30                            | Perguntar onde vai a estampa                                                                                      | 4/6 ✅ |
-| 3   | Logo de um lado só                          | Perguntar para quando                                                                                             | 5/6    |
-| 4   | Semana que vem                              | Transferir (Pré-ficha completa); no resumo, "Dica: caneca, squeeze, garrafa e mouse pad costumam ser sublimação." | 6/6    |
-| 5   | Ok                                          | Ficar calado                                                                                                      | —      |
+| #   | Você manda                                  | O bot deve                                                                                                                                                          | Ficha  |
+| --- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| 1   | Oi, sou o Davi. Vocês personalizam canecas? | Não dizer que a Silmer faz: dizer que anota para o vendedor confirmar, e perguntar a cor (sem modelo nem tecido)                                                    | 2/7    |
+| 2   | Brancas, umas 30                            | Perguntar onde vai a estampa                                                                                                                                        | 4/7 ✅ |
+| 3   | De um lado só                               | Perguntar se você já tem a arte (ou logo) pronta                                                                                                                    | 5/7    |
+| 4   | Ainda não tenho                             | Não gravar "Silmer cria a arte"; perguntar para quando                                                                                                              | 5/7    |
+| 5   | Dia 20 de novembro                          | Transferir (Pré-ficha completa); no resumo, "Dica: caneca, squeeze, garrafa e mouse pad costumam ser sublimação; cliente ainda não tem a arte: combinar quem cria." | 6/7    |
+| 6   | Ok                                          | Ficar calado                                                                                                                                                        | —      |
 
 ### KPI-09 — Sublimação em peça escura
 
 | #   | Você manda                                                    | O bot deve                                                                                                                                                               | Ficha  |
 | --- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| 1   | Oi, sou o Léo. Quero 40 camisetas pretas com sublimação total | Perguntar o modelo, sem comentar a técnica com o cliente                                                                                                                 | 4/7 ✅ |
-| 2   | Comum                                                         | Perguntar onde vai a estampa                                                                                                                                             | 5/7    |
-| 3   | Na frente toda                                                | Perguntar para quando                                                                                                                                                    | 6/7    |
-| 4   | Fim do mês                                                    | Transferir (Pré-ficha completa); no resumo, "Atenção: sublimação em peça escura: a sublimação pede peça branca ou clara."; a cor continua "pretas", como o cliente disse | 7/7    |
-| 5   | Ok                                                            | Ficar calado                                                                                                                                                             | —      |
+| 1   | Oi, sou o Léo. Quero 40 camisetas pretas com sublimação total | Perguntar o modelo, sem comentar a técnica com o cliente; o tecido fica "poliéster" pela técnica                                                                         | 5/9 ✅ |
+| 2   | Comum                                                         | Perguntar onde vai a estampa                                                                                                                                             | 6/9    |
+| 3   | Na frente toda                                                | Perguntar se você já tem a arte (ou logo) pronta                                                                                                                         | 7/9    |
+| 4   | Vou mandar a arte                                             | Perguntar para quando                                                                                                                                                    | 8/9    |
+| 5   | Fim do mês                                                    | Transferir (Pré-ficha completa); no resumo, "Atenção: sublimação em peça escura: a sublimação pede peça branca ou clara."; a cor continua "pretas", como o cliente disse | 9/9    |
+| 6   | Ok                                                            | Ficar calado                                                                                                                                                             | —      |
 
 ### KPI-10 — Divisão por público e nome e número
 
 | #   | Você manda                                                                                               | O bot deve                                                                                                                                                                                                                                                          | Ficha  |
 | --- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| 1   | Oi, sou o Rafa, quero 25 camisetas pro time: 10 masculinas, 10 femininas e 5 infantis, com nome e número | Perguntar o modelo; não perguntar tamanhos nem a divisão                                                                                                                                                                                                            | 3/7    |
-| 2   | Comum, azul                                                                                              | Perguntar onde vai a estampa                                                                                                                                                                                                                                        | 5/7 ✅ |
-| 3   | Escudo na frente e nome e número nas costas                                                              | Perguntar para quando                                                                                                                                                                                                                                               | 6/7    |
-| 4   | Dia 5 de dezembro                                                                                        | Transferir (Pré-ficha completa); no resumo, "Dica: personalização individual: pedir a lista de nomes, números e tamanhos; divisão por público: cada público vira um item."; o Pedido pendente tem três itens (Masculino 10, Feminino 10 e Infantil 5), sem tamanhos | 7/7    |
-| 5   | Valeu                                                                                                    | Ficar calado                                                                                                                                                                                                                                                        | —      |
+| 1   | Oi, sou o Rafa, quero 25 camisetas pro time: 10 masculinas, 10 femininas e 5 infantis, com nome e número | Perguntar o modelo; não perguntar tamanhos nem a divisão                                                                                                                                                                                                            | 3/9    |
+| 2   | Comum, azul                                                                                              | Perguntar o tecido                                                                                                                                                                                                                                                  | 5/9 ✅ |
+| 3   | Poliéster                                                                                                | Perguntar onde vai a estampa                                                                                                                                                                                                                                        | 6/9    |
+| 4   | Escudo na frente e nome e número nas costas                                                              | Perguntar se você já tem a arte (ou logo) pronta                                                                                                                                                                                                                    | 7/9    |
+| 5   | O escudo eu tenho                                                                                        | Perguntar para quando                                                                                                                                                                                                                                               | 8/9    |
+| 6   | Dia 5 de dezembro                                                                                        | Transferir (Pré-ficha completa); no resumo, "Dica: personalização individual: pedir a lista de nomes, números e tamanhos; divisão por público: cada público vira um item."; o Pedido pendente tem três itens (Masculino 10, Feminino 10 e Infantil 5), sem tamanhos | 9/9    |
+| 7   | Valeu                                                                                                    | Ficar calado                                                                                                                                                                                                                                                        | —      |
+
+## Aprendizados de 29/10/2026 (VND-L02)
+
+Uma conversa nova por roteiro. Eles não entram no indicador; conferem as
+regras novas.
+
+| ID     | Você manda                                                                                       | O bot deve                                                                                                                                                                                               |
+| ------ | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L02-01 | "Oi" e, logo em seguida, "Quero 20 camisetas" (as duas em menos de 8 segundos)                   | Responder uma vez só, considerando as duas: apresentar-se e pedir o nome                                                                                                                                 |
+| L02-02 | Uma imagem sem legenda, depois de o bot perguntar a cor                                          | Responder "Recebi sua imagem, já deixei aqui para o vendedor ver." e perguntar a cor de novo; nunca "não consegui abrir" nem transferência por duas tentativas                                           |
+| L02-03 | Duas imagens seguidas                                                                            | Uma resposta só, com o mesmo reconhecimento                                                                                                                                                              |
+| L02-04 | Um áudio que não dá para ouvir                                                                   | Pedir com gentileza para escrever                                                                                                                                                                        |
+| L02-05 | "Sou da Loja Sintética. Vocês fazem parceria? Qual o preço para revendedor? Emitem nota fiscal?" | Responder "Anotei suas perguntas para o vendedor responder uma a uma." e transferir (Pediu um vendedor); no resumo, as perguntas em tópicos e "Dica: Possível parceria/revenda"; nunca "Ótima pergunta!" |
+| L02-06 | Ficha de camiseta completa e, por último, "Preciso para amanhã"                                  | Transferir com o aviso de urgência (motivo Urgência) e "Urgência: precisa para amanhã (dd/mm/aaaa)" no resumo                                                                                            |
+| L02-07 | "Quero camisa em dry fit" no começo da conversa                                                  | Gravar "dry fit" e nunca perguntar o tecido                                                                                                                                                              |
+| L02-08 | Qualquer transferência numa quarta-feira às 17h45                                                | O aviso diz que o horário está perto de acabar e que, se não der tempo hoje, um vendedor responde a partir de amanhã às 9h                                                                               |
+| L02-09 | "Camisa Streetwar, preta"                                                                        | Gravar com as palavras do cliente, sem repetir o erro de digitação nem elogiar a escolha                                                                                                                 |
 
 ## Não é pedido do zero: transferência imediata
 
@@ -199,13 +236,13 @@ zero" e nenhum Pedido pendente novo aparece. O "ok" seguinte não tem resposta.
 Também uma conversa nova por linha. O bot não transfere; segue a ficha com a
 próxima pergunta.
 
-| ID      | Você manda                                                        | O bot deve                                                         |
-| ------- | ----------------------------------------------------------------- | ------------------------------------------------------------------ |
-| ZERO-01 | Oi, vi vocês no Instagram e quero fazer 20 camisetas pro meu time | Apresentar-se, pedir o nome e seguir a ficha                       |
-| ZERO-02 | Vim pelo anúncio. Vocês fazem camisa personalizada?               | Seguir sem afirmar que a Silmer faz; dizer que o vendedor confirma |
-| ZERO-03 | Preciso das camisas prontas até dia 20                            | Seguir; a data é desejo, não prazo, e não é pronta entrega         |
-| ZERO-04 | Quero 50 camisetas com nome e número nas costas                   | Seguir a ficha                                                     |
-| ZERO-05 | Vocês fazem mochila com a logo da escola?                         | Seguir sem afirmar que a Silmer faz; pedir o nome                  |
+| ID      | Você manda                                                        | O bot deve                                                                                                               |
+| ------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| ZERO-01 | Oi, vi vocês no Instagram e quero fazer 20 camisetas pro meu time | Apresentar-se, pedir o nome e seguir a ficha                                                                             |
+| ZERO-02 | Vim pelo anúncio. Vocês fazem camisa personalizada?               | Seguir sem afirmar que a Silmer faz; dizer que o vendedor confirma                                                       |
+| ZERO-03 | Preciso das camisas prontas até dia 20                            | Seguir; a data é desejo, não prazo, e não é pronta entrega                                                               |
+| ZERO-04 | Quero 50 camisetas com nome e número nas costas                   | Seguir a ficha                                                                                                           |
+| ZERO-05 | Quanto custa uma camiseta?                                        | Não transferir na primeira pergunta de preço: dizer que o vendedor passa o valor e pedir o nome e o que vai personalizar |
 
 ## Registro
 

@@ -1,5 +1,13 @@
 # Architecture Decision Records
 
+## Decisão de 29/10/2026
+
+- [051 — Vendedor aprende com os atendentes humanos](051-vendedor-aprende-com-os-atendentes-humanos.md),
+  preço adiado na primeira pergunta, arte e tecido perguntados, imagem sem
+  falha, rajada agrupada, urgência pelo prazo, parceria e revenda, tom e aviso
+  perto do fechamento; supersede a ADR 009 (item 4) e a ADR 024 (item 3) em
+  parte.
+
 ## Decisão de 28/10/2026
 
 - [049 — Aprendizados do Vendedor na Inbox real](049-aprendizados-do-vendedor-na-inbox-real.md),

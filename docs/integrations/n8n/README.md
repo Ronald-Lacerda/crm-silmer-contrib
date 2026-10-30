@@ -30,11 +30,14 @@ personalizar, nunca "qual camisa"; se o cliente não disser o nome, a resposta
 seguinte reage ao que ele contou e pede só o nome, e depois o bot não insiste.
 Os pontos, nesta ordem, são: produto (`product_type`), modelo
 (`product_model`, só para roupa, boné, mochila ou bolsa), cor (`colors`),
-quantidade (`quantity`), onde vai a estampa (`artwork_locations`) e para
-quando o cliente precisa (`needed_by`, desejo do cliente, nunca prazo
-confirmado). Origem da arte, técnica, tecido, tamanhos, gola, personalização
-individual e divisão por público nunca são perguntados: o bot grava o que o
-cliente disser e o vendedor completa. A divisão por público vai em
+quantidade (`quantity`), tecido (`fabrics`, só para roupa sem kit que o
+defina), onde vai a estampa (`artwork_locations`), se o cliente já tem a arte
+(`artwork_status`) e para quando o cliente precisa (`needed_by`, desejo do
+cliente, nunca prazo confirmado); tecido e arte entram no ritmo pela
+[ADR 051](../../adr/051-vendedor-aprende-com-os-atendentes-humanos.md).
+Técnica, tamanhos, gola, personalização individual e divisão por público
+nunca são perguntados: o bot grava o que o cliente disser e o vendedor
+completa. A divisão por público vai em
 `audiences` ("4 masculinas, 3 femininas e 3 infantis"), e o CRM a transforma
 em um item por público quando a lê sem dúvida (ADR 025). O bot nunca oferece criar a arte e, de
 tecido, só fala de algodão, poliéster e dry fit. Os demais campos
@@ -66,14 +69,15 @@ sanitizado principal com os nós gerados por `render-mvp-workflow.mjs` e rode
 `npm run generate:n8n-dev-workflow` e `npm run generate:n8n-local-workflow`.
 Os gatilhos de transferência da ADR 009 são
 aplicados pelo nó de decisão, não só pelo prompt: pergunta de preço, frete ou
-pagamento; pedido de pessoa ou de vendedor pelo nome; nome fora do CRM pedido
+pagamento repetida (a primeira é adiada, ADR 051); pedido de pessoa ou de vendedor pelo nome; nome fora do CRM pedido
 duas vezes; conversa que não é pedido do zero (camisa ou boné do post, "quero
 essa camisa", pedido de contato por e-mail, WhatsApp ou telefone, algo já
 combinado com a Silmer; ADR 013); duas respostas incompreensíveis ou indecisas
 para o mesmo item; reclamação; urgência; conteúdo não suportado; e o teto de
 15 mensagens. O resumo de todo handoff traz "Ficha: X de N (Y%)", o indicador
 da meta de 50% da ficha, com N igual ao nome, enquanto o bot o pede, mais os
-pontos do produto (7 para roupa, boné, bolsa ou bandeira; 6 para outro produto); o
+pontos do produto (9 para roupa; 8 para boné, bolsa ou bandeira; 7 para outro
+produto ou produto não dito; ADR 051); o
 [roteiro do indicador da ficha](roteiro-indicador-da-ficha.md) tem as
 mensagens para testá-lo.
 `briefing_status` e `next_required_field` guardam o estado desses gatilhos e
@@ -99,7 +103,9 @@ de desenvolvimento e nunca é fallback silencioso.
   arquivo já chega com a mensagem.
 - O que não pode ser consultado, baixado, preparado ou transcrito (por exemplo
   áudio AAC ou AMR) chega ao modelo como "não consegui abrir", e o bot pede
-  para o cliente escrever. Documento, vídeo e tipo desconhecido transferem.
+  para o cliente escrever. Imagem, lida ou não, recebe "Recebi sua imagem, já
+  deixei aqui para o vendedor ver." e a próxima pergunta, e nunca conta como
+  tentativa falha nem pergunta ignorada (ADR 051). Documento, vídeo e tipo desconhecido transferem.
 - Figurinha é guardada como imagem e não vai ao modelo; localização e contato
   viram texto; reação e avisos de sistema são ignorados.
 - **Chat do site:** `Site - Receber mensagem do chat (MVP)` é um Chat Trigger
@@ -934,3 +940,37 @@ conferidos iguais ao backup. Rollback: publicar a versão `a107910d`.
 Armadilha do conector MCP: ao enviar parâmetros, um `\uXXXX` literal no código
 chega ao n8n como o próprio caractere. Codifique a barra (`\\u005Cu200B`) e
 confira o `jsCode` gravado; para rollback, prefira publicar a versão anterior.
+
+## VND-L02 — Aprendizados com os atendentes humanos (29/10/2026)
+
+A [ADR 051](../../adr/051-vendedor-aprende-com-os-atendentes-humanos.md) ajusta o
+agente a partir de nove conversas reais e das respostas da vendedora. Regras no
+SDK, cobertas por `test/n8n-vendedor-aprendizados-l02.test.js`:
+
+- **Preço adiado.** A primeira pergunta de preço não transfere: o workflow
+  responde "Quem passa o valor é o vendedor, e pra ele já te mandar o preço
+  certinho me conta: …" com a próxima pergunta do ritmo e marca `price_` em
+  `briefing_status` (sem chave nova no `briefing_patch`; sem pedido, o
+  histórico é a reserva). A segunda transfere com `negotiation`. Ficha
+  completa depois da pergunta transfere com `briefing_complete` e "Perguntou o
+  valor." no resumo.
+- **Arte** ("Você já tem a arte (ou logo) pronta?", sem oferecer criação) grava
+  só "cliente envia a arte", "Silmer cria a arte" (pedido explícito) ou "sem
+  estampa". "Não tenho" e respostas evasivas gravam "Definir com o vendedor",
+  com nota e Dica; foto de referência não é arte do cliente.
+- **Tecido** (só roupa sem kit) pergunta algodão, poliéster ou dry fit; o
+  tecido já dito é gravado com as palavras do cliente, abaixo de 200
+  caracteres; "tanto faz" e "vocês escolhem" gravam "Definir com o vendedor".
+- **Rajada.** Depois de registrar o inbound, `Aguardar mensagens seguidas`
+  espera 8 s e `CRM - Reler conversa` reenvia o mesmo inbound (mesma chave de
+  idempotência; o CRM devolve o estado atual com `duplicate: true`). `Ainda é a
+última mensagem?` só segue se `source_revision` não mudou; a execução mais
+  nova responde a todas as mensagens desde a última resposta.
+- **Prazo hoje ou amanhã** com ficha completa transfere com `urgency`.
+- **Parceria, revenda, nota fiscal, envio direto ou fotos das peças** transfere
+  com `human_requested`, aviso "Anotei suas perguntas…" e resumo com as
+  perguntas em tópicos e a Dica "Possível parceria/revenda". O resumo do
+  handoff ainda não aparece na tela da Inbox.
+- **Tom.** `withoutPraise` remove elogios à escolha do cliente.
+- **Fechamento.** O aviso de horário vale também nos últimos 30 minutos do
+  expediente (seg–sex 17h30, sáb 11h30).
