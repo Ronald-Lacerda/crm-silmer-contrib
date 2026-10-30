@@ -1,5 +1,28 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## INBOX-UX-01 — área útil e clareza da Inbox (29/10/2026)
+
+Complementa INBOX-4, PCX-10/12/13/14 e preserva contexto de AGT-03/05.
+Autorização do proprietário no chat em 29/10/2026. Benchmark e limites em
+[registro de produto](../../../docs/product/benchmark-inbox-2026-10-29.md).
+
+- [x] Comparar referências de inbox no Dribbble, sem tratar inspiração visual
+      ou dez perfis simulados como pesquisa com usuários reais.
+- [x] Texto visível em Detalhes, painel recolhível e headers explícitos,
+      preservando teclado, foco, preferências e regras de domínio.
+- [x] Menu compacto na Inbox por padrão, escolha manual salva entre rotas e
+      recargas, dicas por foco/hover e fallback sem storage.
+- [x] Atalhos Aguardando vendedor / Meus atendimentos e linguagem consistente
+      de transferência; nomes completos no celular sem scroll horizontal.
+- [x] Gate integrado: validate (1.429 aprovados, cinco skips), E2E/axe
+      (349 aprovados, sete skips), regressão final de Inbox/shell (74
+      aprovados, sete skips), audit sem high/critical e diff sem whitespace.
+      Auditoria informa um aviso low e dois moderate em dependências existentes.
+- [x] Entrega atômica preparada com documentação e regressões; commit e push
+      seguem o protocolo 1:1:1:1 desta tarefa.
+- [ ] Homologação com vendedores reais: medir descoberta e produtividade;
+      não é substituída por este benchmark ou pelos testes sintéticos.
+
 ## INBOX-IMG-RELEASE-03 — implantação da imagem para pedido
 
 IMG-01/02/06–11, ARQ-02/04, PRV-03. Solicitação de 29/10/2026.

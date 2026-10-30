@@ -211,7 +211,10 @@ desenhada primeiro para 390×844.
 
 - Sidebar de `248px` no canvas, sem borda; item ativo é um cartão branco com
   sombra curta e ícone na cor da marca. Recolhe para rail de `72px` entre 769 e
-  1199 px, com o monograma da marca.
+  1199 px, com o monograma da marca. A Inbox começa com menu compacto quando
+  não há preferência; `Expandir menu` / `Recolher menu` preserva a escolha
+  no navegador para todas as telas desktop/tablet. No celular permanece a barra inferior.
+  Ícones compactos mantêm nomes acessíveis e rótulos no hover e no foco.
 - O trabalho fica num painel inset (`--color-page`, raio `xl`) com topbar de
   `56px`: trilha "Empresa › Tela", função, estado da conexão e tema.
 - Uma lista de rotas alimenta a sidebar, a barra inferior e a folha "Mais";
@@ -280,8 +283,8 @@ Workspace de altura fixa para a atendente (pesquisa UX de 15/10/2026, achado 1):
 a página ocupa exatamente a altura abaixo da barra superior e nunca rola; cada
 coluna rola por dentro.
 
-- **Colunas:** lista | conversa | contexto. O contexto (Detalhes › Pedido,
-  assuntos, cliente) é recolhível pelo botão `Detalhes` do cabeçalho; abre por
+- **Colunas:** lista | conversa | contexto. O contexto (Detalhes do atendimento › Pedido,
+  assuntos, cliente) é recolhível pelo botão com texto visível `Detalhes` do cabeçalho; abre por
   padrão a partir de 1440 px e a última escolha da pessoa vale naquele
   navegador. No tablet o contexto cobre a conversa; no celular aparece um
   painel por vez. Detalhes aberto pelo teclado leva o foco ao título; Esc
@@ -290,8 +293,8 @@ coluna rola por dentro.
   conversa são telas separadas, com voltar; o cabeçalho mantém só o voltar,
   o link do pedido quando há pedido, `Criar pedido` quando cabe (ver
   "Cabeçalho da conversa") e `Mais`, que abre uma folha
-  inferior acima da barra de navegação (Detalhes da conversa, Criar pedido
-  quando não cabe no cabeçalho, Repassar, Arquivar/Desarquivar, Encerrar). A
+  inferior acima da barra de navegação (Detalhes do atendimento, Criar pedido
+  quando não cabe no cabeçalho, Transferir atendimento, Arquivar/Desarquivar, Encerrar). A
   resposta fica acima da barra; ao digitar, a barra sai e a resposta encosta
   no teclado (`interactive-widget=resizes-content`). Alvos de 44 px; nada
   depende de hover.
@@ -301,7 +304,7 @@ coluna rola por dentro.
   conversa muda o endereço sem recarregar a lista, a busca ou os filtros. No
   celular o endereço decide entre a lista e a conversa (voltar = `Conversas`).
 - **Filtros (PCX-14):** a busca no topo da lista, três atalhos com contagem
-  e seleção neutra (`Todas · Aguardando · Minhas`) e o botão `Filtros`, que
+  e seleção neutra (`Todas · Aguardando vendedor · Meus atendimentos`) e o botão `Filtros`, que
   abre a folha "Filtrar conversas" com Situação
   (`Todas · Aguardando vendedor · Com o agente · Com vendedor · Arquivadas`)
   e Responsável (`Todas · Minhas · Sem responsável`). Um par fora dos atalhos aparece no

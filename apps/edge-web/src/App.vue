@@ -21,6 +21,47 @@ import { RETURN_QUERY, safeReturnPath } from './lib/return-path.js';
 
 const router = useRouter();
 const route = useRoute();
+const SIDEBAR_STORAGE_KEY = 'crm.sidebar.compact';
+const sidebarMedia = globalThis.matchMedia?.('(max-width: 1199px)');
+const sidebarNarrow = ref(sidebarMedia?.matches ?? false);
+const sidebarPreference = ref(readSidebarPreference());
+const sidebarTipsDismissed = ref(false);
+const sidebarCompact = computed(
+  () =>
+    sidebarPreference.value ??
+    (route.path.startsWith('/inbox') || sidebarNarrow.value),
+);
+
+/** @returns {boolean | null} */
+function readSidebarPreference() {
+  try {
+    const value = globalThis.localStorage?.getItem(SIDEBAR_STORAGE_KEY);
+    return value === 'true' ? true : value === 'false' ? false : null;
+  } catch {
+    return null;
+  }
+}
+
+function toggleSidebar() {
+  sidebarPreference.value = !sidebarCompact.value;
+  try {
+    globalThis.localStorage?.setItem(
+      SIDEBAR_STORAGE_KEY,
+      String(sidebarPreference.value),
+    );
+  } catch {
+    // The menu remains usable when browser storage is unavailable.
+  }
+}
+
+/** @param {MediaQueryListEvent} event */
+function updateSidebarWidth(event) {
+  sidebarNarrow.value = event.matches;
+}
+sidebarMedia?.addEventListener('change', updateSidebarWidth);
+onBeforeUnmount(() =>
+  sidebarMedia?.removeEventListener('change', updateSidebarWidth),
+);
 const phase = ref('restoring');
 const session = shallowRef(null);
 const activeView = shallowRef(null);
@@ -397,6 +438,18 @@ async function logout() {
 }
 
 /** @param {KeyboardEvent} event */
+function dismissSidebarTip(event) {
+  const visible = Array.from(
+    document.querySelectorAll('.app-sidebar .sidebar-tooltip'),
+  ).some((element) => element.getClientRects().length > 0);
+  if (!visible) return;
+  sidebarTipsDismissed.value = true;
+  // Dismiss only the visible tip; do not also discard the reply's media.
+  event.preventDefault();
+  event.stopPropagation();
+}
+
+/** @param {KeyboardEvent} event */
 function handleShellKey(event) {
   if (event.key !== 'Escape' || !moreOpen.value) return;
   moreOpen.value = false;
@@ -474,8 +527,19 @@ function onCursor(cursor) {
     </main>
   </div>
 
-  <div v-else class="app-shell" @keydown="handleShellKey">
-    <aside class="app-sidebar">
+  <div
+    v-else
+    class="app-shell"
+    :data-sidebar="sidebarCompact ? 'compact' : 'expanded'"
+    @keydown.esc.capture="dismissSidebarTip"
+    @keydown="handleShellKey"
+  >
+    <aside
+      class="app-sidebar"
+      :data-tips-dismissed="sidebarTipsDismissed"
+      @focusin="sidebarTipsDismissed = false"
+      @pointerover="sidebarTipsDismissed = false"
+    >
       <RouterLink
         class="brand app-brand"
         :to="homePath"
@@ -485,7 +549,25 @@ function onCursor(cursor) {
         <BrandMark class="brand-monogram" variant="monogram" />
         <span class="product-label brand-label">CRM</span>
       </RouterLink>
-      <nav aria-label="Navegação principal">
+      <button
+        class="quiet sidebar-toggle"
+        type="button"
+        :aria-expanded="!sidebarCompact"
+        aria-controls="main-navigation"
+        :title="sidebarCompact ? 'Expandir menu' : 'Recolher menu'"
+        @click="toggleSidebar"
+      >
+        <AppIcon name="menu" />
+        <span class="nav-label">{{
+          sidebarCompact ? 'Expandir menu' : 'Recolher menu'
+        }}</span>
+        <span
+          class="sidebar-tooltip"
+          data-label="Expandir menu"
+          aria-hidden="true"
+        ></span>
+      </button>
+      <nav id="main-navigation" aria-label="Navegação principal">
         <RouterLink
           v-for="item in navItems"
           :key="item.to"
@@ -501,6 +583,11 @@ function onCursor(cursor) {
           >
             <AppIcon :name="item.icon" />
             <span class="nav-label">{{ item.label }}</span>
+            <span
+              class="sidebar-tooltip"
+              :data-label="item.label"
+              aria-hidden="true"
+            ></span>
             <span v-if="item.count?.value > 0" class="nav-count"
               >{{ item.count.value
               }}<span class="sr-only">{{ storeCountLabel }}</span></span
@@ -531,6 +618,11 @@ function onCursor(cursor) {
         >
           <AppIcon name="logout" />
           <span class="nav-label">{{ logoutBusy ? 'Saindo…' : 'Sair' }}</span>
+          <span
+            class="sidebar-tooltip"
+            data-label="Sair"
+            aria-hidden="true"
+          ></span>
         </button>
       </div>
     </aside>

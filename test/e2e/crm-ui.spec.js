@@ -904,7 +904,7 @@ test('selects a conversation subject by keyboard and restores focus', async ({
   await select.focus();
   await select.press('Enter');
   await expect(
-    panel.getByRole('heading', { name: 'Pedidos e assuntos desta conversa' }),
+    panel.getByRole('heading', { name: 'Pedidos e assuntos do atendimento' }),
   ).toBeFocused();
   await expect(panel.getByRole('status')).toHaveText(
     'Pronto. O agente passa a usar este.',
@@ -1491,7 +1491,7 @@ test('labels human and AI service distinctly and only permits transfer after tak
   ).toBeVisible();
   await page.getByRole('button', { name: 'Mais ações' }).click();
   await expect(
-    page.getByRole('button', { name: 'Repassar atendimento' }),
+    page.getByRole('button', { name: 'Transferir atendimento' }),
   ).toBeVisible();
 
   await mockCrm(page, { assistant: true, assistantKeepsOwner: true });
@@ -1502,7 +1502,7 @@ test('labels human and AI service distinctly and only permits transfer after tak
   await expect(page.locator('.conv-identity')).not.toContainText('Você');
   await page.getByRole('button', { name: 'Mais ações' }).click();
   await expect(
-    page.getByRole('button', { name: 'Repassar atendimento' }),
+    page.getByRole('button', { name: 'Transferir atendimento' }),
   ).toHaveCount(0);
 });
 
@@ -1546,7 +1546,7 @@ test('never offers to hand the conversation back to the AI and keeps the actions
   await page.keyboard.press('Enter');
   await expect(more).toHaveAttribute('aria-expanded', 'true');
   await expect(
-    actions.getByRole('button', { name: 'Repassar atendimento' }),
+    actions.getByRole('button', { name: 'Transferir atendimento' }),
   ).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(
@@ -1560,11 +1560,11 @@ test('never offers to hand the conversation back to the AI and keeps the actions
   await expect(more).toBeFocused();
   await expect(more).toHaveAttribute('aria-expanded', 'false');
   await expect(
-    actions.getByRole('button', { name: 'Repassar atendimento' }),
+    actions.getByRole('button', { name: 'Transferir atendimento' }),
   ).toBeHidden();
   await page.keyboard.press('Enter');
   await page.keyboard.press('Enter');
-  await expect(page.getByLabel('Repassar venda para')).toBeFocused();
+  await expect(page.getByLabel('Transferir atendimento para')).toBeFocused();
   // The contact sits with the client, in the context panel.
   await actions.getByRole('button', { name: 'Detalhes' }).click();
   await expect(
@@ -1760,7 +1760,7 @@ test('refreshes the Inbox manually when live updates fail and keeps focus on liv
   // PCX-14: "Minhas" is a shortcut now, not an option of the "Fila" select.
   await page
     .getByRole('group', { name: 'Atalhos da Caixa' })
-    .getByRole('button', { name: /^Minhas/u })
+    .getByRole('button', { name: /^Meus atendimentos/u })
     .click();
   await expect
     .poll(() => inboxQueries.at(-1)?.assignedUserId)
@@ -1905,8 +1905,8 @@ test('PCX-14: filters the Inbox with three shortcuts with totals and the "Filtro
   // shortcuts with their totals and "Filtros": five controls, not seven.
   await expect(shortcuts.getByRole('button')).toHaveText([
     /^Todas\s*1$/u,
-    /^Aguardando\s*1$/u,
-    /^Minhas\s*1$/u,
+    /^Aguardando vendedor\s*1$/u,
+    /^Meus atendimentos\s*1$/u,
   ]);
   await expect(page.locator('.inbox-toolbar select')).toHaveCount(0);
   await expect(page.locator('#inbox-queue')).toHaveCount(0);
@@ -1928,22 +1928,28 @@ test('PCX-14: filters the Inbox with three shortcuts with totals and the "Filtro
   );
 
   // PCX-05: "Minhas" keeps deciding whose conversations are listed.
-  await shortcut('Minhas').click();
+  await shortcut('Meus atendimentos').click();
   await expect
     .poll(() => inboxQueries.at(-1))
     .toMatchObject({ archived: 'false', assignedUserId: 'operator-1' });
   expect(inboxQueries.at(-1)?.pendingHandoff).toBeUndefined();
-  await expect(shortcut('Minhas')).toHaveAttribute('aria-pressed', 'true');
+  await expect(shortcut('Meus atendimentos')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(shortcut('Todas')).toHaveAttribute('aria-pressed', 'false');
 
   // PCX-02/PCX-04: "Aguardando" is every waiting conversation, whoever owns it.
-  await shortcut('Aguardando').click();
+  await shortcut('Aguardando vendedor').click();
   await expect
     .poll(() => inboxQueries.at(-1))
     .toMatchObject({ archived: 'false', pendingHandoff: 'true' });
   expect(inboxQueries.at(-1)?.automationState).toBeUndefined();
   expect(inboxQueries.at(-1)?.assignedUserId).toBeUndefined();
-  await expect(shortcut('Aguardando')).toHaveAttribute('aria-pressed', 'true');
+  await expect(shortcut('Aguardando vendedor')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
 
   // The sheet opens from the keyboard on the filters in use.
   await filters.focus();
@@ -2006,7 +2012,7 @@ test('PCX-14: filters the Inbox with three shortcuts with totals and the "Filtro
 
   // A pair no shortcut covers: no shortcut pressed, "Filtros" says how many
   // are on and the summary names each one with a way to remove it.
-  for (const name of ['Todas', 'Aguardando', 'Minhas']) {
+  for (const name of ['Todas', 'Aguardando vendedor', 'Meus atendimentos']) {
     await expect(shortcut(name)).toHaveAttribute('aria-pressed', 'false');
   }
   await expect(filters).toHaveAccessibleName('Filtros 2 ativos');
@@ -2092,8 +2098,8 @@ test('PCX-14: on a 390 px phone the shortcuts fit, the sheet works by keyboard a
   const shortcuts = page.getByRole('group', { name: 'Atalhos da Caixa' });
   await expect(shortcuts.getByRole('button')).toHaveText([
     /^Todas\s*1$/u,
-    /^Aguardando\s*1$/u,
-    /^Minhas\s*1$/u,
+    /^Aguardando vendedor\s*1$/u,
+    /^Meus atendimentos\s*1$/u,
   ]);
   await expect(page.getByRole('button', { name: /Studio Malu/ })).toBeVisible();
 
@@ -2189,12 +2195,12 @@ test.describe('on a touch tablet', () => {
     const shortcuts = page.getByRole('group', { name: 'Atalhos da Caixa' });
     await expect(shortcuts.getByRole('button')).toHaveText([
       /^Todas\s*1$/u,
-      /^Aguardando\s*1$/u,
-      /^Minhas\s*1$/u,
+      /^Aguardando vendedor\s*1$/u,
+      /^Meus atendimentos\s*1$/u,
     ]);
     const buttons = await shortcuts.getByRole('button').all();
     const filters = page.getByRole('button', { name: /^Filtros/u });
-    // Then the same on a touch phone, where the three still fit on one line.
+    // Full labels can wrap on a phone; targets stay whole and separated.
     for (const viewport of [null, { height: 844, width: 390 }]) {
       if (viewport) await page.setViewportSize(viewport);
       for (const control of [...buttons, filters]) {
@@ -2206,8 +2212,11 @@ test.describe('on a touch tablet', () => {
       for (let index = 1; index < buttons.length; index += 1) {
         const before = await buttons[index - 1].boundingBox();
         const after = await buttons[index].boundingBox();
+        if (!before || !after) throw new Error('Shortcuts must be visible');
         expect(
-          (after?.x ?? 0) - ((before?.x ?? 0) + (before?.width ?? 0)),
+          after.y >= before.y + before.height
+            ? after.y - (before.y + before.height)
+            : after.x - (before.x + before.width),
         ).toBeGreaterThanOrEqual(8);
       }
       const rowOverflow = await page
@@ -2237,7 +2246,10 @@ test('PCX-14: the Painel links open the Inbox with their shortcut pressed', asyn
   const summary = page.getByRole('group', { name: 'Filtro:' });
 
   await page.goto('/inbox?fila=minhas');
-  await expect(shortcut('Minhas')).toHaveAttribute('aria-pressed', 'true');
+  await expect(shortcut('Meus atendimentos')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(shortcut('Todas')).toHaveAttribute('aria-pressed', 'false');
   await expect(summary).toHaveCount(0);
   await expect
@@ -2245,7 +2257,10 @@ test('PCX-14: the Painel links open the Inbox with their shortcut pressed', asyn
     .toMatchObject({ assignedUserId: 'operator-1' });
 
   await page.goto('/inbox?situacao=aguardando');
-  await expect(shortcut('Aguardando')).toHaveAttribute('aria-pressed', 'true');
+  await expect(shortcut('Aguardando vendedor')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(summary).toHaveCount(0);
   await expect
     .poll(() => inboxQueries.at(-1))
@@ -2285,8 +2300,8 @@ test('PCX-14: an empty filter is not an empty Inbox and offers "Limpar filtros"'
   // The count is the API's answer: 0 waiting, not a hidden number.
   await expect(shortcuts.getByRole('button')).toHaveText([
     /^Todas\s*1$/u,
-    /^Aguardando\s*0$/u,
-    /^Minhas\s*1$/u,
+    /^Aguardando vendedor\s*0$/u,
+    /^Meus atendimentos\s*1$/u,
   ]);
 
   await shortcuts.getByRole('button', { name: /^Aguardando/u }).click();
@@ -2327,8 +2342,8 @@ test('PCX-14: a total that fails to load is left out, never guessed', async ({
   const shortcuts = page.getByRole('group', { name: 'Atalhos da Caixa' });
   await expect(shortcuts.getByRole('button')).toHaveText([
     /^Todas\s*1$/u,
-    /^Aguardando\s*1$/u,
-    /^Minhas\s*$/u,
+    /^Aguardando vendedor\s*1$/u,
+    /^Meus atendimentos\s*$/u,
   ]);
   await expect(page.getByRole('button', { name: /Studio Malu/ })).toBeVisible();
 });
@@ -2521,7 +2536,7 @@ test('PCX-12: on a phone Detalhes › Pedido opens from "Mais" and Esc hands foc
   await more.focus();
   await page.keyboard.press('Enter');
   await expect(
-    page.getByRole('button', { name: 'Detalhes da conversa' }),
+    page.getByRole('button', { name: 'Detalhes do atendimento' }),
   ).toBeFocused();
   await page.keyboard.press('Enter');
   const context = page.getByRole('complementary', { name: 'Detalhes' });
@@ -3104,13 +3119,13 @@ test('on a phone the address decides between the list and the conversation', asy
   // PCX-11: waiting for a seller, an administrator creates the order from
   // here; "Encerrar conversa" closes the list (PCX-13).
   await expect(sheet.getByRole('button')).toHaveText([
-    'Detalhes da conversa',
+    'Detalhes do atendimento',
     'Criar pedido',
     'Arquivar conversa',
     'Encerrar conversa',
   ]);
   await expect(
-    sheet.getByRole('button', { name: 'Detalhes da conversa' }),
+    sheet.getByRole('button', { name: 'Detalhes do atendimento' }),
   ).toBeFocused();
   for (const box of await sheet
     .getByRole('button')
@@ -3248,6 +3263,116 @@ test('collapses the context panel and remembers it on this browser', async ({
   await expect(context).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test('INBOX-UX-01: compact navigation preserves focus, destinations and the saved choice', async ({
+  page,
+}, testInfo) => {
+  await mockCrm(page);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto('/inbox/conversation-1');
+  const shell = page.locator('.app-shell');
+  const menu = page.locator('.sidebar-toggle');
+  const navigation = page.getByRole('navigation', {
+    name: 'Navegação principal',
+  });
+  await expect(shell).toHaveAttribute('data-sidebar', 'compact');
+  await expect(menu).toHaveAccessibleName('Expandir menu');
+  await expect(menu).toHaveAttribute('aria-expanded', 'false');
+  expect(
+    await page.evaluate(() =>
+      globalThis.localStorage.getItem('crm.sidebar.compact'),
+    ),
+  ).toBeNull();
+  const compactChat = await page.locator('.inbox-conversation').boundingBox();
+  await page.screenshot({ path: testInfo.outputPath('inbox-compact.png') });
+  await menu.focus();
+  await page.keyboard.press('Enter');
+  await expect(menu).toBeFocused();
+  await expect(menu).toHaveAccessibleName('Recolher menu');
+  await expect(menu).toHaveAttribute('aria-expanded', 'true');
+  const expandedChat = await page.locator('.inbox-conversation').boundingBox();
+  if (!compactChat || !expandedChat)
+    throw new Error('Conversation must be visible');
+  expect(compactChat.width - expandedChat.width).toBeGreaterThan(100);
+  await expect(
+    navigation.getByRole('link', { name: 'Caixa de Entrada' }),
+  ).toHaveAttribute('aria-current', 'page');
+  await page.reload();
+  await expect(shell).toHaveAttribute('data-sidebar', 'expanded');
+  await menu.press('Enter');
+  await expect(menu).toBeFocused();
+  await navigation.getByRole('link', { name: 'Pedidos', exact: true }).focus();
+  await expect(
+    page.locator('.app-sidebar a:focus .sidebar-tooltip'),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(
+    navigation.getByRole('link', { name: 'Pedidos', exact: true }),
+  ).toBeFocused();
+  await expect(
+    page.locator('.app-sidebar a:focus .sidebar-tooltip'),
+  ).toBeHidden();
+  const reply = page.getByLabel('Responder', { exact: true });
+  await reply.focus();
+  const ordersLink = navigation.getByRole('link', {
+    name: 'Pedidos',
+    exact: true,
+  });
+  await ordersLink.hover();
+  await expect(ordersLink.locator('.sidebar-tooltip')).toBeVisible();
+  await ordersLink.locator('.sidebar-tooltip').hover();
+  await expect(ordersLink.locator('.sidebar-tooltip')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(ordersLink.locator('.sidebar-tooltip')).toBeHidden();
+  await expect(reply).toBeFocused();
+  await navigation.getByRole('link', { name: 'Pedidos', exact: true }).click();
+  await expect(shell).toHaveAttribute('data-sidebar', 'compact');
+  await page.reload();
+  await expect(shell).toHaveAttribute('data-sidebar', 'compact');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(menu).toBeHidden();
+  await expect(page.locator('.mobile-nav')).toBeVisible();
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await expect(menu).toHaveAttribute('aria-expanded', 'false');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+for (const storage of ['invalid', 'blocked']) {
+  test(`INBOX-UX-01: menu and details work with ${storage} browser storage`, async ({
+    page,
+  }) => {
+    await mockCrm(page);
+    await page.addInitScript((mode) => {
+      if (mode === 'blocked') {
+        Object.defineProperty(globalThis, 'localStorage', {
+          get() {
+            throw new globalThis.DOMException(
+              'Storage unavailable',
+              'SecurityError',
+            );
+          },
+        });
+      } else {
+        globalThis.localStorage.setItem('crm.sidebar.compact', 'invalid');
+      }
+    }, storage);
+    await page.setViewportSize({ width: 1366, height: 768 });
+    await page.goto('/inbox/conversation-1');
+    const menu = page.locator('.sidebar-toggle');
+    await expect(menu).toHaveAttribute('aria-expanded', 'false');
+    await menu.click();
+    await expect(menu).toHaveAttribute('aria-expanded', 'true');
+    const details = page.getByRole('button', { name: 'Detalhes', exact: true });
+    await expect(details).toHaveText('Detalhes');
+    await details.press('Enter');
+    await expect(
+      page.getByRole('heading', { name: 'Detalhes do atendimento' }),
+    ).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(details).toBeFocused();
+    await expect(details).toHaveAttribute('aria-expanded', 'false');
+  });
+}
 
 test('formats the phone in the active conversation identity', async ({
   page,

@@ -467,7 +467,9 @@
 
 .conv-actions > .conv-context-toggle {
   min-inline-size: var(--control-height-sm);
-  padding: 0;
+  gap: var(--space-2);
+  padding-inline: var(--space-3);
+  white-space: nowrap;
 }
 
 .conv-context-toggle[aria-expanded='true'] {
@@ -1110,11 +1112,14 @@
 
   .inbox-tabs {
     flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: var(--space-2);
     order: 1;
   }
 
   .inbox-tabs .inbox-tab {
     flex: 1 0 auto;
+    white-space: normal;
   }
 
   .inbox-active-filter {

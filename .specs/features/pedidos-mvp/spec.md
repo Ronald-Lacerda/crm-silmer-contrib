@@ -1213,15 +1213,26 @@ LOJ-33, LOJ-34, REV-06, REV-10 e FIN-02.
     SHALL NOT ver o botão ativo e SHALL ver o motivo em texto. "Encerrar
     conversa" SHALL ficar em "Mais" em todas as larguras (emenda PCX-05).
 11. **PCX-14** A fila da Caixa de Entrada SHALL ter a busca, os atalhos Todas
-    · Aguardando · Minhas, cada um com contagem e seleção neutra, e o botão
+    · Aguardando vendedor · Meus atendimentos, cada um com contagem e seleção neutra, e o botão
     "Filtros", que abre uma folha com Situação (Todas, Aguardando vendedor,
     Com o agente, Com vendedor, Arquivadas) e Responsável (Todas, Minhas, Sem
     responsável). Os filtros ativos SHALL aparecer num resumo, cada um com
     botão para removê-lo; Esc fecha a folha e devolve o foco a "Filtros".
-    Aguardando continua ordenada por tempo parado (PCX-04). Os links
+    Aguardando vendedor continua ordenada por tempo parado (PCX-04). Os links
     `?fila=` e `?situacao=` SHALL abrir a lista com o filtro no resumo; valor
     desconhecido SHALL ser ignorado sem erro. As abas de estado e o seletor
     "Fila" SHALL deixar de existir (emenda PCX-02 e PCX-05).
+
+Emenda visual autorizada em 29/10/2026, tarefa INBOX-UX-01: PCX-12 mantém o
+resumo em painel recolhível com botão `Detalhes` de texto visível no
+desktop/tablet e título `Detalhes do atendimento`; no celular a entrada fica
+em Mais. Abertura e fechamento preservam foco, Escape e preferência anterior.
+Os nomes completos de PCX-14 podem ocupar mais de uma linha sem scroll
+horizontal, mantendo os alvos de toque. O menu principal começa compacto na
+Inbox quando não existe preferência válida; a escolha manual Expandir/Recolher
+prevalece entre rotas e recargas no navegador, com fallback sem storage.
+Destinos, autorização e navegação inferior móvel permanecem os mesmos.
+Benchmark e limites: [registro de produto](../../../docs/product/benchmark-inbox-2026-10-29.md).
 
 ### Lista de Pedidos
 

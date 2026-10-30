@@ -436,6 +436,7 @@ summary {
 }
 .app-sidebar {
   position: sticky;
+  z-index: 6;
   inset-block-start: 0;
   display: flex;
   flex-direction: column;
@@ -458,6 +459,21 @@ summary {
 .app-sidebar nav {
   display: grid;
   gap: 0.125rem;
+}
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  min-block-size: var(--target-min);
+  padding-inline: var(--space-3);
+  color: var(--color-navigation-text-muted);
+}
+.sidebar-tooltip {
+  display: none;
+}
+.sidebar-tooltip::before {
+  content: attr(data-label);
 }
 .app-sidebar nav a,
 .sidebar-logout {
@@ -928,39 +944,66 @@ html[data-theme='dark'] .sidebar-account-avatar {
   overflow-wrap: anywhere;
 }
 
-/* Tablet: the sidebar folds to an icon rail ---------------------------- */
-@media (max-width: 1199px) and (min-width: 769px) {
-  .app-shell {
+/* Compact navigation keeps the same destinations and accessible names. */
+@media (min-width: 769px) {
+  .app-shell[data-sidebar='compact']
+    .app-sidebar:not([data-tips-dismissed='true'])
+    :is(a, button):is(:hover, :focus-visible)
+    > .sidebar-tooltip {
+    position: fixed;
+    z-index: 20;
+    inset-inline-start: var(--sidebar-rail-size);
+    display: block;
+    inline-size: max-content;
+    max-inline-size: 15rem;
+    padding: var(--space-2) var(--space-3);
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-overlay);
+    pointer-events: auto;
+  }
+  .sidebar-tooltip::after {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 100%;
+    inline-size: var(--space-4);
+    content: '';
+  }
+  .app-shell[data-sidebar='compact'] {
     grid-template-columns: var(--sidebar-rail-size) minmax(0, 1fr);
   }
-  .brand-label,
-  .nav-label,
-  .sidebar-account-copy,
-  .app-sidebar .brand-logo {
+  .app-shell[data-sidebar='compact'] .app-sidebar .brand-label,
+  .app-shell[data-sidebar='compact'] .app-sidebar .nav-label,
+  .app-shell[data-sidebar='compact'] .app-sidebar .sidebar-account-copy,
+  .app-shell[data-sidebar='compact'] .app-sidebar .brand-logo {
     position: absolute;
     inline-size: 1px;
     block-size: 1px;
     overflow: hidden;
     clip: rect(0 0 0 0);
   }
-  .app-sidebar .brand-monogram {
+  .app-shell[data-sidebar='compact'] .app-sidebar .brand-monogram {
     display: block;
   }
-  .app-sidebar {
+  .app-shell[data-sidebar='compact'] .app-sidebar {
     align-items: center;
     padding-inline: var(--space-2);
   }
-  .app-brand {
+  .app-shell[data-sidebar='compact'] .app-brand {
     padding: 0;
   }
-  .app-sidebar nav a,
-  .sidebar-logout {
+  .app-shell[data-sidebar='compact'] .app-sidebar nav a,
+  .app-shell[data-sidebar='compact'] .sidebar-toggle,
+  .app-shell[data-sidebar='compact'] .sidebar-logout {
     position: relative;
     justify-content: center;
     inline-size: var(--target-min);
     padding: 0;
   }
-  .app-sidebar .nav-count {
+  .app-shell[data-sidebar='compact'] .app-sidebar .nav-count {
     position: absolute;
     inset: 0.125rem 0.125rem auto auto;
     min-inline-size: 1.125rem;
@@ -968,14 +1011,14 @@ html[data-theme='dark'] .sidebar-account-avatar {
     padding-inline: 0.25rem;
     font-size: 0.6875rem;
   }
-  .sidebar-footer {
+  .app-shell[data-sidebar='compact'] .sidebar-footer {
     justify-items: center;
   }
-  .sidebar-footer .sidebar-logout {
+  .app-shell[data-sidebar='compact'] .sidebar-footer .sidebar-logout {
     justify-content: center;
     inline-size: var(--target-min);
   }
-  .sidebar-account {
+  .app-shell[data-sidebar='compact'] .sidebar-account {
     justify-content: center;
     padding: var(--space-2) 0;
   }
