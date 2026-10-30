@@ -1685,8 +1685,227 @@ test('shows a failed delivery code to the seller in the Inbox', async ({
   await mockCrm(page, { failedDelivery: true, mixedAuthors: true });
   await page.goto('/inbox');
   await expect(
-    page.getByText('Falha no envio · código técnico: N8N_COMMAND_HTTP_401'),
+    page.getByText('O envio encontrou um problema', { exact: true }),
   ).toBeVisible();
+  await expect(page.getByText('N8N_COMMAND_HTTP_401')).not.toBeVisible();
+  await page.getByText('Detalhes para suporte', { exact: true }).press('Enter');
+  await expect(page.getByText('N8N_COMMAND_HTTP_401')).toBeVisible();
+  await expect(page.getByText('message-human', { exact: true })).toBeVisible();
+});
+
+/** INBOX-DELIVERY-01: fault/late-callback scenarios, using synthetic messages only.
+ * @param {import('@playwright/test').Page} page
+ * @param {(call: number) => Promise<string>|string} status
+ */
+async function mockDeliveryCheck(page, status) {
+  await mockCrm(page, { mixedAuthors: true, manyConversations: true });
+  let calls = 0;
+  await page.route(
+    '**/api/v1/inbox/conversations/conversation-1',
+    async (route) => {
+      // Initial loading and live reconnection can both read the detail. Only
+      // the user's explicit check advances this synthetic provider response.
+      const checking = await page
+        .getByRole('button', { name: 'Verificando…', exact: true })
+        .count();
+      const deliveryStatus = checking
+        ? await status(++calls)
+        : 'outcome_unknown';
+      if (deliveryStatus === 'unavailable') {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/problem+json',
+          body: '{}',
+        });
+        return;
+      }
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          conversation,
+          messages: [
+            {
+              ...conversation.lastMessage,
+              id: 'message-human',
+              authorKind: 'human',
+              direction: 'outbound',
+              preview: 'Mensagem sintética em verificação.',
+              deliveryStatus,
+              deliveryErrorCode:
+                deliveryStatus === 'outcome_unknown'
+                  ? 'N8N_COMMAND_TIMEOUT'
+                  : null,
+            },
+          ],
+          suggestion: null,
+        }),
+      });
+    },
+  );
+}
+
+test('INBOX-DELIVERY-01: uncertain send is traceable and checks without sending', async ({
+  page,
+}) => {
+  await mockDeliveryCheck(page, () => 'outcome_unknown');
+  /** @type {string[]} */
+  const writes = [];
+  page.on('request', (request) => {
+    if (request.method() === 'POST') writes.push(request.url());
+  });
+  await page.goto('/inbox');
+  await expect(
+    page.getByText('Ainda não conseguimos confirmar o envio'),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/Verifique o envio antes de repetir/u),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Verificar envio', exact: true })
+    .press('Enter');
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: 'Ainda não há confirmação do envio.' }),
+  ).toContainText('Ainda não há confirmação do envio.');
+  await expect(
+    page.getByRole('button', { name: 'Verificar envio', exact: true }),
+  ).toBeFocused();
+  await page.getByText('Detalhes para suporte', { exact: true }).press('Enter');
+  await expect(page.getByText('message-human', { exact: true })).toBeVisible();
+  await expect(
+    page.getByText('N8N_COMMAND_TIMEOUT', { exact: true }),
+  ).toBeVisible();
+  expect(writes).toEqual([]);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test('INBOX-DELIVERY-01: failed status check preserves history and can be tried again', async ({
+  page,
+}) => {
+  let failCheck = false;
+  await mockDeliveryCheck(page, () =>
+    failCheck ? 'unavailable' : 'outcome_unknown',
+  );
+  await page.goto('/inbox');
+  await page
+    .getByRole('textbox', { name: 'Responder', exact: true })
+    .fill('Rascunho preservado');
+  failCheck = true;
+  await page
+    .getByRole('button', { name: 'Verificar envio', exact: true })
+    .click();
+  await expect(page.getByRole('alert')).toContainText(
+    'Não foi possível verificar o envio agora.',
+  );
+  await expect(
+    page.getByText('Mensagem sintética em verificação.'),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('textbox', { name: 'Responder', exact: true }),
+  ).toHaveValue('Rascunho preservado');
+  failCheck = false;
+  await page
+    .getByRole('button', { name: 'Tentar novamente', exact: true })
+    .press('Enter');
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: 'Ainda não há confirmação do envio.' }),
+  ).toContainText('Ainda não há confirmação do envio.');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('INBOX-DELIVERY-01: late confirmation removes warning and restores keyboard focus', async ({
+  page,
+}) => {
+  let deliveryStatus = 'outcome_unknown';
+  await mockDeliveryCheck(page, () => deliveryStatus);
+  await page.goto('/inbox');
+  await expect(
+    page.getByRole('button', { name: 'Verificar envio', exact: true }),
+  ).toBeVisible();
+  deliveryStatus = 'delivered';
+  await page
+    .getByRole('button', { name: 'Verificar envio', exact: true })
+    .press('Enter');
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Mensagem entregue.' }),
+  ).toContainText('Mensagem entregue.');
+  await expect(
+    page.getByRole('button', { name: 'Verificar envio', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('list', { name: 'Histórico da conversa' }),
+  ).toBeFocused();
+});
+
+test('INBOX-DELIVERY-01: pending check cannot duplicate or update another conversation', async ({
+  page,
+}) => {
+  let checking = false;
+  let checks = 0;
+  let finished = false;
+  /** @type {(value: string) => void} */
+  let release = () => {};
+  /** @type {Promise<string>} */
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  await mockDeliveryCheck(page, async () => {
+    if (!checking) return 'outcome_unknown';
+    checks++;
+    const result = await gate;
+    finished = true;
+    return result;
+  });
+  await page.route('**/api/v1/inbox/conversations/conversation-2', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        conversation: {
+          ...conversation,
+          id: 'conversation-2',
+          contact: {
+            ...conversation.contact,
+            label: 'Outro atendimento sintético',
+          },
+        },
+        messages: [],
+        suggestion: null,
+      }),
+    }),
+  );
+  await page.goto('/inbox');
+  await expect(
+    page.getByRole('button', { name: 'Verificar envio', exact: true }),
+  ).toBeVisible();
+  checking = true;
+  await page
+    .getByRole('button', { name: 'Verificar envio', exact: true })
+    .press('Enter');
+  const pendingButton = page.getByRole('button', {
+    name: 'Verificando…',
+    exact: true,
+  });
+  await expect(pendingButton).toHaveAttribute('aria-disabled', 'true');
+  await pendingButton.press('Enter');
+  await page.getByRole('button', { name: /Cliente de teste 2\s/u }).click();
+  await expect(
+    page.getByRole('heading', {
+      name: 'Outro atendimento sintético',
+      exact: true,
+    }),
+  ).toBeVisible();
+  release('delivered');
+  await expect.poll(() => finished).toBe(true);
+  expect(checks).toBe(1);
+  await expect(
+    page.getByText('Mensagem sintética em verificação.'),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Mensagem entregue.' }),
+  ).toHaveCount(0);
 });
 
 test('shows the declared site phone instead of the synthetic chat ID', async ({

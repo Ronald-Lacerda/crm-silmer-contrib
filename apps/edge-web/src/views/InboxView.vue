@@ -16,6 +16,7 @@ import AudioRecorder from '../components/inbox/AudioRecorder.vue';
 import ConversationHandoffSummary from '../components/inbox/ConversationHandoffSummary.vue';
 import ConversationOrderSummary from '../components/inbox/ConversationOrderSummary.vue';
 import MediaMessage from '../components/inbox/MediaMessage.vue';
+import MessageDeliveryNotice from '../components/inbox/MessageDeliveryNotice.vue';
 import { commandKey, request } from '../lib/api-client.js';
 import {
   CHANNEL_LABELS,
@@ -33,10 +34,6 @@ import { openDialog } from '../lib/ui.js';
 
 const ADMIN_CAPABILITY = 'COMMERCIAL_ADMIN';
 const LIVE_REFRESH_DELAY_MS = 250;
-const DELIVERY_NOTICES = Object.freeze({
-  failed: 'Falha no envio',
-  outcome_unknown: 'Envio aguardando confirmação',
-});
 /**
  * PCX-02 (D19): the Inbox is filtered by who has to act next, not by the
  * internal state of the conversation. A pending handoff is the whole of
@@ -180,6 +177,10 @@ const mediaSending = ref(false);
 const error = ref('');
 const listError = ref('');
 const actionMessage = ref('');
+const deliveryCheckingId = ref('');
+const deliveryCheckNotice = ref('');
+const deliveryCheckError = ref('');
+const deliveryCheckFailedId = ref('');
 const conversations = ref([]);
 const totalCount = ref(0);
 const activeId = ref('');
@@ -221,6 +222,7 @@ const now = ref(new Date());
 let listController;
 let countController;
 let detailController;
+let deliveryCheckController;
 let subjectController;
 const subjectCommandKeys = new Map();
 /** "Separar como novo assunto" already created, while its link is retried. */
@@ -988,17 +990,64 @@ function messageInitials(message) {
   return brand.assistant.name.slice(0, 1).toLocaleUpperCase('pt-BR');
 }
 
-/** @param {{deliveryStatus?: unknown, deliveryErrorCode?: unknown}} message */
-function deliveryNotice(message) {
-  const notice =
-    DELIVERY_NOTICES[
-      /** @type {keyof typeof DELIVERY_NOTICES} */ (message.deliveryStatus)
-    ] ?? null;
-  if (!notice) return null;
-  const code = message.deliveryErrorCode;
-  return typeof code === 'string' && /^[A-Z0-9_]{1,64}$/u.test(code)
-    ? `${notice} · código técnico: ${code}`
-    : notice;
+/** INBOX-DELIVERY-01: consult the existing attempt; never create another send.
+ * @param {string} messageId
+ */
+async function checkMessageDelivery(messageId) {
+  if (deliveryCheckingId.value || !activeId.value || !detail.value) return;
+  detailController?.abort();
+  detailController = undefined;
+  const id = activeId.value;
+  const controller = new AbortController();
+  deliveryCheckController = controller;
+  const trigger = globalThis.document.activeElement;
+  deliveryCheckingId.value = messageId;
+  deliveryCheckNotice.value = '';
+  deliveryCheckError.value = '';
+  deliveryCheckFailedId.value = '';
+  try {
+    const response = await request(
+      `/api/v1/inbox/conversations/${encodeURIComponent(id)}`,
+      { signal: controller.signal },
+    );
+    if (controller.signal.aborted || activeId.value !== id) return;
+    const updated = response.data.messages?.find(
+      (message) => message.id === messageId,
+    );
+    const current = detail.value?.messages.find(
+      (message) => message.id === messageId,
+    );
+    if (!updated || !current) throw new Error('Message status unavailable');
+    // Only delivery fields change; drafts, subjects and the thread stay intact.
+    current.deliveryStatus = updated.deliveryStatus;
+    current.deliveryErrorCode = updated.deliveryErrorCode;
+    current.status = updated.status;
+    const notices = {
+      sent: 'Envio confirmado pelo serviço de mensagens.',
+      delivered: 'Mensagem entregue.',
+      read: 'Mensagem lida.',
+      failed:
+        'O envio continua com problema. Consulte os detalhes para suporte.',
+    };
+    deliveryCheckNotice.value =
+      notices[updated.deliveryStatus] ??
+      'Ainda não há confirmação do envio. Não repita a mensagem enquanto o resultado estiver incerto.';
+    await nextTick();
+    if (
+      activeId.value === id &&
+      !trigger?.isConnected &&
+      globalThis.document.activeElement === globalThis.document.body
+    ) {
+      thread.value?.focus();
+    }
+  } catch {
+    if (controller.signal.aborted || activeId.value !== id) return;
+    deliveryCheckFailedId.value = messageId;
+    deliveryCheckError.value =
+      'Não foi possível verificar o envio agora. Tente novamente. O histórico foi preservado.';
+  } finally {
+    if (deliveryCheckController === controller) deliveryCheckingId.value = '';
+  }
 }
 
 /** @param {unknown} cause */
@@ -1132,11 +1181,16 @@ async function selectVisibleConversation(refreshActive = true) {
 /** @param {string} id @param {boolean} [silent] */
 async function selectConversation(id, silent = false) {
   if (!id) return;
+  deliveryCheckController?.abort();
+  deliveryCheckingId.value = '';
   detailController?.abort();
   subjectController?.abort();
   const controller = new AbortController();
   detailController = controller;
   if (activeId.value !== id) {
+    deliveryCheckNotice.value = '';
+    deliveryCheckError.value = '';
+    deliveryCheckFailedId.value = '';
     detail.value = null;
     threadFollowsLatest = true;
     moreOpen.value = false;
@@ -1878,6 +1932,7 @@ onBeforeUnmount(() => {
   listController?.abort();
   countController?.abort();
   detailController?.abort();
+  deliveryCheckController?.abort();
   subjectController?.abort();
   if (refreshTimer) globalThis.clearTimeout(refreshTimer);
 });
@@ -2363,6 +2418,18 @@ onBeforeUnmount(() => {
             :handoff="active.handoff ?? null"
           />
 
+          <p v-if="deliveryCheckNotice" role="status" class="inbox-notice">
+            {{ deliveryCheckNotice }}
+          </p>
+          <p
+            v-if="deliveryCheckError"
+            role="alert"
+            class="inbox-notice"
+            data-tone="error"
+          >
+            {{ deliveryCheckError }}
+          </p>
+
           <div v-if="detailLoading" class="loading-state thread" role="status">
             Carregando histórico…
           </div>
@@ -2423,9 +2490,12 @@ onBeforeUnmount(() => {
               <small v-if="message.deliveryMode === 'dev'"
                 >DEV: envio simulado</small
               >
-              <small v-if="deliveryNotice(message)" class="msg-delivery">{{
-                deliveryNotice(message)
-              }}</small>
+              <MessageDeliveryNotice
+                :message="message"
+                :checking="Boolean(deliveryCheckingId)"
+                :check-failed="deliveryCheckFailedId === message.id"
+                @check="checkMessageDelivery(message.id)"
+              />
               <!-- CP-16/UXA-01: no control on every message. The question
                    sits only on the message the agent stopped on, for whoever
                    has the conversation; the others read why it waits. -->
