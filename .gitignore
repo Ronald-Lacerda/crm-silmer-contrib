@@ -44,3 +44,14 @@ Thumbs.db
 # Graphify: only Hermes on the Ubuntu worker generates the graph; it comes back
 # through Syncthing, not git.
 graphify-out/
+
+# Saídas geradas localmente (evidências, capturas, vídeos e QA)
+# Os PDFs já versionados em output/pdf continuam rastreados.
+.impeccable/
+brag-output/
+/output/canais-vendas-*/
+/output/instagram-whatsapp/
+/output/jornada-crm-*/
+/output/n8n-vendedor/
+/output/whatsapp-activation/
+/output/pdf/qa-*.pdf
