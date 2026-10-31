@@ -21,8 +21,13 @@ export const PAYMENT_CONDITION_OPTIONS = Object.freeze([
   Object.freeze({ label: 'Cartão de débito', value: 'cartao_debito' }),
 ]);
 
-/** A03: every `reason_code` the CHECK of migrations 0013 and 0025 accepts. */
+/**
+ * A03: every `reason_code` the CHECK of migrations 0013, 0025 and 0046
+ * accepts. AGENTE-FAIL-01 / INBOX-HANDOFF-02 (RFC 041): the agent that failed
+ * or stalled, and the customer who wants to partner or resell.
+ */
 export const HANDOFF_REASON_LABELS = Object.freeze({
+  automation_failure: 'Agente falhou',
   briefing_complete: 'Pré-ficha completa',
   complaint: 'Reclamação',
   customer_requested_human: 'Pediu um vendedor',
@@ -30,6 +35,7 @@ export const HANDOFF_REASON_LABELS = Object.freeze({
   iteration_limit: 'Limite de mensagens',
   low_confidence: 'Agente sem confiança',
   negotiation: 'Perguntou o valor',
+  partnership: 'Parceria ou revenda',
   price_before_quote: 'Perguntou o valor',
   unresolved_blocker: 'Dado divergente',
   unsupported: 'Conteúdo não suportado',

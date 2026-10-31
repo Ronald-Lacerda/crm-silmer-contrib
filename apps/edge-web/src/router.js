@@ -1,6 +1,8 @@
 import { h } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
+import { performanceTitle } from './lib/assistant-performance.js';
 import AccountView from './views/AccountView.vue';
+import AssistantPerformanceView from './views/AssistantPerformanceView.vue';
 import ClientsView from './views/ClientsView.vue';
 import DashboardView from './views/DashboardView.vue';
 import FinanceView from './views/FinanceView.vue';
@@ -19,6 +21,12 @@ export const router = createRouter({
       path: '/dashboard',
       component: DashboardView,
       meta: { title: 'Dashboard' },
+    },
+    {
+      // AGENTE-OBS-01: opened from the agent's card, the manager's question.
+      path: '/dashboard/agente',
+      component: AssistantPerformanceView,
+      meta: { requiresAdmin: true, title: performanceTitle() },
     },
     {
       // Deep link to one conversation (Pedido, Clientes and Dashboard open it

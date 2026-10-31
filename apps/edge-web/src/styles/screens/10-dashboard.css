@@ -306,3 +306,18 @@
     font-size: var(--text-2xl);
   }
 }
+
+/* AGENTE-OBS-01: the way into "Desempenho do agente", under the agent's
+   card. The card stays one link; this is a second, quieter one. */
+.metric-grid > li:has(.metric-more) {
+  align-content: start;
+  gap: var(--space-1);
+}
+
+.metric-more {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--target-min);
+  padding-inline: var(--space-1);
+  font-size: var(--text-sm);
+}

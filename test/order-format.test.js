@@ -60,9 +60,11 @@ test('offers the three payment conditions in the order of the mockup', () => {
 });
 
 test('labels every reason_code the handoffs table accepts (A03)', () => {
-  // The CHECK constraint of migration 0013; a code without a label would
-  // reach the Inbox as a raw identifier.
+  // The CHECK constraint of migrations 0013, 0025 and 0046; a code without a
+  // label would reach the Inbox as a raw identifier.
   for (const code of [
+    'automation_failure',
+    'partnership',
     'customer_requested_human',
     'price_before_quote',
     'unresolved_blocker',
@@ -92,6 +94,8 @@ test('labels every reason_code the handoffs table accepts (A03)', () => {
   assert.equal(handoffReasonLabel('urgency'), 'Urgência');
   assert.equal(handoffReasonLabel('unsupported'), 'Conteúdo não suportado');
   assert.equal(handoffReasonLabel('iteration_limit'), 'Limite de mensagens');
+  assert.equal(handoffReasonLabel('automation_failure'), 'Agente falhou');
+  assert.equal(handoffReasonLabel('partnership'), 'Parceria ou revenda');
   assert.equal(handoffReasonLabel('inventado'), 'Aguardando vendedor');
 });
 

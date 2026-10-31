@@ -28,6 +28,7 @@ import {
   waitingIndicator,
 } from '../lib/dashboard-format.js';
 import { storeNoticeText } from '../lib/order-format.js';
+import { performanceTitle } from '../lib/assistant-performance.js';
 
 // Pesquisa de UX de 15/10/2026, achado 2: o Painel responde às perguntas de
 // cada papel. O gestor vê o dia (vendas do período, entregas, quem espera
@@ -36,6 +37,7 @@ import { storeNoticeText } from '../lib/order-format.js';
 const ADMIN_CAPABILITY = 'COMMERCIAL_ADMIN';
 
 const heading = ref(null);
+const performanceLinkLabel = `Ver ${performanceTitle().toLocaleLowerCase('pt-BR')}`;
 const ordersRetry = ref(null);
 const liveEvent = inject('liveEvent', ref(null));
 const sessionUser = inject(
@@ -454,6 +456,14 @@ onBeforeUnmount(() => {
                 {{ cards[key].detail }}
               </span>
             </RouterLink>
+            <!-- AGENTE-OBS-01: the agent's numbers over days, next to its
+                 card; a link of its own, never nested in the card's link. -->
+            <RouterLink
+              v-if="key === 'assistant'"
+              class="metric-more"
+              to="/dashboard/agente"
+              >{{ performanceLinkLabel }}</RouterLink
+            >
           </li>
         </ul>
       </section>
