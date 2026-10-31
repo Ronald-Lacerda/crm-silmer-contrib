@@ -1,5 +1,14 @@
 # Architecture Decision Records
 
+## Decisão de 30/10/2026
+
+- [052 — Vendedor mensurável e com mais contexto](052-vendedor-mensuravel-e-com-mais-contexto.md),
+  decidida na RFC 041; falha do bot vira handoff `automation_failure`,
+  telemetria por turno sem PII, handoff resolvido ao encerrar, vendedor pedido
+  pelo nome, transcrição do áudio no CRM, histórico com Assuntos, contexto do
+  cliente recorrente e código de falha do bot. A ADR 050 (Evolution) entra por
+  outro PR.
+
 ## Decisão de 29/10/2026
 
 - [051 — Vendedor aprende com os atendentes humanos](051-vendedor-aprende-com-os-atendentes-humanos.md),

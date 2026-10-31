@@ -6,6 +6,13 @@
   aberta em 29/10/2026. Tem retirada na loja ou Melhor Envio, etiqueta
   pronta ao embalar e menu próprio. As decisões D1–D9 estão em aberto.
 
+## Decisão de 30/10/2026
+
+- [041 — Vendedor mensurável e com mais contexto](041-vendedor-mensuravel-e-com-mais-contexto.md),
+  decidida na ADR 052; revisão do Vendedor publicado, falha silenciosa,
+  telemetria sem PII e mais contexto para o agente. Catálogo e agente com
+  ferramentas ficaram adiados.
+
 ## Decisão de 29/10/2026
 
 - [040 — Vendedor aprende com os atendentes humanos](040-vendedor-aprende-com-os-atendentes-humanos.md),
