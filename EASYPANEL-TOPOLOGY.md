@@ -479,6 +479,7 @@ PRIVATE_MEDIA_ROOT
 PRIVATE_MEDIA_MAX_BYTES
 PRIVATE_MEDIA_MAX_FILE_BYTES
 MEDIA_RETENTION_SCAN_INTERVAL_MS
+ASSISTANT_STALL_MINUTES
 OBJECT_STORAGE_ENDPOINT
 OBJECT_STORAGE_REGION
 OBJECT_STORAGE_BUCKET
@@ -502,6 +503,10 @@ Regras:
 - `N8N_COMMAND_REPLAY_SAFE=true` só é permitido depois que a reserva remota
   anterior à Meta foi comprovada em homologação; até lá, timeout produz
   `outcome_unknown` e reconciliação;
+- `ASSISTANT_STALL_MINUTES` fica no `silmer-worker` e não é segredo: minutos
+  sem resposta do bot antes de a varredura `automation.stall.sweep` transferir
+  a conversa com `automation_failure` (ADR 052). Padrão 5, mínimo 2 e máximo
+  60, em implementação;
 - `N8N_ENCRYPTION_KEY` é obrigatória, fica em escrow operacional e deve ser
   restaurável junto do banco próprio do n8n;
 - `OBJECT_STORAGE_*` existe somente em `silmer-api`: endpoint

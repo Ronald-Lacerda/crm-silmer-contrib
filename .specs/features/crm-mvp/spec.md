@@ -122,6 +122,8 @@ Para INB-01–04, Cliente é Contact + ContactIdentity; Pedido é rascunho até 
 6. **AGT-06:** WHEN o agente envia mensagem, decide, altera estado ou transfere atendimento THEN um usuário autorizado SHALL conseguir auditar o evento e sua correlação com a execução do n8n.
 7. **AGT-07:** WHEN todos os campos obrigatórios atuais da ficha estão válidos THEN o sistema SHALL permitir que dono da conversa ou administrador gere o Pedido; o agente SHALL preservar essa confirmação humana.
 8. **AGT-08:** WHEN um campo obrigatório está ausente ou divergente THEN o sistema SHALL impedir geração, indicar pendências e permitir salvar rascunho sem apagar dados e histórico.
+9. **AGT-09:** WHEN o agente falha ou não responde ao cliente em `ASSISTANT_STALL_MINUTES` THEN o sistema SHALL criar handoff sem dono com motivo `automation_failure` e invalidar respostas atrasadas pelo epoch (ADR 052).
+10. **AGT-10:** WHEN o agente responde ou transfere THEN o CRM SHALL registrar a telemetria do turno só com códigos, contagens e tempos, sem texto do cliente, nome ou telefone, e expor apenas agregados (ADR 052).
 
 O contexto do agente vem de `recent_messages` e do snapshot de briefing da
 Conversa; não existe memória comercial paralela no n8n. `briefing_patch` ignora
@@ -274,7 +276,7 @@ A ADR 006 retirou cobrança, comprovante e status de pagamento do MVP. PAY-01..0
 | ------------------ | --------------- | ---------------------------------------------------------------------------------------- |
 | Orquestração n8n   | ORC-01 a ORC-09 | WhatsApp implementado; homologação pendente; ORC-09 em CANAL-2                           |
 | Inbox e conversão  | INB-01 a INB-04 | Implementada no contrato n8n v1                                                          |
-| Agente vendedor    | AGT-01 a AGT-08 | Implementado; publicação pendente                                                        |
+| Agente vendedor    | AGT-01 a AGT-10 | AGT-01..08 implementados; AGT-09..10 em implementação (ADR 052); publicação pendente     |
 | Pedido             | ORD-01 a ORD-05 | Pedido e impressão v5 implementados; encaminhamento e assinatura física pendentes        |
 | Mensagens e canais | MSG-01 a MSG-04 | WhatsApp: homologação pendente; Instagram em CANAL-2                                     |
 | Financeiro         | FIN-01 a FIN-03 | Confirmados e valor vendido implementados; UAT pendente                                  |

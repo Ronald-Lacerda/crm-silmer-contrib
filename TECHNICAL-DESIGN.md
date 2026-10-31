@@ -192,6 +192,16 @@ Status confirmados não regridem; entrega publica SSE na mesma transação.
 
 Handoff é reivindicado por CAS, com um vencedor. Takeover invalida decisões
 antigas. Conversa transferida não volta ao bot (ADR 015).
+
+ADR 052 (em implementação): o worker roda `automation.stall.sweep` a cada
+60 s. Conversa em modo assistente, aberta, sem handoff ativo e com mensagem do
+cliente sem resposta do bot há mais de `ASSISTANT_STALL_MINUTES` (env do
+worker; padrão 5, de 2 a 60) ganha, sob lock e na mesma transação, handoff sem
+dono `automation_failure`, modo humano, `requer_atencao`, epoch novo, histórico
+e auditoria. A varredura é idempotente e não envia mensagem ao cliente. A
+telemetria por turno (`turn`, `crm.automation_turns`) guarda só códigos,
+contagens e tempos. Migrações 0046–0048 são manuais e entram antes da API e
+da publicação do workflow.
 Contrato, diagnóstico e rollout: [n8n](docs/integrations/n8n/README.md) e
 [ator técnico](docs/runbooks/automation-executor.md).
 
