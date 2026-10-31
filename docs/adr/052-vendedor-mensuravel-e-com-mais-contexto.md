@@ -13,8 +13,17 @@ Complementa as ADRs 009, 015, 049 e 051; não as supersede.
 
 1. **Campos novos opcionais e ordem de implantação.** Todo campo novo é
    opcional, e o schema continua estrito: campo desconhecido é recusado. O
-   workflow publicado hoje (VND-L02) continua funcionando com o CRM novo. O
-   CRM e as migrações 0046, 0047 e 0048 entram antes da publicação do n8n.
+   workflow publicado hoje (VND-L02) continua funcionando com o CRM novo.
+   A implantação tem duas etapas antes do n8n: primeiro um PR só com as
+   migrações 0046, 0047 e 0048, implantado e aplicado no console; depois o PR
+   do código, que lê as colunas da 0048 já no inbound. Por último, a
+   publicação do workflow. As migrações são expand-only e compatíveis com a
+   release atual.
+   O workflow só envia os campos novos (`turn`, `requested_seller_id`,
+   `automation_failure`, `partnership` e `message.transcribed`) quando a
+   resposta do inbound traz a chave `contact_context`. Contra um CRM antigo
+   ele volta ao comportamento da `mvp-simple-19`, e o bot continua
+   respondendo.
 2. **Motivos novos de handoff (migração 0046).** `reason_code` ganha
    `automation_failure` e `partnership`, no padrão expand-only da 0025.
    `crm.handoffs` ganha `preferred_user_id`, nulo, com FK para usuários; é
@@ -26,11 +35,16 @@ Complementa as ADRs 009, 015, 049 e 051; não as supersede.
      30 s e um retry; a transcrição, timeout de 30 s. O pior caso cabe nos
      120 s da execução.
    - No worker, o job `automation.stall.sweep` roda a cada 60 s. Ele pega a
-     conversa em modo `assistant`, aberta e não arquivada, cuja última
-     mensagem do cliente é posterior à última enviada pelo bot e mais antiga
-     que `ASSISTANT_STALL_MINUTES` (padrão 5, de 2 a 60), sem handoff ativo.
-     A idade conta pela hora em que o CRM recebeu a mensagem, e só entram
-     mensagens das últimas 24 h.
+     conversa em modo `assistant`, aberta e não arquivada, sem handoff ativo,
+     cuja revisão de entrada mais recente não teve resposta efetiva: ainda
+     não foi consumida (`inbound_revision > claimed_revision`) ou foi
+     consumida por resposta `failed`, `outcome_unknown` ou presa em `sending`
+     há mais de 2 minutos. A última mensagem do cliente precisa ser mais
+     antiga que `ASSISTANT_STALL_MINUTES` (padrão 5, de 2 a 60) e das
+     últimas 24 h, pela hora em que o CRM a recebeu.
+   - A falha de uma conversa não interrompe o lote. O worker registra
+     `automation_stall_sweep_completed` com `candidates`, `handed_off` e
+     `failed`. O cartão do painel inicial usa a mesma regra e a mesma env.
    - Para cada uma, na mesma transação e com lock da conversa: handoff sem
      dono com `automation_failure` e o resumo cifrado "O assistente não
      respondeu a tempo. Confira a última mensagem do cliente."; modo humano;
@@ -69,9 +83,9 @@ Complementa as ADRs 009, 015, 049 e 051; não as supersede.
    - `handoff.requested` aceita `requested_seller_id`. Se ele estiver entre os
      vendedores ativos que o inbound devolve, o CRM grava em
      `preferred_user_id`; se não, ignora, registra e cria o handoff mesmo
-     assim, com a auditoria `PREFERRED_SELLER_NOT_ACTIVE`. A leitura do
-     handoff e a lista da Inbox mostram o primeiro nome
-     (`handoff.preferredSellerFirstName`).
+     assim, com a auditoria `PREFERRED_SELLER_NOT_ACTIVE`. A lista da Inbox
+     mostra o primeiro nome em `handoff.preferredSellerFirstName`; a leitura
+     do handoff devolve `preferred_seller` ao lado de `handoff`.
    - O motivo `partnership` substitui `human_requested` para parceria e
      revenda (ADR 051, item 7).
 6. **Transcrição no CRM (INBOX-AUDIO-TRANSCRIPT-01, migração 0048).**
@@ -89,11 +103,11 @@ Complementa as ADRs 009, 015, 049 e 051; não as supersede.
    - Cada item de `recent_messages` traz `subject_ids`, vazio quando não
      houver vínculo, para o workflow filtrar pelo Assunto sem zerar o
      histórico.
-   - O inbound devolve `contact_context`: ciclos anteriores, data e desfecho
-     do último encerramento (data em São Paulo) e até 3 pedidos anteriores
-     (número, status, tipo do primeiro item e mês de criação), sem os desta
-     conversa nem os de teste. Sem valores, endereço,
-     financeiro ou arquivos.
+   - O inbound devolve `contact_context` só com `previous_cycles`,
+     `previous_orders_count` (0 a 99, sem pedidos de teste nem os desta
+     conversa) e `last_closed_at` (data em São Paulo). Lista de pedidos e
+     desfecho saíram por minimização (RULES 8 e 13). O prompt recebe só
+     "Cliente recorrente: já foi atendido pela Silmer antes."
 8. **Código de falha do bot (INBOX-DELIVERY-02).** `crm.messages` ganha
    `delivery_failure_code` (migração 0048). `message.failed` e
    `message.send.unknown` aceitam `failure.code`; código ausente ou fora do
@@ -103,8 +117,9 @@ Complementa as ADRs 009, 015, 049 e 051; não as supersede.
    código do comando.
 9. **Workflow (VND-L03).** O workflow consome os itens acima, reduz os falsos
    positivos de transferência (e-mail, telefone ou link; "loja"; "Sim" na
-   pergunta da arte), tira "Ótima pergunta!" do aviso de preço e inclui
-   feriados no aviso de horário.
+   pergunta da arte; contar que passou pelo Instagram), transfere pedido
+   repetido ("igual da última vez"), tira "Ótima pergunta!" do aviso de preço
+   e inclui feriados no aviso de horário.
 
 O catálogo para o agente fica fora desta decisão e terá RFC própria. Agente
 com ferramentas e memória no n8n também ficam fora (RFC 041).
@@ -130,8 +145,15 @@ com ferramentas e memória no n8n também ficam fora (RFC 041).
   oscila; o motivo aparece separado no painel.
 - A transcrição passa a ser dado pessoal guardado no CRM, com a política das
   mensagens de entrada.
-- As migrações 0046–0048 são manuais e rodam no console da API logo depois
-  do deploy. A publicação do workflow VND-L03 vem depois, com backup e
-  verificação (ADR 044).
+- A implantação tem duas etapas no CRM (migrações, depois código) e só então
+  a publicação do workflow VND-L03, com backup e verificação (ADR 044).
+- Encerrar uma conversa com handoff sem dono deixa como dono quem encerrou,
+  sem a checagem de elegibilidade do claim. O tempo até assumir usa só
+  handoffs `accepted`.
+- O caminho `failed` → `ok` da transcrição existe no CRM, mas o workflow
+  atual não o percorre: a chave do evento é fixa por mensagem.
+- Follow-up: o retry do inbound que recebe `duplicate: true` não continua o
+  turno; hoje a varredura cobre esse caso. As migrações não usam `NOT VALID`
+  nem `CONCURRENTLY`, aceito pelo volume do piloto; rodar fora do pico.
 - O transporte do WhatsApp pelo Evolution (ADR 050) está em integração em
   outro PR e não altera este contrato.

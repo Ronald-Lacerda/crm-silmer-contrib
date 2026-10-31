@@ -56,9 +56,11 @@ depois. O schema do CRM continua estrito: campo desconhecido é recusado.
    do inbound e um aviso fixo ao cliente. O modelo ganha timeout de 30 s e um
    retry; a transcrição, timeout de 30 s. O pior caso cabe nos 120 s da
    execução. No CRM, um job do worker varre conversas paradas a cada 60 s:
-   modo assistente, abertas, com a última mensagem do cliente sem resposta do
-   bot há mais de `ASSISTANT_STALL_MINUTES` (padrão 5, de 2 a 60) e sem
-   handoff ativo. Cada uma ganha, na mesma transação, handoff sem dono com
+   modo assistente, abertas, sem handoff ativo e cuja revisão de entrada mais
+   recente não teve resposta efetiva (não consumida, ou consumida por
+   resposta que falhou, ficou incerta ou presa em envio), com a última
+   mensagem do cliente há mais de `ASSISTANT_STALL_MINUTES` (padrão 5, de 2 a
+   60). Cada uma ganha, na mesma transação, handoff sem dono com
    `automation_failure`, resumo fixo do CRM, modo humano, estado
    `requer_atencao`, epoch incrementado, histórico e auditoria. Esse caminho
    não avisa o cliente, porque o CRM não envia mensagens sozinho. Rodar duas
@@ -81,9 +83,11 @@ depois. O schema do CRM continua estrito: campo desconhecido é recusado.
    transcrição, e o histórico do agente usa o texto no lugar do áudio.
 5. **Mais contexto (VND-CTX-01).** Cada mensagem do histórico traz os
    `subject_ids` em vez de ser filtrada por Assunto. O inbound devolve
-   `contact_context` do cliente recorrente: ciclos anteriores, último
-   desfecho e até 3 pedidos anteriores, sem valores, endereço, financeiro ou
-   arquivos.
+   `contact_context` do cliente recorrente só com contagens e a data do
+   último encerramento (`previous_cycles`, `previous_orders_count` e
+   `last_closed_at`). Na revisão de QA, a lista de pedidos e o último desfecho
+   saíram por minimização (RULES 8 e 13); o prompt só sabe que o cliente já
+   foi atendido.
 6. **Código de falha do bot (INBOX-DELIVERY-02).** `message.failed` e
    `message.send.unknown` aceitam `failure.code`. O CRM grava o código na
    mensagem, e a Inbox o usa para mensagens do bot.
@@ -114,9 +118,13 @@ Os detalhes de campos, limites e códigos estão na ADR 052.
 
 ## Riscos
 
-- Ordem de implantação: se o workflow novo for publicado antes do CRM, os
-  campos novos dão `400` e o bot para de responder. Mitigação: CRM e
-  migração antes da publicação; cada campo é opcional.
+- Ordem de implantação: o código novo lê colunas da 0048 já no inbound. Se a
+  API nova subir antes da migração, mensagens de clientes se perdem.
+  Mitigação: migrações num PR próprio, implantadas e aplicadas antes do PR do
+  código.
+- Workflow novo contra CRM antigo: o CRM antigo recusaria os campos novos com
+  `400`. Mitigação: o workflow só os envia quando o inbound traz
+  `contact_context`; sem a chave, volta ao comportamento da `mvp-simple-19`.
 - A varredura pode transferir uma conversa que o bot ainda responderia
   devagar. O epoch incrementado descarta a resposta atrasada pelo fence.
 - `automation_failure` aumenta a fila humana quando o provedor oscila. O
@@ -128,9 +136,9 @@ Os detalhes de campos, limites e códigos estão na ADR 052.
 
 ## Plano de implantação
 
-1. Merge do CRM (API, worker e Inbox) com os campos novos opcionais.
-2. Migração manual das 0046, 0047 e 0048 no console da API, logo depois do
-   deploy.
+1. PR só com as migrações 0046, 0047 e 0048: merge, deploy e aplicação no
+   console da API. São expand-only e compatíveis com a release atual.
+2. PR do código (API, worker e Inbox): merge e deploy.
 3. Conferir que o workflow publicado (VND-L02) continua funcionando com o CRM
    novo.
 4. Conferir o worker com `N8N_INTEGRATION_ENVELOPE_KEY` e, se o padrão não
