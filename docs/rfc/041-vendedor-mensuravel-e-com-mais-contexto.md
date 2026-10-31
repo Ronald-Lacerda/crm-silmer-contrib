@@ -67,8 +67,8 @@ depois. O schema do CRM continua estrito: campo desconhecido é recusado.
    `handoff.requested` aceitam o objeto opcional `turn`, só com códigos,
    contagens e tempos: ponto perguntado, como o cliente respondeu, pontos da
    ficha, gatilho, modelo, latência e tipo de mídia. O CRM grava em
-   `crm.automation_turns`, sem duplicar no replay. Um painel "Desempenho do
-   Vendedor" lê só agregados de uma janela de 1 a 90 dias. A conversa ganha
+   `crm.automation_turns`, sem duplicar no replay. Um painel do administrador
+   ("Desempenho do agente") lê só agregados de uma janela de 1 a 90 dias. A conversa ganha
    uma leitura do último turno para a Inbox.
 3. **Handoff completo (INBOX-HANDOFF-02).** Encerrar a conversa resolve o
    handoff ativo na mesma transação. `handoff.requested` aceita
@@ -129,13 +129,19 @@ Os detalhes de campos, limites e códigos estão na ADR 052.
 ## Plano de implantação
 
 1. Merge do CRM (API, worker e Inbox) com os campos novos opcionais.
-2. Migração manual das 0046, 0047 e 0048 no ambiente, antes da API nova.
+2. Migração manual das 0046, 0047 e 0048 no console da API, logo depois do
+   deploy.
 3. Conferir que o workflow publicado (VND-L02) continua funcionando com o CRM
    novo.
-4. Configurar `ASSISTANT_STALL_MINUTES` no worker, se o padrão não servir.
+4. Conferir o worker com `N8N_INTEGRATION_ENVELOPE_KEY` e, se o padrão não
+   servir, `ASSISTANT_STALL_MINUTES`.
 5. Publicar o workflow VND-L03 no n8n com backup, verificação e versão de
    rollback, autorizado pelo proprietário (ADR 044).
-6. Observar as primeiras conversas pelo painel "Desempenho do Vendedor".
+6. Observar as primeiras conversas pelo painel "Desempenho do agente"
+   (`/dashboard/agente`).
+
+O passo a passo está no
+[runbook da VND-L03](../runbooks/vendedor-l03-implantacao.md).
 
 O Evolution como transporte do WhatsApp (ADR 050 / RFC 039) está em
 integração em outro PR e não muda este contrato.

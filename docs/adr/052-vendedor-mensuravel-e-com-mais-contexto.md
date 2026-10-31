@@ -17,7 +17,8 @@ Complementa as ADRs 009, 015, 049 e 051; não as supersede.
    CRM e as migrações 0046, 0047 e 0048 entram antes da publicação do n8n.
 2. **Motivos novos de handoff (migração 0046).** `reason_code` ganha
    `automation_failure` e `partnership`, no padrão expand-only da 0025.
-   `crm.handoffs` ganha `preferred_user_id`, nulo, com FK para usuários.
+   `crm.handoffs` ganha `preferred_user_id`, nulo, com FK para usuários; é
+   `text` porque `crm.users.id` é `text`.
 3. **Falha vira handoff (AGENTE-FAIL-01).**
    - No workflow, erro do modelo, do parser ou do agente segue pela saída de
      erro do nó e vira `handoff.requested` com `automation_failure`, epoch e
@@ -28,6 +29,8 @@ Complementa as ADRs 009, 015, 049 e 051; não as supersede.
      conversa em modo `assistant`, aberta e não arquivada, cuja última
      mensagem do cliente é posterior à última enviada pelo bot e mais antiga
      que `ASSISTANT_STALL_MINUTES` (padrão 5, de 2 a 60), sem handoff ativo.
+     A idade conta pela hora em que o CRM recebeu a mensagem, e só entram
+     mensagens das últimas 24 h.
    - Para cada uma, na mesma transação e com lock da conversa: handoff sem
      dono com `automation_failure` e o resumo cifrado "O assistente não
      respondeu a tempo. Confira a última mensagem do cliente."; modo humano;
@@ -39,8 +42,9 @@ Complementa as ADRs 009, 015, 049 e 051; não as supersede.
    - `message.send.requested` e `handoff.requested` aceitam o objeto
      opcional e estrito `turn`: `asked_field`, `answer_status`,
      `ficha_filled`, `ficha_total`, `trigger`, `model`, `latency_ms` e
-     `media_kind`. Cada campo tem padrão ou faixa fechada; chave desconhecida
-     dá `400`.
+     `media_kind`. `ficha_filled` e `ficha_total` são obrigatórios dentro de
+     `turn`. Cada campo tem padrão ou faixa fechada; chave desconhecida dá
+     `400`.
    - O CRM grava em `crm.automation_turns`, uma linha por evento do n8n
      (`n8n_event_id` único), com versão do workflow e motivo do handoff.
      Replay não duplica.
@@ -48,46 +52,55 @@ Complementa as ADRs 009, 015, 049 e 051; não as supersede.
      agregados: conversas e respostas do bot, handoffs por motivo, ficha no
      handoff, tempo até assumir e até resolver, falhas por tipo, turnos por
      versão do workflow e conversas paradas agora. `null` quando não houver
-     amostra. Sem cache, com a permissão do cartão do assistente no painel
-     inicial.
+     amostra. Sem cache. Exige a ação nova `assistant.performance.read`
+     (`COMMERCIAL_ADMIN`). A recusa pelo fence (`stale_fence`) é contada pela
+     auditoria.
    - `GET /api/v1/inbox/conversations/:id/assistant-context` devolve o último
-     turno e as mensagens do bot contra o teto, com a permissão de ler a
-     conversa e sem cache.
+     turno e as mensagens do bot contra o teto, com `conversation.read` e sem
+     cache.
    - Nenhum campo de telemetria carrega texto do cliente, nome, telefone ou
      conteúdo. Só códigos, contagens e tempos.
 5. **Handoff completo (INBOX-HANDOFF-02).**
    - Todo caminho que encerra a conversa (`concluido`, `sem_pedido` ou outro
      que preencha `terminal_at`) leva o handoff ativo a `resolved`, com
-     `resolved_at` e histórico, na mesma transação.
+     `resolved_at` e histórico (`conversation_closed`), na mesma transação.
+     Handoff sem dono fica com quem encerrou como responsável, porque o CHECK
+     da 0013 exige dono em `resolved`.
    - `handoff.requested` aceita `requested_seller_id`. Se ele estiver entre os
      vendedores ativos que o inbound devolve, o CRM grava em
      `preferred_user_id`; se não, ignora, registra e cria o handoff mesmo
-     assim. A leitura do handoff e a lista da Inbox mostram o primeiro nome.
+     assim, com a auditoria `PREFERRED_SELLER_NOT_ACTIVE`. A leitura do
+     handoff e a lista da Inbox mostram o primeiro nome
+     (`handoff.preferredSellerFirstName`).
    - O motivo `partnership` substitui `human_requested` para parceria e
      revenda (ADR 051, item 7).
 6. **Transcrição no CRM (INBOX-AUDIO-TRANSCRIPT-01, migração 0048).**
    - Evento novo `message.transcribed`, com `status` `ok` e texto de até 4000
      caracteres, ou `failed` e um código (`TRANSCRIPTION_FAILED`,
      `TRANSCRIPTION_EMPTY` ou `AUDIO_TOO_LARGE`). Só vale para mensagem de
-     entrada, de áudio e da mesma conversa. É idempotente; a mesma chave com
-     outro payload dá conflito.
+     entrada, de áudio e da mesma conversa, achada pelo `external_message_id`
+     do inbound. É idempotente; a mesma chave com outro payload dá conflito.
+     Um `failed` pode virar `ok`; um `ok` não é substituído.
    - O texto tem a mesma proteção e retenção do texto das mensagens de
-     entrada.
+     entrada: cifrado com a chave das mensagens.
    - No histórico do agente, o áudio transcrito vem como texto com
      `transcribed: true`. Na Inbox, a mensagem de áudio mostra a transcrição.
 7. **Mais contexto (VND-CTX-01).**
    - Cada item de `recent_messages` traz `subject_ids`, vazio quando não
-     houver vínculo, em vez de ser filtrado por Assunto.
+     houver vínculo, para o workflow filtrar pelo Assunto sem zerar o
+     histórico.
    - O inbound devolve `contact_context`: ciclos anteriores, data e desfecho
-     do último encerramento e até 3 pedidos anteriores (número, status,
-     produto e mês de criação), sem os desta conversa. Sem valores, endereço,
+     do último encerramento (data em São Paulo) e até 3 pedidos anteriores
+     (número, status, tipo do primeiro item e mês de criação), sem os desta
+     conversa nem os de teste. Sem valores, endereço,
      financeiro ou arquivos.
 8. **Código de falha do bot (INBOX-DELIVERY-02).** `crm.messages` ganha
    `delivery_failure_code` (migração 0048). `message.failed` e
-   `message.send.unknown` aceitam `failure.code`; código fora do padrão vira
-   `SEND_FAILED`, e resultado incerto sem código grava
-   `SEND_OUTCOME_UNKNOWN`. Mensagens do bot usam esse código na Inbox; as
-   humanas continuam com o código do comando.
+   `message.send.unknown` aceitam `failure.code`; código ausente ou fora do
+   padrão vira `SEND_FAILED` no `message.failed` e `SEND_OUTCOME_UNKNOWN` no
+   `message.send.unknown`. Um `sent` ou `delivered` posterior limpa o código.
+   Mensagens do bot usam esse código na Inbox; as humanas continuam com o
+   código do comando.
 9. **Workflow (VND-L03).** O workflow consome os itens acima, reduz os falsos
    positivos de transferência (e-mail, telefone ou link; "loja"; "Sim" na
    pergunta da arte), tira "Ótima pergunta!" do aviso de preço e inclui
@@ -117,8 +130,8 @@ com ferramentas e memória no n8n também ficam fora (RFC 041).
   oscila; o motivo aparece separado no painel.
 - A transcrição passa a ser dado pessoal guardado no CRM, com a política das
   mensagens de entrada.
-- As migrações 0046–0048 são manuais e precisam rodar antes da API nova. A
-  publicação do workflow VND-L03 vem depois, com backup e verificação
-  (ADR 044).
+- As migrações 0046–0048 são manuais e rodam no console da API logo depois
+  do deploy. A publicação do workflow VND-L03 vem depois, com backup e
+  verificação (ADR 044).
 - O transporte do WhatsApp pelo Evolution (ADR 050) está em integração em
   outro PR e não altera este contrato.
