@@ -511,7 +511,11 @@ Regras:
   mesmo valor para `stalled_now`; use o mesmo nos dois serviços.
   `ASSISTANT_STALL_SWEEP_INTERVAL_MS` (padrão 60000) fica só no worker, que
   também precisa de `N8N_INTEGRATION_ENVELOPE_KEY` para cifrar o resumo do
-  handoff ([runbook](docs/runbooks/vendedor-l03-implantacao.md));
+  handoff. A tolerância de resposta presa em `sending`
+  (`ASSISTANT_SENDING_GRACE_MINUTES`, 2 minutos) é constante no código desta
+  versão, não variável de ambiente. O log de cada rodada é
+  `automation_stall_sweep_completed`
+  ([runbook](docs/runbooks/vendedor-l03-implantacao.md));
 - `N8N_ENCRYPTION_KEY` é obrigatória, fica em escrow operacional e deve ser
   restaurável junto do banco próprio do n8n;
 - `OBJECT_STORAGE_*` existe somente em `silmer-api`: endpoint

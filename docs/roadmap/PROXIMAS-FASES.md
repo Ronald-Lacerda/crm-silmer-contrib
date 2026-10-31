@@ -51,8 +51,8 @@ Rodada de 30/10/2026, implementada e aguardando implantação
 vira handoff, telemetria por turno sem PII e painel "Desempenho do agente",
 handoff resolvido ao encerrar e vendedor pedido pelo nome, transcrição do
 áudio no CRM, histórico com Assuntos e contexto do cliente recorrente, código
-de falha do bot e o workflow VND-L03. Ordem: CRM, migração manual 0046–0048 e
-só depois a publicação do n8n. O transporte Evolution (ADR 050) entra por
+de falha do bot e o workflow VND-L03. Ordem: PR das migrações 0046–0048
+aplicadas no console, depois o PR do código e só então a publicação do n8n. O transporte Evolution (ADR 050) entra por
 outro PR. Catálogo para o agente fica para uma RFC própria.
 
 ## Caminho de homologação

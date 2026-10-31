@@ -196,15 +196,21 @@ antigas. Conversa transferida não volta ao bot (ADR 015).
 ADR 052 / RFC 041 (implementado, aguardando implantação):
 
 - `automation.stall.sweep` no worker, a cada `ASSISTANT_STALL_SWEEP_INTERVAL_MS`
-  (padrão 60000). Pega a conversa em modo assistente, aberta, sem handoff
-  ativo e com mensagem do cliente sem resposta do bot há mais de
+  (padrão 60000). Pega a conversa em modo assistente, aberta e sem handoff
+  ativo cuja revisão de entrada mais recente não teve resposta efetiva:
+  `inbound_revision > claimed_revision`, ou revisão consumida por resposta
+  `failed`/`outcome_unknown` ou presa em `sending` há mais de
+  `ASSISTANT_SENDING_GRACE_MINUTES` (2, constante no código desta versão). A
+  última mensagem do cliente precisa ser mais antiga que
   `ASSISTANT_STALL_MINUTES` (padrão 5; 2..60 com clamp; valor não numérico
-  impede a subida). A idade conta por `created_at`, só nas últimas 24 h. Sob
-  lock e na mesma transação: handoff sem dono `automation_failure` com resumo
-  fixo cifrado com `N8N_INTEGRATION_ENVELOPE_KEY` (o worker precisa dela),
-  modo humano, `requer_atencao`, epoch novo, histórico e auditoria. É
-  idempotente e não envia mensagem ao cliente. A API lê a mesma env para
-  `stalled_now`.
+  impede a subida) e das últimas 24 h, por `created_at`. Sob lock e na mesma
+  transação: handoff sem dono `automation_failure` com resumo fixo cifrado
+  com `N8N_INTEGRATION_ENVELOPE_KEY` (o worker precisa dela), modo humano,
+  `requer_atencao`, epoch novo, histórico e auditoria. O lote é resiliente
+  por candidato e registra `automation_stall_sweep_completed` (`candidates`,
+  `handed_off`, `failed`). É idempotente e não envia mensagem ao cliente. A
+  API usa a mesma regra e a mesma env no cartão do painel inicial (antes, 10
+  minutos fixos) e no `stalled_now`.
 - Migração `0046_handoff_reasons_preferred_seller.expand.sql`: motivos
   `automation_failure` e `partnership`; `crm.handoffs.preferred_user_id text`
   com FK para `crm.users` (que usa id `text`). `requested_seller_id` fora dos
@@ -224,12 +230,16 @@ ADR 052 / RFC 041 (implementado, aguardando implantação):
 - `GET /api/v1/inbox/conversations/:id/assistant-context`: último turno e
   mensagens do bot contra o teto, `conversation.read`, `no-store`.
 - Inbound: `subject_ids` em `recent_messages`, áudio transcrito como texto e
-  `contact_context` (até 3 pedidos, sem teste nem desta conversa). Read model
-  da Inbox: `handoff.preferredSellerFirstName`, `transcript` no áudio e código
-  de falha do bot.
+  `contact_context` só com `previous_cycles`, `previous_orders_count` (0..99,
+  sem teste nem desta conversa) e `last_closed_at`. Read model da Inbox:
+  `handoff.preferredSellerFirstName` na lista, `preferred_seller` ao lado de
+  `handoff` no detalhe, `transcript` no áudio e código de falha do bot.
+- Workflow `mvp-simple-20` só envia os campos novos quando o inbound traz
+  `contact_context`; contra CRM antigo, mantém o contrato da `mvp-simple-19`.
 
-As migrações são expand-only e rodam à mão no console da API logo depois do
-deploy, antes da publicação do workflow. Passo a passo:
+As migrações são expand-only, compatíveis com a release atual, e vão num PR
+próprio, implantado e aplicado à mão no console da API antes do PR do código:
+o inbound novo lê colunas da 0048. Depois vem a publicação do workflow. Passo a passo:
 [runbook da VND-L03](docs/runbooks/vendedor-l03-implantacao.md). Teste com
 PostgreSQL real: `npm run test:vendedor:live`.
 
