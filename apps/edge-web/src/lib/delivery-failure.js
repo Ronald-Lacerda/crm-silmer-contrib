@@ -38,6 +38,7 @@ const HINTS = Object.freeze({
   N8N_COMMAND_STALE:
     'A mensagem ficou desatualizada antes do envio e não foi enviada.',
   N8N_COMMAND_TIMEOUT: 'A automação de envio demorou demais para responder.',
+  META_SEND_OUTCOME_UNKNOWN: UNCONFIRMED,
   OUTCOME_UNKNOWN: UNCONFIRMED,
   SEND_FAILED: 'O serviço de mensagens não entregou a mensagem ao cliente.',
   SEND_OUTCOME_UNKNOWN: UNCONFIRMED,

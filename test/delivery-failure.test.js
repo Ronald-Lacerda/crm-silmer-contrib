@@ -34,6 +34,11 @@ test('explains the agent codes and the n8n command codes', () => {
     deliveryFailureHint('OUTCOME_UNKNOWN'),
     deliveryFailureHint('SEND_OUTCOME_UNKNOWN'),
   );
+  // The code the published workflow reports for an unconfirmed send.
+  assert.equal(
+    deliveryFailureHint('META_SEND_OUTCOME_UNKNOWN'),
+    deliveryFailureHint('SEND_OUTCOME_UNKNOWN'),
+  );
   for (const code of [
     'COMMAND_LEASE_EXPIRED',
     'N8N_COMMAND_ACK_MISMATCH',
