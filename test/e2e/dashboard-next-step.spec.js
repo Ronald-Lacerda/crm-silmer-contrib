@@ -111,8 +111,9 @@ test('the manager starts from the SLA and the period says it is for Vendido', as
     'Atendimento',
     'Meus afazeres de entrega',
   ]);
-  // Three period buttons and seven indicators, plus the next step.
-  await expect(visibleControls(page)).toHaveCount(11);
+  // Three period buttons and seven indicators, plus the next step and the
+  // way into the agent's performance (AGENTE-OBS-01).
+  await expect(visibleControls(page)).toHaveCount(12);
 
   const periodGroup = page.getByRole('group', { name: 'Período das vendas' });
   await expect(periodGroup).toHaveAccessibleDescription('Vale para Vendido');
