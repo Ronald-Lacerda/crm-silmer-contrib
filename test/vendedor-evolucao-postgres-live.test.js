@@ -1609,6 +1609,68 @@ if (connectionString) {
           );
         },
       );
+      await t.test(
+        'AGENTE-FAIL-01: late delivery and read receipts reconcile failures before the stall sweep',
+        async () => {
+          const conversations = [];
+          for (const receipt of ['delivered', 'read']) {
+            const inbound = await env.receive(
+              receipt === 'delivered' ? '5527990001401' : '5527990001402',
+              `wamid.recovered.${receipt}`,
+            );
+            const replyId = `reply-recovered-${receipt}`;
+            await env.reply(inbound, replyId);
+            await env.sent(inbound, replyId);
+            const base = {
+              conversation_id: inbound.conversation_id,
+              external_message_id: `wamid.out.${replyId}`,
+              occurred_at: env.clock.now.toISOString(),
+              schema_version: '1.0',
+            };
+            for (const eventType of ['failed', receipt, 'failed']) {
+              const eventId = `recovered-${receipt}-${eventType}-${randomUUID()}`;
+              await env.n8n.recordEvent({
+                ...base,
+                event_id: eventId,
+                event_type: `message.${eventType}`,
+                technical: env.technical(eventId),
+              });
+            }
+            const row = (
+              await pool.query(
+                `SELECT status, delivery_status, delivery_failure_code
+                 FROM crm.messages WHERE command_id=$1`,
+                [`command-${replyId}`],
+              )
+            ).rows[0];
+            assert.deepEqual(row, {
+              status: 'sent',
+              delivery_status: receipt,
+              delivery_failure_code: null,
+            });
+            conversations.push(inbound.conversation_id);
+          }
+          env.advance(6);
+          await env.sweeper.sweep();
+          assert.equal(
+            await countStalledConversations(env.database, env.clock.now, 5),
+            0,
+          );
+          const states = await pool.query(
+            `SELECT automation_state FROM crm.conversations WHERE id=ANY($1)`,
+            [conversations],
+          );
+          assert.deepEqual(
+            states.rows.map((/** @type {any} */ row) => row.automation_state),
+            ['assistant', 'assistant'],
+          );
+          const handoffs = await pool.query(
+            'SELECT id FROM crm.handoffs WHERE conversation_id=ANY($1)',
+            [conversations],
+          );
+          assert.equal(handoffs.rowCount, 0);
+        },
+      );
     } finally {
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');

@@ -583,6 +583,12 @@ código, depois a publicação do n8n
 colunas da 0048 no inbound; subir a API antes da migração perderia mensagens.
 Teste com PostgreSQL real: `node --test --test-concurrency=1 test/vendedor-evolucao-postgres-live.test.js`.
 
+Revisão da PR #257 (31/10/2026, AGENTE-FAIL-01 / AGT-09): comprovante tardio
+de entrega ou leitura reconcilia o envio para `sent`, limpa a falha e evita
+handoff indevido pela varredura. Callback de falha posterior não regride a
+entrega comprovada. A suíte live do Vendedor integra o gate PostgreSQL
+serializado do CI, incluindo essa regressão.
+
 - [x] **AGENTE-FAIL-01 — falha do bot vira handoff** (AGT-05, AGT-09, ORC-08).
       Erro do modelo, do parser, do agente ou da decisão vira
       `handoff.requested` com `automation_failure` e aviso fixo. O worker roda

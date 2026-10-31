@@ -2780,7 +2780,10 @@ async function updateDeliveryStatus(client, input) {
     await client.query(
       `UPDATE crm.messages
        SET delivery_status = $2, delivery_status_at = $3,
-           status = CASE WHEN $2 = 'failed' THEN 'failed' ELSE status END,
+           status = CASE
+             WHEN $2 = 'failed' THEN 'failed'
+             WHEN $2 IN ('delivered', 'read') THEN 'sent'
+             ELSE status END,
            delivery_failure_code = $4
        WHERE id = $1`,
       [
