@@ -18,6 +18,7 @@ import ConversationHandoffSummary from '../components/inbox/ConversationHandoffS
 import ConversationOrderSummary from '../components/inbox/ConversationOrderSummary.vue';
 import MediaMessage from '../components/inbox/MediaMessage.vue';
 import MessageDeliveryNotice from '../components/inbox/MessageDeliveryNotice.vue';
+import MessageTranscript from '../components/inbox/MessageTranscript.vue';
 import { commandKey, request } from '../lib/api-client.js';
 import {
   preferredSellerFirstName,
@@ -2515,6 +2516,12 @@ onBeforeUnmount(() => {
                 :orders="
                   message.direction === 'inbound' ? imageAttachmentOrders : []
                 "
+              />
+              <!-- INBOX-AUDIO-TRANSCRIPT-01: what the transcription heard. -->
+              <MessageTranscript
+                v-if="message.transcript"
+                :message-id="message.id"
+                :transcript="message.transcript"
               />
               <small v-if="message.deliveryMode === 'dev'"
                 >DEV: envio simulado</small
