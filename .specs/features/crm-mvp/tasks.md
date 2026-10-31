@@ -574,51 +574,69 @@ Decisão ADR 051/RFC 040. Teste: `test/n8n-vendedor-aprendizados-l02.test.js`.
 
 ## Vendedor mensurável e com mais contexto — 30/10/2026
 
-Estado: em implementação. Decisão ADR 052/RFC 041. Nenhum campo novo do
-contrato é obrigatório, e o workflow VND-L02 publicado continua funcionando
-com o CRM novo. Dependência de todas as tarefas de workflow: implantar o CRM e
-rodar a migração manual 0046–0048 antes de publicar o n8n.
+Estado: implementado, aguardando implantação. Decisão ADR 052/RFC 041.
+Nenhum campo novo do contrato é obrigatório, e o workflow VND-L02 publicado
+continua funcionando com o CRM novo. Dependência de todas as tarefas de
+workflow: implantar o CRM e rodar a migração manual 0046–0048 antes de
+publicar o n8n ([runbook](../../../docs/runbooks/vendedor-l03-implantacao.md)).
+Teste com PostgreSQL real: `npm run test:vendedor:live`.
 
-- [ ] **AGENTE-FAIL-01 — falha do bot vira handoff** (AGT-05, AGT-09, ORC-08).
-      Erro do modelo, do parser ou do agente vira `handoff.requested` com
-      `automation_failure` e aviso fixo. O worker roda `automation.stall.sweep`
-      a cada 60 s e transfere a conversa parada há mais de
-      `ASSISTANT_STALL_MINUTES` (padrão 5, de 2 a 60), com epoch novo, histórico
-      e auditoria, sem aviso ao cliente. Repetir a varredura não cria outro
-      handoff; resposta atrasada do bot é recusada pelo fence.
-- [ ] **AGENTE-OBS-01 — telemetria por turno** (AGT-06, AGT-10). `turn` opcional
-      e estrito em `message.send.requested` e `handoff.requested`; chave
-      desconhecida dá `400`. Linha única por evento em `crm.automation_turns`,
-      sem duplicar no replay. Painel "Desempenho do Vendedor" só com
-      agregados de 1 a 90 dias e `null` sem amostra. Nenhum texto do cliente,
+- [x] **AGENTE-FAIL-01 — falha do bot vira handoff** (AGT-05, AGT-09, ORC-08).
+      Erro do modelo, do parser, do agente ou da decisão vira
+      `handoff.requested` com `automation_failure` e aviso fixo. O worker roda
+      `automation.stall.sweep` a cada 60 s
+      (`ASSISTANT_STALL_SWEEP_INTERVAL_MS`) e transfere a conversa com
+      mensagem do cliente das últimas 24 h sem resposta há mais de
+      `ASSISTANT_STALL_MINUTES` (padrão 5, 2..60 com clamp), com epoch novo,
+      histórico e auditoria, sem aviso ao cliente. Repetir a varredura não
+      cria outro handoff; resposta atrasada é recusada pelo fence.
+- [x] **AGENTE-OBS-01 — telemetria por turno** (AGT-06, AGT-10). `turn`
+      estrito em `message.send.requested` e `handoff.requested`, com
+      `ficha_filled` e `ficha_total` obrigatórios; chave desconhecida dá
+      `400`. Linha única por evento em `crm.automation_turns` (0047). Painel
+      "Desempenho do agente" (`/dashboard/agente`, só administrador, ação
+      `assistant.performance.read`) com agregados de 1 a 90 dias e `null` sem
+      amostra; `stale_fence` contado pela auditoria. Nenhum texto do cliente,
       nome ou telefone.
-- [ ] **INBOX-HANDOFF-02 — handoff completo** (AGT-03, ORC-07). Encerrar a
-      conversa resolve o handoff ativo na mesma transação. `requested_seller_id`
-      fora dos vendedores ativos é ignorado e registrado, sem falhar o handoff.
-      A Inbox mostra o primeiro nome do vendedor pedido. Motivo `partnership`
-      aceito. O handoff continua sem dono e o claim continua atômico.
-- [ ] **INBOX-AUDIO-TRANSCRIPT-01 — transcrição no CRM** (AGT-01, MSG-01).
-      `message.transcribed` só para áudio de entrada da mesma conversa;
-      idempotente, com conflito se o payload mudar. Texto com a proteção e a
-      retenção das mensagens de entrada. A Inbox mostra a transcrição e o
-      histórico do agente traz `transcribed: true`.
-- [ ] **VND-CTX-01 — mais contexto** (AGT-01). `subject_ids` em cada item de
+- [x] **INBOX-HANDOFF-02 — handoff completo** (AGT-03, ORC-07). Encerrar a
+      conversa resolve o handoff ativo na mesma transação, com
+      `conversation_closed` no histórico. `requested_seller_id` fora dos
+      Vendedores ativos é ignorado e auditado (`PREFERRED_SELLER_NOT_ACTIVE`),
+      sem falhar o handoff. A Inbox mostra `handoff.preferredSellerFirstName`.
+      Motivo `partnership` aceito (0046). O handoff continua sem dono e o claim
+      continua atômico.
+- [x] **INBOX-AUDIO-TRANSCRIPT-01 — transcrição no CRM** (AGT-01, MSG-01).
+      `message.transcribed` só para áudio de entrada da conversa, pelo
+      `external_message_id`; idempotente; `failed` pode virar `ok`, e `ok` não
+      é substituído (`409 TRANSCRIPT_ALREADY_RECORDED`). Texto cifrado com a
+      chave das mensagens (0048). A Inbox mostra a transcrição abaixo do áudio
+      e o histórico do agente traz `transcribed: true`.
+- [x] **VND-CTX-01 — mais contexto** (AGT-01). `subject_ids` em cada item de
       `recent_messages`, sem zerar o histórico com vários Assuntos.
-      `contact_context` com até 3 pedidos anteriores, sem valores, endereço,
-      financeiro ou arquivos.
-- [ ] **INBOX-DELIVERY-02 — código de falha do bot** (MSG-02). `failure.code`
-      em `message.failed` e `message.send.unknown`; código fora do padrão vira
-      `SEND_FAILED` e incerto sem código vira `SEND_OUTCOME_UNKNOWN`. A Inbox
-      mostra o código nas mensagens do bot.
-- [ ] **VND-L03 — workflow** (AGT-02..05, AGT-09..10). Consome os itens acima;
-      timeout do modelo de 30 s com um retry e da transcrição de 30 s, dentro
-      dos 120 s da execução. Menos falsos positivos (e-mail, telefone ou link;
-      "loja"; "Sim" na arte), sem "Ótima pergunta!" no aviso de preço e com
-      feriados no aviso de horário. Publicar com backup, verificação e
-      rollback, autorizado pelo proprietário.
-- [ ] **DOC-VND-03 — documentação.** RFC 041, ADR 052, gate OpenAI (DPA e ZDR
-      informados em 30/10/2026) e drift do README do n8n. Ajuste final com o
-      que for implementado.
+      `contact_context` com até 3 pedidos anteriores, sem teste nem os desta
+      conversa, sem valores, endereço, financeiro ou arquivos.
+- [x] **INBOX-DELIVERY-02 — código de falha do bot** (MSG-02). `failure.code`
+      em `message.failed` e `message.send.unknown`; ausente ou fora do padrão
+      vira `SEND_FAILED` ou `SEND_OUTCOME_UNKNOWN`. Um `sent` ou `delivered`
+      posterior limpa o código. A Inbox explica o código nas mensagens do bot,
+      inclusive `META_SEND_OUTCOME_UNKNOWN`.
+- [x] **VND-L03 — workflow `mvp-simple-20`** (AGT-02..05, AGT-09..10).
+      Consome os itens acima, com 4 nós novos. Modelo 30 s com um retry,
+      transcrição 30 s; pior caso de cerca de 112 s, dentro dos 120 s. Menos
+      falsos positivos (e-mail ou telefone do próprio cliente, link de
+      referência, "loja" sozinha, fotos das peças, "Sim" fora da pergunta da
+      arte, "faixa etária", "jogo" sozinho), sem "Ótima pergunta!" no aviso de
+      preço e com feriados nacionais de 2026–2027 no aviso de horário (sem ES
+      nem municipais). Teste: `test/n8n-vendedor-l03.test.js`.
+- [x] **DOC-VND-03 — documentação.** RFC 041, ADR 052, gate OpenAI (DPA e ZDR
+      informados em 30/10/2026), drift e contrato no README do n8n e runbook
+      de implantação.
+- [ ] Merge e deploy do CRM; migrações 0046–0048 com `applied_count` 3.
+- [ ] Worker com `N8N_INTEGRATION_ENVELOPE_KEY` e varredura rodando.
+- [ ] Smoke da API e do painel; VND-L02 segue respondendo.
+- [ ] Publicar `mvp-simple-20` como delta sobre o export vivo, autorizado pelo
+      proprietário; rollback `cd0de4e8`.
+- [ ] Observar as primeiras conversas reais pelo painel.
 
 Fora desta rodada: catálogo para o agente (RFC própria) e agente com
 ferramentas.

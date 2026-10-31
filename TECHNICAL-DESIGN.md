@@ -165,7 +165,7 @@ Também existem `audit_events`, `n8n_events`, `n8n_commands`, idempotência e jo
 A numeração do Pedido usa a sequência `crm.order_number_seq` (migração 0023).
 Conferir a migration específica antes de alterar SQL.
 
-Migrations até `0026_message_first_sent_at.expand.sql` estão versionadas.
+Migrations até `0048_message_transcript_delivery_code.expand.sql` estão versionadas.
 Isso não prova aplicação no ambiente alvo. Tabelas/módulos de Negócio,
 qualificação e execução antiga permanecem por compatibilidade com migrations
 publicadas; não orientam novas telas. Remoção exige contract separado,
@@ -193,15 +193,46 @@ Status confirmados não regridem; entrega publica SSE na mesma transação.
 Handoff é reivindicado por CAS, com um vencedor. Takeover invalida decisões
 antigas. Conversa transferida não volta ao bot (ADR 015).
 
-ADR 052 (em implementação): o worker roda `automation.stall.sweep` a cada
-60 s. Conversa em modo assistente, aberta, sem handoff ativo e com mensagem do
-cliente sem resposta do bot há mais de `ASSISTANT_STALL_MINUTES` (env do
-worker; padrão 5, de 2 a 60) ganha, sob lock e na mesma transação, handoff sem
-dono `automation_failure`, modo humano, `requer_atencao`, epoch novo, histórico
-e auditoria. A varredura é idempotente e não envia mensagem ao cliente. A
-telemetria por turno (`turn`, `crm.automation_turns`) guarda só códigos,
-contagens e tempos. Migrações 0046–0048 são manuais e entram antes da API e
-da publicação do workflow.
+ADR 052 / RFC 041 (implementado, aguardando implantação):
+
+- `automation.stall.sweep` no worker, a cada `ASSISTANT_STALL_SWEEP_INTERVAL_MS`
+  (padrão 60000). Pega a conversa em modo assistente, aberta, sem handoff
+  ativo e com mensagem do cliente sem resposta do bot há mais de
+  `ASSISTANT_STALL_MINUTES` (padrão 5; 2..60 com clamp; valor não numérico
+  impede a subida). A idade conta por `created_at`, só nas últimas 24 h. Sob
+  lock e na mesma transação: handoff sem dono `automation_failure` com resumo
+  fixo cifrado com `N8N_INTEGRATION_ENVELOPE_KEY` (o worker precisa dela),
+  modo humano, `requer_atencao`, epoch novo, histórico e auditoria. É
+  idempotente e não envia mensagem ao cliente. A API lê a mesma env para
+  `stalled_now`.
+- Migração `0046_handoff_reasons_preferred_seller.expand.sql`: motivos
+  `automation_failure` e `partnership`; `crm.handoffs.preferred_user_id text`
+  com FK para `crm.users` (que usa id `text`). `requested_seller_id` fora dos
+  Vendedores ativos é ignorado e auditado (`PREFERRED_SELLER_NOT_ACTIVE`).
+  Encerrar a conversa resolve o handoff ativo com `conversation_closed` no
+  histórico; sem dono, recebe quem encerrou, pelo CHECK da 0013.
+- Migração `0047_automation_turns.expand.sql`: `crm.automation_turns`, uma
+  linha por evento n8n aceito, só códigos, contagens e tempos, com CHECK em
+  cada campo; índice parcial de auditoria `integration.n8n.stale_fence`.
+- Migração `0048_message_transcript_delivery_code.expand.sql`: transcrição do
+  áudio de entrada em `crm.messages` (envelope AES-256-GCM com a chave das
+  mensagens, ou código de falha), `delivery_failure_code` e o evento
+  `message.transcribed`.
+- `GET /api/v1/inbox/assistant/performance?days=1..90` (padrão 7): agregados
+  do agente, `private, no-store`, ação `assistant.performance.read`
+  (`COMMERCIAL_ADMIN`); tela `/dashboard/agente`, só para administrador.
+- `GET /api/v1/inbox/conversations/:id/assistant-context`: último turno e
+  mensagens do bot contra o teto, `conversation.read`, `no-store`.
+- Inbound: `subject_ids` em `recent_messages`, áudio transcrito como texto e
+  `contact_context` (até 3 pedidos, sem teste nem desta conversa). Read model
+  da Inbox: `handoff.preferredSellerFirstName`, `transcript` no áudio e código
+  de falha do bot.
+
+As migrações são expand-only e rodam à mão no console da API logo depois do
+deploy, antes da publicação do workflow. Passo a passo:
+[runbook da VND-L03](docs/runbooks/vendedor-l03-implantacao.md). Teste com
+PostgreSQL real: `npm run test:vendedor:live`.
+
 Contrato, diagnóstico e rollout: [n8n](docs/integrations/n8n/README.md) e
 [ator técnico](docs/runbooks/automation-executor.md).
 

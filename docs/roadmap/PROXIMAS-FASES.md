@@ -45,10 +45,10 @@ lê conversas reais, decide numa ADR e publica no n8n com backup e rollback:
 - Inbox: imagens e áudios recebidos, resumo da transferência na conversa
   (INBOX-HANDOFF-01) e falhas de entrega legíveis (INBOX-DELIVERY-01).
 
-Rodada de 30/10/2026, em implementação
+Rodada de 30/10/2026, implementada e aguardando implantação
 ([RFC 041](../rfc/041-vendedor-mensuravel-e-com-mais-contexto.md) e
 [ADR 052](../adr/052-vendedor-mensuravel-e-com-mais-contexto.md)): falha do bot
-vira handoff, telemetria por turno sem PII e painel "Desempenho do Vendedor",
+vira handoff, telemetria por turno sem PII e painel "Desempenho do agente",
 handoff resolvido ao encerrar e vendedor pedido pelo nome, transcrição do
 áudio no CRM, histórico com Assuntos e contexto do cliente recorrente, código
 de falha do bot e o workflow VND-L03. Ordem: CRM, migração manual 0046–0048 e

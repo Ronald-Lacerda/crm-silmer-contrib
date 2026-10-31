@@ -480,6 +480,7 @@ PRIVATE_MEDIA_MAX_BYTES
 PRIVATE_MEDIA_MAX_FILE_BYTES
 MEDIA_RETENTION_SCAN_INTERVAL_MS
 ASSISTANT_STALL_MINUTES
+ASSISTANT_STALL_SWEEP_INTERVAL_MS
 OBJECT_STORAGE_ENDPOINT
 OBJECT_STORAGE_REGION
 OBJECT_STORAGE_BUCKET
@@ -503,10 +504,14 @@ Regras:
 - `N8N_COMMAND_REPLAY_SAFE=true` só é permitido depois que a reserva remota
   anterior à Meta foi comprovada em homologação; até lá, timeout produz
   `outcome_unknown` e reconciliação;
-- `ASSISTANT_STALL_MINUTES` fica no `silmer-worker` e não é segredo: minutos
-  sem resposta do bot antes de a varredura `automation.stall.sweep` transferir
-  a conversa com `automation_failure` (ADR 052). Padrão 5, mínimo 2 e máximo
-  60, em implementação;
+- `ASSISTANT_STALL_MINUTES` não é segredo: minutos sem resposta do bot antes
+  de a varredura `automation.stall.sweep` do `silmer-worker` transferir a
+  conversa com `automation_failure` (ADR 052). Padrão 5; fora de 2..60 é
+  levado ao limite; valor não numérico impede a subida. A `silmer-api` lê o
+  mesmo valor para `stalled_now`; use o mesmo nos dois serviços.
+  `ASSISTANT_STALL_SWEEP_INTERVAL_MS` (padrão 60000) fica só no worker, que
+  também precisa de `N8N_INTEGRATION_ENVELOPE_KEY` para cifrar o resumo do
+  handoff ([runbook](docs/runbooks/vendedor-l03-implantacao.md));
 - `N8N_ENCRYPTION_KEY` é obrigatória, fica em escrow operacional e deve ser
   restaurável junto do banco próprio do n8n;
 - `OBJECT_STORAGE_*` existe somente em `silmer-api`: endpoint
