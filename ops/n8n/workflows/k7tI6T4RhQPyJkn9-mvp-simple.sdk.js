@@ -2066,10 +2066,11 @@ for (const candidate of [decision.requested_seller, decision.requested_person_na
 if (requestedSeller && !mentioned(decision.requested_person_name ?? '') && !mentioned(requestedSeller)) requestedSeller = null;
 // INBOX-HANDOFF-02: the seller's id, when the CRM listed it and the name points to one seller only
 // (two sellers with the same first name name nobody). The handoff still starts without an owner.
+// The id is the CRM's own (users are "user-<32 hex>"), from sellers[]; only its shape is checked.
 const sellerMatches = requestedSeller
   ? (context.seller_directory ?? []).filter((seller) => fold(seller?.name) === fold(requestedSeller)) : [];
 const requestedSellerId = sellerMatches.length === 1
-  && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(sellerMatches[0].id ?? ''))
+  && /^[A-Za-z0-9_-]{1,128}$/.test(String(sellerMatches[0].id ?? ''))
   ? sellerMatches[0].id : null;
 let personRequest = ['generic', 'named'].includes(decision.person_request) ? decision.person_request : 'none';
 if (personRequest === 'named' && !mentioned(decision.requested_person_name ?? '') && !requestedSeller) personRequest = 'none';

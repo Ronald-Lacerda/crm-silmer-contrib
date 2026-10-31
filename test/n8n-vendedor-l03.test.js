@@ -44,8 +44,9 @@ const ART_QUESTION = 'Você já tem a arte (ou logo) pronta?';
 // Thursday 29/10/2026, 10:00 in São Paulo (UTC-3).
 const THURSDAY_MORNING = '2026-10-29T13:00:00.000Z';
 const RECEIVED_AT = '2026-10-29T13:00:01.000Z';
-const SELLER_ID = '6f1c2a54-0b7e-4c1d-9a3f-1e2d3c4b5a69';
-const OTHER_SELLER_ID = '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d';
+// The CRM's user ids (modules/identity-access: "user-" plus 32 hex digits).
+const SELLER_ID = 'user-6f1c2a540b7e4c1d9a3f1e2d3c4b5a69';
+const OTHER_SELLER_ID = 'user-9a8b7c6d5e4f4a3b8c2d1e0f9a8b7c6d';
 
 /** @param {string} source @param {number} [output] */
 function targets(source, output = 0) {
@@ -743,6 +744,21 @@ test('handoff negative: a name outside the list, a shared first name or a generi
     person_request: 'generic',
   });
   assert.equal(generic.requested_seller_id, null);
+
+  // An id out of shape (spaces, too long) is never forwarded.
+  for (const id of ['user 1', 'x'.repeat(129), '']) {
+    const odd = decide(
+      context('Quero falar com a Bianca', {
+        sellers: [{ id, name: 'Bianca' }],
+      }),
+      {
+        person_request: 'named',
+        requested_person_name: 'Bianca',
+        requested_seller: 'Bianca',
+      },
+    );
+    assert.equal(odd.requested_seller_id, null, id);
+  }
 });
 
 test('handoff: partnership, resale, wholesale and invoice use the partnership reason', () => {
