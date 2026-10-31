@@ -448,3 +448,211 @@ test('INBOX-HANDOFF-01: rejects query parameters on the handoff summary route', 
   assert.deepEqual(calls, []);
   await api.close();
 });
+
+test('AGENTE-OBS-01: publishes the assistant performance with conversation.read and no-store', async () => {
+  const { api, calls, headers } = harness({
+    async assistantPerformance(/** @type {any} */ input) {
+      calls.push(['performance', input]);
+      return { assistant_replies: 3, stalled_now: 1 };
+    },
+  });
+  const defaults = await api.inject({
+    headers,
+    method: 'GET',
+    url: '/api/v1/inbox/assistant/performance',
+  });
+  assert.equal(defaults.statusCode, 200);
+  assert.equal(defaults.headers['cache-control'], 'private, no-store');
+  assert.equal(defaults.headers.vary, 'Origin, Cookie');
+  assert.equal(calls[0][1].action, 'assistant.performance.read');
+  assert.deepEqual(calls[1], ['performance', {}]);
+  const thirty = await api.inject({
+    headers,
+    method: 'GET',
+    url: '/api/v1/inbox/assistant/performance?days=30',
+  });
+  assert.equal(thirty.statusCode, 200);
+  assert.deepEqual(calls.at(-1), ['performance', { days: 30 }]);
+  for (const query of ['days=abc', 'days=-1', 'days=1000', 'conversation=1']) {
+    const refused = await api.inject({
+      headers,
+      method: 'GET',
+      url: `/api/v1/inbox/assistant/performance?${query}`,
+    });
+    assert.equal(refused.statusCode, 400, query);
+  }
+  await api.close();
+});
+
+test('AGENTE-OBS-01: publishes the assistant context of a conversation with no-store', async () => {
+  const { api, calls, headers } = harness({
+    async getAssistantContext(/** @type {any} */ input) {
+      calls.push(['assistant-context', input]);
+      return {
+        assistant_message_cap: 15,
+        assistant_messages: 3,
+        last_turn: null,
+      };
+    },
+  });
+  const response = await api.inject({
+    headers,
+    method: 'GET',
+    url: '/api/v1/inbox/conversations/conversation-1/assistant-context',
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(response.headers['cache-control'], 'private, no-store');
+  assert.equal(calls[0][1].action, 'conversation.read');
+  assert.deepEqual(calls[1], [
+    'assistant-context',
+    { conversationId: 'conversation-1' },
+  ]);
+  const extra = await api.inject({
+    headers,
+    method: 'GET',
+    url: '/api/v1/inbox/conversations/conversation-1/assistant-context?x=1',
+  });
+  assert.equal(extra.statusCode, 400);
+  await api.close();
+});
+
+test('AGENTE-OBS-01: refuses the assistant reads without a session or without conversation.read', async () => {
+  for (const url of [
+    '/api/v1/inbox/assistant/performance',
+    '/api/v1/inbox/conversations/conversation-1/assistant-context',
+  ]) {
+    let read = false;
+    const unauthenticated = harness({
+      async authorizeRead() {
+        throw Object.assign(new Error('Unauthorized'), {
+          code: 'UNAUTHENTICATED',
+          statusCode: 401,
+        });
+      },
+      async assistantPerformance() {
+        read = true;
+        return {};
+      },
+      async getAssistantContext() {
+        read = true;
+        return {};
+      },
+    });
+    const anonymous = await unauthenticated.api.inject({
+      headers: unauthenticated.headers,
+      method: 'GET',
+      url,
+    });
+    assert.equal(anonymous.statusCode, 401, url);
+    await unauthenticated.api.close();
+    const assistantActor = {
+      capabilities: [],
+      functionName: 'Vendedor',
+      id: 'n8n',
+      kind: 'assistant',
+    };
+    const forbidden = harness({
+      async authorizeRead(/** @type {any} */ input) {
+        authorize(/** @type {any} */ (assistantActor), input.action);
+        return { actor: assistantActor };
+      },
+      async assistantPerformance() {
+        read = true;
+        return {};
+      },
+      async getAssistantContext() {
+        read = true;
+        return {};
+      },
+    });
+    const refused = await forbidden.api.inject({
+      headers: forbidden.headers,
+      method: 'GET',
+      url,
+    });
+    assert.equal(refused.statusCode, 403, url);
+    assert.equal(read, false);
+    await forbidden.api.close();
+  }
+});
+
+test('AGENTE-OBS-01: the assistant performance is the manager panel; a plain seller or finance gets 403', async () => {
+  const actors = [
+    {
+      capabilities: [],
+      functionName: 'Vendedor',
+      id: 'seller-1',
+      kind: 'human',
+    },
+    {
+      capabilities: [],
+      functionName: 'Financeiro',
+      id: 'finance-1',
+      kind: 'human',
+    },
+  ];
+  for (const actor of actors) {
+    let read = false;
+    const { api, headers } = harness({
+      async authorizeRead(/** @type {any} */ input) {
+        authorize(/** @type {any} */ (actor), input.action);
+        return { actor };
+      },
+      async assistantPerformance() {
+        read = true;
+        return {};
+      },
+    });
+    const response = await api.inject({
+      headers,
+      method: 'GET',
+      url: '/api/v1/inbox/assistant/performance',
+    });
+    assert.equal(response.statusCode, 403, actor.functionName);
+    assert.equal(read, false);
+    await api.close();
+  }
+  const manager = {
+    capabilities: ['COMMERCIAL_ADMIN'],
+    functionName: 'Vendedor',
+    id: 'manager-1',
+    kind: 'human',
+  };
+  const { api, headers } = harness({
+    async authorizeRead(/** @type {any} */ input) {
+      authorize(/** @type {any} */ (manager), input.action);
+      return { actor: manager };
+    },
+    async assistantPerformance() {
+      return { stalled_now: 0 };
+    },
+  });
+  const allowed = await api.inject({
+    headers,
+    method: 'GET',
+    url: '/api/v1/inbox/assistant/performance',
+  });
+  assert.equal(allowed.statusCode, 200);
+  await api.close();
+  // The context of one conversation stays open to any seller who reads it.
+  const seller = harness({
+    async authorizeRead(/** @type {any} */ input) {
+      authorize(/** @type {any} */ (actors[0]), input.action);
+      return { actor: actors[0] };
+    },
+    async getAssistantContext() {
+      return {
+        assistant_message_cap: 15,
+        assistant_messages: 0,
+        last_turn: null,
+      };
+    },
+  });
+  const context = await seller.api.inject({
+    headers: seller.headers,
+    method: 'GET',
+    url: '/api/v1/inbox/conversations/conversation-1/assistant-context',
+  });
+  assert.equal(context.statusCode, 200);
+  await seller.api.close();
+});

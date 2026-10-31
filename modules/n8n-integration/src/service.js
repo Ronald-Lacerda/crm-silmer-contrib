@@ -301,6 +301,7 @@ export function createN8nIntegrationService({
           technical.workflowVersion,
         ),
         technical,
+        turn: normalizeTurn(input?.turn, eventType),
       });
       validateEventShape(normalized);
       return translateConflict(() =>
@@ -444,6 +445,98 @@ function validateEventShape(input) {
   if (input.eventType === 'message.send.unknown' && !input.commandId) {
     throw new N8nValidationError('message.send.unknown requires command_id');
   }
+}
+
+const TURN_ANSWER_STATUSES = [
+  'answered',
+  'unclear',
+  'undecided',
+  'question',
+  'deferred',
+  'other',
+  'none',
+];
+const TURN_MEDIA_KINDS = ['text', 'image', 'audio', 'sticker'];
+const TURN_FIELDS = new Set([
+  'answer_status',
+  'asked_field',
+  'ficha_filled',
+  'ficha_total',
+  'latency_ms',
+  'media_kind',
+  'model',
+  'trigger',
+]);
+
+/**
+ * AGENTE-OBS-01: the turn telemetry the workflow may attach to a reply or a
+ * handoff. Strict: codes, counts and times only, never customer text. An
+ * absent key reads as null; `ficha_filled` and `ficha_total` are required.
+ *
+ * @param {unknown} value @param {string} eventType
+ */
+function normalizeTurn(value, eventType) {
+  if (value === undefined || value === null) return null;
+  if (!['handoff.requested', 'message.send.requested'].includes(eventType)) {
+    throw new N8nValidationError(
+      'turn is only allowed on send reservation or handoff',
+    );
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new N8nValidationError('turn must be an object');
+  }
+  const turn = /** @type {Record<string, unknown>} */ (value);
+  if (Object.keys(turn).some((key) => !TURN_FIELDS.has(key))) {
+    throw new N8nValidationError('turn has unknown fields');
+  }
+  /** @param {string} key @param {RegExp} pattern */
+  const code = (key, pattern) => {
+    const field = turn[key];
+    if (field === undefined || field === null) return null;
+    if (typeof field !== 'string' || !pattern.test(field)) {
+      throw new N8nValidationError(`turn.${key} is invalid`);
+    }
+    return field;
+  };
+  /** @param {string} key @param {string[]} allowed */
+  const choice = (key, allowed) => {
+    const field = turn[key];
+    if (field === undefined || field === null) return null;
+    if (typeof field !== 'string' || !allowed.includes(field)) {
+      throw new N8nValidationError(`turn.${key} is unsupported`);
+    }
+    return field;
+  };
+  /** @param {string} key @param {number} max */
+  const count = (key, max) => {
+    const field = turn[key];
+    if (
+      !Number.isSafeInteger(field) ||
+      Number(field) < 0 ||
+      Number(field) > max
+    ) {
+      throw new N8nValidationError(`turn.${key} is invalid`);
+    }
+    return Number(field);
+  };
+  const fichaFilled = count('ficha_filled', 64);
+  const fichaTotal = count('ficha_total', 64);
+  if (fichaFilled > fichaTotal) {
+    throw new N8nValidationError('turn.ficha_filled exceeds ficha_total');
+  }
+  return Object.freeze({
+    answerStatus: choice('answer_status', TURN_ANSWER_STATUSES),
+    askedField: code('asked_field', /^[a-z_]{1,48}$/u),
+    fichaFilled,
+    fichaTotal,
+    latencyMs:
+      turn.latency_ms === undefined || turn.latency_ms === null
+        ? null
+        : count('latency_ms', 600_000),
+    mediaKind: choice('media_kind', TURN_MEDIA_KINDS),
+    model: code('model', /^[a-z0-9._-]{1,64}$/u),
+    trigger: code('trigger', /^[a-z0-9_]{1,64}$/u),
+  });
 }
 
 /** @param {unknown} contract @param {string} workflowVersion */

@@ -67,7 +67,7 @@ async function setup(pool) {
       withTransaction(pool, work),
   };
   // Real time: the inbound read keeps the last 24 hours by the server clock.
-  const clock = { now: new Date(Date.now() - 60 * 60_000) };
+  const clock = { now: new Date(Date.now() - 3 * 60 * 60_000) };
   const advance = (/** @type {number} */ minutes) => {
     clock.now = new Date(clock.now.getTime() + minutes * 60_000);
     return clock.now;
@@ -117,6 +117,7 @@ async function setup(pool) {
   });
   const reads = createOperationReadService({
     clock: () => clock.now,
+    countStalled: (now) => countStalledConversations(database, now, 5),
     contactRepository: {},
     cursorKey: Buffer.alloc(32, 86),
     database,
@@ -706,6 +707,221 @@ if (connectionString) {
           });
           assert.equal(open.handoff.reasonCode, 'automation_failure');
           assert.match(open.handoff.summary, /assistente falhou/u);
+        },
+      );
+
+      await t.test(
+        'AGENTE-OBS-01: turns are stored once per receipt, fence refusals are counted and the panel aggregates them',
+        async () => {
+          const turnReply = {
+            answer_status: 'answered',
+            asked_field: 'colors',
+            ficha_filled: 2,
+            ficha_total: 8,
+            latency_ms: 5400,
+            media_kind: 'text',
+            model: 'gpt-5.6-luna',
+            trigger: null,
+          };
+          const first = await env.receive('5527990000701', 'wamid.obs.1');
+          const event = {
+            automation_epoch: first.automation_epoch,
+            command_id: 'command-obs-1',
+            conversation_id: first.conversation_id,
+            event_id: 'reply-obs-1',
+            event_type: 'message.send.requested',
+            message: { text: 'Quais cores você quer?', type: 'text' },
+            occurred_at: env.clock.now.toISOString(),
+            schema_version: '1.0',
+            source_revision: first.source_revision,
+            technical: env.technical('reply-obs-1'),
+            turn: turnReply,
+          };
+          const [accepted, replayed] = await Promise.all([
+            env.n8n.recordEvent(event),
+            env.n8n.recordEvent(event),
+          ]);
+          assert.deepEqual([accepted.duplicate, replayed.duplicate].sort(), [
+            false,
+            true,
+          ]);
+          await assert.rejects(
+            env.n8n.recordEvent({
+              ...event,
+              turn: { ...turnReply, latency_ms: 1 },
+            }),
+            { code: 'IDEMPOTENCY_CONFLICT' },
+          );
+          const turns = await pool.query(
+            `SELECT event_type, asked_field, ficha_filled, ficha_total,
+                    workflow_version, handoff_reason
+             FROM crm.automation_turns WHERE conversation_id=$1`,
+            [first.conversation_id],
+          );
+          assert.deepEqual(turns.rows, [
+            {
+              asked_field: 'colors',
+              event_type: 'message.send.requested',
+              ficha_filled: 2,
+              ficha_total: 8,
+              handoff_reason: null,
+              workflow_version: 'mvp-simple-14',
+            },
+          ]);
+          // A late duplicate turn for the same revision is fenced and counted.
+          await assert.rejects(
+            env.reply(first, 'reply-obs-stale', {
+              command_id: 'command-obs-stale',
+              turn: turnReply,
+            }),
+            { code: 'STALE_AUTOMATION_FENCE' },
+          );
+          assert.equal(
+            (
+              await pool.query(
+                `SELECT count(*)::integer AS total FROM crm.audit_events
+                 WHERE action='integration.n8n.stale_fence' AND target_id=$1`,
+                [first.conversation_id],
+              )
+            ).rows[0].total,
+            1,
+          );
+
+          env.advance(1);
+          const second = await env.receive('5527990000701', 'wamid.obs.2');
+          const handoffAt = env.clock.now.toISOString();
+          const handoff = await env.requestHandoff(
+            second,
+            'handoff-obs-1',
+            { reason: 'briefing_complete', summary: 'Ficha completa.' },
+            {
+              turn: {
+                answer_status: 'answered',
+                asked_field: null,
+                ficha_filled: 6,
+                ficha_total: 8,
+                trigger: 'briefing_complete',
+              },
+            },
+          );
+          env.advance(12);
+          const claim = await env.handoffs.claimHandoff({
+            actor: SELLER,
+            correlationId: 'correlation-claim-obs-1',
+            expectedHandoffVersion: 1,
+            handoffId: handoff.handoff_id,
+            idempotencyKey: 'claim-obs-1',
+          });
+          assert.equal(claim.handoff.status, 'accepted');
+
+          const context = await env.reads.getAssistantContext({
+            conversationId: second.conversation_id,
+          });
+          assert.deepEqual(context, {
+            assistant_message_cap: 15,
+            assistant_messages: 1,
+            last_turn: {
+              answer_status: 'answered',
+              asked_field: null,
+              ficha_filled: 6,
+              ficha_total: 8,
+              occurred_at: handoffAt,
+              trigger: 'briefing_complete',
+            },
+          });
+          assert.deepEqual(
+            await env.reads.getAssistantContext({
+              conversationId: (
+                await env.receive('5527990000702', 'wamid.obs.none')
+              ).conversation_id,
+            }),
+            {
+              assistant_message_cap: 15,
+              assistant_messages: 0,
+              last_turn: null,
+            },
+          );
+          await assert.rejects(
+            env.reads.getAssistantContext({ conversationId: 'missing' }),
+            { code: 'CONVERSATION_NOT_FOUND', statusCode: 404 },
+          );
+
+          const performance = await env.reads.assistantPerformance({ days: 1 });
+          assert.equal(performance.window.days, 1);
+          assert.equal(
+            Date.parse(performance.window.to) -
+              Date.parse(performance.window.from),
+            24 * 60 * 60_000,
+          );
+          const reasons = Object.fromEntries(
+            performance.handoffs.by_reason.map((/** @type {any} */ row) => [
+              row.reason_code,
+              row.count,
+            ]),
+          );
+          const stored = await pool.query(
+            `SELECT reason_code, count(*)::integer AS total FROM crm.handoffs
+             GROUP BY reason_code`,
+          );
+          assert.deepEqual(
+            reasons,
+            Object.fromEntries(
+              stored.rows.map((/** @type {any} */ row) => [
+                row.reason_code,
+                row.total,
+              ]),
+            ),
+          );
+          assert.equal(
+            performance.handoffs.total,
+            stored.rows.reduce(
+              (/** @type {number} */ sum, /** @type {any} */ row) =>
+                sum + row.total,
+              0,
+            ),
+          );
+          assert.deepEqual(performance.ficha_at_handoff, {
+            avg_ratio: 0.75,
+            samples: 1,
+          });
+          assert.ok(performance.time_to_claim_minutes.samples >= 2);
+          assert.equal(
+            typeof performance.time_to_claim_minutes.median,
+            'number',
+          );
+          assert.equal(typeof performance.time_to_claim_minutes.p90, 'number');
+          assert.ok(performance.time_to_resolve_minutes.samples >= 2);
+          assert.ok(performance.failures.stale_fence >= 1);
+          assert.equal(
+            performance.failures.automation_failure_handoffs,
+            reasons.automation_failure,
+          );
+          assert.deepEqual(
+            performance.by_workflow_version.find(
+              (/** @type {any} */ row) =>
+                row.workflow_version === 'mvp-simple-14',
+            ),
+            { handoffs: 1, turns: 2, workflow_version: 'mvp-simple-14' },
+          );
+          assert.ok(performance.assistant_replies >= 1);
+          assert.ok(performance.conversations_with_assistant >= 2);
+          assert.equal(
+            performance.stalled_now,
+            await countStalledConversations(env.database, env.clock.now, 5),
+          );
+          // Aggregates only: no conversation, phone, name or message text.
+          assert.doesNotMatch(
+            JSON.stringify(performance),
+            /5527|conversation-|Ana|Quais cores|Ficha completa/u,
+          );
+          const empty = await env.reads.assistantPerformance({ days: 1 });
+          assert.equal(typeof empty.window.from, 'string');
+          await assert.rejects(env.reads.assistantPerformance({ days: 0 }), {
+            code: 'INVALID_DAYS',
+          });
+          await assert.rejects(env.reads.assistantPerformance({ days: 91 }), {
+            code: 'INVALID_DAYS',
+          });
         },
       );
     } finally {

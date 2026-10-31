@@ -203,6 +203,49 @@ export function registerOperationRoutes(api, operations, contextFor) {
     }),
   );
 
+  // AGENTE-OBS-01: the manager's panel. `assistant.performance.read` needs
+  // COMMERCIAL_ADMIN, the capability that shows the manager's Painel.
+  api.get('/api/v1/inbox/assistant/performance', async (request, reply) =>
+    respond(reply, async () => {
+      const query = requireObject(request.query ?? {});
+      rejectUnknownKeys(query, ['days']);
+      if (
+        query.days !== undefined &&
+        (typeof query.days !== 'string' || !/^[0-9]{1,3}$/u.test(query.days))
+      ) {
+        throw new OperationReadRequestError(400, 'INVALID_DAYS');
+      }
+      await authorizeRead(request, operations, 'assistant.performance.read');
+      privateNoStoreHeaders(reply);
+      return reply
+        .code(200)
+        .send(
+          await operations.assistantPerformance(
+            query.days === undefined ? {} : { days: Number(query.days) },
+          ),
+        );
+    }),
+  );
+
+  api.get(
+    '/api/v1/inbox/conversations/:conversationId/assistant-context',
+    async (request, reply) =>
+      respond(reply, async () => {
+        const params = requireObject(request.params);
+        rejectUnknownKeys(requireObject(request.query ?? {}), []);
+        await authorizeRead(request, operations, 'conversation.read');
+        privateNoStoreHeaders(reply);
+        return reply.code(200).send(
+          await operations.getAssistantContext({
+            conversationId: requireIdentifier(
+              params.conversationId,
+              'CONVERSATION_ID',
+            ),
+          }),
+        );
+      }),
+  );
+
   api.get('/api/v1/inbox/conversations', async (request, reply) =>
     respond(reply, async () => {
       const input = parseListQuery(request.query, [
@@ -576,6 +619,7 @@ async function respond(reply, operation) {
       'FORBIDDEN',
       'IDEMPOTENCY_KEY_REUSED',
       'INVALID_CURSOR',
+      'INVALID_DAYS',
       'INVALID_DISPLAY_NAME',
       'INVALID_FILTER',
       'INVALID_LIMIT',

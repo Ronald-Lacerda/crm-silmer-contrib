@@ -169,6 +169,8 @@ export function registerN8nRoutes(api, integration, contextFor) {
           'source_revision',
           'subject_id',
           'target_contract',
+          // AGENTE-OBS-01: optional turn telemetry (codes and counts only).
+          'turn',
         ]);
         requireSchemaVersion(body.schema_version);
         const eventType = requireIdentifier(

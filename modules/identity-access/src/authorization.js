@@ -84,6 +84,8 @@ export const FINANCE_ACTIONS = Object.freeze(
 const operationalActions = OPERATIONAL_ACTIONS;
 /** @type {Map<string, Capability>} */
 const actionCapabilities = new Map([
+  // AGENTE-OBS-01: "Desempenho do Vendedor" is the manager's panel.
+  ['assistant.performance.read', CAPABILITIES.COMMERCIAL_ADMIN],
   ['conversation.archive', CAPABILITIES.COMMERCIAL_ADMIN],
   ['order-form.approve', CAPABILITIES.COMMERCIAL_ADMIN],
   ['order-form.cancel', CAPABILITIES.COMMERCIAL_ADMIN],

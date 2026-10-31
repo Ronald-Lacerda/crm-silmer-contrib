@@ -457,6 +457,229 @@ export class PostgresInboxReadRepository {
     });
   }
 
+  /**
+   * AGENTE-OBS-01: "Desempenho do Vendedor", aggregates only, read in one
+   * snapshot over `(from, to]`. Nothing here identifies a conversation, a
+   * customer or a seller; `null` stands for "no sample".
+   *
+   * @param {{from: Date, to: Date}} input
+   */
+  async assistantPerformance({ from, to }) {
+    const window = [from.toISOString(), to.toISOString()];
+    return this.#snapshot(async (database) => {
+      const [activity, reasons, ficha, claim, resolve, failures, versions] =
+        await runSequential([
+          () =>
+            database.query(
+              `SELECT
+                 (SELECT count(*)::integer FROM crm.messages
+                  WHERE direction='outbound' AND author_kind='assistant'
+                    AND created_at > $1 AND created_at <= $2) replies,
+                 (SELECT count(DISTINCT conversation_id)::integer FROM (
+                    SELECT conversation_id FROM crm.messages
+                    WHERE direction='outbound' AND author_kind='assistant'
+                      AND created_at > $1 AND created_at <= $2
+                    UNION ALL
+                    SELECT conversation_id FROM crm.automation_turns
+                    WHERE occurred_at > $1 AND occurred_at <= $2
+                    UNION ALL
+                    SELECT conversation_id FROM crm.handoffs
+                    WHERE created_at > $1 AND created_at <= $2
+                      AND (automation_workflow_key IS NOT NULL
+                        OR reason_code = 'automation_failure')
+                  ) touched) conversations`,
+              window,
+            ),
+          () =>
+            database.query(
+              `SELECT reason_code, count(*)::integer total
+               FROM crm.handoffs
+               WHERE created_at > $1 AND created_at <= $2
+               GROUP BY reason_code
+               ORDER BY total DESC, reason_code`,
+              window,
+            ),
+          () =>
+            database.query(
+              `SELECT count(*)::integer samples,
+                      round(avg(ficha_filled::numeric / ficha_total), 2) ratio
+               FROM crm.automation_turns
+               WHERE event_type='handoff.requested' AND ficha_total > 0
+                 AND occurred_at > $1 AND occurred_at <= $2`,
+              window,
+            ),
+          () =>
+            database.query(
+              `SELECT count(*)::integer samples,
+                      round((percentile_cont(0.5) WITHIN GROUP (ORDER BY minutes))::numeric, 1) median,
+                      round((percentile_cont(0.9) WITHIN GROUP (ORDER BY minutes))::numeric, 1) p90
+               FROM (
+                 SELECT extract(epoch FROM claimed.at - handoff.created_at) / 60 minutes
+                 FROM crm.handoffs handoff
+                 JOIN LATERAL (
+                   SELECT min(history.occurred_at) at
+                   FROM crm.handoff_history history
+                   WHERE history.handoff_id=handoff.id
+                     AND history.to_status='accepted'
+                 ) claimed ON claimed.at IS NOT NULL
+                 WHERE handoff.created_at > $1 AND handoff.created_at <= $2
+               ) waits`,
+              window,
+            ),
+          () =>
+            database.query(
+              `SELECT count(*)::integer samples,
+                      round((percentile_cont(0.5) WITHIN GROUP (ORDER BY minutes))::numeric, 1) median
+               FROM (
+                 SELECT extract(epoch FROM resolved_at - created_at) / 60 minutes
+                 FROM crm.handoffs
+                 WHERE created_at > $1 AND created_at <= $2
+                   AND resolved_at IS NOT NULL
+               ) durations`,
+              window,
+            ),
+          () =>
+            database.query(
+              `SELECT
+                 (SELECT count(*)::integer FROM crm.n8n_events
+                  WHERE event_type='workflow.failed'
+                    AND processed_at > $1 AND processed_at <= $2) workflow_failed,
+                 (SELECT count(*)::integer FROM crm.messages
+                  WHERE direction='outbound' AND author_kind='assistant'
+                    AND created_at > $1 AND created_at <= $2
+                    AND (status='outcome_unknown'
+                      OR delivery_status='outcome_unknown')) send_unknown,
+                 (SELECT count(*)::integer FROM crm.messages
+                  WHERE direction='outbound' AND author_kind='assistant'
+                    AND created_at > $1 AND created_at <= $2
+                    AND (status='failed' OR delivery_status='failed')) send_failed,
+                 (SELECT count(*)::integer FROM crm.audit_events
+                  WHERE action='integration.n8n.stale_fence'
+                    AND occurred_at > $1 AND occurred_at <= $2) stale_fence,
+                 (SELECT count(*)::integer FROM crm.handoffs
+                  WHERE reason_code='automation_failure'
+                    AND created_at > $1 AND created_at <= $2) automation_failure_handoffs`,
+              window,
+            ),
+          () =>
+            database.query(
+              `SELECT workflow_version, count(*)::integer turns,
+                      count(*) FILTER (WHERE event_type='handoff.requested')::integer handoffs
+               FROM crm.automation_turns
+               WHERE occurred_at > $1 AND occurred_at <= $2
+               GROUP BY workflow_version
+               ORDER BY turns DESC, workflow_version
+               LIMIT 20`,
+              window,
+            ),
+        ]);
+      const counts = activity.rows[0] ?? {};
+      const fails = failures.rows[0] ?? {};
+      const fichaRow = ficha.rows[0] ?? {};
+      const claimRow = claim.rows[0] ?? {};
+      const resolveRow = resolve.rows[0] ?? {};
+      const byReason = reasons.rows.map((/** @type {any} */ row) =>
+        Object.freeze({
+          count: Number(row.total),
+          reason_code: row.reason_code,
+        }),
+      );
+      return Object.freeze({
+        conversations_with_assistant: Number(counts.conversations ?? 0),
+        assistant_replies: Number(counts.replies ?? 0),
+        handoffs: Object.freeze({
+          by_reason: Object.freeze(byReason),
+          total: byReason.reduce(
+            (/** @type {number} */ sum, /** @type {{count: number}} */ row) =>
+              sum + row.count,
+            0,
+          ),
+        }),
+        ficha_at_handoff: Object.freeze({
+          avg_ratio: nullableNumber(fichaRow.ratio),
+          samples: Number(fichaRow.samples ?? 0),
+        }),
+        time_to_claim_minutes: Object.freeze({
+          median: nullableNumber(claimRow.median),
+          p90: nullableNumber(claimRow.p90),
+          samples: Number(claimRow.samples ?? 0),
+        }),
+        time_to_resolve_minutes: Object.freeze({
+          median: nullableNumber(resolveRow.median),
+          samples: Number(resolveRow.samples ?? 0),
+        }),
+        failures: Object.freeze({
+          workflow_failed: Number(fails.workflow_failed ?? 0),
+          send_unknown: Number(fails.send_unknown ?? 0),
+          send_failed: Number(fails.send_failed ?? 0),
+          stale_fence: Number(fails.stale_fence ?? 0),
+          transcription_failed: 0,
+          automation_failure_handoffs: Number(
+            fails.automation_failure_handoffs ?? 0,
+          ),
+        }),
+        by_workflow_version: Object.freeze(
+          versions.rows.map((/** @type {any} */ row) =>
+            Object.freeze({
+              handoffs: Number(row.handoffs),
+              turns: Number(row.turns),
+              workflow_version: row.workflow_version,
+            }),
+          ),
+        ),
+      });
+    });
+  }
+
+  /**
+   * AGENTE-OBS-01 / INBOX-HANDOFF-02: what the assistant knew at its last
+   * turn, for the seller who takes the conversation over. Codes and counts
+   * only; 404 when the conversation does not exist.
+   *
+   * @param {string} conversationId
+   */
+  async assistantContext(conversationId) {
+    return this.#snapshot(async (database) => {
+      const [conversation, turn, messages] = await runSequential([
+        () =>
+          database.query('SELECT id FROM crm.conversations WHERE id=$1', [
+            conversationId,
+          ]),
+        () =>
+          database.query(
+            `SELECT asked_field, answer_status, ficha_filled, ficha_total,
+                    trigger, occurred_at
+             FROM crm.automation_turns
+             WHERE conversation_id=$1
+             ORDER BY occurred_at DESC, id DESC LIMIT 1`,
+            [conversationId],
+          ),
+        () =>
+          database.query(
+            `SELECT count(*)::integer total FROM crm.messages
+             WHERE conversation_id=$1 AND direction='outbound'
+               AND author_kind='assistant'`,
+            [conversationId],
+          ),
+      ]);
+      if (!conversation.rows[0]) throw notFound('CONVERSATION_NOT_FOUND');
+      const last = turn.rows[0];
+      return Object.freeze({
+        assistantMessages: Number(messages.rows[0]?.total ?? 0),
+        lastTurn: last
+          ? Object.freeze({
+              answer_status: last.answer_status,
+              asked_field: last.asked_field,
+              ficha_filled: Number(last.ficha_filled),
+              ficha_total: Number(last.ficha_total),
+              occurred_at: iso(last.occurred_at),
+              trigger: last.trigger,
+            })
+          : null,
+      });
+    });
+  }
+
   /** @template T @param {(database: any) => Promise<T>} work */
   async #snapshot(work) {
     if (typeof this.database.transaction !== 'function') {
@@ -671,6 +894,11 @@ function iso(value) {
   return value instanceof Date
     ? value.toISOString()
     : new Date(value).toISOString();
+}
+
+/** @param {unknown} value */
+function nullableNumber(value) {
+  return value === null || value === undefined ? null : Number(value);
 }
 
 /** @param {string} code */

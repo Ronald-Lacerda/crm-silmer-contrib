@@ -216,3 +216,34 @@ test('n8n events route forwards open_order under the event action (ADR 014)', as
   ]);
   assert.equal(calls.length, 4);
 });
+
+test('n8n events route accepts the optional turn and still refuses unknown fields (AGENTE-OBS-01)', async (t) => {
+  const { api, calls } = harness();
+  t.after(() => api.close());
+  /** @param {Record<string, unknown>} extra */
+  const send = (extra) =>
+    api.inject({
+      headers: technicalHeaders,
+      method: 'POST',
+      payload: {
+        automation_epoch: 1,
+        command_id: 'conversation-synthetic:2:ai-response',
+        conversation_id: 'conversation-synthetic',
+        event_id: 'reserve:conversation-synthetic:2:ai-response',
+        event_type: 'message.send.requested',
+        message: { text: 'Qual a cor?', type: 'text' },
+        occurred_at: '2026-10-30T12:00:00.000Z',
+        schema_version: '1.0',
+        source_revision: 2,
+        ...extra,
+      },
+      url: '/api/v1/integrations/n8n/events',
+    });
+  const accepted = await send({ turn: { ficha_filled: 1, ficha_total: 8 } });
+  assert.equal(accepted.statusCode, 200);
+  assert.deepEqual(calls[0].input.turn, { ficha_filled: 1, ficha_total: 8 });
+  const unknown = await send({ telemetry: {} });
+  assert.equal(unknown.statusCode, 400);
+  assert.equal(unknown.json().error.code, 'UNKNOWN_REQUEST_FIELD');
+  assert.equal(calls.length, 1);
+});

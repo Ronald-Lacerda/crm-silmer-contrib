@@ -22,6 +22,11 @@ import {
   normalizeContactRegistration,
 } from '@crm-silmer/contacts';
 import { PostgresInboxReadRepository } from '@crm-silmer/inbox-channels';
+import {
+  AUTOMATION_MESSAGE_CAP,
+  countStalledConversations,
+  readAssistantStallMinutes,
+} from '@crm-silmer/n8n-integration';
 import { PostgresHandoffReadRepository } from '@crm-silmer/work-management';
 
 const DISPLAY_NAME_MAX_LENGTH = 120;
@@ -53,7 +58,14 @@ export class OperationReadError extends Error {
   }
 }
 
-/** @param {{clock?: () => Date, contactRepository: any, cursorKey: Buffer, database?: any, handoffRepository: any, inboxRepository: any}} dependencies */
+// AGENTE-OBS-01: the "Desempenho do Vendedor" window, in days.
+export const ASSISTANT_PERFORMANCE_DAYS = Object.freeze({
+  default: 7,
+  max: 90,
+  min: 1,
+});
+
+/** @param {{clock?: () => Date, contactRepository: any, cursorKey: Buffer, database?: any, handoffRepository: any, inboxRepository: any, countStalled?: (now: Date) => Promise<number>, assistantMessageCap?: number}} dependencies */
 export function createOperationReadService({
   clock = () => new Date(),
   contactRepository,
@@ -61,6 +73,8 @@ export function createOperationReadService({
   database,
   handoffRepository,
   inboxRepository,
+  countStalled = async () => 0,
+  assistantMessageCap = AUTOMATION_MESSAGE_CAP,
 }) {
   if (!contactRepository || typeof contactRepository !== 'object') {
     throw new TypeError('contactRepository is required');
@@ -87,6 +101,57 @@ export function createOperationReadService({
         actorId: requireId(input?.actorId, 'ACTOR_ID'),
         now: clock(),
         stallMinutes: ASSISTANT_STALL_MINUTES,
+      });
+    },
+    /**
+     * AGENTE-OBS-01: aggregates of the assistant over the last `days`, on
+     * the server clock. Counts, ratios and minutes only.
+     *
+     * @param {{days?: unknown}} [input]
+     */
+    async assistantPerformance(input = {}) {
+      rejectUnknownKeys(input, ['days']);
+      const days =
+        input.days === undefined
+          ? ASSISTANT_PERFORMANCE_DAYS.default
+          : Number(input.days);
+      if (
+        !Number.isSafeInteger(days) ||
+        days < ASSISTANT_PERFORMANCE_DAYS.min ||
+        days > ASSISTANT_PERFORMANCE_DAYS.max
+      ) {
+        throw new OperationReadError(400, 'INVALID_DAYS');
+      }
+      const to = clock();
+      const from = new Date(to.getTime() - days * 24 * 60 * 60_000);
+      const aggregates = await inboxRepository.assistantPerformance({
+        from,
+        to,
+      });
+      return Object.freeze({
+        window: Object.freeze({
+          days,
+          from: from.toISOString(),
+          to: to.toISOString(),
+        }),
+        ...aggregates,
+        stalled_now: await countStalled(to),
+      });
+    },
+    /**
+     * AGENTE-OBS-01: the assistant's last turn on one conversation and how
+     * much of its message budget it used.
+     *
+     * @param {any} input
+     */
+    async getAssistantContext(input) {
+      const context = await inboxRepository.assistantContext(
+        requireId(input?.conversationId, 'CONVERSATION_ID'),
+      );
+      return Object.freeze({
+        last_turn: context.lastTurn,
+        assistant_messages: context.assistantMessages,
+        assistant_message_cap: assistantMessageCap,
       });
     },
     /** @param {any} input */
@@ -331,7 +396,12 @@ export function createOperationReadRuntime(database, options = {}) {
       'IDEMPOTENCY_ENVELOPE_KEY',
     ),
   });
+  const stallMinutes = readAssistantStallMinutes(
+    environment.ASSISTANT_STALL_MINUTES,
+  );
   const service = createOperationReadService({
+    countStalled: (now) =>
+      countStalledConversations(database, now, stallMinutes),
     contactRepository: new PostgresContactReadRepository({
       database,
       envelopeKey: contactKey,

@@ -63,6 +63,11 @@ async function appendConversationStreamEvent(client, runtime, event) {
   );
 }
 
+const EVENTS_WITH_TURNS = new Set([
+  'handoff.requested',
+  'message.send.requested',
+]);
+
 const AUTOMATION_FAILURE_SUMMARY =
   'O assistente falhou ao responder. Confira a última mensagem do cliente.';
 
@@ -716,7 +721,12 @@ export class PostgresN8nIntegrationRepository {
     // order bootstrap after commit can record their subject too.
     /** @type {{fromRevision: number, toRevision: number} | null} */
     let answeredTurn = null;
-    const result = await this.database.transaction(async (client) => {
+    /** @type {(work: (client: Queryable) => Promise<any>) => Promise<any>} */
+    const transaction = (work) =>
+      this.#traceStaleFence(input, runtime, () =>
+        this.database.transaction(work),
+      );
+    const result = await transaction(async (client) => {
       await transactionBounds(client);
       await advisoryLock(client, `n8n-event:${input.technical.idempotencyKey}`);
       const replay = await selectReceipt(
@@ -1027,6 +1037,7 @@ export class PostgresN8nIntegrationRepository {
         );
         outcome.handoffId = handoff.id;
         outcome.targetRole = handoff.target_role;
+        outcome.handoffReason = handoff.reason_code;
         const turn = {
           fromRevision: Number(conversation.claimed_revision),
           toRevision: Number(eventInput.sourceRevision),
@@ -1095,7 +1106,7 @@ export class PostgresN8nIntegrationRepository {
         }
       }
 
-      await insertReceipt(client, runtime, {
+      const receiptId = await insertReceipt(client, runtime, {
         automationEpoch: eventInput.automationEpoch,
         conversationId: resolvedConversationId,
         correlationId: eventInput.correlationId,
@@ -1111,6 +1122,16 @@ export class PostgresN8nIntegrationRepository {
         sourceRevision: eventInput.sourceRevision,
         technical: eventInput.technical,
       });
+      if (eventInput.turn && resolvedConversationId) {
+        await insertAutomationTurn(
+          client,
+          runtime,
+          eventInput,
+          receiptId,
+          resolvedConversationId,
+          outcome.handoffReason ?? null,
+        );
+      }
       await appendAudit(client, runtime, {
         action: `integration.n8n.${eventInput.eventType}`,
         actor: eventInput.technical.actor,
@@ -1166,6 +1187,44 @@ export class PostgresN8nIntegrationRepository {
       ...(order ? { order } : {}),
       ...(projectionTarget?.subjectId && projection ? { projection } : {}),
     };
+  }
+
+  /**
+   * AGENTE-OBS-01: a reply or handoff refused by the automation fence leaves
+   * no receipt (the transaction rolls back), so the refusal is recorded apart,
+   * best-effort, as an audit code for the "Desempenho do Vendedor" panel.
+   *
+   * @template T
+   * @param {any} input @param {any} runtime @param {() => Promise<T>} operation
+   * @returns {Promise<T>}
+   */
+  async #traceStaleFence(input, runtime, operation) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (
+        /** @type {any} */ (error)?.code === 'STALE_AUTOMATION_FENCE' &&
+        EVENTS_WITH_TURNS.has(input.eventType) &&
+        input.conversationId
+      ) {
+        await this.database
+          .transaction(async (client) => {
+            await transactionBounds(client);
+            await appendAudit(client, runtime, {
+              action: 'integration.n8n.stale_fence',
+              actor: input.technical.actor,
+              correlationId: input.correlationId,
+              occurredAt: validClock(runtime.clock),
+              reason: 'STALE_AUTOMATION_FENCE',
+              targetId: input.conversationId,
+              targetType: 'conversation',
+              version: input.automationEpoch ?? 1,
+            });
+          })
+          .catch(() => {});
+      }
+      throw error;
+    }
   }
 
   /**
@@ -2140,6 +2199,7 @@ export class PostgresN8nIntegrationRepository {
 
 /** @param {Queryable} client @param {any} runtime @param {any} input */
 async function insertReceipt(client, runtime, input) {
+  const id = runtime.idFactory('n8n-event');
   await client.query(
     `INSERT INTO crm.n8n_events
        (id, idempotency_scope, idempotency_key, external_event_id, event_type,
@@ -2149,7 +2209,7 @@ async function insertReceipt(client, runtime, input) {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, $9, $10::jsonb, $11,
              $12, $13, $14, $15, $16, $17)`,
     [
-      runtime.idFactory('n8n-event'),
+      id,
       input.idempotencyScope,
       input.idempotencyKey,
       input.eventId,
@@ -2166,6 +2226,53 @@ async function insertReceipt(client, runtime, input) {
       input.technical.executionId,
       input.automationEpoch,
       input.sourceRevision,
+    ],
+  );
+  return id;
+}
+
+/**
+ * AGENTE-OBS-01: one row per accepted turn, keyed by its receipt, so a replay
+ * (which returns before reaching this point) never counts twice.
+ *
+ * @param {Queryable} client @param {any} runtime @param {any} input
+ * @param {string} receiptId @param {string} conversationId @param {string|null} handoffReason
+ */
+async function insertAutomationTurn(
+  client,
+  runtime,
+  input,
+  receiptId,
+  conversationId,
+  handoffReason,
+) {
+  const turn = input.turn;
+  await client.query(
+    `INSERT INTO crm.automation_turns
+       (id, n8n_event_id, conversation_id, event_type, asked_field,
+        answer_status, ficha_filled, ficha_total, trigger, model, latency_ms,
+        media_kind, workflow_key, workflow_version, handoff_reason,
+        occurred_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+             $15, $16)
+     ON CONFLICT (n8n_event_id) DO NOTHING`,
+    [
+      runtime.idFactory('automation-turn'),
+      receiptId,
+      conversationId,
+      input.eventType,
+      turn.askedField,
+      turn.answerStatus,
+      turn.fichaFilled,
+      turn.fichaTotal,
+      turn.trigger,
+      turn.model,
+      turn.latencyMs,
+      turn.mediaKind,
+      input.technical.workflowKey,
+      input.technical.workflowVersion,
+      handoffReason,
+      input.occurredAt,
     ],
   );
 }

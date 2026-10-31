@@ -49,6 +49,8 @@ const OPERATIONAL_READ_ACTIONS = new Set([
   ...[...OPERATIONAL_ACTIONS].filter((action) => action.endsWith('.read')),
   'order.print',
   'finance.read',
+  // AGENTE-OBS-01: manager only (COMMERCIAL_ADMIN), see authorization.js.
+  'assistant.performance.read',
 ]);
 
 /**
