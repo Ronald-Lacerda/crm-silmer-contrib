@@ -15,11 +15,11 @@ controles de privacidade ficam no [checklist OpenAI](../openai/README.md).
 Spikes Gemini não são dependência do lançamento. Deploy preserva o fluxo
 GitHub → EasyPanel existente ([ADR 022](../../adr/022-manter-deploy-automatico-github-easypanel.md)).
 
-O n8n recebe o webhook oficial do WhatsApp, registra a mensagem no CRM, usa o
-contexto devolvido pelo CRM, decide entre resposta de IA e handoff e pede ao CRM
-uma autorização de uso único antes de chamar a Meta. PostgreSQL continua sendo
-a fonte da verdade. O n8n não acessa o banco e não mantém cópia paralela de
-cliente, conversa, briefing ou memória curta.
+O n8n recebe o evento do WhatsApp pelo transporte em uso, registra a mensagem
+no CRM, usa o contexto devolvido pelo CRM, decide entre resposta de IA e
+handoff e pede ao CRM uma autorização de uso único antes de enviar a resposta.
+PostgreSQL continua sendo a fonte da verdade. O n8n não acessa o banco e não
+mantém cópia paralela de cliente, conversa, briefing ou memória curta.
 
 ## Pré-ficha guiada antes do handoff
 
@@ -29,7 +29,7 @@ ficha (ADR 012, ADR 024). A saudação pede o nome e o que o cliente quer
 personalizar, nunca "qual camisa"; se o cliente não disser o nome, a resposta
 seguinte reage ao que ele contou e pede só o nome, e depois o bot não insiste.
 Os pontos, nesta ordem, são: produto (`product_type`), modelo
-(`product_model`, só para roupa, boné, mochila ou bolsa), cor (`colors`),
+(`product_model`, só para roupa, boné ou bandeira), cor (`colors`),
 quantidade (`quantity`), tecido (`fabrics`, só para roupa sem kit que o
 defina), onde vai a estampa (`artwork_locations`), se o cliente já tem a arte
 (`artwork_status`) e para quando o cliente precisa (`needed_by`, desejo do
@@ -47,10 +47,14 @@ sempre na "Loja da Silmer".
 
 Sem perguntar, o workflow grava o que já está definido (`KITS`): abadá é
 sublimação total em poliéster branco com gola regata; sublimação total pede
-poliéster branco; regata tem gola "regata", polo tem "gola polo", e boné,
-mochila e bolsa têm gola `NAO APLICAVEL`. Também grava o produto a partir do
-modelo dito ("30 regatas"), o modelo quando o produto já o nomeia ("abadás",
-"ecobags") e o nome do produto no modelo de boné e bolsa ("bonés trucker").
+poliéster branco; regata tem gola "regata", polo tem "gola polo", e boné e
+bandeira têm gola `NAO APLICAVEL`. Também grava o produto a partir do
+modelo dito ("30 regatas"), o modelo quando o produto já o nomeia ("abadás")
+e o nome do produto no modelo de boné e bandeira ("bonés trucker").
+Mochila, bolsa e similares (sacochila, ecobag, sacola, necessaire, pochete e
+estojo) não entram na ficha: o nó de decisão transfere na hora com
+`unsupported`, sem gravar o briefing do turno nem abrir Pedido (ADR 044). O
+grupo `bolsa` continua nas tabelas do SDK só para reconhecer esse produto.
 Só preenche campo vazio, e o que preenche não é perguntado. O resumo da
 transferência traz "Atenção" (`ALERTS`: sublimação em algodão ou em peça
 escura, bordado com foto) e "Dica" (`HINTS`: técnica usual do produto,
@@ -85,7 +89,7 @@ combinado com a Silmer; ADR 013); duas respostas incompreensíveis ou indecisas
 para o mesmo item; reclamação; urgência; conteúdo não suportado; e o teto de
 15 mensagens. O resumo de todo handoff traz "Ficha: X de N (Y%)", o indicador
 da meta de 50% da ficha, com N igual ao nome, enquanto o bot o pede, mais os
-pontos do produto (9 para roupa; 8 para boné, bolsa ou bandeira; 7 para outro
+pontos do produto (9 para roupa; 8 para boné ou bandeira; 7 para outro
 produto ou produto não dito; ADR 051); o
 [roteiro do indicador da ficha](roteiro-indicador-da-ficha.md) tem as
 mensagens para testá-lo.
@@ -97,12 +101,22 @@ primeiro dos seus pontos ou um campo que ele só grava, em geral o produto
 (ADR 014); oficial é o Pedido `confirmado`, e a confirmação permanece humana
 (ADR 006).
 
-O bot atende no WhatsApp e no chat do site e lê imagens e áudios
-([ADR 026](../../adr/026-midia-e-chat-do-site-no-bot.md)); Instagram fica nas
-fases posteriores. O adapter direto Meta → CRM permanece apenas como fixture
-de desenvolvimento e nunca é fallback silencioso.
+O bot atende só no WhatsApp e lê imagens e áudios
+([ADR 026](../../adr/026-midia-e-chat-do-site-no-bot.md)). O site e o Instagram
+só encaminham para o WhatsApp, sem IA nem coleta
+([ADR 044](../../adr/044-atendimento-comercial-concentrado-no-whatsapp.md)).
+O adapter direto Meta → CRM permanece apenas como fixture de desenvolvimento e
+nunca é fallback silencioso.
 
-## Imagem, áudio e chat do site (ADR 026)
+**Transporte.** O SDK versionado
+(`ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sdk.js`) ainda descreve os nós
+da Graph API da Meta. O workflow publicado em 29/10/2026 já usa o Evolution
+como transporte do WhatsApp; a ADR 050 (Evolution) está em integração em outro
+PR. As seções sobre Meta, WAHA e chat do site abaixo são histórico ou
+referência do SDK. A reserva de envio, o fence e os eventos do CRM valem para
+qualquer transporte.
+
+## Imagem, áudio e chat do site (ADR 026, chat do site encerrado pela ADR 044)
 
 - **Imagem** (até 5 MB) vai anexada ao agente. **Áudio** (até 16 MB) é
   transcrito pela mesma conta OpenAI (`gpt-4o-mini-transcribe`) e entra como
@@ -984,7 +998,7 @@ SDK, cobertas por `test/n8n-vendedor-aprendizados-l02.test.js`:
 - **Parceria, revenda, nota fiscal, envio direto ou fotos das peças** transfere
   com `human_requested`, aviso "Anotei suas perguntas…" e resumo com as
   perguntas em tópicos e a Dica "Possível parceria/revenda". O resumo do
-  handoff ainda não aparece na tela da Inbox.
+  handoff aparece na conversa da Inbox desde a INBOX-HANDOFF-01.
 - **Tom.** `withoutPraise` remove elogios à escolha do cliente.
 - **Fechamento.** O aviso de horário vale também nos últimos 30 minutos do
   expediente (seg–sex 17h30, sáb 11h30).

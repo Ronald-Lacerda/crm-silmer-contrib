@@ -1,13 +1,14 @@
 # Próximas fases — prontidão do CRM Silmer
 
-> **Atualizado em:** 10/10/2026\
+> **Atualizado em:** 30/10/2026\
 > **Fila canônica:** `.specs/features/crm-mvp/tasks.md`
 
 Inbox, Handoffs, Clientes, usuários, Pedidos e Dashboard já estão implementados.
 A PR 142 incorpora técnica por item e origem da arte; a ficha vigente é v6
 com público por item (ADR 025). Arte no RustFS, chat do site e loja paga
-foram incorporados à baseline (ADRs 023, 026, 027 e 028). A próxima fase
-é homologar a operação e demonstrar prontidão de produção.
+foram incorporados à baseline (ADRs 023, 026, 027 e 028). Desde a ADR 044 o
+atendimento comercial fica só no WhatsApp; o site e o Instagram encaminham.
+A próxima fase é homologar a operação e demonstrar prontidão de produção.
 
 Kanban e Negócio estão aposentados (ADR 004); Pedido possui dois status e
 confirmação humana (ADR 006). Handoff e takeover não retornam à IA (ADR 015).
@@ -30,6 +31,29 @@ física de Rose e Operação.
 
 Frentes 1–4 podem avançar em paralelo preservando posse dos arquivos. Cada
 gate registra o que foi testado e o que ainda depende do ambiente ou de pessoa.
+
+## Frente Vendedor e Inbox — outubro de 2026
+
+O Vendedor atende a linha real do WhatsApp desde o fim de outubro. Cada rodada
+lê conversas reais, decide numa ADR e publica no n8n com backup e rollback:
+
+- CHAN-WA-01 (ADR 044): atendimento concentrado no WhatsApp; mochilas e
+  bolsas transferem sem ficha.
+- VND-L01 (ADR 049) e VND-L02 (ADR 051): ajustes de ritmo, preço adiado,
+  arte, tecido, rajada, urgência, parceria e tom, publicados em 28 e
+  29/10/2026.
+- Inbox: imagens e áudios recebidos, resumo da transferência na conversa
+  (INBOX-HANDOFF-01) e falhas de entrega legíveis (INBOX-DELIVERY-01).
+
+Rodada de 30/10/2026, em implementação
+([RFC 041](../rfc/041-vendedor-mensuravel-e-com-mais-contexto.md) e
+[ADR 052](../adr/052-vendedor-mensuravel-e-com-mais-contexto.md)): falha do bot
+vira handoff, telemetria por turno sem PII e painel "Desempenho do Vendedor",
+handoff resolvido ao encerrar e vendedor pedido pelo nome, transcrição do
+áudio no CRM, histórico com Assuntos e contexto do cliente recorrente, código
+de falha do bot e o workflow VND-L03. Ordem: CRM, migração manual 0046–0048 e
+só depois a publicação do n8n. O transporte Evolution (ADR 050) entra por
+outro PR. Catálogo para o agente fica para uma RFC própria.
 
 ## Caminho de homologação
 
