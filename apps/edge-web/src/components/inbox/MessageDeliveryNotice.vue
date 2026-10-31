@@ -1,7 +1,13 @@
 <script setup>
 import { computed } from 'vue';
+import { assistantOf } from '../../lib/assistant-performance.js';
+import {
+  deliveryFailureCode,
+  deliveryFailureHint,
+} from '../../lib/delivery-failure.js';
 
 // INBOX-DELIVERY-01 / MSG-02/03: a status check never authorizes a new send.
+// INBOX-DELIVERY-02: the agent's messages carry their own failure code too.
 const props = defineProps({
   message: { type: Object, required: true },
   checking: { type: Boolean, default: false },
@@ -18,11 +24,28 @@ const uncertain = computed(
 const descriptionId = computed(
   () => `message-delivery-help-${props.message.id}`,
 );
-const technicalCode = computed(() => {
-  const code = props.message.deliveryErrorCode;
-  return typeof code === 'string' && /^[A-Z0-9_]{1,64}$/u.test(code)
-    ? code
-    : null;
+const technicalCode = computed(() =>
+  deliveryFailureCode(props.message.deliveryErrorCode),
+);
+const technicalHint = computed(() =>
+  deliveryFailureHint(props.message.deliveryErrorCode),
+);
+const fromAssistant = computed(() => props.message.authorKind === 'assistant');
+const title = computed(() => {
+  if (uncertain.value) return 'Ainda não conseguimos confirmar o envio';
+  return fromAssistant.value
+    ? `A resposta ${assistantOf()} não foi enviada`
+    : 'O envio encontrou um problema';
+});
+const description = computed(() => {
+  if (fromAssistant.value) {
+    return uncertain.value
+      ? `A confirmação desta resposta ${assistantOf()} está demorando. Verifique o envio antes de repetir a informação ao cliente.`
+      : `O cliente pode não ter recebido esta resposta ${assistantOf()}. Verifique o status atualizado; se for preciso, assuma o atendimento e responda.`;
+  }
+  return uncertain.value
+    ? 'A confirmação está demorando mais que o esperado. Verifique o envio antes de repetir a mensagem para evitar duplicidade.'
+    : 'O envio encontrou um problema. Verifique o status atualizado. Se o problema continuar, informe a referência abaixo ao suporte.';
 });
 
 function check() {
@@ -33,19 +56,9 @@ function check() {
 <template>
   <div v-if="visible" class="message-delivery-notice">
     <p class="message-delivery-notice__title">
-      <strong>{{
-        uncertain
-          ? 'Ainda não conseguimos confirmar o envio'
-          : 'O envio encontrou um problema'
-      }}</strong>
+      <strong>{{ title }}</strong>
     </p>
-    <p :id="descriptionId">
-      {{
-        uncertain
-          ? 'A confirmação está demorando mais que o esperado. Verifique o envio antes de repetir a mensagem para evitar duplicidade.'
-          : 'O envio encontrou um problema. Verifique o status atualizado. Se o problema continuar, informe a referência abaixo ao suporte.'
-      }}
-    </p>
+    <p :id="descriptionId">{{ description }}</p>
     <button
       type="button"
       :aria-describedby="descriptionId"
@@ -69,6 +82,7 @@ function check() {
       <p v-if="technicalCode">
         Código técnico: <code>{{ technicalCode }}</code>
       </p>
+      <p v-if="technicalHint">{{ technicalHint }}</p>
     </details>
   </div>
 </template>
