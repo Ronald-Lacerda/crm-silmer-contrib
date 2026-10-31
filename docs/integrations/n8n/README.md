@@ -67,6 +67,15 @@ e `NAMED_MODELS`. Para trocar a ordem ou acrescentar um kit, edite
 `ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sdk.js`, atualize o snapshot
 sanitizado principal com os nós gerados por `render-mvp-workflow.mjs` e rode
 `npm run generate:n8n-dev-workflow` e `npm run generate:n8n-local-workflow`.
+O snapshot principal guarda a jornada com a fronteira Meta e não contém o
+ramo de mídia da Inbox aplicado no n8n por `patch-evolution-inbound-images.mjs`
+e `patch-evolution-inbound-audio.mjs`. O principal publicado usa Evolution
+([ADR 050](../../adr/050-evolution-baileys-como-ponte-do-whatsapp.md)): não
+importe o snapshot nem um candidato gerado dele sobre o principal, pois isso
+devolveria o transporte à Meta ou perderia o ramo de mídia. Leve mudanças da
+jornada como delta sobre o export vivo, comparando nós, conexões e settings.
+`create-evolution-workflow.mjs` converte uma fonte para Evolution e serve para
+candidatos inativos e testes; ver o [runbook Evolution](../../runbooks/evolution-baileys.md).
 Os gatilhos de transferência da ADR 009 são
 aplicados pelo nó de decisão, não só pelo prompt: pergunta de preço, frete ou
 pagamento repetida (a primeira é adiada, ADR 051); pedido de pessoa ou de vendedor pelo nome; nome fora do CRM pedido

@@ -17,7 +17,7 @@ texto de entrada, handoff e resposta humana pela Inbox chegaram ao WhatsApp Web
 uma vez. Os sete workflows Meta foram preservados. Recibos `delivered`/`read`,
 mídia e recuperação permanecem pendentes em EVOL-01D.
 
-## Transporte atual da nova linha — WAHA/WEBJS; WPPConnect pausado
+## Transporte anterior da nova linha — WAHA/WEBJS; WPPConnect pausado (histórico)
 
 A [ADR 046](docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md)
 pausa o WPPConnect preparado pela ADR 045: API privada e build verificados,

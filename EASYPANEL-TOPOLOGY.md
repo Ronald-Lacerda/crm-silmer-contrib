@@ -19,7 +19,7 @@ verificados no WhatsApp Web; os auxiliares de pareamento e consulta somente
 leitura foram removidos após conferir backups privados. Os sete fluxos Meta
 permaneceram inalterados; os gates restantes constam no runbook.
 
-## Transporte da nova linha — WAHA retomado; WPPConnect parado
+## Transporte anterior da nova linha — WAHA retomado; WPPConnect parado (histórico)
 
 A [ADR 046](docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md)
 pausa `schedule/silmer-wppconnect`, preparado pela ADR 045 com API privada na
@@ -34,7 +34,7 @@ no n8n. A sessão WAHA `default` está em `WORKING`, com identidade esperada
 confirmada; o workflow principal foi atualizado no mesmo ID e publicado com
 101 nós. Entrada real na Inbox e resposta humana entregue uma vez foram
 verificadas; mídia, reentrega e recuperação continuam com gates abertos.
-[Estado atual WAHA](docs/runbooks/waha-webjs.md) e
+[Estado WAHA](docs/runbooks/waha-webjs.md) e
 [evidências WPPConnect](docs/runbooks/wppconnect.md).
 
 ## Serviço adicional autorizado — piloto WAHA/WEBJS

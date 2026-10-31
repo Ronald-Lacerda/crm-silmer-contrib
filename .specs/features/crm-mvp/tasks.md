@@ -214,6 +214,8 @@ Estado e limites no [runbook Evolution](../../../docs/runbooks/evolution-baileys
 
 Preparação: [ADR 045](../../../docs/adr/045-piloto-whatsapp-wppconnect.md).
 Revisão do transporte: [ADR 046](../../../docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md).
+Escolha de transporte supersedida pela [ADR 050](../../../docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md)
+(EVOL-01); esta seção permanece como histórico.
 Requisitos ORC-01..08, INB-01 e MSG-01..04; OPS-1, INT-1/2 e INBOX-2/3.
 [Etapas e evidências](../../../docs/runbooks/wppconnect.md).
 
@@ -235,6 +237,8 @@ com seus volumes preservados. Nenhuma taxa de bloqueio é inferida da biblioteca
 Decisão: [ADR 043](../../../docs/adr/043-piloto-whatsapp-waha-webjs.md).
 Requisitos: ORC-01..08, INB-01 e MSG-01..04; fronteiras INBOX-2/3, AGENTE-6,
 OPS-1 e INT-1/2. [Runbook e evidências](../../../docs/runbooks/waha-webjs.md).
+Escolha de transporte supersedida pela [ADR 050](../../../docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md)
+(EVOL-01); itens abertos abaixo ficam como histórico do WAHA.
 
 - [x] WAHA-01A — preservar fonte e backup do workflow anterior.
 - [x] WAHA-01B — instalar e validar WEBJS privado com persistência e autenticação.

@@ -8,6 +8,13 @@ Rastreabilidade: WAHA-01, INBOX-2/3, AGENTE-6, OPS-1, INT-1/2;
 
 ## Estado e escopo
 
+Supersedido em 29/10/2026 pela
+[ADR 050](../adr/050-evolution-baileys-como-ponte-do-whatsapp.md): a ponte
+atual da nova linha é Evolution/Baileys ([runbook](evolution-baileys.md)).
+O WAHA foi suspenso em `SCAN_QR_CODE`, sem conta pareada, com volumes e
+backups preservados; não reativá-lo automaticamente. O conteúdo abaixo é
+histórico.
+
 O proprietário autorizou instalar WAHA com WEBJS no EasyPanel e conectar a
 linha temporária ao n8n e à Inbox, preservando a integração existente.
 As evidências observadas estão registradas abaixo. A criação do serviço e os

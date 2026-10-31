@@ -14,7 +14,7 @@ Mídia, recibos e recuperação seguem como gates no
 [runbook Evolution](docs/runbooks/evolution-baileys.md), tarefa EVOL-01D.
 As seções WAHA/WPPConnect abaixo registram a situação anterior.
 
-## Transporte atual da nova linha — WAHA/WEBJS
+## Transporte anterior da nova linha — WAHA/WEBJS (histórico)
 
 A [ADR 046](docs/adr/046-retomar-waha-para-atendimento-da-nova-linha.md)
 pausa a preparação WPPConnect da ADR 045 após falha de namespace do Chromium,
@@ -29,7 +29,7 @@ persistência na Inbox, transferência, takeover e resposta humana entregue
 uma vez foram observados. WAHA-01D segue aberta para os gates restantes de
 mídia, falhas, reentrega e recuperação.
 Não há Inbox paralela, Redis ou banco adicional.
-[Estado atual e gates](docs/runbooks/waha-webjs.md);
+[Estado WAHA e gates históricos](docs/runbooks/waha-webjs.md);
 [preparação WPPConnect preservada](docs/runbooks/wppconnect.md).
 
 ## Piloto autorizado — WAHA com WEBJS
