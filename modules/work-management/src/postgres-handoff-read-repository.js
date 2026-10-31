@@ -93,11 +93,16 @@ export class PostgresHandoffReadRepository {
   async getOpenForConversation(conversationId) {
     return this.#snapshot(async (database) => {
       const result = await database.query(
-        `SELECT id, deal_id, conversation_id, status, version, reason_code,
-                summary_envelope, created_at
-         FROM crm.handoffs
-         WHERE conversation_id = $1 AND status IN ('pending', 'accepted')
-         ORDER BY created_at DESC, id DESC
+        `SELECT handoff.id, handoff.deal_id, handoff.conversation_id,
+                handoff.status, handoff.version, handoff.reason_code,
+                handoff.summary_envelope, handoff.created_at,
+                preferred.id preferred_id,
+                split_part(preferred.name, ' ', 1) preferred_first_name
+         FROM crm.handoffs handoff
+         LEFT JOIN crm.users preferred ON preferred.id = handoff.preferred_user_id
+         WHERE handoff.conversation_id = $1
+           AND handoff.status IN ('pending', 'accepted')
+         ORDER BY handoff.created_at DESC, handoff.id DESC
          LIMIT 1`,
         [conversationId],
       );
@@ -106,6 +111,13 @@ export class PostgresHandoffReadRepository {
       return Object.freeze({
         createdAt: iso(row.created_at),
         id: row.id,
+        // INBOX-HANDOFF-02: who the customer asked for, first name only.
+        preferredSeller: row.preferred_id
+          ? Object.freeze({
+              firstName: row.preferred_first_name,
+              id: row.preferred_id,
+            })
+          : null,
         reasonCode: row.reason_code,
         status: row.status,
         summary: summaryText(row, this),

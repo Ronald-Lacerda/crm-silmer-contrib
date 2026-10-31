@@ -506,6 +506,9 @@ export class PostgresInboxRepository {
           [input.conversationId, ...assignments.values],
         );
         result = mapConversation(updated.rows[0]);
+        if (kind === 'transition' && isTerminalInboxState(input.state)) {
+          await resolveOpenHandoff(transaction, input, occurredAt);
+        }
         commandResult = {
           entityId: result.id,
           entityType: 'conversation',
@@ -645,6 +648,84 @@ const CONVERSATION_SELECT = `id, contact_identity_id, provider,
 const MESSAGE_SELECT = `id, conversation_id, provider, provider_account_id,
   external_message_id, command_id, direction, author_kind, author_id,
   message_type, content_envelope, status, occurred_at, created_at`;
+
+/**
+ * INBOX-HANDOFF-02: closing the conversation (any path that sets
+ * `terminal_at`) resolves its open handoff in the same transaction, so the
+ * "Aguardando vendedor" queue and the Painel never count a closed cycle.
+ * A handoff nobody claimed is resolved in the name of the person closing it,
+ * because a resolved handoff always has an owner (0013). Its human task, when
+ * the legacy Deal flow created one, is completed alongside.
+ *
+ * @param {Queryable} transaction @param {any} input @param {string} occurredAt
+ */
+async function resolveOpenHandoff(transaction, input, occurredAt) {
+  const resolved = await transaction.query(
+    `WITH open AS (
+       SELECT id, status FROM crm.handoffs
+       WHERE conversation_id = $1 AND status IN ('pending', 'accepted')
+       FOR UPDATE
+     )
+     UPDATE crm.handoffs AS handoff
+     SET status = 'resolved', resolved_at = $2,
+         updated_at = GREATEST(handoff.created_at, $2::timestamptz),
+         assigned_user_id = COALESCE(handoff.assigned_user_id, $3),
+         version = handoff.version + 1
+     FROM open
+     WHERE handoff.id = open.id
+     RETURNING handoff.id, handoff.version, handoff.assigned_user_id,
+               handoff.target_role, open.status AS from_status`,
+    [input.conversationId, occurredAt, input.actor.id],
+  );
+  for (const handoff of resolved.rows) {
+    await transaction.query(
+      `INSERT INTO crm.handoff_history
+         (handoff_id, resulting_version, from_status, to_status,
+          assigned_user_id, target_role, actor_id, reason_code,
+          correlation_id, occurred_at)
+       VALUES ($1, $2, $3, 'resolved', $4, $5, $6, 'conversation_closed', $7,
+               $8)`,
+      [
+        handoff.id,
+        Number(handoff.version),
+        handoff.from_status,
+        handoff.assigned_user_id,
+        handoff.target_role,
+        input.actor.id,
+        input.correlationId,
+        occurredAt,
+      ],
+    );
+    const tasks = await transaction.query(
+      `UPDATE crm.tasks AS task
+       SET status = 'completed', completed_at = $2,
+           updated_at = GREATEST(task.created_at, $2::timestamptz),
+           version = task.version + 1
+       FROM (SELECT id, status FROM crm.tasks
+             WHERE handoff_id = $1 AND status IN ('pending', 'in_progress')
+             FOR UPDATE) AS previous
+       WHERE task.id = previous.id
+       RETURNING task.id, task.version, previous.status AS from_status`,
+      [handoff.id, occurredAt],
+    );
+    for (const task of tasks.rows) {
+      await transaction.query(
+        `INSERT INTO crm.task_history
+           (task_id, resulting_version, from_status, to_status, actor_id,
+            reason_code, correlation_id, occurred_at)
+         VALUES ($1, $2, $3, 'completed', $4, 'conversation_closed', $5, $6)`,
+        [
+          task.id,
+          Number(task.version),
+          task.from_status,
+          input.actor.id,
+          input.correlationId,
+          occurredAt,
+        ],
+      );
+    }
+  }
+}
 
 /** @param {string} kind @param {any} input @param {string} occurredAt */
 function mutationAssignments(kind, input, occurredAt) {

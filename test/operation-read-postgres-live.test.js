@@ -425,7 +425,7 @@ if (connectionString) {
       );
       assert.deepEqual(
         await reads.getConversationHandoff({ conversationId: withoutHandoff }),
-        { handoff: null },
+        { handoff: null, preferred_seller: null },
       );
       await pool.query(
         `UPDATE crm.handoffs SET status = 'resolved', assigned_user_id = $2,
@@ -435,7 +435,7 @@ if (connectionString) {
       );
       assert.deepEqual(
         await reads.getConversationHandoff({ conversationId: summarized }),
-        { handoff: null },
+        { handoff: null, preferred_seller: null },
       );
     } finally {
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');

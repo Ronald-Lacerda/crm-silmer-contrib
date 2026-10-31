@@ -396,6 +396,19 @@ function validateEventShape(input) {
   if (input.eventType === 'handoff.requested' && !input.handoff) {
     throw new N8nValidationError('handoff.requested requires handoff');
   }
+  // INBOX-HANDOFF-02: the seller the customer asked for by name. Only the
+  // shape is checked here; the repository ignores (and audits) an id that is
+  // not an active Vendedor instead of failing the handoff.
+  if (
+    input.handoff?.requested_seller_id !== undefined &&
+    input.handoff.requested_seller_id !== null
+  ) {
+    identifier(
+      input.handoff.requested_seller_id,
+      'handoff.requested_seller_id',
+      128,
+    );
+  }
   if (input.handoff?.notice !== undefined) {
     const notice = input.handoff.notice;
     if (!notice || typeof notice !== 'object' || Array.isArray(notice)) {

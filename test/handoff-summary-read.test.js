@@ -65,6 +65,8 @@ test('INBOX-HANDOFF-01: reads the n8n summary as the plain text the agent wrote'
   assert.deepEqual(handoff, {
     createdAt: '2026-10-29T12:00:00.000Z',
     id: 'handoff-1',
+    // INBOX-HANDOFF-02: no seller was asked for by name.
+    preferredSeller: null,
     reasonCode: 'price_before_quote',
     status: 'pending',
     summary: SUMMARY,
@@ -213,7 +215,7 @@ test('INBOX-HANDOFF-01: the read service requires a conversation id', async () =
   });
   assert.deepEqual(
     await service.getConversationHandoff({ conversationId: 'conversation-1' }),
-    { handoff: null },
+    { handoff: null, preferred_seller: null },
   );
   await assert.rejects(service.getConversationHandoff({}), {
     statusCode: 400,

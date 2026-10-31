@@ -2583,6 +2583,13 @@ async function createUnassignedHandoff(
   if (existing.rows[0]) {
     throw new N8nConflictError('Active handoff already exists');
   }
+  const preferredUserId = await preferredSellerFor(
+    client,
+    input,
+    runtime,
+    conversation,
+    now,
+  );
   const id = runtime.idFactory('handoff');
   const summary = String(
     input.handoff?.summary ?? input.handoff?.reasoning ?? reasonCode,
@@ -2617,9 +2624,9 @@ async function createUnassignedHandoff(
           version, reason_code, summary_envelope, due_at, sla_minutes,
           sla_policy_version, automation_workflow_key,
           automation_workflow_version, automation_execution_id, created_at,
-          updated_at)
+          updated_at, preferred_user_id)
        VALUES ($1, NULL, $2, NULL, $3, 'pending', 1, $4, $5::jsonb, $6, $7,
-               'n8n-mvp-1', $8, $9, $10, $11, $11)
+               'n8n-mvp-1', $8, $9, $10, $11, $11, $12)
        RETURNING *`,
       [
         id,
@@ -2635,6 +2642,7 @@ async function createUnassignedHandoff(
         input.technical.workflowVersion,
         input.technical.executionId,
         now,
+        preferredUserId,
       ],
     )
   ).rows[0];
@@ -2654,6 +2662,43 @@ async function createUnassignedHandoff(
     ],
   );
   return handoff;
+}
+
+/**
+ * INBOX-HANDOFF-02: the seller the customer asked for by name, kept only when
+ * it is one of the active sellers the inbound offered in `sellers[]`. Any
+ * other id is ignored and audited, so a stale or wrong id never fails the
+ * handoff. The handoff still opens without an owner (ADR 009).
+ *
+ * @param {Queryable} client @param {any} input @param {any} runtime
+ * @param {any} conversation @param {string} now
+ * @returns {Promise<string|null>}
+ */
+async function preferredSellerFor(client, input, runtime, conversation, now) {
+  const requested = input.handoff?.requested_seller_id;
+  if (typeof requested !== 'string') return null;
+  const seller = (
+    await client.query(
+      `SELECT u.id FROM crm.users AS u
+       JOIN crm.user_functions AS f ON f.user_id = u.id
+       WHERE u.id = $1 AND u.disabled_at IS NULL
+         AND f.function_name = 'Vendedor'`,
+      [requested],
+    )
+  ).rows[0];
+  if (seller) return seller.id;
+  await appendAudit(client, runtime, {
+    action: 'integration.n8n.handoff.preferred_seller_ignored',
+    actor: input.technical.actor,
+    correlationId: input.correlationId,
+    occurredAt: now,
+    // The code only: the requested id is not echoed into the trail.
+    reason: 'PREFERRED_SELLER_NOT_ACTIVE',
+    targetId: conversation.id,
+    targetType: 'conversation',
+    version: input.automationEpoch ?? 1,
+  });
+  return null;
 }
 
 /** @param {Queryable} client @param {any} runtime @param {any} input */

@@ -72,6 +72,24 @@ const DELIVERY_ERROR_CODES = new Set([
 ]);
 
 /**
+ * The conversation's open handoff (at most one is pending or accepted) and,
+ * INBOX-HANDOFF-02, the first name of the seller the customer asked for.
+ */
+const OPEN_HANDOFF_JOIN = `LEFT JOIN LATERAL (
+             SELECT candidate.id, candidate.status, candidate.version,
+                    candidate.target_role,
+                    candidate.due_at, candidate.reason_code,
+                    candidate.created_at,
+                    split_part(preferred.name, ' ', 1) preferred_first_name
+             FROM crm.handoffs candidate
+             LEFT JOIN crm.users preferred
+               ON preferred.id=candidate.preferred_user_id
+             WHERE candidate.conversation_id=conversation.id
+               AND candidate.status IN ('pending','accepted')
+             ORDER BY candidate.created_at DESC, candidate.id DESC LIMIT 1
+           ) handoff ON true`;
+
+/**
  * The order the Inbox shows for a conversation: the pending one, otherwise the
  * most recently confirmed (same rule as GET /conversations/:id/order). Only
  * plain columns are read; the ficha stays encrypted.
@@ -177,6 +195,7 @@ export class PostgresInboxReadRepository {
                   handoff.target_role, handoff.due_at handoff_due_at,
                   handoff.reason_code handoff_reason_code,
                   handoff.created_at handoff_created_at,
+                  handoff.preferred_first_name handoff_preferred_first_name,
                   current_order.id order_id, current_order.number order_number,
                   current_order.status order_status,
                   last_message.id last_message_id,
@@ -199,16 +218,7 @@ export class PostgresInboxReadRepository {
              ON site_claim.conversation_id=conversation.id
            LEFT JOIN crm.user_functions assigned_function
              ON assigned_function.user_id=conversation.assigned_user_id
-           LEFT JOIN LATERAL (
-             SELECT candidate.id, candidate.status, candidate.version,
-                    candidate.target_role,
-                    candidate.due_at, candidate.reason_code,
-                    candidate.created_at
-             FROM crm.handoffs candidate
-             WHERE candidate.conversation_id=conversation.id
-               AND candidate.status IN ('pending','accepted')
-             ORDER BY candidate.created_at DESC, candidate.id DESC LIMIT 1
-           ) handoff ON true
+           ${OPEN_HANDOFF_JOIN}
            ${CURRENT_ORDER_JOIN}
            LEFT JOIN LATERAL (
              SELECT message.id, message.direction, message.message_type,
@@ -269,6 +279,7 @@ export class PostgresInboxReadRepository {
                     handoff.target_role, handoff.due_at handoff_due_at,
                     handoff.reason_code handoff_reason_code,
                     handoff.created_at handoff_created_at,
+                  handoff.preferred_first_name handoff_preferred_first_name,
                     current_order.id order_id,
                     current_order.number order_number,
                     current_order.status order_status
@@ -280,16 +291,7 @@ export class PostgresInboxReadRepository {
                ON site_claim.conversation_id=conversation.id
              LEFT JOIN crm.user_functions assigned_function
                ON assigned_function.user_id=conversation.assigned_user_id
-             LEFT JOIN LATERAL (
-               SELECT candidate.id, candidate.status, candidate.version,
-                      candidate.target_role,
-                      candidate.due_at, candidate.reason_code,
-                      candidate.created_at
-               FROM crm.handoffs candidate
-               WHERE candidate.conversation_id=conversation.id
-                 AND candidate.status IN ('pending','accepted')
-               ORDER BY candidate.created_at DESC, candidate.id DESC LIMIT 1
-             ) handoff ON true
+             ${OPEN_HANDOFF_JOIN}
              ${CURRENT_ORDER_JOIN}
              WHERE conversation.id=$1`,
             [conversationId],
@@ -529,6 +531,7 @@ function mapConversationSummary(row, repository) {
       ? {
           dueAt: iso(row.handoff_due_at),
           id: row.handoff_id,
+          preferredSellerFirstName: row.handoff_preferred_first_name ?? null,
           status: row.handoff_status,
           createdAt: iso(row.handoff_created_at),
           reasonCode: row.handoff_reason_code,

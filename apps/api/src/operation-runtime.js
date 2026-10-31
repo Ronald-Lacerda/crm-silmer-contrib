@@ -106,10 +106,22 @@ export function createOperationReadService({
      * @param {any} input
      */
     async getConversationHandoff(input) {
+      const open = await handoffRepository.getOpenForConversation(
+        requireId(input?.conversationId, 'CONVERSATION_ID'),
+      );
+      if (!open)
+        return Object.freeze({ handoff: null, preferred_seller: null });
+      const { preferredSeller, ...handoff } = open;
       return Object.freeze({
-        handoff: await handoffRepository.getOpenForConversation(
-          requireId(input?.conversationId, 'CONVERSATION_ID'),
-        ),
+        handoff: Object.freeze(handoff),
+        // INBOX-HANDOFF-02: the seller the customer asked for by name. It is
+        // a hint for the queue; the claim stays open to any Vendedor.
+        preferred_seller: preferredSeller
+          ? Object.freeze({
+              first_name: preferredSeller.firstName,
+              id: preferredSeller.id,
+            })
+          : null,
       });
     },
     /** @param {any} input */
