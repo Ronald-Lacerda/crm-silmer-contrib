@@ -21,7 +21,7 @@ física de Rose e Operação.
 | 1     | Baseline de lançamento | Docs/IDs coerentes com ADR 020 e PR 142; sem tarefas de telas já entregues tratadas como futuro              | OPS-DOC-01           |
 | 2     | Pipeline               | Build e publicação de imagens verdes; SHA/digest verificável                                                 | OPS-CI-01 / INT-3    |
 | 3     | EasyPanel atual        | Deploy automático, domínio/HTTPS, rede privada, health, segredos e rollback checados no ambiente             | OPS-CHK-01 / INT-3   |
-| 4     | OpenAI                 | Provedor único documentado; DPA, retenção, logging e ZDR aplicáveis aprovados antes de PII                   | OPS-AI-01 / AGENTE-3 |
+| 4     | OpenAI                 | Provedor único documentado; DPA e ZDR informados em 30/10/2026; retenção e logging aprovados antes de PII    | OPS-AI-01 / AGENTE-3 |
 | 5     | WhatsApp real          | Duas credenciais distintas; versão ativa e jornada com mensagens/resposta humana, handoff e takeover         | OPS-1 / INT-1..2     |
 | 6     | Recuperação e alertas  | Backups externos dos bancos, chave n8n recuperável, tombstones, restore e monitor externo com drills         | CRM-4 / INT-3        |
 | 7     | Pedido e ficha         | Jornada por teclado, ACL negativa, dados fora de ordem, geração/reabertura, v6 e assinatura física           | CRM-1..3 / INT-4     |

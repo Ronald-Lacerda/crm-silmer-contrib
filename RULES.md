@@ -111,7 +111,7 @@ da loja continuam bloqueadas.
 10. n8n v1 usa Basic Auth com `AUTOMATION_EXECUTOR`, idempotência, correlação, identidade de workflow e `application/problem+json`; sem HMAC/timestamp nesse contrato.
 11. `message.send.requested` é reserva obrigatória de uso único antes da chamada à Meta. Timeout posterior vira resultado desconhecido e reconciliação; retry cego é proibido.
 12. A reserva valida modo, `automation_epoch` e `source_revision` atuais; cada revisão inbound só pode ser consumida uma vez. Não há claim, lease ou token de rodada.
-13. OpenAI é o provedor escolhido para produção. Produção com PII exige evidências aplicáveis de DPA, retenção, logging e ZDR; escolha do provedor não satisfaz esse gate.
+13. OpenAI é o provedor escolhido para produção. Produção com PII exige evidências aplicáveis de DPA, retenção, logging e ZDR; escolha do provedor não satisfaz esse gate. DPA e ZDR foram informados como entregues pelo responsável em 30/10/2026; retenção e logging seguem no [checklist OpenAI](docs/integrations/openai/README.md).
 14. `PRINT_TEMPLATE` seleciona `ficha-canonical-v6` (ADR 025), com aprovação provisória do PO. Rose e Operação devem assinar a amostra física antes da produção; templates v2–v5 e hashes permanecem imutáveis.
 15. Manter o deploy automático GitHub → EasyPanel existente; verificar imagem/digest, migrations, health, segredos, isolamento, rollback e recovery no ambiente alvo antes de declarar prontidão operacional.
 

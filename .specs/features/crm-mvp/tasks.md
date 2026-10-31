@@ -442,14 +442,14 @@ homologação WhatsApp e backup/restore permanecem evidências externas.
 
 ## Objetivo 3 — Agente Vendedor Silmer no n8n
 
-| Etapa                      | Contrato ou capacidade                                           | Pendência                                                                        |
-| -------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| AGENTE-1 — Runtime         | n8n com banco e criptografia próprios                            | Checar ambiente EasyPanel existente, editor protegido, backup e restauração      |
-| AGENTE-2 — API             | Três endpoints, Basic, idempotência, correlação e epoch/revisão  | OPS-1 no ambiente real                                                           |
-| AGENTE-3 — OpenAI          | Provedor escolhido; schema e regras determinísticas              | DPA, retenção, logging e ZDR aplicáveis da issue #5; escolha não prova aprovação |
-| AGENTE-4 — Coleta e Pedido | Briefing progressivo, projeção e criação idempotente do pendente | Jornada real com dados fora de ordem, técnica e origem da arte                   |
-| AGENTE-5 — Handoff         | Transferência e invalidar execuções antigas                      | Takeover durante resposta e claim concorrente                                    |
-| AGENTE-6 — Operação        | Workflows e contratos versionados                                | Health, alertas, rotação, custo e runbooks no ambiente alvo                      |
+| Etapa                      | Contrato ou capacidade                                           | Pendência                                                                                                   |
+| -------------------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| AGENTE-1 — Runtime         | n8n com banco e criptografia próprios                            | Checar ambiente EasyPanel existente, editor protegido, backup e restauração                                 |
+| AGENTE-2 — API             | Três endpoints, Basic, idempotência, correlação e epoch/revisão  | OPS-1 no ambiente real                                                                                      |
+| AGENTE-3 — OpenAI          | Provedor escolhido; schema e regras determinísticas              | DPA e ZDR informados como entregues em 30/10/2026; retenção, logging e demais checagens do checklist OpenAI |
+| AGENTE-4 — Coleta e Pedido | Briefing progressivo, projeção e criação idempotente do pendente | Jornada real com dados fora de ordem, técnica e origem da arte                                              |
+| AGENTE-5 — Handoff         | Transferência e invalidar execuções antigas                      | Takeover durante resposta e claim concorrente                                                               |
+| AGENTE-6 — Operação        | Workflows e contratos versionados                                | Health, alertas, rotação, custo e runbooks no ambiente alvo                                                 |
 
 **Rastreabilidade:** ORC-01..08, AGT-01..08, PAG/TEC e PRV-01..03.
 OpenAI é a baseline da [ADR 021](../../../docs/adr/021-adotar-openai-no-mvp.md);
@@ -506,7 +506,7 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
 | OPS-DOC-01 | Reconciliar PR 142, docs ativos e rastreabilidade, preservando histórico | CRM-1..4, ORC/INB/AGT/ORD, TEC-01..08, T83..T87 | Entregue; contratos, links, validate e E2E passaram                                                                                       |
 | OPS-CI-01  | Investigar e corrigir publicação de imagens                              | INT-3 / T00.2                                   | Em verificação                                                                                                                            |
 | OPS-CHK-01 | Auditar deploy automático existente e checar ambiente alvo               | INT-3 / T00.3                                   | Auditoria dos quatro serviços registrada; gaps de produção pendentes ([evidência](../../../docs/runbooks/production-readiness-checks.md)) |
-| OPS-AI-01  | Escolher OpenAI e reconciliar baseline documental                        | ORC-06, PRV-01..03, AGENTE-3 / INT-3            | Decisão técnica registrada; privacidade externa pendente                                                                                  |
+| OPS-AI-01  | Escolher OpenAI e reconciliar baseline documental                        | ORC-06, PRV-01..03, AGENTE-3 / INT-3            | Decisão técnica registrada; DPA e ZDR informados em 30/10/2026; demais checagens pendentes                                                |
 
 ## Confiabilidade da Inbox — 24/10/2026
 
