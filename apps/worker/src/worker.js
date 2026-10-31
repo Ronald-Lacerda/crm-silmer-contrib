@@ -297,6 +297,88 @@ export class MediaRetentionScheduler {
   }
 }
 
+export const AUTOMATION_STALL_SWEEP_JOB = 'automation.stall.sweep';
+
+/**
+ * AGENTE-FAIL-01: every minute, hands to a seller the conversations whose
+ * customer message the assistant left unanswered. The sweep itself is a port
+ * of the n8n domain module; this loop only paces it and logs bounded codes.
+ */
+export class AutomationStallScheduler {
+  /** @param {{sweeper: {sweep: () => Promise<unknown>}, intervalMs?: number, logger?: ReturnType<typeof createSafeLogger>}} options */
+  constructor(options) {
+    if (!options?.sweeper || typeof options.sweeper.sweep !== 'function') {
+      throw new TypeError('Automation stall scheduler requires sweep');
+    }
+    this.sweeper = options.sweeper;
+    this.intervalMs = options.intervalMs ?? 60_000;
+    if (!Number.isSafeInteger(this.intervalMs) || this.intervalMs < 1_000) {
+      throw new TypeError('Automation stall interval must be at least 1000ms');
+    }
+    this.logger =
+      options.logger ?? createSafeLogger({ service: SERVICES.worker });
+    /** @type {NodeJS.Timeout|undefined} */
+    this.timer = undefined;
+    /** @type {Promise<void>|undefined} */
+    this.inFlight = undefined;
+  }
+
+  async start() {
+    if (this.timer) return;
+    await this.poll();
+    this.timer = setInterval(() => this.poll(), this.intervalMs);
+  }
+
+  poll() {
+    if (this.inFlight) return this.inFlight;
+    this.inFlight = this.sweeper
+      .sweep()
+      .then(() => {})
+      .catch((error) => {
+        this.logger.error('worker_job_failed', {
+          error_code: technicalErrorCode(error),
+          job_type: AUTOMATION_STALL_SWEEP_JOB,
+          queue: 'default',
+        });
+      })
+      .finally(() => {
+        this.inFlight = undefined;
+      });
+    return this.inFlight;
+  }
+
+  async stop() {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = undefined;
+    }
+    await this.inFlight;
+  }
+}
+
+/**
+ * Loads the stall sweep from the n8n domain module at the executable
+ * boundary, as `loadN8nCommandStore` does.
+ *
+ * @param {Record<string, unknown>} database
+ * @param {Record<string, string|undefined>} environment
+ * @param {(specifier: string) => Promise<Record<string, any>>} [importModule]
+ */
+export async function loadAutomationStallSweeper(
+  database,
+  environment,
+  importModule = (specifier) => import(specifier),
+) {
+  const domainModule = await importModule('@crm-silmer/n8n-integration');
+  if (typeof domainModule.createPostgresAutomationStallSweeper !== 'function') {
+    throw technicalStartupError('AUTOMATION_STALL_SWEEPER_UNAVAILABLE');
+  }
+  return domainModule.createPostgresAutomationStallSweeper({
+    database,
+    environment,
+  });
+}
+
 /**
  * Production composition root. The n8n domain store remains a port so this
  * package has no compile-time dependency on the domain module.
@@ -429,7 +511,7 @@ export function createChatMediaWorkerRuntime(options) {
 }
 
 /** Starts text delivery without waiting for an external signature CDN.
- * @param {{commandWorker: {start: Function},mediaWorker: {start: Function},chatMediaWorker?: {start: Function},chatMediaCleanup?:{start:Function},retentionScheduler: {start: Function},signatureRefresh: {start: () => Promise<void>},scannerDaemon?: {start: () => Promise<void>}}} services */
+ * @param {{commandWorker: {start: Function},mediaWorker: {start: Function},chatMediaWorker?: {start: Function},chatMediaCleanup?:{start:Function},retentionScheduler: {start: Function},signatureRefresh: {start: () => Promise<void>},scannerDaemon?: {start: () => Promise<void>},stallScheduler?: {start: Function}}} services */
 export async function startWorkerServices({
   commandWorker,
   mediaWorker,
@@ -438,8 +520,10 @@ export async function startWorkerServices({
   retentionScheduler,
   signatureRefresh,
   scannerDaemon,
+  stallScheduler,
 }) {
   await commandWorker.start();
+  await stallScheduler?.start();
   await scannerDaemon?.start();
   await mediaWorker.start();
   await chatMediaWorker?.start();
@@ -588,6 +672,19 @@ export async function startWorkerFromEnvironment(options = {}) {
             }),
           })
         : undefined;
+    const stallScheduler = new AutomationStallScheduler({
+      intervalMs: optionalPositiveInteger(
+        environment.ASSISTANT_STALL_SWEEP_INTERVAL_MS,
+        60_000,
+        'ASSISTANT_STALL_SWEEP_INTERVAL_MS',
+      ),
+      logger,
+      sweeper: await loadAutomationStallSweeper(
+        database,
+        environment,
+        options.importModule,
+      ),
+    });
     await startWorkerServices({
       commandWorker,
       mediaWorker,
@@ -596,6 +693,7 @@ export async function startWorkerFromEnvironment(options = {}) {
       retentionScheduler,
       signatureRefresh,
       scannerDaemon,
+      stallScheduler,
     });
     return Object.freeze({
       runtime: Object.freeze({
@@ -605,8 +703,10 @@ export async function startWorkerFromEnvironment(options = {}) {
         chatMediaWorker,
         chatMediaCleanup,
         scannerDaemon,
+        stallScheduler,
       }),
       stop: async () => {
+        await stallScheduler.stop();
         await chatMediaCleanup?.stop();
         await signatureRefresh.stop();
         await retentionScheduler.stop();

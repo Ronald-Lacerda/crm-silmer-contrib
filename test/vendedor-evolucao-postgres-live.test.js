@@ -17,7 +17,10 @@ import {
   createInboxService,
 } from '../modules/inbox-channels/src/index.js';
 import {
+  PostgresAutomationStallSweeper,
   PostgresN8nIntegrationRepository,
+  STALL_HANDOFF_SUMMARY,
+  countStalledConversations,
   createN8nIntegrationService,
 } from '../modules/n8n-integration/src/index.js';
 import { PostgresHandoffReadRepository } from '../modules/work-management/src/index.js';
@@ -237,9 +240,18 @@ async function setup(pool) {
       ).rows[0].version,
     );
 
+  const sweeper = new PostgresAutomationStallSweeper({
+    clock: () => clock.now,
+    database,
+    envelopeKey: N8N_KEY,
+    idFactory: (kind) => `${kind}-${++sequence}-${randomUUID()}`,
+    stallMinutes: 5,
+  });
+
   return {
     advance,
     clock,
+    sweeper,
     database,
     handoffs,
     inbox,
@@ -485,6 +497,215 @@ if (connectionString) {
             ).rows[0].total,
             0,
           );
+        },
+      );
+
+      await t.test(
+        'AGENTE-FAIL-01: the sweep hands a stalled conversation to a seller once and fences the late reply',
+        async () => {
+          const inbound = await env.receive('5527990000301', 'wamid.stall.1');
+          env.advance(4);
+          assert.equal((await env.sweeper.sweep()).handedOff, 0);
+          env.advance(2);
+          assert.equal(
+            await countStalledConversations(env.database, env.clock.now, 5),
+            1,
+          );
+          const first = await env.sweeper.sweep();
+          assert.deepEqual(first, { candidates: 1, handedOff: 1 });
+          assert.deepEqual(await env.sweeper.sweep(), {
+            candidates: 0,
+            handedOff: 0,
+          });
+          const conversation = (
+            await pool.query(
+              `SELECT automation_state, state, automation_epoch,
+                      claimed_revision, inbound_revision, assigned_user_id
+               FROM crm.conversations WHERE id=$1`,
+              [inbound.conversation_id],
+            )
+          ).rows[0];
+          assert.deepEqual(conversation, {
+            assigned_user_id: null,
+            automation_epoch: String(inbound.automation_epoch + 1),
+            automation_state: 'human',
+            claimed_revision: String(inbound.source_revision),
+            inbound_revision: String(inbound.source_revision),
+            state: 'requer_atencao',
+          });
+          const handoffs = await pool.query(
+            `SELECT id, reason_code, status, assigned_user_id, target_role
+             FROM crm.handoffs WHERE conversation_id=$1`,
+            [inbound.conversation_id],
+          );
+          assert.equal(handoffs.rows.length, 1);
+          const { id: handoffId, ...handoff } = handoffs.rows[0];
+          assert.deepEqual(handoff, {
+            assigned_user_id: null,
+            reason_code: 'automation_failure',
+            status: 'pending',
+            target_role: 'Vendedor',
+          });
+          const open = await env.reads.getConversationHandoff({
+            conversationId: inbound.conversation_id,
+          });
+          assert.equal(open.handoff.summary, STALL_HANDOFF_SUMMARY);
+          const trail = await pool.query(
+            `SELECT action, reason FROM crm.audit_events
+             WHERE target_id=$1 AND action='automation.stall.handoff_created'`,
+            [inbound.conversation_id],
+          );
+          assert.deepEqual(trail.rows, [
+            {
+              action: 'automation.stall.handoff_created',
+              reason: 'ASSISTANT_STALLED',
+            },
+          ]);
+          const history = await pool.query(
+            'SELECT to_status, reason_code FROM crm.handoff_history WHERE handoff_id=$1',
+            [handoffId],
+          );
+          assert.deepEqual(history.rows, [
+            { reason_code: 'automation_failure', to_status: 'pending' },
+          ]);
+          // The assistant's late answer arrives after the sweep: refused.
+          await assert.rejects(env.reply(inbound, 'late-reply-stall-1'), {
+            code: 'STALE_AUTOMATION_FENCE',
+          });
+          await assert.rejects(
+            env.requestHandoff(inbound, 'late-handoff-stall-1', {
+              reason: 'automation_failure',
+            }),
+            { code: 'STALE_AUTOMATION_FENCE' },
+          );
+          // The CRM never writes a customer message on this path.
+          assert.equal(
+            (
+              await pool.query(
+                `SELECT count(*)::integer AS total FROM crm.messages
+                 WHERE conversation_id=$1 AND direction='outbound'`,
+                [inbound.conversation_id],
+              )
+            ).rows[0].total,
+            0,
+          );
+        },
+      );
+
+      await t.test(
+        'AGENTE-FAIL-01: answered, recent, archived, old and handed-off conversations are left alone',
+        async () => {
+          const answered = await env.receive('5527990000401', 'wamid.ok.1');
+          await env.reply(answered, 'reply-ok-1');
+          const archived = await env.receive('5527990000402', 'wamid.arch.1');
+          await pool.query(
+            'UPDATE crm.conversations SET archived_at=$2 WHERE id=$1',
+            [archived.conversation_id, env.clock.now],
+          );
+          const ancient = await env.receive('5527990000403', 'wamid.old.1');
+          await pool.query(
+            `UPDATE crm.messages SET created_at = created_at - interval '2 days',
+                 occurred_at = occurred_at - interval '2 days'
+             WHERE conversation_id=$1`,
+            [ancient.conversation_id],
+          );
+          const escalated = await env.receive('5527990000404', 'wamid.esc.1');
+          await env.requestHandoff(escalated, 'handoff-esc-1', {
+            reason: 'negotiation',
+          });
+          env.advance(10);
+          const recent = await env.receive('5527990000405', 'wamid.recent.1');
+          const swept = await env.sweeper.sweep();
+          assert.equal(swept.handedOff, 0);
+          for (const inbound of [answered, archived, ancient, recent]) {
+            const row = (
+              await pool.query(
+                'SELECT automation_state FROM crm.conversations WHERE id=$1',
+                [inbound.conversation_id],
+              )
+            ).rows[0];
+            assert.equal(row.automation_state, 'assistant');
+          }
+          // A new customer message after the reply makes it a candidate again.
+          env.advance(1);
+          const again = await env.receive('5527990000401', 'wamid.ok.2');
+          assert.equal(again.conversation_id, answered.conversation_id);
+          env.advance(6);
+          const later = await env.sweeper.sweep();
+          assert.equal(later.handedOff, 2);
+          assert.equal(
+            (
+              await pool.query(
+                'SELECT reason_code FROM crm.handoffs WHERE conversation_id=$1',
+                [answered.conversation_id],
+              )
+            ).rows[0].reason_code,
+            'automation_failure',
+          );
+        },
+      );
+
+      await t.test(
+        'AGENTE-FAIL-01: a sweep racing the assistant reply leaves exactly one winner',
+        async () => {
+          for (let round = 0; round < 6; round += 1) {
+            const inbound = await env.receive(
+              `55279900005${String(round).padStart(2, '0')}`,
+              `wamid.race.${round}`,
+            );
+            env.advance(6);
+            const [swept, replied] = await Promise.allSettled([
+              env.sweeper.sweep(),
+              env.reply(inbound, `reply-race-${round}`),
+            ]);
+            assert.equal(swept.status, 'fulfilled');
+            const handoffs = Number(
+              (
+                await pool.query(
+                  'SELECT count(*)::integer AS total FROM crm.handoffs WHERE conversation_id=$1',
+                  [inbound.conversation_id],
+                )
+              ).rows[0].total,
+            );
+            const sent = Number(
+              (
+                await pool.query(
+                  `SELECT count(*)::integer AS total FROM crm.messages
+                   WHERE conversation_id=$1 AND author_kind='assistant'`,
+                  [inbound.conversation_id],
+                )
+              ).rows[0].total,
+            );
+            if (replied.status === 'fulfilled') {
+              assert.deepEqual([handoffs, sent], [0, 1]);
+            } else {
+              assert.equal(
+                /** @type {any} */ (replied.reason).code,
+                'STALE_AUTOMATION_FENCE',
+              );
+              assert.deepEqual([handoffs, sent], [1, 0]);
+            }
+          }
+        },
+      );
+
+      await t.test(
+        'AGENTE-FAIL-01: the workflow error branch hands off with automation_failure',
+        async () => {
+          const inbound = await env.receive('5527990000601', 'wamid.fail.1');
+          const result = await env.requestHandoff(inbound, 'handoff-fail-1', {
+            notice: {
+              command_id: 'notice-fail-1',
+              text: 'Vou chamar uma pessoa da equipe para continuar.',
+            },
+            reason: 'automation_failure',
+          });
+          assert.equal(result.notice.send_authorized, true);
+          const open = await env.reads.getConversationHandoff({
+            conversationId: inbound.conversation_id,
+          });
+          assert.equal(open.handoff.reasonCode, 'automation_failure');
+          assert.match(open.handoff.summary, /assistente falhou/u);
         },
       );
     } finally {

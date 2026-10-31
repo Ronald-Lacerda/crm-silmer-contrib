@@ -63,6 +63,9 @@ async function appendConversationStreamEvent(client, runtime, event) {
   );
 }
 
+const AUTOMATION_FAILURE_SUMMARY =
+  'O assistente falhou ao responder. Confira a última mensagem do cliente.';
+
 /** ADR 009: automated messages per Conversation; the last one is the handoff notice. */
 export const AUTOMATION_MESSAGE_CAP = 15;
 
@@ -2592,7 +2595,12 @@ async function createUnassignedHandoff(
   );
   const id = runtime.idFactory('handoff');
   const summary = String(
-    input.handoff?.summary ?? input.handoff?.reasoning ?? reasonCode,
+    input.handoff?.summary ??
+      input.handoff?.reasoning ??
+      // AGENTE-FAIL-01: the workflow's error branch may carry no summary.
+      (reasonCode === 'automation_failure'
+        ? AUTOMATION_FAILURE_SUMMARY
+        : reasonCode),
   ).slice(0, 8192);
   const slaMinutes = 240;
   const dueAt = new Date(

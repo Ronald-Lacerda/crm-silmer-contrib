@@ -78,6 +78,7 @@ const categoricalPolicies = new Map([
       allowed: new Set([
         'outbox_delivery',
         'unknown_job',
+        'automation.stall.sweep',
         'chat_media.process',
         'media.signature.refresh',
       ]),

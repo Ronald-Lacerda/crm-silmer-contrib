@@ -16,3 +16,13 @@ export {
   PostgresN8nCommandStore,
 } from './postgres-command-store.js';
 export { PostgresN8nCommandOutbox } from './postgres-command-outbox.js';
+export {
+  ASSISTANT_STALL_LOOKBACK_HOURS,
+  ASSISTANT_STALL_MINUTES,
+  AUTOMATION_STALL_SWEEP_JOB,
+  countStalledConversations,
+  createPostgresAutomationStallSweeper,
+  PostgresAutomationStallSweeper,
+  readAssistantStallMinutes,
+  STALL_HANDOFF_SUMMARY,
+} from './postgres-automation-stall-sweeper.js';
