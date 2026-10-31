@@ -190,7 +190,9 @@ test('keeps the simplified workflow inactive and free of removed runtime concept
   assert.equal(workflow.source.activeVersionId, null);
   // Baseline includes the static site redirect; legacy nodes stay disconnected.
   // VND-L02 item 5: the burst window, the reread and the newest-message check.
-  assert.equal(workflow.nodes.length, 90);
+  // VND-L03: the transcript back to the CRM (check, preparation and call) and
+  // the handoff of a failed model or decision.
+  assert.equal(workflow.nodes.length, 94);
   const serialized = JSON.stringify(workflow);
   assert.doesNotMatch(serialized, /claim_token|claim_id|ai-turns\/claim/u);
   assert.doesNotMatch(serialized, /silmer_failures|windowBufferMemory/u);

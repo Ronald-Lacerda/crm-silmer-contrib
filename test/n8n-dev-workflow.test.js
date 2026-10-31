@@ -43,7 +43,8 @@ test('keeps the canonical MVP path while replacing only WhatsApp transport', asy
   assert.equal(dev.source.active, false);
   // Canonical chains exclude all three public site nodes, plus nine DEV nodes.
   // VND-L02 item 5 adds the burst window, the reread and its check.
-  assert.equal(nodes.length, 96);
+  // VND-L03 adds the transcript back to the CRM and the failure handoff.
+  assert.equal(nodes.length, 100);
   assert.equal(names.has('Site - Receber mensagem do chat (MVP)'), false);
   assert.equal(names.has('Site - Montar evento do chat (MVP)'), false);
   assert.equal(names.has('Site - Direcionar para WhatsApp (MVP)'), false);

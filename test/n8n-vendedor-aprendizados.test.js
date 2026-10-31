@@ -710,19 +710,21 @@ test('item 9: a transfer outside the opening hours says when a seller answers', 
     notice(WEDNESDAY_NIGHT),
     `${plain} ${AFTER_HOURS} Um vendedor te responde a partir de amanhã às 9h.`,
   );
+  // VND-L03: the weekend cases moved from 31/10-02/11 to 07/11-09/11, because
+  // Monday 02/11/2026 is Finados, a holiday (n8n-vendedor-l03.test.js).
   // Saturday 13:00: Sunday is closed, so Monday.
   assert.match(
-    notice('2026-10-31T16:00:00.000Z'),
+    notice('2026-11-07T16:00:00.000Z'),
     /Um vendedor te responde a partir de segunda-feira às 9h\.$/u,
   );
   // Sunday: Monday is tomorrow.
   assert.match(
-    notice('2026-11-01T18:00:00.000Z'),
+    notice('2026-11-08T18:00:00.000Z'),
     /Um vendedor te responde a partir de amanhã às 9h\.$/u,
   );
   // Monday 08:00: before opening, today.
   assert.match(
-    notice('2026-11-02T11:00:00.000Z'),
+    notice('2026-11-09T11:00:00.000Z'),
     /Um vendedor te responde a partir de hoje às 9h\.$/u,
   );
   // Friday 19:00: Saturday morning is tomorrow.
@@ -734,7 +736,7 @@ test('item 9: a transfer outside the opening hours says when a seller answers', 
   // is in the last 30 minutes, so the notice says a seller may answer only on Monday.
   assert.equal(notice('2026-10-28T13:00:00.000Z'), plain);
   assert.match(
-    notice('2026-10-31T14:59:00.000Z'),
+    notice('2026-11-07T14:59:00.000Z'),
     /Se não der tempo hoje, um vendedor te responde a partir de segunda-feira às 9h\.$/u,
   );
   assert.match(notice('2026-10-28T21:00:00.000Z'), /amanhã às 9h\.$/u);
@@ -778,7 +780,8 @@ test('item 9: every transfer notice gets the line, and a reply that is not a tra
       'Normalizar evento WhatsApp (MVP)': {
         message_type: 'document',
         channel: 'whatsapp',
-        occurred_at: '2026-11-01T18:00:00.000Z',
+        // VND-L03: Sunday 08/11 (Monday 02/11/2026 is Finados).
+        occurred_at: '2026-11-08T18:00:00.000Z',
       },
     },
   );

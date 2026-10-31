@@ -289,6 +289,10 @@ test('item 2: each answer is recorded as a phrase the CRM projection reads', () 
           ...shirtWithout('artwork_status', 'needed_by'),
           next_required_field: 'artwork_status',
         },
+        // VND-L03: a bare "Sim" counts only after the art question, so the
+        // history now carries the bot's last reply (ADR 051 known false
+        // positive; the negative case is in n8n-vendedor-l03.test.js).
+        recent_messages: [{ sender_type: 'ai', text: ART_QUESTION }],
       }),
       {
         answer_status: status,
@@ -816,7 +820,9 @@ test('item 8: partnership and resale questions hand off with the questions liste
     reply_text: 'Ótima pergunta! Qual é o seu nome?',
   });
   assert.equal(result.trigger, 'partnership');
-  assert.equal(result.handoff_reason, 'human_requested');
+  // VND-L03 (INBOX-HANDOFF-02): partnership has its own reason since the CRM
+  // migration 0046; it was human_requested in VND-L02.
+  assert.equal(result.handoff_reason, 'partnership');
   assert.doesNotMatch(result.reply_text, /Ótima pergunta/u);
   assert.match(
     result.reply_text,
@@ -922,9 +928,10 @@ test('item 10: a handoff in the last 30 minutes says a seller may answer at the 
     notice('2026-10-28T20:45:00.000Z'),
     /está perto de acabar\. Se não der tempo hoje, um vendedor te responde a partir de amanhã às 9h\.$/u,
   );
-  // Saturday 31/10 11:40: Monday.
+  // Saturday 07/11 11:40: Monday. VND-L03: this was Saturday 31/10, but
+  // Monday 02/11/2026 is Finados, a holiday (n8n-vendedor-l03.test.js).
   assert.match(
-    notice('2026-10-31T14:40:00.000Z'),
+    notice('2026-11-07T14:40:00.000Z'),
     /Se não der tempo hoje, um vendedor te responde a partir de segunda-feira às 9h\.$/u,
   );
   // The content handoff (a document) gets it too.

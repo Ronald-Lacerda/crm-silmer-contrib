@@ -190,7 +190,8 @@ for (const local of [false, true])
     assert.deepEqual(snapshot, createDevTestWorkflow(source, { local }));
     // ADR 026 inbound reading adds nodes; outbound seller transports stay simulated.
     // VND-L02 item 5 adds the burst window, the reread and its check.
-    assert.equal(snapshot.nodes.length, 96);
+    // VND-L03 adds the transcript back to the CRM and the failure handoff.
+    assert.equal(snapshot.nodes.length, 100);
     const metaRequests = snapshot.nodes.filter((/** @type {any} */ node) =>
       node.parameters?.url?.includes('graph.facebook.com'),
     );
