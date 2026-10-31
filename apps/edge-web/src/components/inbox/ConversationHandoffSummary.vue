@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import AppIcon from '../AppIcon.vue';
 import { request } from '../../lib/api-client.js';
+import { preferredSellerFirstName } from '../../lib/assistant-context.js';
 import { handoffSummaryLines } from '../../lib/handoff-summary.js';
 
 /**
@@ -18,6 +19,8 @@ const props = defineProps({
 
 const toggle = ref(null);
 const summary = ref('');
+/** INBOX-HANDOFF-02: the seller the customer asked for, first name only. */
+const preferredSeller = ref('');
 const loading = ref(false);
 const error = ref('');
 /** Without `handoff.read` (or with no summary) the section stays out. */
@@ -32,7 +35,10 @@ const visible = computed(
   () =>
     Boolean(props.handoff) &&
     !unavailable.value &&
-    (loading.value || Boolean(error.value) || lines.value.length > 0),
+    (loading.value ||
+      Boolean(error.value) ||
+      Boolean(preferredSeller.value) ||
+      lines.value.length > 0),
 );
 
 async function load() {
@@ -52,12 +58,14 @@ async function load() {
     if (own !== controller) return;
     const handoff = response.data?.handoff ?? null;
     summary.value = handoff?.summary ?? '';
+    preferredSeller.value = preferredSellerFirstName(handoff);
     unavailable.value = !handoff;
     error.value = '';
   } catch (cause) {
     if (own !== controller || /** @type {any} */ (cause)?.name === 'AbortError')
       return;
     summary.value = '';
+    preferredSeller.value = '';
     // No permission, or nothing to show: the conversation reads as before.
     const status = /** @type {any} */ (cause)?.status;
     unavailable.value = status === 403 || status === 404;
@@ -81,6 +89,7 @@ watch(
   () => {
     // Another conversation or handoff never shows the summary before it.
     summary.value = '';
+    preferredSeller.value = '';
     error.value = '';
     unavailable.value = false;
     expanded.value = props.handoff?.status === 'pending';
@@ -125,6 +134,9 @@ onBeforeUnmount(() => controller?.abort());
         <button type="button" @click="retry">Tentar novamente</button>
       </div>
       <ul v-else class="handoff-summary-lines">
+        <li v-if="preferredSeller" data-tone="info">
+          <strong>Cliente pediu:</strong>{{ ' ' }}{{ preferredSeller }}
+        </li>
         <li
           v-for="line in lines"
           :key="line.key"

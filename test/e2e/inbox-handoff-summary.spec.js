@@ -11,7 +11,7 @@ const SUMMARY =
 
 /**
  * @param {import('@playwright/test').Page} page
- * @param {{handoffStatus?: number, status?: 'pending'|'accepted'}} [options]
+ * @param {{handoffStatus?: number, status?: 'pending'|'accepted', preferredSeller?: string, assistantContext?: {status?: number, body: unknown}}} [options]
  */
 async function setup(page, options = {}) {
   const status = options.status ?? 'pending';
@@ -20,7 +20,9 @@ async function setup(page, options = {}) {
     version: 4,
     channel: 'whatsapp',
     state: 'requer_atencao',
-    automationState: 'human',
+    // INBOX-HANDOFF-02: the second conversation is still with the agent.
+    automationState:
+      number === 2 && options.assistantContext ? 'assistant' : 'human',
     automationEpoch: 2,
     assignedUser:
       status === 'accepted'
@@ -33,6 +35,9 @@ async function setup(page, options = {}) {
             dueAt: '2026-10-29T16:00:00.000Z',
             id: 'handoff-1',
             reasonCode: 'price_before_quote',
+            ...(options.preferredSeller
+              ? { preferredSellerFirstName: options.preferredSeller }
+              : {}),
             status,
             targetRole: 'Vendedor',
             version: 1,
@@ -52,6 +57,7 @@ async function setup(page, options = {}) {
     requiresAttention: number === 1,
   }));
   const summaryRequests = /** @type {string[]} */ ([]);
+  const contextRequests = /** @type {string[]} */ ([]);
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request(),
       url = new URL(request.url()),
@@ -101,12 +107,30 @@ async function setup(page, options = {}) {
                 createdAt: conversation.handoff.createdAt,
                 id: conversation.handoff.id,
                 reasonCode: conversation.handoff.reasonCode,
+                preferredSeller: options.preferredSeller
+                  ? { id: 'seller-9', firstName: options.preferredSeller }
+                  : null,
                 status: conversation.handoff.status,
                 summary: SUMMARY,
                 version: 1,
               }
             : null,
         },
+      });
+    }
+    const context =
+      /^\/api\/v1\/inbox\/conversations\/([^/]+)\/assistant-context$/.exec(
+        path,
+      );
+    if (context) {
+      contextRequests.push(context[1]);
+      return route.fulfill({
+        headers: { 'cache-control': 'private, no-store' },
+        // An older API has no such route.
+        status: options.assistantContext
+          ? (options.assistantContext.status ?? 200)
+          : 404,
+        json: options.assistantContext?.body ?? { error: {} },
       });
     }
     const detail = /^\/api\/v1\/inbox\/conversations\/([^/]+)$/.exec(path);
@@ -122,7 +146,7 @@ async function setup(page, options = {}) {
     }
     return route.fulfill({ status: 404, json: {} });
   });
-  return { summaryRequests };
+  return { contextRequests, summaryRequests };
 }
 
 test('shows the handoff summary of a transferred conversation to the seller', async ({
@@ -218,4 +242,86 @@ test('leaves the summary out when the reader may not read handoffs', async ({
     page.getByRole('button', { name: 'Resumo da transferência' }),
   ).toHaveCount(0);
   await expect(page.getByText('Perguntou o valor.')).toHaveCount(0);
+});
+
+test('INBOX-HANDOFF-02: names the seller the customer asked for', async ({
+  page,
+}) => {
+  await setup(page, { preferredSeller: 'Ana' });
+  await page.goto('/inbox/conversation-1');
+  const row = page.locator('[data-conversation-id="conversation-1"]');
+  await expect(row).toContainText('Cliente pediu: Ana');
+  await expect(
+    page.locator('[data-conversation-id="conversation-2"]'),
+  ).not.toContainText('Cliente pediu');
+  const summary = page.getByRole('region', { name: 'Resumo da transferência' });
+  await expect(summary.getByRole('listitem').first()).toHaveText(
+    'Cliente pediu: Ana',
+  );
+  // Any seller may still take it; the reason says who was asked for.
+  await expect(page.locator('#takeover-reason')).toContainText(
+    'Cliente pediu: Ana.',
+  );
+  await expect(
+    page.getByRole('button', { name: 'Assumir atendimento' }),
+  ).toBeEnabled();
+  const axe = await new AxeBuilder({ page })
+    .include('.handoff-summary')
+    .include('.inbox-list')
+    .analyze();
+  expect(axe.violations).toEqual([]);
+});
+
+test('INBOX-HANDOFF-02: a direct takeover says what the agent was asking', async ({
+  page,
+}) => {
+  const { contextRequests, summaryRequests } = await setup(page, {
+    assistantContext: {
+      body: {
+        last_turn: {
+          asked_field: 'colors',
+          answer_status: 'answered',
+          ficha_filled: 3,
+          ficha_total: 8,
+          trigger: null,
+          occurred_at: '2026-10-30T12:00:00.000Z',
+        },
+        assistant_messages: 4,
+        assistant_message_cap: 15,
+      },
+    },
+  });
+  await page.goto('/inbox/conversation-2');
+  const reason = page.locator('#takeover-reason');
+  await expect(reason).toContainText('O agente está atendendo.');
+  await expect(reason).toContainText(
+    'O agente estava perguntando: Cor · Ficha 3 de 8',
+  );
+  await expect(reason).toContainText('4 de 15 mensagens do agente');
+  const takeOver = page.getByRole('button', { name: 'Assumir atendimento' });
+  await expect(takeOver).toHaveAccessibleDescription(
+    /O agente estava perguntando: Cor · Ficha 3 de 8 4 de 15 mensagens do agente/u,
+  );
+  // No handoff, so no summary is read; the context never takes the focus.
+  expect(summaryRequests).toEqual([]);
+  expect(contextRequests).toContain('conversation-2');
+  await expect(reason.locator(':focus')).toHaveCount(0);
+  const axe = await new AxeBuilder({ page })
+    .include('.inbox-takeover')
+    .analyze();
+  expect(axe.violations).toEqual([]);
+});
+
+test('INBOX-HANDOFF-02: without the agent context the takeover reads as before', async ({
+  page,
+}) => {
+  const { contextRequests } = await setup(page, {
+    assistantContext: { status: 404, body: { error: { code: 'NOT_FOUND' } } },
+  });
+  await page.goto('/inbox/conversation-2');
+  const reason = page.locator('#takeover-reason');
+  await expect(reason).toContainText('O agente está atendendo.');
+  await expect.poll(() => contextRequests.length).toBeGreaterThan(0);
+  await expect(reason).not.toContainText('estava perguntando');
+  await expect(reason).not.toContainText('mensagens do agente');
 });

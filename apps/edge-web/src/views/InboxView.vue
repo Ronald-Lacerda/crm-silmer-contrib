@@ -12,12 +12,17 @@ import { useRoute, useRouter } from 'vue-router';
 import { brand } from '../brand/index.js';
 import AppIcon from '../components/AppIcon.vue';
 import FilterSheet from '../components/FilterSheet.vue';
+import AssistantTakeoverContext from '../components/inbox/AssistantTakeoverContext.vue';
 import AudioRecorder from '../components/inbox/AudioRecorder.vue';
 import ConversationHandoffSummary from '../components/inbox/ConversationHandoffSummary.vue';
 import ConversationOrderSummary from '../components/inbox/ConversationOrderSummary.vue';
 import MediaMessage from '../components/inbox/MediaMessage.vue';
 import MessageDeliveryNotice from '../components/inbox/MessageDeliveryNotice.vue';
 import { commandKey, request } from '../lib/api-client.js';
+import {
+  preferredSellerFirstName,
+  preferredSellerLabel,
+} from '../lib/assistant-context.js';
 import {
   CHANNEL_LABELS,
   conversationLabel,
@@ -319,9 +324,16 @@ const takeoverReason = computed(() => {
   if (!conversation) return { detail: '', title: '' };
   if (pendingHandoff.value) {
     const elapsed = elapsedSince(conversation.handoff.createdAt, now.value);
-    const waiting = elapsed
-      ? `Esperando vendedor há ${elapsed}.`
-      : 'Esperando um vendedor assumir.';
+    // INBOX-HANDOFF-02: the seller the customer asked for, by first name;
+    // any seller may still take it (the handoff has no owner).
+    const asked = preferredSellerLabel(
+      preferredSellerFirstName(conversation.handoff),
+    );
+    const waiting = `${
+      elapsed
+        ? `Esperando vendedor há ${elapsed}.`
+        : 'Esperando um vendedor assumir.'
+    }${asked ? ` ${asked}.` : ''}`;
     // UXA-03/CP-16: the agent's stop over which order a message is about
     // (`low_confidence` with a message to review) must not read as "Agente
     // sem confiança"; it says what the seller decides after taking. Any other
@@ -659,6 +671,17 @@ function focusAfterFilterChange() {
 function stopReason(conversation) {
   return conversation.handoff?.status === 'pending'
     ? handoffReasonLabel(conversation.handoff.reasonCode)
+    : '';
+}
+
+/**
+ * INBOX-HANDOFF-02: "Cliente pediu: Ana" while the handoff waits for someone.
+ *
+ * @param {{handoff?: Record<string, any>|null}} conversation
+ */
+function askedSeller(conversation) {
+  return conversation.handoff?.status === 'pending'
+    ? preferredSellerLabel(preferredSellerFirstName(conversation.handoff))
     : '';
 }
 
@@ -2146,6 +2169,12 @@ onBeforeUnmount(() => {
                   waitingFor(conversation)
                 }}</span>
                 <span
+                  v-if="askedSeller(conversation)"
+                  class="badge"
+                  data-tone="info"
+                  >{{ askedSeller(conversation) }}</span
+                >
+                <span
                   v-if="
                     conversation.assignedUser &&
                     conversation.assignedUser.id !== currentUserId
@@ -2629,6 +2658,15 @@ onBeforeUnmount(() => {
               <p id="takeover-reason" class="inbox-takeover-reason">
                 <strong>{{ takeoverReason.title }}</strong
                 >{{ ' ' }}<span>{{ takeoverReason.detail }}</span>
+                <!-- INBOX-HANDOFF-02: without a handoff summary, what the
+                     agent was asking when the seller takes over. -->
+                <AssistantTakeoverContext
+                  v-if="
+                    !pendingHandoff && active.automationState === 'assistant'
+                  "
+                  :conversation-id="active.id"
+                  :revision="active.updatedAt ?? ''"
+                />
               </p>
               <button
                 ref="takeoverButton"

@@ -6,6 +6,7 @@
  * "0 min", "NaN" or "null".
  */
 import { brand } from '../brand/index.js';
+import { snakeKeys } from './assistant-context.js';
 import { handoffReasonLabel } from './order-format.js';
 
 export const PERFORMANCE_PERIODS = Object.freeze([
@@ -291,7 +292,7 @@ function timingOf(data) {
  * @returns {PerformanceSummary}
  */
 export function performanceSummary(answer, requestedDays) {
-  const data = answer && typeof answer === 'object' ? answer : {};
+  const data = answer && typeof answer === 'object' ? snakeKeys(answer) : {};
   const conversations = countOf(data.conversations_with_assistant);
   const replies = countOf(data.assistant_replies);
   const handoffs = countOf(data.handoffs?.total);
