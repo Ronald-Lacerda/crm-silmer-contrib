@@ -189,8 +189,9 @@ pedido pago da loja (seção [Pedido pago da loja](#pedido-pago-da-loja-adr-028)
 
 Eventos aceitos: `message.send.requested`, `message.sent`,
 `message.delivered`, `message.read`, `message.failed`,
-`message.send.unknown`, `handoff.requested`, `order.intent_confirmed`
-(obsoleto desde a ADR 014, aceito para workflows antigos) e `workflow.failed`.
+`message.send.unknown`, `message.transcribed` (migração 0048, ADR 052),
+`handoff.requested`, `order.intent_confirmed` (obsoleto desde a ADR 014,
+aceito para workflows antigos) e `workflow.failed`.
 
 O retorno do inbound também traz `automation_message_count` (mensagens do
 agente já reservadas na Conversa), `automation_message_cap` (15) e `sellers`
@@ -199,6 +200,72 @@ agente já reservadas na Conversa), `automation_message_cap` (15) e `sellers`
 Erros usam `application/problem+json`. Replay da mesma chave com o mesmo
 payload devolve o resultado idempotente; a mesma chave com payload diferente
 retorna `409`.
+
+### Campos da ADR 052 (migrações 0046–0048)
+
+Todos são opcionais: um workflow que não os envia continua funcionando. O
+schema segue estrito, então o CRM com as migrações precisa estar implantado
+antes do workflow que os envia.
+
+- **Motivos novos de handoff.** `handoff.reason` aceita `automation_failure`
+  (falha do modelo, do parser, do agente ou da decisão) e `partnership`
+  (parceria, revenda, atacado e nota fiscal). Sem `summary`, o handoff de
+  `automation_failure` recebe um resumo fixo do CRM.
+- **Vendedor pedido pelo nome.** `handoff.requested_seller_id` leva o id de
+  um item de `sellers`. O CRM grava em `crm.handoffs.preferred_user_id`
+  (`text`, porque `crm.users.id` é `text`). Id que não é Vendedor ativo é
+  ignorado e auditado como `PREFERRED_SELLER_NOT_ACTIVE`; o handoff é criado
+  mesmo assim, sem dono. A lista e o detalhe da Inbox mostram
+  `handoff.preferredSellerFirstName`.
+- **Telemetria `turn`.** `message.send.requested` e `handoff.requested`
+  aceitam um objeto estrito, só com códigos, contagens e tempos. Chave
+  desconhecida dá `400`.
+
+  | Campo           | Regra                                                                               |
+  | --------------- | ----------------------------------------------------------------------------------- |
+  | `ficha_filled`  | Obrigatório, inteiro de 0 a 64, até `ficha_total`                                   |
+  | `ficha_total`   | Obrigatório, inteiro de 0 a 64                                                      |
+  | `asked_field`   | `^[a-z_]{1,48}$` ou nulo                                                            |
+  | `answer_status` | `answered`, `unclear`, `undecided`, `question`, `deferred`, `other`, `none` ou nulo |
+  | `trigger`       | `^[a-z0-9_]{1,64}$` ou nulo                                                         |
+  | `model`         | `^[a-z0-9._-]{1,64}$` ou nulo                                                       |
+  | `latency_ms`    | Inteiro de 0 a 600000 ou nulo                                                       |
+  | `media_kind`    | `text`, `image`, `audio`, `sticker` ou nulo                                         |
+
+  O CRM grava uma linha por evento aceito em `crm.automation_turns`; replay
+  não duplica. Reserva ou handoff recusado pelo fence não deixa linha e é
+  contado pela auditoria `integration.n8n.stale_fence`.
+
+- **Transcrição do áudio.** `message.transcribed` leva `conversation_id`,
+  `external_message_id` (o mesmo `message.external_id` do inbound do áudio) e
+  `transcript`: `{status: "ok", text}` com 1 a 4000 caracteres, ou
+  `{status: "failed", code}` com `TRANSCRIPTION_FAILED`,
+  `TRANSCRIPTION_EMPTY` ou `AUDIO_TOO_LARGE`. Mensagem que não existe na
+  conversa dá `404`; mensagem que não é áudio de entrada dá `409
+TRANSCRIPT_TARGET_INVALID`. Um `failed` pode virar `ok`; um `ok` gravado não
+  é substituído (`409 TRANSCRIPT_ALREADY_RECORDED`). O texto é cifrado com a
+  chave das mensagens e segue a retenção da mensagem.
+- **Código de falha do bot.** `message.failed` e `message.send.unknown`
+  aceitam `failure: {code}`, só com essa chave. Código fora de
+  `^[A-Z0-9_]{1,64}$` ou ausente vira `SEND_FAILED` no `message.failed` e
+  `SEND_OUTCOME_UNKNOWN` no `message.send.unknown`. O CRM grava em
+  `crm.messages.delivery_failure_code`; um `sent` ou `delivered` posterior
+  limpa o código. A Inbox explica os códigos conhecidos, inclusive
+  `META_SEND_OUTCOME_UNKNOWN`.
+- **Histórico com Assuntos.** Cada item de `recent_messages` traz
+  `subject_ids` (vazio sem vínculo). Áudio com transcrição `ok` vem com o
+  texto e `transcribed: true`. O workflow filtra pelo Assunto do turno só
+  quando há mais de um.
+- **Cliente recorrente.** O inbound devolve `contact_context`:
+  `previous_cycles`, `last_closed_at` (data em São Paulo), `last_outcome`
+  (`concluido`, `sem_pedido` ou nulo) e até 3 `previous_orders` com
+  `order_number`, `status`, `product_type` (tipo do primeiro item da ficha,
+  até 80 caracteres) e `created_month`. Ficam de fora os pedidos de teste e os
+  desta conversa, e nunca há valores, endereço, financeiro ou arquivos.
+- **Encerrar resolve o handoff.** Ao encerrar a conversa, o handoff ativo vai
+  para `resolved` na mesma transação, com `reason_code='conversation_closed'`
+  no histórico. Handoff sem dono recebe como `assigned_user_id` quem encerrou,
+  porque o CHECK da 0013 exige dono em `resolved`.
 
 ## Fence de envio simplificado
 
@@ -1012,3 +1079,49 @@ mensagens seguidas", "CRM - Reler conversa", com a mesma URL e credencial do
 os settings e as conexões, exceto a religação prevista, foram conferidos iguais
 ao backup; a confirmação ao provedor segue antes da espera. Rollback: publicar a
 versão `8cd3ccf7`.
+
+## VND-L03 — Vendedor mensurável e com mais contexto (30/10/2026)
+
+Estado: **pronta, aguardando publicação.** Nada foi publicado no n8n.
+A [ADR 052](../../adr/052-vendedor-mensuravel-e-com-mais-contexto.md) leva o
+workflow principal a `mvp-simple-20`. Regras no SDK, cobertas por
+`test/n8n-vendedor-l03.test.js`:
+
+- **Falha vira handoff.** Erro do modelo, do parser, do agente ou da decisão
+  segue a saída de erro e chega a `Preparar handoff de falha da IA (MVP)`, que
+  pede `handoff.requested` com `automation_failure`, cercado pelo epoch e pela
+  revisão do turno. Aviso ao cliente: "Recebi a sua mensagem! Um dos nossos
+  vendedores vai continuar o seu atendimento aqui mesmo.", com o aviso de
+  horário quando couber.
+- **Tempos.** Modelo com timeout de 30 s e `maxRetries: 1`; transcrição com
+  30 s. O pior caso, um áudio com as duas chamadas no limite, fica em cerca de
+  112 s, abaixo do `executionTimeout` de 120 s.
+- **Transcrição.** `Áudio não lido? (MVP)`, `Preparar transcrição do áudio
+(MVP)` e `CRM - Registrar transcrição do áudio (MVP)` mandam
+  `message.transcribed` (ok ou falha) com chave estável, numa chamada de 5 s
+  sem retry que não segura a resposta ao cliente.
+- **Telemetria.** `turn` vai na reserva e nos handoffs, com latência do
+  recebimento até a decisão e `media_kind`.
+- **Contexto.** Histórico filtrado por `subject_ids` quando há mais de um
+  Assunto; o áudio entra com o texto transcrito. Cliente recorrente
+  (`contact_context`) pode ouvir "Que bom falar com você de novo".
+- **Handoff.** `requested_seller_id` do vendedor pedido pelo nome. Parceria,
+  revenda, atacado e nota fiscal usam `partnership`.
+- **Falsos positivos corrigidos.** O próprio e-mail ou telefone do cliente,
+  link de referência, "loja" sozinha e fotos das peças não transferem.
+  "Sim" só grava a arte logo depois da pergunta da arte. "Faixa etária" e "na
+  faixa de" não são bandeira, e "jogo" sozinho não é modelo.
+- **Tom e horário.** Aviso de preço sem "Ótima pergunta!". Os feriados
+  nacionais de 2026 e 2027 (com Carnaval, Sexta-feira Santa e Corpus Christi)
+  fecham o dia no aviso de horário. Feriados do ES e municipais não estão
+  cobertos.
+
+Mudanças sobre o snapshot anterior: 4 nós novos (os três da transcrição e o
+handoff de falha), o cabeçalho `X-Silmer-Workflow-Version` em
+`mvp-simple-20` nos nós HTTP do CRM, os nós do Vendedor e as conexões dos
+nós novos e dos ramos de erro. Os settings não mudam.
+
+Ordem de implantação: CRM (merge e deploy), migrações 0046–0048 aplicadas à
+mão, worker com `ASSISTANT_STALL_MINUTES` e só então a publicação do workflow,
+como delta sobre o export vivo (Evolution). O passo a passo e o rollback estão
+no [runbook da VND-L03](../../runbooks/vendedor-l03-implantacao.md).

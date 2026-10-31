@@ -13,8 +13,9 @@ Fonte: `ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sdk.js`.
 
 - Nó `OpenAI - Modelo do MVP`, tipo `lmChatOpenAi`, versão 1.3.
 - Modelo `gpt-5.6-luna`, Responses API habilitada, sem built-in tools.
-- Limite de 1500 tokens, reasoning `low`, timeout 30 segundos e dois retries
-  da geração. Isso não autoriza repetir envio WhatsApp.
+- Limite de 1500 tokens, reasoning `low`, timeout 30 segundos e um retry da
+  geração (`maxRetries: 1` no `mvp-simple-20`, ainda não publicado; ADR 052).
+  Isso não autoriza repetir envio WhatsApp.
 - Parser estruturado do workflow e validação de comandos pelo CRM.
 - `promptCacheKey` definido; a política real de caching deve ser conferida.
 - A fonte não explicita `store: false`. Não se afirma que o request efetivo
