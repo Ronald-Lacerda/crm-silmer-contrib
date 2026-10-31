@@ -820,9 +820,10 @@ test('item 8: partnership and resale questions hand off with the questions liste
     reply_text: 'Ótima pergunta! Qual é o seu nome?',
   });
   assert.equal(result.trigger, 'partnership');
-  // VND-L03 (INBOX-HANDOFF-02): partnership has its own reason since the CRM
-  // migration 0046; it was human_requested in VND-L02.
-  assert.equal(result.handoff_reason, 'partnership');
+  // VND-L03: this harness is a CRM without contact_context (no capability
+  // announced), so the reason stays human_requested; against the CRM of this
+  // round it is partnership (n8n-vendedor-l03.test.js).
+  assert.equal(result.handoff_reason, 'human_requested');
   assert.doesNotMatch(result.reply_text, /Ótima pergunta/u);
   assert.match(
     result.reply_text,

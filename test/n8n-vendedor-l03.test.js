@@ -91,12 +91,19 @@ function context(text, inbound = {}, event = {}, item = null, extra = {}) {
     recent_messages: [],
     subjects: [],
     source_subject_ids: [],
+    // VND-L03 (QA M3): the CRM of this round always answers contact_context
+    // (null for a first contact); legacyCrm() below drops it.
+    contact_context: null,
     sellers: [
       { id: SELLER_ID, name: 'Bianca' },
       { id: OTHER_SELLER_ID, name: 'Davi' },
     ],
     ...inbound,
   };
+  // An undefined key is a CRM that does not send it at all.
+  for (const key of Object.keys(crm)) {
+    if (crm[key] === undefined) delete crm[key];
+  }
   return run('Montar contexto da IA (MVP)', item ?? crm, {
     'CRM - Registrar inbound (MVP)': crm,
     'Preparar inbound CRM (MVP)': { received_at: RECEIVED_AT },
@@ -381,6 +388,7 @@ test('telemetry: a handoff carries its trigger; the latency runs from the receip
       conversation_id: 'conversation-sintetica',
       automation_epoch: 4,
       source_revision: 9,
+      contact_context: null,
     },
     {
       'Normalizar evento WhatsApp (MVP)': {
@@ -444,7 +452,13 @@ test('transcript: an audio reports its transcript with a stable key, and either 
     'Montar contexto da IA (MVP)',
   ]);
   assert.deepEqual(targets('Preparar transcrição do áudio (MVP)'), [
+    'CRM aceita a transcrição? (MVP)',
+  ]);
+  assert.deepEqual(targets('CRM aceita a transcrição? (MVP)', 0), [
     'CRM - Registrar transcrição do áudio (MVP)',
+  ]);
+  assert.deepEqual(targets('CRM aceita a transcrição? (MVP)', 1), [
+    'Montar contexto da IA (MVP)',
   ]);
   const call = nodes.get('CRM - Registrar transcrição do áudio (MVP)');
   assert.equal(call.onError, 'continueErrorOutput');
@@ -464,7 +478,10 @@ test('transcript: an audio reports its transcript with a stable key, and either 
   };
   const upstream = {
     'Normalizar evento WhatsApp (MVP)': source,
-    'CRM - Reler conversa (MVP)': { conversation_id: 'conversation-1' },
+    'CRM - Reler conversa (MVP)': {
+      conversation_id: 'conversation-1',
+      contact_context: null,
+    },
   };
   const ok = run(
     'Preparar transcrição do áudio (MVP)',
@@ -481,6 +498,7 @@ test('transcript: an audio reports its transcript with a stable key, and either 
     transcript: { status: 'ok', text: 'Quero 20 bonés pretos' },
   });
   assert.equal(ok.idempotency_key, 'transcribed:wamid.audio-1');
+  assert.equal(ok.send_transcript, true);
   // The same key always carries the same payload (no clock in it).
   const again = run(
     'Preparar transcrição do áudio (MVP)',
@@ -819,6 +837,124 @@ test('handoff negative: "loja" alone, or photos the customer sends, are not a pa
     decide(context('Vocês têm fotos das peças que já fizeram?')).trigger,
     'partnership',
   );
+});
+
+// 5b — QA M3: the new fields go only to a CRM that announces them.
+
+/** A CRM answer without contact_context: the CRM of mvp-simple-19. */
+const LEGACY = { contact_context: undefined };
+
+test('capability: the CRM of this round gets turn, seller id, the new reasons and the transcript', () => {
+  const ctx = context('Quero falar com a Bianca');
+  assert.equal(ctx.crm_evolution, true);
+  const seller = run(
+    'Preparar handoff da IA (MVP)',
+    decide(ctx, {
+      person_request: 'named',
+      requested_person_name: 'Bianca',
+      requested_seller: 'Bianca',
+    }),
+  ).payload;
+  assert.equal(seller.handoff.requested_seller_id, SELLER_ID);
+  assertTurn(seller.turn);
+  assert.equal(
+    decide(context('Vocês fazem parceria?')).handoff_reason,
+    'partnership',
+  );
+  const failure = run(
+    'Preparar handoff de falha da IA (MVP)',
+    {},
+    { 'Montar contexto da IA (MVP)': ctx },
+  ).payload;
+  assert.equal(failure.handoff.reason, 'automation_failure');
+  assertTurn(failure.turn);
+});
+
+test('capability negative: against an older CRM the workflow sends only what it already accepts', () => {
+  const ctx = context('Quero falar com a Bianca', LEGACY);
+  assert.equal(ctx.crm_evolution, false);
+  assert.equal('turn_started_at' in ctx, true);
+
+  // The seller is named in the summary only; no turn, no seller id.
+  const seller = run(
+    'Preparar handoff da IA (MVP)',
+    decide(ctx, {
+      person_request: 'named',
+      requested_person_name: 'Bianca',
+      requested_seller: 'Bianca',
+    }),
+  ).payload;
+  assert.equal(seller.handoff.reason, 'human_requested');
+  assert.equal('requested_seller_id' in seller.handoff, false);
+  assert.equal('turn' in seller, false);
+  assert.match(seller.handoff.summary, /Vendedor pedido: Bianca\./u);
+  assert.equal(validateEvent(seller, contract), true);
+
+  // A plain reply: no turn.
+  const reply = run(
+    'Preparar reserva de envio da IA (MVP)',
+    decide(context('Branca', { ...LEGACY, briefing: shirtWithout('colors') }), {
+      answer_status: 'answered',
+      briefing_patch: { colors: 'branca' },
+      reply_text: 'Quantas peças você precisa?',
+      asked_field: 'quantity',
+    }),
+  ).payload;
+  assert.equal('turn' in reply, false);
+  assert.equal(validateEvent(reply, contract), true);
+
+  // Partnership falls back to human_requested, a failure to unsupported.
+  assert.equal(
+    decide(context('Vocês fazem parceria?', LEGACY)).handoff_reason,
+    'human_requested',
+  );
+  const failure = run(
+    'Preparar handoff de falha da IA (MVP)',
+    {},
+    { 'Montar contexto da IA (MVP)': ctx },
+  ).payload;
+  assert.equal(failure.handoff.reason, 'unsupported');
+  assert.equal('turn' in failure, false);
+  assert.equal(failure.handoff.notice.text.length > 0, true);
+  assert.equal(validateEvent(failure, contract), true);
+
+  // A content handoff: no turn.
+  const content = run(
+    'Preparar handoff de conteúdo (MVP)',
+    {
+      conversation_id: 'conversation-sintetica',
+      automation_epoch: 4,
+      source_revision: 9,
+    },
+    {
+      'Normalizar evento WhatsApp (MVP)': {
+        message_type: 'document',
+        channel: 'whatsapp',
+        occurred_at: THURSDAY_MORNING,
+      },
+      'Preparar inbound CRM (MVP)': { received_at: RECEIVED_AT },
+    },
+  ).payload;
+  assert.equal('turn' in content, false);
+  assert.equal(validateEvent(content, contract), true);
+
+  // The transcript is not sent; the turn goes straight on to the context.
+  const transcript = run(
+    'Preparar transcrição do áudio (MVP)',
+    { text: 'Quero 20 bonés pretos' },
+    {
+      'Normalizar evento WhatsApp (MVP)': {
+        event_id: 'wamid.audio-legacy',
+        occurred_at: THURSDAY_MORNING,
+        media_kind: 'audio',
+      },
+      'CRM - Reler conversa (MVP)': { conversation_id: 'conversation-1' },
+    },
+  );
+  assert.equal(transcript.send_transcript, false);
+  const gate = nodes.get('CRM aceita a transcrição? (MVP)').parameters
+    .conditions.conditions[0].leftValue;
+  assert.match(gate, /\$json\.send_transcript === true/u);
 });
 
 // 6 — False positives of ADRs 049 and 051.

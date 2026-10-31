@@ -714,7 +714,7 @@ const DECISION_GUARD_PREFIX =
 const TURN_RULE = String.raw`const ANSWER_STATUSES = ['answered', 'unclear', 'undecided', 'question', 'deferred', 'other', 'none'];
 const MEDIA_KINDS = ['text', 'image', 'audio', 'sticker'];
 const turnTelemetry = (d, trigger) => {
-  if (!d || typeof d !== 'object' || !('turn_started_at' in d)) return null;
+  if (!d || typeof d !== 'object' || !('turn_started_at' in d) || d.crm_evolution !== true) return null;
   const code = (value, pattern) => typeof value === 'string' && pattern.test(value) ? value : null;
   const count = (value) => Number.isInteger(value) && value >= 0 && value <= 64 ? value : 0;
   const total = count(d.ficha_total);
@@ -733,6 +733,16 @@ const turnTelemetry = (d, trigger) => {
     media_kind: MEDIA_KINDS.includes(d.turn_media_kind) ? d.turn_media_kind : null
   };
 };`;
+
+// VND-L03 (QA M3): the fields and reasons of this round (turn, requested_seller_id,
+// automation_failure, partnership, message.transcribed) go only to a CRM that
+// announces them. The CRM of this round always returns contact_context (null
+// for a first contact) in the inbound answer; an older CRM, which refuses
+// unknown fields and reasons with 400, never does. Against it the workflow
+// sends what mvp-simple-19 sent: no turn, no seller id, no transcript, and the
+// old reasons (unsupported for a failure, human_requested for a partnership).
+const CAPABILITY_RULE = String.raw`const announcesEvolution = (answer) => Boolean(answer) && typeof answer === 'object'
+  && Object.prototype.hasOwnProperty.call(answer, 'contact_context');`;
 
 function codeStep(name, position, jsCode, continueOnError = false) {
   if (name === 'Montar contexto da IA (MVP)') {
@@ -1353,24 +1363,32 @@ const text = $json.media_unreadable === true ? '' : String($json.text ?? '').tri
 const transcript = $json.media_unreadable === true
   ? { status: 'failed', code: $json.failure_code === 'AUDIO_TOO_LARGE' ? 'AUDIO_TOO_LARGE' : 'TRANSCRIPTION_FAILED' }
   : text ? { status: 'ok', text } : { status: 'failed', code: 'TRANSCRIPTION_EMPTY' };
-const conversationId = (() => {
-  for (const name of ['CRM - Reler conversa (MVP)', 'CRM - Registrar inbound (MVP)']) {
-    try { const id = $(name).item.json.conversation_id; if (id) return id; } catch (error) { /* not run */ }
-  }
-  return null;
-})();
+${CAPABILITY_RULE}
+let crm = null;
+for (const name of ['CRM - Reler conversa (MVP)', 'CRM - Registrar inbound (MVP)']) {
+  try { const answer = $(name).item.json; if (answer?.conversation_id) { crm = answer; break; } } catch (error) { /* not run */ }
+}
+const conversationId = crm?.conversation_id ?? null;
 const eventId = 'transcribed:' + source.event_id;
 return { json: { payload: {
   schema_version: '1.0', event_id: eventId, event_type: 'message.transcribed',
   // The message's own time: the same key always carries the same payload.
   occurred_at: source.occurred_at, conversation_id: conversationId,
   external_message_id: source.event_id, transcript
-}, idempotency_key: eventId, correlation_id: correlationId } };`,
+}, idempotency_key: eventId, correlation_id: correlationId,
+  // VND-L03 (QA M3): an older CRM does not know message.transcribed.
+  send_transcript: announcesEvolution(crm) && conversationId !== null } };`,
+);
+
+const transcriptAccepted = ifBoolean(
+  'CRM aceita a transcrição? (MVP)',
+  [-270, -1200],
+  '{{ $json.send_transcript === true }}',
 );
 
 const crmTranscribed = crmPost(
   'CRM - Registrar transcrição do áudio (MVP)',
-  [-270, -1200],
+  [-30, -1200],
   '/api/v1/integrations/n8n/events',
   true,
   '$json',
@@ -1489,6 +1507,7 @@ const sellerDirectory = Array.isArray(inbound.sellers)
     .map((seller) => ({ id: seller.id, name: String(seller.name).trim() }))
   : [];
 const turn = agentMessages + 1;
+${CAPABILITY_RULE}
 // VND-CTX-01: a returning customer. The CRM sends only counts and a date (previous_cycles,
 // previous_orders_count, last_closed_at); the model gets the fact alone, with no number, product or
 // date. Absent, the conversation goes on as for anyone.
@@ -1591,6 +1610,7 @@ return { json: {
   image_turn: imageTurn,
   burst_size: burstLines.length + 1,
   seller_directory: sellerDirectory,
+  crm_evolution: announcesEvolution(inbound),
   returning_customer: returningCustomer,
   // Only a turn n8n timed carries telemetry: the CRM keeps "turn" optional.
   ...(turnStartedAt ? { turn_started_at: turnStartedAt } : {}),
@@ -2189,7 +2209,7 @@ const reasonByTrigger = {
   external_context: 'human_requested',
   // VND-L02 item 8: not "negotiation", which the Inbox shows as "Perguntou o valor". VND-L03
   // (INBOX-HANDOFF-02): its own reason, which the CRM accepts from migration 0046.
-  partnership: 'partnership',
+  partnership: context.crm_evolution === true ? 'partnership' : 'human_requested',
   unsupported: 'unsupported', foreign_language: 'unsupported', two_attempts: 'low_confidence',
   ignored_twice: 'low_confidence',
   subject_ambiguous: 'low_confidence',
@@ -2430,7 +2450,7 @@ const notice = d.reply_text ? { command_id: command + ':notice', text: d.reply_t
 ${TURN_RULE}
 const turn = turnTelemetry(d);
 // INBOX-HANDOFF-02: the seller the customer asked for by name, among the ones the CRM listed.
-const sellerId = typeof d.requested_seller_id === 'string' && d.requested_seller_id ? d.requested_seller_id : null;
+const sellerId = d.crm_evolution === true && typeof d.requested_seller_id === 'string' && d.requested_seller_id ? d.requested_seller_id : null;
 return { json: {
   payload: {
     schema_version: '1.0', event_id: command, event_type: 'handoff.requested',
@@ -2473,7 +2493,7 @@ return { json: {
     ...(d.target_subject_id ? { subject_id: d.target_subject_id, order_id: d.target_order_id } : {}),
     open_order: false,
     handoff: {
-      reason: 'automation_failure',
+      reason: d.crm_evolution === true ? 'automation_failure' : 'unsupported',
       summary,
       notice: {
         command_id: command + ':notice',
@@ -2500,10 +2520,11 @@ ${CLOCK_RULE}
 const received = { audio: 'o seu áudio', image: 'a sua imagem', text: 'a sua mensagem' }[source.message_type] ?? 'o seu arquivo';
 // AGENTE-OBS-01: this turn never calls the model; its telemetry has the kind of content only.
 ${TURN_RULE}
+${CAPABILITY_RULE}
 let receivedAt;
 try { receivedAt = $('Preparar inbound CRM (MVP)').item.json.received_at; } catch (error) { receivedAt = undefined; }
 const turn = !receivedAt ? null : turnTelemetry({
-  turn_started_at: receivedAt, turn_model: null, ficha_filled: 0, ficha_total: 0,
+  turn_started_at: receivedAt, crm_evolution: announcesEvolution(inbound), turn_model: null, ficha_filled: 0, ficha_total: 0,
   turn_media_kind: ['image', 'audio'].includes(source.media_kind) ? source.media_kind : null
 }, 'unsupported_content');
 return { json: {
@@ -3371,7 +3392,13 @@ validateHumanMediaSent.onError(prepareHumanUnknown);
 // transcript to the CRM on the way; either outcome of that call goes on.
 prepareMedia.to(
   isAudio
-    .onTrue(transcribeAudio.to(prepareTranscribed.to(crmTranscribed)))
+    .onTrue(
+      transcribeAudio.to(
+        prepareTranscribed.to(
+          transcriptAccepted.onTrue(crmTranscribed).onFalse(buildAgentContext),
+        ),
+      ),
+    )
     .onFalse(buildAgentContext),
 );
 getWhatsAppMedia.onError(markMediaUnread);
