@@ -1254,9 +1254,8 @@ if (connectionString) {
           const first = await env.receive(phone, 'wamid.ctx.1');
           assert.deepEqual(first.contact_context, {
             last_closed_at: null,
-            last_outcome: null,
             previous_cycles: 0,
-            previous_orders: [],
+            previous_orders_count: 0,
           });
           const contactId = first.contact_id;
           /** @param {string} id @param {string|null} conversationId @param {string} status @param {string} kind @param {string} createdAt */
@@ -1425,42 +1424,17 @@ if (connectionString) {
               ['wamid.ctx.3', []],
             ],
           );
+          // RULES.md 8/13: counts and one date only. Four earlier orders
+          // (one manual, three of the closed cycle); the current one is out.
           assert.deepEqual(third.contact_context, {
             last_closed_at: closedDay,
-            last_outcome: 'concluido',
             previous_cycles: 1,
-            previous_orders: [
-              {
-                created_month: '2026-10',
-                order_number:
-                  third.contact_context.previous_orders[0].order_number,
-                product_type: 'x'.repeat(80),
-                status: 'confirmado',
-              },
-              {
-                created_month: '2026-09',
-                order_number:
-                  third.contact_context.previous_orders[1].order_number,
-                product_type: 'Regata',
-                status: 'confirmado',
-              },
-              {
-                created_month: '2026-08',
-                order_number:
-                  third.contact_context.previous_orders[2].order_number,
-                product_type: 'Uniforme de futebol',
-                status: 'confirmado',
-              },
-            ],
+            previous_orders_count: 4,
           });
-          assert.match(
-            third.contact_context.previous_orders[0].order_number,
-            /^\d{2,}-CRM$/u,
-          );
           // No amount, address, payment or customer name.
           assert.doesNotMatch(
             JSON.stringify(third.contact_context),
-            /12345|pix|Cliente Sintética|Moletom|Camisa polo/u,
+            /12345|pix|Cliente Sintética|Moletom|Camisa|Regata|CRM|confirmado|concluido/u,
           );
         },
       );

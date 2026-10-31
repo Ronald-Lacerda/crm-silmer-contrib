@@ -1691,32 +1691,47 @@ export class PostgresN8nIntegrationRepository {
   }
 
   /**
-   * VND-CTX-01: what the agent may know about a returning customer: how many
-   * earlier cycles, how the last one ended and at most three earlier orders
-   * (number, status, kind of product, month). No amount, address, payment or
-   * file ever leaves here.
+   * VND-CTX-01: what the agent may know about a returning customer, kept to
+   * the minimum (RULES.md 8 and 13): how many earlier cycles, when the last
+   * one closed and how many earlier orders exist. No order number, status,
+   * product, amount, address, payment or file leaves here, and no ficha is
+   * decrypted on this path.
    *
    * @param {Queryable} client @param {any} conversation
    */
   async #contactContext(client, conversation) {
-    const cycles = (
+    const row = (
       await client.query(
-        `SELECT count(*)::integer AS previous_cycles,
-                to_char(max(previous.terminal_at)
-                  AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS last_closed_at,
-                (SELECT closed.closure_outcome
-                 FROM crm.conversations AS closed
-                 JOIN crm.contact_identities AS closed_identity
-                   ON closed_identity.id = closed.contact_identity_id
-                 WHERE closed_identity.current_contact_id = $1
-                   AND closed.id <> $2 AND closed.terminal_at IS NOT NULL
-                 ORDER BY closed.terminal_at DESC, closed.id DESC
-                 LIMIT 1) AS last_outcome
-         FROM crm.conversations AS previous
-         JOIN crm.contact_identities AS identity
-           ON identity.id = previous.contact_identity_id
-         WHERE identity.current_contact_id = $1 AND previous.id <> $2
-           AND previous.opened_at <= $3`,
+        `SELECT
+           (SELECT count(*)::integer
+            FROM crm.conversations AS previous
+            JOIN crm.contact_identities AS identity
+              ON identity.id = previous.contact_identity_id
+            WHERE identity.current_contact_id = $1 AND previous.id <> $2
+              AND previous.opened_at <= $3) AS previous_cycles,
+           (SELECT to_char(max(closed.terminal_at)
+                     AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD')
+            FROM crm.conversations AS closed
+            JOIN crm.contact_identities AS identity
+              ON identity.id = closed.contact_identity_id
+            WHERE identity.current_contact_id = $1 AND closed.id <> $2
+              AND closed.terminal_at IS NOT NULL) AS last_closed_at,
+           (SELECT count(*)::integer FROM (
+              SELECT 1
+              FROM crm.orders AS orders
+              LEFT JOIN crm.conversations AS origin
+                ON origin.id = orders.conversation_id
+              LEFT JOIN crm.contact_identities AS origin_identity
+                ON origin_identity.id = origin.contact_identity_id
+              WHERE (orders.contact_id = $1
+                  OR origin_identity.current_contact_id = $1)
+                AND orders.conversation_id IS DISTINCT FROM $2
+                AND NOT orders.is_test
+                AND NOT EXISTS (
+                  SELECT 1 FROM crm.conversation_subjects AS subject
+                  WHERE subject.conversation_id = $2
+                    AND subject.order_id = orders.id)
+              LIMIT 99) AS earlier) AS previous_orders_count`,
         [
           conversation.current_contact_id,
           conversation.id,
@@ -1724,64 +1739,14 @@ export class PostgresN8nIntegrationRepository {
         ],
       )
     ).rows[0];
-    const orders = (
-      await client.query(
-        `SELECT orders.id, orders.number, orders.status, orders.ficha_envelope,
-                to_char(orders.created_at AT TIME ZONE 'America/Sao_Paulo',
-                        'YYYY-MM') AS created_month
-         FROM crm.orders AS orders
-         LEFT JOIN crm.conversations AS origin
-           ON origin.id = orders.conversation_id
-         LEFT JOIN crm.contact_identities AS origin_identity
-           ON origin_identity.id = origin.contact_identity_id
-         WHERE (orders.contact_id = $1
-             OR origin_identity.current_contact_id = $1)
-           AND orders.conversation_id IS DISTINCT FROM $2
-           AND NOT orders.is_test
-           AND NOT EXISTS (
-             SELECT 1 FROM crm.conversation_subjects AS subject
-             WHERE subject.conversation_id = $2
-               AND subject.order_id = orders.id)
-         ORDER BY orders.created_at DESC, orders.id DESC
-         LIMIT 3`,
-        [conversation.current_contact_id, conversation.id],
-      )
-    ).rows;
-    const outcome = cycles?.last_outcome;
     return {
-      previous_cycles: Number(cycles?.previous_cycles ?? 0),
-      last_closed_at: cycles?.last_closed_at ?? null,
-      last_outcome:
-        outcome === 'concluido' || outcome === 'sem_pedido' ? outcome : null,
-      previous_orders: orders.map((/** @type {any} */ order) => ({
-        order_number: order.number,
-        status: order.status,
-        product_type: this.#orderProductType(order),
-        created_month: order.created_month,
-      })),
+      previous_cycles: Number(row?.previous_cycles ?? 0),
+      previous_orders_count: Math.min(
+        99,
+        Number(row?.previous_orders_count ?? 0),
+      ),
+      last_closed_at: row?.last_closed_at ?? null,
     };
-  }
-
-  /**
-   * The kind of garment of the order's first item, read from its ficha with
-   * the shared order key. Anything unreadable is simply absent.
-   *
-   * @param {{id: string, ficha_envelope: unknown}} order
-   */
-  #orderProductType(order) {
-    try {
-      const ficha = decryptJson(
-        order.ficha_envelope,
-        `order-ficha:${order.id}`,
-        this.envelopeKey,
-      );
-      const kind = ficha?.items?.[0]?.tipo;
-      if (typeof kind !== 'string') return null;
-      const text = kind.replace(/[\u0000-\u001f\u007f]/gu, ' ').trim();
-      return text ? text.slice(0, 80) : null;
-    } catch {
-      return null;
-    }
   }
 
   /** @param {any} conversation */
