@@ -262,3 +262,74 @@ test('loads versioned forward-only migrations in deterministic order', async () 
     await rm(directory, { force: true, recursive: true });
   }
 });
+
+test('adds the automation_failure and partnership handoff reasons and the preferred seller as an expand migration (INBOX-HANDOFF-02)', async () => {
+  const migration = (await loadMigrations()).find(
+    ({ version }) => version === '0046',
+  );
+  assert.ok(migration, 'migration 0046 is present');
+  assert.equal(migration.name, 'handoff_reasons_preferred_seller');
+  assert.equal(migration.phase, 'expand');
+  assert.match(migration.sql, /'automation_failure', 'partnership'/u);
+  // Every reason the previous release writes stays valid.
+  for (const reason of [
+    'customer_requested_human',
+    'price_before_quote',
+    'briefing_complete',
+    'low_confidence',
+    'iteration_limit',
+  ]) {
+    assert.match(migration.sql, new RegExp(`'${reason}'`, 'u'));
+  }
+  assert.match(
+    migration.sql,
+    /ADD COLUMN preferred_user_id text REFERENCES crm\.users \(id\)/u,
+  );
+  assert.doesNotMatch(migration.sql, /NOT NULL DEFAULT|SET NOT NULL/u);
+  assert.doesNotMatch(migration.sql, /\bDROP\s+(?:TABLE|COLUMN)\b/iu);
+});
+
+test('ships the assistant turn telemetry as an expand migration without free text (AGENTE-OBS-01)', async () => {
+  const migration = (await loadMigrations()).find(
+    ({ version }) => version === '0047',
+  );
+  assert.ok(migration, 'migration 0047 is present');
+  assert.equal(migration.name, 'automation_turns');
+  assert.equal(migration.phase, 'expand');
+  assert.match(migration.sql, /CREATE TABLE crm\.automation_turns\b/u);
+  assert.match(
+    migration.sql,
+    /n8n_event_id text NOT NULL UNIQUE\s+REFERENCES crm\.n8n_events \(id\)/u,
+  );
+  assert.match(migration.sql, /asked_field text CHECK \(asked_field ~ /u);
+  assert.match(migration.sql, /CREATE INDEX automation_turns_occurred\b/u);
+  assert.match(migration.sql, /CREATE INDEX automation_turns_conversation\b/u);
+  // Codes, counts and times only.
+  assert.doesNotMatch(
+    migration.sql,
+    /\b(?:text_envelope|summary|content|phone|name|message_text)\s+(?:text|jsonb)\b/u,
+  );
+  assert.doesNotMatch(migration.sql, /\bDROP\s+(?:TABLE|COLUMN)\b/iu);
+});
+
+test('ships the audio transcript and the assistant delivery code as an expand migration (INBOX-AUDIO-TRANSCRIPT-01, INBOX-DELIVERY-02)', async () => {
+  const migration = (await loadMigrations()).find(
+    ({ version }) => version === '0048',
+  );
+  assert.ok(migration, 'migration 0048 is present');
+  assert.equal(migration.name, 'message_transcript_delivery_code');
+  assert.equal(migration.phase, 'expand');
+  // The transcript is customer content: an envelope, never plain text.
+  assert.match(migration.sql, /ADD COLUMN transcript_envelope jsonb/u);
+  assert.doesNotMatch(migration.sql, /ADD COLUMN transcript_text\b/u);
+  assert.match(
+    migration.sql,
+    /delivery_failure_code ~ '\^\[A-Z0-9_\]\{1,64\}\$'/u,
+  );
+  assert.match(
+    migration.sql,
+    /'message\.send\.unknown', 'message\.transcribed'/u,
+  );
+  assert.doesNotMatch(migration.sql, /NOT NULL DEFAULT|SET NOT NULL/u);
+  assert.doesNotMatch(migration.sql, /\bDROP\s+(?:TABLE|COLUMN)\b/iu);
+});
