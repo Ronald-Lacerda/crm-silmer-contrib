@@ -1489,24 +1489,14 @@ const sellerDirectory = Array.isArray(inbound.sellers)
     .map((seller) => ({ id: seller.id, name: String(seller.name).trim() }))
   : [];
 const turn = agentMessages + 1;
-// VND-CTX-01: a returning customer, as the CRM sums it up (no values, address or files). Absent,
-// the conversation goes on as for anyone.
+// VND-CTX-01: a returning customer. The CRM sends only counts and a date (previous_cycles,
+// previous_orders_count, last_closed_at); the model gets the fact alone, with no number, product or
+// date. Absent, the conversation goes on as for anyone.
 const contactContext = inbound.contact_context && typeof inbound.contact_context === 'object' ? inbound.contact_context : null;
-const previousCycles = Number.isInteger(contactContext?.previous_cycles) && contactContext.previous_cycles > 0 ? contactContext.previous_cycles : 0;
-const previousOrders = (Array.isArray(contactContext?.previous_orders) ? contactContext.previous_orders : [])
-  .filter((order) => order && typeof order === 'object' && String(order.order_number ?? '').trim()).slice(0, 3)
-  .map((order) => String(order.order_number).trim().slice(0, 40)
-    + ' (' + [String(order.product_type ?? '').trim().slice(0, 80) || 'produto não informado',
-      /^\\d{4}-\\d{2}$/.test(String(order.created_month ?? '')) ? order.created_month.slice(5) + '/' + order.created_month.slice(0, 4) : ''
-    ].filter(Boolean).join(', ') + ')');
-const returningCustomer = previousCycles > 0 || previousOrders.length > 0;
-const lastClosed = /^(\\d{4})-(\\d{2})-\\d{2}$/.exec(String(contactContext?.last_closed_at ?? ''));
+const positive = (value) => Number.isInteger(value) && value > 0;
+const returningCustomer = positive(contactContext?.previous_cycles) || positive(contactContext?.previous_orders_count);
 const returningLine = !returningCustomer ? null
-  : 'Cliente recorrente: já foi atendido pela Silmer antes'
-    + (previousCycles ? ' (' + previousCycles + (previousCycles === 1 ? ' atendimento anterior' : ' atendimentos anteriores')
-      + (lastClosed ? ', o último encerrado em ' + lastClosed[2] + '/' + lastClosed[1] : '') + ')' : '')
-    + (previousOrders.length ? '; pedidos anteriores: ' + previousOrders.join('; ') : '')
-    + '. Pode dizer que é bom falar com a pessoa de novo. Trate esta conversa como um pedido novo: não suponha que é o mesmo pedido, não fale de pedido anterior se o cliente não citar e nunca cite valores.';
+  : 'Cliente recorrente: já foi atendido pela Silmer antes. Pode dizer que é bom falar com a pessoa de novo. Trate esta conversa como um pedido novo: não suponha que é o mesmo pedido, não fale de pedido anterior se o cliente não citar e nunca cite valores.';
 // AGENTE-OBS-01: the turn starts when n8n took the message; the kind of message, never its content.
 const turnStartedAt = ranJson('Preparar inbound CRM (MVP)')?.received_at ?? null;
 const turnMediaKind = mediaKind === 'image' || mediaKind === 'audio' ? mediaKind

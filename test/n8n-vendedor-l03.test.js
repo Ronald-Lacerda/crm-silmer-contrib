@@ -632,40 +632,52 @@ test('context negative: a CRM without subject_ids still sends no history with tw
   assert.equal(single.recent_messages.length, 1);
 });
 
-test('context: a returning customer is recognised without values, the earlier order or a guess', () => {
-  const ctx = context('Oi, quero fazer camisetas', {
-    contact_context: {
+test('context: a returning customer is only that fact, with no number, product or date', () => {
+  for (const contact_context of [
+    {
       previous_cycles: 2,
+      previous_orders_count: 1,
       last_closed_at: '2026-08-14',
-      last_outcome: 'concluido',
-      previous_orders: [
-        {
-          order_number: '03-CRM',
-          status: 'confirmado',
-          product_type: 'camisetas',
-          created_month: '2026-08',
-        },
-      ],
     },
-  });
-  assert.equal(ctx.returning_customer, true);
-  assert.match(
-    ctx.prompt,
-    /Cliente recorrente: já foi atendido pela Silmer antes \(2 atendimentos anteriores, o último encerrado em 08\/2026\); pedidos anteriores: 03-CRM \(camisetas, 08\/2026\)\./u,
-  );
-  assert.match(
-    ctx.prompt,
-    /não suponha que é o mesmo pedido, não fale de pedido anterior se o cliente não citar e nunca cite valores/u,
-  );
+    { previous_cycles: 0, previous_orders_count: 3, last_closed_at: null },
+  ]) {
+    const ctx = context('Oi, quero fazer camisetas', { contact_context });
+    assert.equal(ctx.returning_customer, true);
+    const line = ctx.prompt
+      .split('\n')
+      .find((/** @type {string} */ entry) =>
+        entry.startsWith('Cliente recorrente'),
+      );
+    assert.equal(
+      line,
+      'Cliente recorrente: já foi atendido pela Silmer antes. Pode dizer que é bom falar com a pessoa de novo. Trate esta conversa como um pedido novo: não suponha que é o mesmo pedido, não fale de pedido anterior se o cliente não citar e nunca cite valores.',
+    );
+    assert.doesNotMatch(
+      ctx.prompt,
+      /2026-08|08\/2026|\b[123] (atendimento|pedido)/u,
+    );
+  }
   const prompt = nodes.get('Atendente virtual Silmer (MVP)').parameters.options
     .systemMessage;
   assert.match(prompt, /CLIENTE RECORRENTE/u);
+  // The context node no longer reads the fields of the first draft.
+  const code = nodes.get('Montar contexto da IA (MVP)').parameters.jsCode;
+  assert.doesNotMatch(
+    code,
+    /previous_orders\b|created_month|order_number\)\.trim/u,
+  );
 
   // The workflow's own greeting (an image turn) welcomes back, nothing more.
   const image = decide(
     context(
       '',
-      { contact_context: { previous_cycles: 1, previous_orders: [] } },
+      {
+        contact_context: {
+          previous_cycles: 1,
+          previous_orders_count: 0,
+          last_closed_at: '2026-08-14',
+        },
+      },
       { message_type: 'image', media_kind: 'image', media_source: 'whatsapp' },
       { media_kind: 'image', media_unreadable: true },
     ),
@@ -675,17 +687,34 @@ test('context: a returning customer is recognised without values, the earlier or
     image.reply_text,
     /^Oi! Que bom falar com você de novo\. Sou a assistente virtual da Silmer\./u,
   );
-  assert.doesNotMatch(image.reply_text, /03-CRM|pedido anterior/u);
+  assert.doesNotMatch(image.reply_text, /pedido anterior|2026/u);
 });
 
-test('context negative: without contact_context (or a first contact) nothing changes', () => {
+test('context negative: without contact_context, a first contact or the old list, nothing changes', () => {
   for (const inbound of [
     {},
-    { contact_context: { previous_cycles: 0, previous_orders: [] } },
+    { contact_context: null },
+    {
+      contact_context: {
+        previous_cycles: 0,
+        previous_orders_count: 0,
+        last_closed_at: null,
+      },
+    },
+    // The first draft's list is ignored: only the counts say "returning".
+    {
+      contact_context: {
+        previous_cycles: 0,
+        previous_orders_count: 0,
+        previous_orders: [
+          { order_number: '03-CRM', product_type: 'camisetas' },
+        ],
+      },
+    },
   ]) {
     const ctx = context('Oi', inbound);
     assert.equal(ctx.returning_customer, false);
-    assert.doesNotMatch(ctx.prompt, /Cliente recorrente/u);
+    assert.doesNotMatch(ctx.prompt, /Cliente recorrente|03-CRM/u);
   }
   const image = decide(
     context(
