@@ -1686,7 +1686,102 @@ export class PostgresN8nIntegrationRepository {
       ),
       automation_message_cap: this.automationMessageCap,
       sellers: await activeSellers(client),
+      contact_context: await this.#contactContext(client, conversation),
     };
+  }
+
+  /**
+   * VND-CTX-01: what the agent may know about a returning customer: how many
+   * earlier cycles, how the last one ended and at most three earlier orders
+   * (number, status, kind of product, month). No amount, address, payment or
+   * file ever leaves here.
+   *
+   * @param {Queryable} client @param {any} conversation
+   */
+  async #contactContext(client, conversation) {
+    const cycles = (
+      await client.query(
+        `SELECT count(*)::integer AS previous_cycles,
+                to_char(max(previous.terminal_at)
+                  AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM-DD') AS last_closed_at,
+                (SELECT closed.closure_outcome
+                 FROM crm.conversations AS closed
+                 JOIN crm.contact_identities AS closed_identity
+                   ON closed_identity.id = closed.contact_identity_id
+                 WHERE closed_identity.current_contact_id = $1
+                   AND closed.id <> $2 AND closed.terminal_at IS NOT NULL
+                 ORDER BY closed.terminal_at DESC, closed.id DESC
+                 LIMIT 1) AS last_outcome
+         FROM crm.conversations AS previous
+         JOIN crm.contact_identities AS identity
+           ON identity.id = previous.contact_identity_id
+         WHERE identity.current_contact_id = $1 AND previous.id <> $2
+           AND previous.opened_at <= $3`,
+        [
+          conversation.current_contact_id,
+          conversation.id,
+          conversation.opened_at,
+        ],
+      )
+    ).rows[0];
+    const orders = (
+      await client.query(
+        `SELECT orders.id, orders.number, orders.status, orders.ficha_envelope,
+                to_char(orders.created_at AT TIME ZONE 'America/Sao_Paulo',
+                        'YYYY-MM') AS created_month
+         FROM crm.orders AS orders
+         LEFT JOIN crm.conversations AS origin
+           ON origin.id = orders.conversation_id
+         LEFT JOIN crm.contact_identities AS origin_identity
+           ON origin_identity.id = origin.contact_identity_id
+         WHERE (orders.contact_id = $1
+             OR origin_identity.current_contact_id = $1)
+           AND orders.conversation_id IS DISTINCT FROM $2
+           AND NOT orders.is_test
+           AND NOT EXISTS (
+             SELECT 1 FROM crm.conversation_subjects AS subject
+             WHERE subject.conversation_id = $2
+               AND subject.order_id = orders.id)
+         ORDER BY orders.created_at DESC, orders.id DESC
+         LIMIT 3`,
+        [conversation.current_contact_id, conversation.id],
+      )
+    ).rows;
+    const outcome = cycles?.last_outcome;
+    return {
+      previous_cycles: Number(cycles?.previous_cycles ?? 0),
+      last_closed_at: cycles?.last_closed_at ?? null,
+      last_outcome:
+        outcome === 'concluido' || outcome === 'sem_pedido' ? outcome : null,
+      previous_orders: orders.map((/** @type {any} */ order) => ({
+        order_number: order.number,
+        status: order.status,
+        product_type: this.#orderProductType(order),
+        created_month: order.created_month,
+      })),
+    };
+  }
+
+  /**
+   * The kind of garment of the order's first item, read from its ficha with
+   * the shared order key. Anything unreadable is simply absent.
+   *
+   * @param {{id: string, ficha_envelope: unknown}} order
+   */
+  #orderProductType(order) {
+    try {
+      const ficha = decryptJson(
+        order.ficha_envelope,
+        `order-ficha:${order.id}`,
+        this.envelopeKey,
+      );
+      const kind = ficha?.items?.[0]?.tipo;
+      if (typeof kind !== 'string') return null;
+      const text = kind.replace(/[\u0000-\u001f\u007f]/gu, ' ').trim();
+      return text ? text.slice(0, 80) : null;
+    } catch {
+      return null;
+    }
   }
 
   /** @param {any} conversation */
@@ -2004,7 +2099,11 @@ export class PostgresN8nIntegrationRepository {
       await client.query(
         `SELECT id, external_message_id, direction, author_kind, message_type,
                 content_envelope, occurred_at, transcript_status,
-                transcript_envelope
+                transcript_envelope,
+                ARRAY(SELECT link.subject_id
+                      FROM crm.message_subject_links AS link
+                      WHERE link.message_id = crm.messages.id
+                      ORDER BY link.subject_id) AS subject_ids
          FROM crm.messages
          WHERE conversation_id = $1
            AND occurred_at >= now() - interval '24 hours'
@@ -2038,6 +2137,8 @@ export class PostgresN8nIntegrationRepository {
             : row.author_kind === 'assistant'
               ? 'ai'
               : row.author_kind,
+        // VND-CTX-01: every subject the message refers to, not only one.
+        subject_ids: Array.isArray(row.subject_ids) ? row.subject_ids : [],
         text: transcript
           ? String(transcript.text ?? '')
           : (content.text ?? content.caption ?? ''),

@@ -23,6 +23,7 @@ import {
   countStalledConversations,
   createN8nIntegrationService,
 } from '../modules/n8n-integration/src/index.js';
+import { encryptJson } from '../modules/n8n-integration/src/crypto.js';
 import { PostgresHandoffReadRepository } from '../modules/work-management/src/index.js';
 
 const connectionString = process.env.TEST_DATABASE_URL;
@@ -1217,6 +1218,224 @@ if (connectionString) {
               )
             ).rows[0].delivery_failure_code,
             null,
+          );
+        },
+      );
+
+      await t.test(
+        'VND-CTX-01: recent messages keep every subject and a returning customer gets a bounded context',
+        async () => {
+          const phone = '5527990001001';
+          const first = await env.receive(phone, 'wamid.ctx.1');
+          assert.deepEqual(first.contact_context, {
+            last_closed_at: null,
+            last_outcome: null,
+            previous_cycles: 0,
+            previous_orders: [],
+          });
+          const contactId = first.contact_id;
+          /** @param {string} id @param {string|null} conversationId @param {string} status @param {string} kind @param {string} createdAt */
+          const order = async (id, conversationId, status, kind, createdAt) => {
+            const confirmed = status === 'confirmado';
+            await pool.query(
+              `INSERT INTO crm.orders
+                 (id, number_sequence, number, conversation_id, status,
+                  fab_code, ficha_envelope, final_amount_cents,
+                  payment_condition, order_date, confirmed_at, confirmed_by,
+                  created_by_kind, created_by, created_at, updated_at,
+                  contact_id, manual_owner_id, manual_create_key)
+               SELECT $1, sequence, lpad(sequence::text, 2, '0') || '-CRM', $2,
+                      $3, 'FAB-TEST', $4::jsonb, $5, $6, $7, $8, $9, 'user',
+                      $9, $10, $10, $11, $12, $13
+               FROM (SELECT nextval('crm.order_number_seq') AS sequence) next`,
+              [
+                id,
+                conversationId,
+                status,
+                JSON.stringify(
+                  encryptJson(
+                    {
+                      items: [{ tipo: kind }],
+                      summary: { cliente: 'Cliente Sintética' },
+                    },
+                    `order-ficha:${id}`,
+                    N8N_KEY,
+                  ),
+                ),
+                confirmed ? 123_45 : null,
+                confirmed ? 'pix' : null,
+                confirmed ? createdAt.slice(0, 10) : null,
+                confirmed ? createdAt : null,
+                SELLER.id,
+                createdAt,
+                contactId,
+                conversationId ? null : SELLER.id,
+                conversationId ? null : `manual-${id}`,
+              ],
+            );
+          };
+          await order(
+            'order-ctx-1',
+            first.conversation_id,
+            'confirmado',
+            'Camisa polo',
+            '2026-07-10T15:00:00.000Z',
+          );
+          await order(
+            'order-ctx-2',
+            first.conversation_id,
+            'confirmado',
+            'Uniforme de futebol',
+            '2026-08-10T15:00:00.000Z',
+          );
+          await order(
+            'order-ctx-3',
+            first.conversation_id,
+            'confirmado',
+            'Regata',
+            '2026-09-10T15:00:00.000Z',
+          );
+          await order(
+            'order-ctx-4',
+            null,
+            'confirmado',
+            'x'.repeat(120),
+            '2026-10-01T15:00:00.000Z',
+          );
+
+          const owned = await env.inbox.takeover({
+            actor: SELLER,
+            conversationId: first.conversation_id,
+            correlationId: 'correlation-takeover-ctx',
+            expectedVersion: await env.version(first.conversation_id),
+            idempotencyKey: 'takeover-ctx',
+            reason: 'Assumir',
+          });
+          await env.inbox.closeConversation({
+            acknowledgePending: false,
+            actor: SELLER,
+            conversationId: first.conversation_id,
+            correlationId: 'correlation-close-ctx',
+            expectedVersion: owned.version,
+            idempotencyKey: 'close-ctx',
+            outcome: 'concluido',
+            reason: 'Encerramento: concluido',
+          });
+
+          env.advance(1);
+          const second = await env.receive(phone, 'wamid.ctx.2');
+          assert.notEqual(second.conversation_id, first.conversation_id);
+          await order(
+            'order-ctx-current',
+            second.conversation_id,
+            'pendente',
+            'Moletom',
+            '2026-10-29T15:00:00.000Z',
+          );
+          const closedDay = (
+            await pool.query(
+              `SELECT to_char(terminal_at AT TIME ZONE 'America/Sao_Paulo',
+                              'YYYY-MM-DD') AS day
+               FROM crm.conversations WHERE id=$1`,
+              [first.conversation_id],
+            )
+          ).rows[0].day;
+
+          // Two subjects; the customer message refers to both.
+          for (const [position, subjectId] of [
+            'subject-ctx-a',
+            'subject-ctx-b',
+          ].entries()) {
+            await pool.query(
+              `INSERT INTO crm.conversation_subjects
+                 (id, conversation_id, contact_id, order_id, kind, position,
+                  is_current, selected_source, selected_by, selected_at,
+                  created_by, created_by_kind, version, created_at, updated_at)
+               VALUES ($1, $2, $3, NULL, 'geral', $4, $5, $6, $7, $8,
+                       $7, 'human', 1, $8, $8)`,
+              [
+                subjectId,
+                second.conversation_id,
+                contactId,
+                position + 1,
+                position === 0,
+                position === 0 ? 'human' : null,
+                SELLER.id,
+                env.clock.now,
+              ],
+            );
+          }
+          const linked = (
+            await pool.query(
+              `SELECT id FROM crm.messages
+               WHERE conversation_id=$1 AND external_message_id='wamid.ctx.2'`,
+              [second.conversation_id],
+            )
+          ).rows[0].id;
+          for (const subjectId of ['subject-ctx-b', 'subject-ctx-a']) {
+            await pool.query(
+              `INSERT INTO crm.message_subject_links
+                 (message_id, subject_id, conversation_id, assigned_by,
+                  assigned_by_kind, assigned_at)
+               VALUES ($1, $2, $3, $4, 'human', $5)`,
+              [
+                linked,
+                subjectId,
+                second.conversation_id,
+                SELLER.id,
+                env.clock.now,
+              ],
+            );
+          }
+          env.advance(1);
+          const third = await env.receive(phone, 'wamid.ctx.3');
+          assert.equal(third.conversation_id, second.conversation_id);
+          assert.deepEqual(
+            third.recent_messages.map((/** @type {any} */ message) => [
+              message.external_id,
+              message.subject_ids,
+            ]),
+            [
+              ['wamid.ctx.2', ['subject-ctx-a', 'subject-ctx-b']],
+              ['wamid.ctx.3', []],
+            ],
+          );
+          assert.deepEqual(third.contact_context, {
+            last_closed_at: closedDay,
+            last_outcome: 'concluido',
+            previous_cycles: 1,
+            previous_orders: [
+              {
+                created_month: '2026-10',
+                order_number:
+                  third.contact_context.previous_orders[0].order_number,
+                product_type: 'x'.repeat(80),
+                status: 'confirmado',
+              },
+              {
+                created_month: '2026-09',
+                order_number:
+                  third.contact_context.previous_orders[1].order_number,
+                product_type: 'Regata',
+                status: 'confirmado',
+              },
+              {
+                created_month: '2026-08',
+                order_number:
+                  third.contact_context.previous_orders[2].order_number,
+                product_type: 'Uniforme de futebol',
+                status: 'confirmado',
+              },
+            ],
+          });
+          assert.match(
+            third.contact_context.previous_orders[0].order_number,
+            /^\d{2,}-CRM$/u,
+          );
+          // No amount, address, payment or customer name.
+          assert.doesNotMatch(
+            JSON.stringify(third.contact_context),
+            /12345|pix|Cliente Sintética|Moletom|Camisa polo/u,
           );
         },
       );
