@@ -1,7 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { readFile } from 'node:fs/promises';
+
 import { createN8nIntegrationService } from '../modules/n8n-integration/src/index.js';
+import { validateEvent } from '../schemas/fixtures/external/n8n/contract-validator.mjs';
+
+const contract = JSON.parse(
+  await readFile(
+    new URL(
+      '../schemas/fixtures/external/n8n/contract-v1.json',
+      import.meta.url,
+    ),
+    'utf8',
+  ),
+);
 
 const technical = Object.freeze({
   actor: 'AUTOMATION_EXECUTOR',
@@ -145,4 +158,163 @@ test('AGENTE-OBS-01: the turn is part of the idempotency fingerprint', async () 
   await service.recordEvent(reply({ turn: TURN }));
   await service.recordEvent(reply({ turn: { ...TURN, latency_ms: 1 } }));
   assert.notEqual(recorded[0].eventFingerprint, recorded[1].eventFingerprint);
+});
+
+test('INBOX-DELIVERY-02: failure carries only a bounded code on failed and unknown sends', async () => {
+  const { recorded, service } = harness();
+  const unknown = {
+    command_id: 'command-turn',
+    conversation_id: 'conversation-turn',
+    event_id: 'event-unknown',
+    event_type: 'message.send.unknown',
+    occurred_at: '2026-10-30T12:00:00.000Z',
+    schema_version: '1.0',
+    technical,
+  };
+  const withoutCommand = Object.fromEntries(
+    Object.entries(unknown).filter(([key]) => key !== 'command_id'),
+  );
+  await service.recordEvent({ ...unknown, failure: { code: 'META_131047' } });
+  await service.recordEvent({ ...unknown, failure: { code: 'meta erro' } });
+  await service.recordEvent(unknown);
+  await service.recordEvent({
+    ...unknown,
+    event_type: 'message.failed',
+    external_message_id: 'wamid.out',
+    failure: { code: 'Cliente 5527999999999' },
+  });
+  assert.deepEqual(
+    recorded.map((input) => input.failure),
+    [
+      { code: 'META_131047' },
+      { code: 'SEND_OUTCOME_UNKNOWN' },
+      null,
+      { code: 'SEND_FAILED' },
+    ],
+  );
+  await assert.rejects(
+    service.recordEvent({
+      ...unknown,
+      failure: { code: 'META_131047', message: 'texto' },
+    }),
+    /failure only accepts code/u,
+  );
+  await assert.rejects(
+    service.recordEvent({
+      ...withoutCommand,
+      event_type: 'message.transcribed',
+      external_message_id: 'wamid.audio',
+      transcript: { code: 'TRANSCRIPTION_FAILED', status: 'ok', text: 'oi' },
+    }),
+    { name: 'N8nValidationError' },
+  );
+});
+
+test('the n8n contract validator knows the Vendedor evolution fields', () => {
+  const base = {
+    automation_epoch: 0,
+    conversation_id: 'conversation-turn',
+    event_id: 'event-contract',
+    occurred_at: '2026-10-30T12:00:00.000Z',
+    schema_version: '1.0',
+    source_revision: 1,
+  };
+  assert.equal(
+    validateEvent(
+      {
+        ...base,
+        command_id: 'command-turn',
+        event_type: 'message.send.requested',
+        message: { text: 'Oi', type: 'text' },
+        turn: TURN,
+      },
+      contract,
+    ),
+    true,
+  );
+  for (const reason of ['automation_failure', 'partnership']) {
+    assert.equal(
+      validateEvent(
+        {
+          ...base,
+          event_type: 'handoff.requested',
+          handoff: { reason, requested_seller_id: 'seller-1' },
+        },
+        contract,
+      ),
+      true,
+    );
+  }
+  assert.throws(
+    () =>
+      validateEvent(
+        { ...base, event_type: 'handoff.requested', handoff: { reason: 'x' } },
+        contract,
+      ),
+    { code: 'INVALID_HANDOFF_REASON' },
+  );
+  assert.throws(
+    () =>
+      validateEvent(
+        {
+          ...base,
+          command_id: 'command-turn',
+          event_type: 'message.send.requested',
+          message: { text: 'Oi', type: 'text' },
+          turn: { ...TURN, note: 'texto livre' },
+        },
+        contract,
+      ),
+    { code: 'UNKNOWN_FIELD:note' },
+  );
+  assert.equal(
+    validateEvent(
+      {
+        ...base,
+        event_type: 'message.transcribed',
+        external_message_id: 'wamid.audio',
+        transcript: { status: 'ok', text: 'Quero camisas' },
+      },
+      contract,
+    ),
+    true,
+  );
+  assert.throws(
+    () =>
+      validateEvent(
+        {
+          ...base,
+          event_type: 'message.transcribed',
+          external_message_id: 'wamid.audio',
+          transcript: { code: 'X', status: 'failed' },
+        },
+        contract,
+      ),
+    { code: 'INVALID_TRANSCRIPT' },
+  );
+  assert.equal(
+    validateEvent(
+      {
+        ...base,
+        command_id: 'command-turn',
+        event_type: 'message.send.unknown',
+        failure: { code: 'META_SEND_OUTCOME_UNKNOWN' },
+      },
+      contract,
+    ),
+    true,
+  );
+  assert.throws(
+    () =>
+      validateEvent(
+        {
+          ...base,
+          event_type: 'message.failed',
+          external_message_id: 'wamid.out',
+          failure: { code: 'X', message: 'texto' },
+        },
+        contract,
+      ),
+    { code: 'UNKNOWN_FIELD:message' },
+  );
 });

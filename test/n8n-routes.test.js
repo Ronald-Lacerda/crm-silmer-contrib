@@ -247,3 +247,28 @@ test('n8n events route accepts the optional turn and still refuses unknown field
   assert.equal(unknown.json().error.code, 'UNKNOWN_REQUEST_FIELD');
   assert.equal(calls.length, 1);
 });
+
+test('n8n events route accepts message.transcribed under the event action (INBOX-AUDIO-TRANSCRIPT-01)', async (t) => {
+  const { api, authorizedActions, calls } = harness();
+  t.after(() => api.close());
+  const response = await api.inject({
+    headers: technicalHeaders,
+    method: 'POST',
+    payload: {
+      conversation_id: 'conversation-synthetic',
+      event_id: 'transcribed:wamid.audio',
+      event_type: 'message.transcribed',
+      external_message_id: 'wamid.audio',
+      occurred_at: '2026-10-30T12:00:00.000Z',
+      schema_version: '1.0',
+      transcript: { code: 'TRANSCRIPTION_FAILED', status: 'failed' },
+    },
+    url: '/api/v1/integrations/n8n/events',
+  });
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(authorizedActions, ['integration.n8n.event.create']);
+  assert.deepEqual(calls[0].input.transcript, {
+    code: 'TRANSCRIPTION_FAILED',
+    status: 'failed',
+  });
+});

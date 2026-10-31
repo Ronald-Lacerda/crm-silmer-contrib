@@ -14,6 +14,8 @@ const EVENT_ACTIONS = Object.freeze({
   'message.send.requested': 'integration.n8n.event.create',
   'message.send.unknown': 'integration.n8n.event.create',
   'message.sent': 'integration.n8n.event.create',
+  // INBOX-AUDIO-TRANSCRIPT-01: the transcript of an inbound audio.
+  'message.transcribed': 'integration.n8n.event.create',
   // Deprecated by ADR 014: workflows from mvp-simple-11 on send `open_order`
   // on the reservation or the handoff. Kept for older workflows.
   'order.intent_confirmed': 'order.intent',
@@ -169,6 +171,7 @@ export function registerN8nRoutes(api, integration, contextFor) {
           'source_revision',
           'subject_id',
           'target_contract',
+          'transcript',
           // AGENTE-OBS-01: optional turn telemetry (codes and counts only).
           'turn',
         ]);

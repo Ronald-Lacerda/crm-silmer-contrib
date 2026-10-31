@@ -39,6 +39,24 @@ const eventKeys = Object.freeze([
   'source_revision',
   'subject_id',
   'target_contract',
+  // INBOX-AUDIO-TRANSCRIPT-01 and AGENTE-OBS-01.
+  'transcript',
+  'turn',
+]);
+const turnKeys = Object.freeze([
+  'answer_status',
+  'asked_field',
+  'ficha_filled',
+  'ficha_total',
+  'latency_ms',
+  'media_kind',
+  'model',
+  'trigger',
+]);
+const transcriptFailureCodes = Object.freeze([
+  'TRANSCRIPTION_FAILED',
+  'TRANSCRIPTION_EMPTY',
+  'AUDIO_TOO_LARGE',
 ]);
 
 export class ContractValidationError extends Error {
@@ -60,7 +78,11 @@ export function validateContract(contract) {
   if (contract.errorMediaType !== 'application/problem+json') {
     fail('INVALID_ERROR_MEDIA_TYPE');
   }
-  exactMembers(contract.channels, ['whatsapp', 'site_chat'], 'INVALID_CHANNELS');
+  exactMembers(
+    contract.channels,
+    ['whatsapp', 'site_chat'],
+    'INVALID_CHANNELS',
+  );
   exactMembers(
     contract.activeChannels,
     ['site_chat'],
@@ -232,6 +254,20 @@ export function validateEvent(payload, contract) {
     epoch(payload.automation_epoch);
     positive(payload.source_revision, 'INVALID_HANDOFF_FENCE');
     object(payload.handoff, 'INVALID_HANDOFF');
+    if (
+      payload.handoff.reason !== undefined &&
+      Array.isArray(contract.handoffReasons) &&
+      !contract.handoffReasons.includes(payload.handoff.reason)
+    ) {
+      fail('INVALID_HANDOFF_REASON');
+    }
+    // INBOX-HANDOFF-02: an id from `sellers[]`; the CRM ignores any other.
+    if (
+      payload.handoff.requested_seller_id !== undefined &&
+      payload.handoff.requested_seller_id !== null
+    ) {
+      nonEmpty(payload.handoff.requested_seller_id, 'INVALID_HANDOFF');
+    }
     if (payload.handoff.notice !== undefined) {
       object(payload.handoff.notice, 'INVALID_HANDOFF_NOTICE');
       nonEmpty(payload.handoff.notice.command_id, 'INVALID_HANDOFF_NOTICE');
@@ -251,6 +287,30 @@ export function validateEvent(payload, contract) {
     )
   ) {
     nonEmpty(payload.external_message_id, 'INVALID_MESSAGE_STATUS');
+  }
+  if (
+    ['message.failed', 'message.send.unknown'].includes(payload.event_type) &&
+    payload.failure !== undefined
+  ) {
+    // INBOX-DELIVERY-02: only the code.
+    object(payload.failure, 'INVALID_FAILURE');
+    rejectUnknown(payload.failure, ['code']);
+  }
+  if (payload.event_type === 'message.transcribed') {
+    nonEmpty(payload.external_message_id, 'INVALID_TRANSCRIPT');
+    validateTranscript(payload.transcript);
+  } else if (payload.transcript !== undefined) {
+    fail('INVALID_TRANSCRIPT_EVENT');
+  }
+  if (payload.turn !== undefined && payload.turn !== null) {
+    if (
+      !['handoff.requested', 'message.send.requested'].includes(
+        payload.event_type,
+      )
+    ) {
+      fail('INVALID_TURN_EVENT');
+    }
+    validateTurn(payload.turn);
   }
   if (payload.open_order !== undefined) {
     if (typeof payload.open_order !== 'boolean') fail('INVALID_OPEN_ORDER');
@@ -298,6 +358,76 @@ export function validateEvent(payload, contract) {
     validateBriefingPatch(payload.briefing_patch, contract);
   }
   return true;
+}
+
+/**
+ * AGENTE-OBS-01: codes, counts and times only.
+ * @param {any} turn
+ */
+export function validateTurn(turn) {
+  object(turn, 'INVALID_TURN');
+  rejectUnknown(turn, turnKeys);
+  /** @param {string} key @param {RegExp} pattern */
+  const code = (key, pattern) => {
+    const value = turn[key];
+    if (value !== undefined && value !== null) {
+      if (typeof value !== 'string' || !pattern.test(value)) {
+        fail('INVALID_TURN');
+      }
+    }
+  };
+  code('asked_field', /^[a-z_]{1,48}$/u);
+  code('trigger', /^[a-z0-9_]{1,64}$/u);
+  code('model', /^[a-z0-9._-]{1,64}$/u);
+  code(
+    'answer_status',
+    /^(?:answered|unclear|undecided|question|deferred|other|none)$/u,
+  );
+  code('media_kind', /^(?:text|image|audio|sticker)$/u);
+  for (const key of ['ficha_filled', 'ficha_total']) {
+    if (!Number.isSafeInteger(turn[key]) || turn[key] < 0 || turn[key] > 64) {
+      fail('INVALID_TURN');
+    }
+  }
+  if (turn.ficha_filled > turn.ficha_total) fail('INVALID_TURN');
+  if (
+    turn.latency_ms !== undefined &&
+    turn.latency_ms !== null &&
+    (!Number.isSafeInteger(turn.latency_ms) ||
+      turn.latency_ms < 0 ||
+      turn.latency_ms > 600_000)
+  ) {
+    fail('INVALID_TURN');
+  }
+  return true;
+}
+
+/**
+ * INBOX-AUDIO-TRANSCRIPT-01: `{status: 'ok', text}` or
+ * `{status: 'failed', code}`.
+ * @param {any} transcript
+ */
+export function validateTranscript(transcript) {
+  object(transcript, 'INVALID_TRANSCRIPT');
+  if (transcript.status === 'ok') {
+    rejectUnknown(transcript, ['status', 'text']);
+    if (
+      typeof transcript.text !== 'string' ||
+      transcript.text.trim() === '' ||
+      transcript.text.length > 4000
+    ) {
+      fail('INVALID_TRANSCRIPT');
+    }
+    return true;
+  }
+  if (transcript.status === 'failed') {
+    rejectUnknown(transcript, ['status', 'code']);
+    if (!transcriptFailureCodes.includes(transcript.code)) {
+      fail('INVALID_TRANSCRIPT');
+    }
+    return true;
+  }
+  return fail('INVALID_TRANSCRIPT');
 }
 
 /** @param {any} patch @param {any} contract */

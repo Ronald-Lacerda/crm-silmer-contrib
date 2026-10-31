@@ -1079,6 +1079,13 @@ export class PostgresN8nIntegrationRepository {
             processedAt,
           );
         }
+      } else if (eventInput.eventType === 'message.transcribed') {
+        messageId = await this.#recordTranscript(
+          client,
+          eventInput,
+          processedAt,
+        );
+        outcome.transcriptStatus = eventInput.transcript.status;
       } else if (eventInput.eventType === 'workflow.failed') {
         outcome.failureCode = safeFailureCode(eventInput.failure?.code);
         if (eventInput.failure?.phase === 'before_message_send') {
@@ -1996,7 +2003,8 @@ export class PostgresN8nIntegrationRepository {
     const rows = (
       await client.query(
         `SELECT id, external_message_id, direction, author_kind, message_type,
-                content_envelope, occurred_at
+                content_envelope, occurred_at, transcript_status,
+                transcript_envelope
          FROM crm.messages
          WHERE conversation_id = $1
            AND occurred_at >= now() - interval '24 hours'
@@ -2010,6 +2018,16 @@ export class PostgresN8nIntegrationRepository {
         `message:${row.id}`,
         this.messageEnvelopeKey,
       );
+      // INBOX-AUDIO-TRANSCRIPT-01: the agent reads what the customer said.
+      const transcribed =
+        row.message_type === 'audio' && row.transcript_status === 'ok';
+      const transcript = transcribed
+        ? decryptJson(
+            row.transcript_envelope,
+            `message-transcript:${row.id}`,
+            this.messageEnvelopeKey,
+          )
+        : null;
       return {
         attachment_id: content.attachmentId ?? null,
         external_id: row.external_message_id,
@@ -2020,10 +2038,72 @@ export class PostgresN8nIntegrationRepository {
             : row.author_kind === 'assistant'
               ? 'ai'
               : row.author_kind,
-        text: content.text ?? content.caption ?? '',
+        text: transcript
+          ? String(transcript.text ?? '')
+          : (content.text ?? content.caption ?? ''),
+        transcribed,
         type: row.message_type,
       };
     });
+  }
+
+  /**
+   * INBOX-AUDIO-TRANSCRIPT-01: stores the transcript of one inbound audio of
+   * the conversation, sealed with the message key like the message itself.
+   * A failed attempt can be followed by a successful one; a recorded
+   * transcript is never replaced.
+   *
+   * @param {Queryable} client @param {any} input @param {string} now
+   * @returns {Promise<string>}
+   */
+  async #recordTranscript(client, input, now) {
+    const message = (
+      await client.query(
+        `SELECT id, direction, message_type, transcript_status
+         FROM crm.messages
+         WHERE conversation_id = $1 AND external_message_id = $2
+         FOR UPDATE`,
+        [input.conversationId, input.externalMessageId],
+      )
+    ).rows[0];
+    if (!message) {
+      throw new N8nNotFoundError('Audio message was not found');
+    }
+    if (message.direction !== 'inbound' || message.message_type !== 'audio') {
+      throw new N8nConflictError(
+        'Only an inbound audio can be transcribed',
+        'TRANSCRIPT_TARGET_INVALID',
+      );
+    }
+    if (message.transcript_status === 'ok') {
+      throw new N8nConflictError(
+        'The audio already has a transcript',
+        'TRANSCRIPT_ALREADY_RECORDED',
+      );
+    }
+    const transcript = input.transcript;
+    await client.query(
+      `UPDATE crm.messages
+       SET transcript_status = $2, transcript_envelope = $3::jsonb,
+           transcript_code = $4, transcribed_at = $5
+       WHERE id = $1`,
+      [
+        message.id,
+        transcript.status,
+        transcript.status === 'ok'
+          ? JSON.stringify(
+              encryptJson(
+                { text: transcript.text },
+                `message-transcript:${message.id}`,
+                this.messageEnvelopeKey,
+              ),
+            )
+          : null,
+        transcript.code,
+        now,
+      ],
+    );
+    return message.id;
   }
 
   /** @param {Queryable} client @param {any} input @param {any} runtime @param {any} conversation @param {string} now */
@@ -2572,7 +2652,8 @@ async function confirmReservedSend(client, input, now) {
            delivery_status_at = CASE
              WHEN delivery_status IN ('delivered', 'read') THEN delivery_status_at
              ELSE $3
-           END
+           END,
+           delivery_failure_code = NULL
        WHERE command_id = $1
          AND conversation_id = $4
          AND status IN ('sending', 'sent', 'failed', 'outcome_unknown')
@@ -2628,12 +2709,20 @@ async function updateDeliveryStatus(client, input) {
         current === 'outcome_unknown' ||
         (rank[requested] ?? 0) > (rank[current] ?? 0);
   if (changed) {
+    // INBOX-DELIVERY-02: why it failed, as a bounded code; cleared once a
+    // later receipt proves the message arrived.
     await client.query(
       `UPDATE crm.messages
        SET delivery_status = $2, delivery_status_at = $3,
-           status = CASE WHEN $2 = 'failed' THEN 'failed' ELSE status END
+           status = CASE WHEN $2 = 'failed' THEN 'failed' ELSE status END,
+           delivery_failure_code = $4
        WHERE id = $1`,
-      [message.id, requested, input.occurredAt],
+      [
+        message.id,
+        requested,
+        input.occurredAt,
+        requested === 'failed' ? (input.failure?.code ?? 'SEND_FAILED') : null,
+      ],
     );
   }
   return {
@@ -2649,10 +2738,15 @@ async function markSendUnknown(client, input, now) {
     await client.query(
       `UPDATE crm.messages
        SET status = 'outcome_unknown', delivery_status = 'outcome_unknown',
-           delivery_status_at = $2
+           delivery_status_at = $2, delivery_failure_code = $4
        WHERE command_id = $1 AND conversation_id = $3 AND status = 'sending'
        RETURNING id`,
-      [input.commandId, now, input.conversationId],
+      [
+        input.commandId,
+        now,
+        input.conversationId,
+        input.failure?.code ?? 'SEND_OUTCOME_UNKNOWN',
+      ],
     )
   ).rows[0];
   if (!message) throw new N8nNotFoundError('Send reservation was not found');

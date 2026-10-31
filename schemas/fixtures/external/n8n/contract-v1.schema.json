@@ -74,6 +74,83 @@
         "sponsors": { "type": ["array", "null"] }
       }
     },
+    "turn": {
+      "description": "AGENTE-OBS-01: optional turn telemetry on message.send.requested and handoff.requested. Codes, counts and times only.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ficha_filled", "ficha_total"],
+      "properties": {
+        "asked_field": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z_]{1,48}$"
+        },
+        "answer_status": {
+          "enum": [
+            "answered",
+            "unclear",
+            "undecided",
+            "question",
+            "deferred",
+            "other",
+            "none",
+            null
+          ]
+        },
+        "ficha_filled": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "ficha_total": { "type": "integer", "minimum": 0, "maximum": 64 },
+        "trigger": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9_]{1,64}$"
+        },
+        "model": {
+          "type": ["string", "null"],
+          "pattern": "^[a-z0-9._-]{1,64}$"
+        },
+        "latency_ms": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "maximum": 600000
+        },
+        "media_kind": { "enum": ["text", "image", "audio", "sticker", null] }
+      }
+    },
+    "transcript": {
+      "description": "INBOX-AUDIO-TRANSCRIPT-01: the transcript of an inbound audio, on message.transcribed.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "text"],
+          "properties": {
+            "status": { "const": "ok" },
+            "text": { "type": "string", "minLength": 1, "maxLength": 4000 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "code"],
+          "properties": {
+            "status": { "const": "failed" },
+            "code": {
+              "enum": [
+                "TRANSCRIPTION_FAILED",
+                "TRANSCRIPTION_EMPTY",
+                "AUDIO_TOO_LARGE"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "deliveryFailure": {
+      "description": "INBOX-DELIVERY-02: failure on message.failed and message.send.unknown. A code outside ^[A-Z0-9_]{1,64}$ is stored as the generic code.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string" }
+      }
+    },
     "openOrder": {
       "description": "ADR 014: true asks the CRM to create or reuse the pending order after the event commits. Only on message.send.requested and handoff.requested.",
       "type": "boolean"
@@ -197,6 +274,11 @@
     "eventTypes": {
       "type": "array",
       "contains": { "const": "message.send.requested" }
+    },
+    "handoffReasons": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[a-z_]{1,64}$" }
     },
     "openOrderEvents": {
       "type": "array",

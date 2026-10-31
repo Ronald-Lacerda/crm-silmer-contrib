@@ -924,6 +924,302 @@ if (connectionString) {
           });
         },
       );
+
+      await t.test(
+        'INBOX-AUDIO-TRANSCRIPT-01: the transcript is sealed, idempotent, read by the agent and shown in the Inbox',
+        async () => {
+          const phone = '5527990000801';
+          /** @param {string} id */
+          const audio = (id) =>
+            env.receive(phone, id, {
+              attachment: { external_id: `media-${id}` },
+              external_id: id,
+              type: 'audio',
+            });
+          const first = await audio('wamid.audio.1');
+          const transcribed = {
+            conversation_id: first.conversation_id,
+            event_id: 'transcribed-audio-1',
+            event_type: 'message.transcribed',
+            external_message_id: 'wamid.audio.1',
+            occurred_at: env.clock.now.toISOString(),
+            schema_version: '1.0',
+            technical: env.technical('transcribed-audio-1'),
+            transcript: {
+              status: 'ok',
+              text: 'Quero vinte camisas azuis para o time',
+            },
+          };
+          const [accepted, replayed] = await Promise.all([
+            env.n8n.recordEvent(transcribed),
+            env.n8n.recordEvent(transcribed),
+          ]);
+          assert.deepEqual([accepted.duplicate, replayed.duplicate].sort(), [
+            false,
+            true,
+          ]);
+          await assert.rejects(
+            env.n8n.recordEvent({
+              ...transcribed,
+              transcript: { status: 'ok', text: 'outro texto' },
+            }),
+            { code: 'IDEMPOTENCY_CONFLICT' },
+          );
+          await assert.rejects(
+            env.n8n.recordEvent({
+              ...transcribed,
+              event_id: 'transcribed-audio-1-again',
+              technical: env.technical('transcribed-audio-1-again'),
+            }),
+            { code: 'TRANSCRIPT_ALREADY_RECORDED' },
+          );
+          const stored = (
+            await pool.query(
+              `SELECT transcript_status, transcript_code,
+                      transcript_envelope::text AS envelope
+               FROM crm.messages WHERE external_message_id='wamid.audio.1'`,
+            )
+          ).rows[0];
+          assert.equal(stored.transcript_status, 'ok');
+          assert.equal(stored.transcript_code, null);
+          assert.doesNotMatch(stored.envelope, /camisas|azuis/u);
+          assert.match(stored.envelope, /AES-256-GCM/u);
+
+          // A failed attempt, then a successful one, on a second audio.
+          env.advance(1);
+          const second = await audio('wamid.audio.2');
+          const failed = {
+            ...transcribed,
+            event_id: 'transcribed-audio-2-failed',
+            external_message_id: 'wamid.audio.2',
+            technical: env.technical('transcribed-audio-2-failed'),
+            transcript: { code: 'AUDIO_TOO_LARGE', status: 'failed' },
+          };
+          await env.n8n.recordEvent(failed);
+          const detailFailed = await env.reads.getConversation({
+            conversationId: second.conversation_id,
+          });
+          const failedMessage = detailFailed.messages.find(
+            (/** @type {any} */ message) =>
+              message.type === 'audio' &&
+              message.transcript?.status === 'failed',
+          );
+          assert.deepEqual(failedMessage.transcript, {
+            status: 'failed',
+            text: null,
+          });
+          env.advance(1);
+          const third = await env.receive(phone, 'wamid.text.after-audio');
+          const agentView = third.recent_messages.filter(
+            (/** @type {any} */ message) => message.type === 'audio',
+          );
+          assert.deepEqual(
+            agentView.map((/** @type {any} */ message) => [
+              message.external_id,
+              message.text,
+              message.transcribed,
+            ]),
+            [
+              ['wamid.audio.1', 'Quero vinte camisas azuis para o time', true],
+              ['wamid.audio.2', '', false],
+            ],
+          );
+          assert.equal(
+            third.recent_messages.find(
+              (/** @type {any} */ message) =>
+                message.external_id === 'wamid.text.after-audio',
+            ).transcribed,
+            false,
+          );
+          await env.n8n.recordEvent({
+            ...failed,
+            event_id: 'transcribed-audio-2-ok',
+            technical: env.technical('transcribed-audio-2-ok'),
+            transcript: { status: 'ok', text: 'Tamanhos P e M' },
+          });
+          const detail = await env.reads.getConversation({
+            conversationId: second.conversation_id,
+          });
+          const audios = detail.messages.filter(
+            (/** @type {any} */ message) => message.type === 'audio',
+          );
+          assert.deepEqual(
+            audios.map((/** @type {any} */ message) => message.transcript),
+            [
+              { status: 'ok', text: 'Quero vinte camisas azuis para o time' },
+              { status: 'ok', text: 'Tamanhos P e M' },
+            ],
+          );
+          assert.equal(
+            detail.messages.find(
+              (/** @type {any} */ message) => message.type === 'text',
+            ).transcript,
+            null,
+          );
+
+          // Only an inbound audio of the same conversation.
+          await assert.rejects(
+            env.n8n.recordEvent({
+              ...transcribed,
+              event_id: 'transcribed-text',
+              external_message_id: 'wamid.text.after-audio',
+              technical: env.technical('transcribed-text'),
+            }),
+            { code: 'TRANSCRIPT_TARGET_INVALID' },
+          );
+          const elsewhere = await env.receive('5527990000802', 'wamid.other');
+          await assert.rejects(
+            env.n8n.recordEvent({
+              ...transcribed,
+              conversation_id: elsewhere.conversation_id,
+              event_id: 'transcribed-elsewhere',
+              technical: env.technical('transcribed-elsewhere'),
+            }),
+            { statusCode: 404 },
+          );
+          for (const transcript of [
+            { status: 'ok', text: '' },
+            { status: 'ok', text: 'x'.repeat(4001) },
+            { code: 'TRANSCRIPTION_FAILED', status: 'ok', text: 'a' },
+            { status: 'failed', text: 'a' },
+            { code: 'OTHER', status: 'failed' },
+            { status: 'pending' },
+          ]) {
+            await assert.rejects(
+              env.n8n.recordEvent({
+                ...transcribed,
+                event_id: 'transcribed-invalid',
+                technical: env.technical('transcribed-invalid'),
+                transcript,
+              }),
+              { name: 'N8nValidationError' },
+            );
+          }
+          const performance = await env.reads.assistantPerformance({ days: 1 });
+          assert.equal(performance.failures.transcription_failed, 1);
+        },
+      );
+
+      await t.test(
+        'INBOX-DELIVERY-02: the assistant send failure code is bounded, stored and shown',
+        async () => {
+          const inbound = await env.receive('5527990000901', 'wamid.del.1');
+          await env.reply(inbound, 'reply-del-1');
+          await env.n8n.recordEvent({
+            command_id: 'command-reply-del-1',
+            conversation_id: inbound.conversation_id,
+            event_id: 'unknown-del-1',
+            event_type: 'message.send.unknown',
+            failure: { code: 'META_SEND_OUTCOME_UNKNOWN' },
+            occurred_at: env.clock.now.toISOString(),
+            schema_version: '1.0',
+            technical: env.technical('unknown-del-1'),
+          });
+          /** @param {string} conversationId */
+          const botMessage = async (conversationId) =>
+            (await env.reads.getConversation({ conversationId })).messages.find(
+              (/** @type {any} */ message) =>
+                message.authorKind === 'assistant',
+            );
+          let message = await botMessage(inbound.conversation_id);
+          assert.equal(message.deliveryStatus, 'outcome_unknown');
+          assert.equal(message.deliveryErrorCode, 'META_SEND_OUTCOME_UNKNOWN');
+
+          env.advance(1);
+          const next = await env.receive('5527990000901', 'wamid.del.2');
+          await env.reply(next, 'reply-del-2', {
+            command_id: 'command-reply-del-2',
+          });
+          // The workflow published today may omit the failure.
+          await env.n8n.recordEvent({
+            command_id: 'command-reply-del-2',
+            conversation_id: next.conversation_id,
+            event_id: 'unknown-del-2',
+            event_type: 'message.send.unknown',
+            occurred_at: env.clock.now.toISOString(),
+            schema_version: '1.0',
+            technical: env.technical('unknown-del-2'),
+          });
+          assert.equal(
+            (
+              await pool.query(
+                'SELECT delivery_failure_code FROM crm.messages WHERE command_id=$1',
+                ['command-reply-del-2'],
+              )
+            ).rows[0].delivery_failure_code,
+            'SEND_OUTCOME_UNKNOWN',
+          );
+
+          // Sent, then failed with a code outside the pattern, then delivered.
+          const other = await env.receive('5527990000902', 'wamid.del.3');
+          await env.reply(other, 'reply-del-3', {
+            command_id: 'command-reply-del-3',
+          });
+          const base = {
+            conversation_id: other.conversation_id,
+            occurred_at: env.clock.now.toISOString(),
+            schema_version: '1.0',
+          };
+          await env.n8n.recordEvent({
+            ...base,
+            command_id: 'command-reply-del-3',
+            event_id: 'sent-del-3',
+            event_type: 'message.sent',
+            external_message_id: 'wamid.out.del.3',
+            technical: env.technical('sent-del-3'),
+          });
+          await assert.rejects(
+            env.n8n.recordEvent({
+              ...base,
+              event_id: 'failed-del-3-extra',
+              event_type: 'message.failed',
+              external_message_id: 'wamid.out.del.3',
+              failure: { code: 'META_131047', detail: 'Cliente 5527...' },
+              technical: env.technical('failed-del-3-extra'),
+            }),
+            { name: 'N8nValidationError' },
+          );
+          await env.n8n.recordEvent({
+            ...base,
+            event_id: 'failed-del-3',
+            event_type: 'message.failed',
+            external_message_id: 'wamid.out.del.3',
+            failure: { code: 'erro do cliente 5527990000902' },
+            technical: env.technical('failed-del-3'),
+          });
+          const failedRow = (
+            await pool.query(
+              'SELECT delivery_failure_code, delivery_status FROM crm.messages WHERE command_id=$1',
+              ['command-reply-del-3'],
+            )
+          ).rows[0];
+          assert.deepEqual(failedRow, {
+            delivery_failure_code: 'SEND_FAILED',
+            delivery_status: 'failed',
+          });
+          message = await botMessage(other.conversation_id);
+          assert.equal(message.deliveryErrorCode, 'SEND_FAILED');
+          await env.n8n.recordEvent({
+            ...base,
+            event_id: 'delivered-del-3',
+            event_type: 'message.delivered',
+            external_message_id: 'wamid.out.del.3',
+            technical: env.technical('delivered-del-3'),
+          });
+          message = await botMessage(other.conversation_id);
+          assert.equal(message.deliveryStatus, 'delivered');
+          assert.equal(message.deliveryErrorCode, null);
+          assert.equal(
+            (
+              await pool.query(
+                'SELECT delivery_failure_code FROM crm.messages WHERE command_id=$1',
+                ['command-reply-del-3'],
+              )
+            ).rows[0].delivery_failure_code,
+            null,
+          );
+        },
+      );
     } finally {
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');

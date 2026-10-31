@@ -41,7 +41,23 @@
     "message.read",
     "message.failed",
     "handoff.requested",
-    "workflow.failed"
+    "workflow.failed",
+    "message.transcribed"
+  ],
+  "handoffReasons": [
+    "customer_requested_human",
+    "price_before_quote",
+    "unresolved_blocker",
+    "low_confidence",
+    "briefing_complete",
+    "human_requested",
+    "negotiation",
+    "complaint",
+    "urgency",
+    "unsupported",
+    "iteration_limit",
+    "automation_failure",
+    "partnership"
   ],
   "openOrderEvents": ["message.send.requested", "handoff.requested"],
   "briefingPatchFields": [

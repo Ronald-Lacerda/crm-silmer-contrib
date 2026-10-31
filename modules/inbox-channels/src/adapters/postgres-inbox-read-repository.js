@@ -69,6 +69,11 @@ const DELIVERY_ERROR_CODES = new Set([
   'N8N_COMMAND_STALE',
   'N8N_COMMAND_TIMEOUT',
   'OUTCOME_UNKNOWN',
+  // INBOX-DELIVERY-02: the assistant's send outcome as the workflow reports
+  // it; the two generic codes are the CRM defaults.
+  'META_SEND_OUTCOME_UNKNOWN',
+  'SEND_FAILED',
+  'SEND_OUTCOME_UNKNOWN',
 ]);
 
 /**
@@ -301,10 +306,15 @@ export class PostgresInboxReadRepository {
             `SELECT message.id, message.conversation_id, message.direction,
                     message.author_kind, message.author_id, message.message_type,
                     message.content_envelope, message.status, message.delivery_status,
-                    CASE WHEN message.delivery_status IN ('failed', 'outcome_unknown')
-                               AND command.status IN ('failed', 'outcome_unknown')
+                    CASE WHEN message.delivery_status NOT IN ('failed', 'outcome_unknown')
+                           OR message.delivery_status IS NULL THEN NULL
+                         -- INBOX-DELIVERY-02: the assistant's own code.
+                         WHEN message.author_kind = 'assistant'
+                           THEN message.delivery_failure_code
+                         WHEN command.status IN ('failed', 'outcome_unknown')
                                AND command.last_error_code ~ '^[A-Z0-9_]{1,64}$'
                          THEN command.last_error_code ELSE NULL END delivery_error_code,
+                    message.transcript_status, message.transcript_envelope,
                     message.occurred_at, message.created_at, ${MEDIA_PROJECTION}
              FROM crm.messages message ${MEDIA_JOIN}
              LEFT JOIN crm.n8n_commands command ON command.message_id=message.id
@@ -556,6 +566,10 @@ export class PostgresInboxReadRepository {
                  (SELECT count(*)::integer FROM crm.audit_events
                   WHERE action='integration.n8n.stale_fence'
                     AND occurred_at > $1 AND occurred_at <= $2) stale_fence,
+                 (SELECT count(*)::integer FROM crm.n8n_events
+                  WHERE event_type='message.transcribed'
+                    AND outcome->>'transcriptStatus'='failed'
+                    AND processed_at > $1 AND processed_at <= $2) transcription_failed,
                  (SELECT count(*)::integer FROM crm.handoffs
                   WHERE reason_code='automation_failure'
                     AND created_at > $1 AND created_at <= $2) automation_failure_handoffs`,
@@ -613,7 +627,7 @@ export class PostgresInboxReadRepository {
           send_unknown: Number(fails.send_unknown ?? 0),
           send_failed: Number(fails.send_failed ?? 0),
           stale_fence: Number(fails.stale_fence ?? 0),
-          transcription_failed: 0,
+          transcription_failed: Number(fails.transcription_failed ?? 0),
           automation_failure_handoffs: Number(
             fails.automation_failure_handoffs ?? 0,
           ),
@@ -844,6 +858,24 @@ function mapMessage(row, repository) {
     occurredAt: iso(row.occurred_at),
     preview: messagePreview(content, row.message_type),
     status: row.status,
+    // INBOX-AUDIO-TRANSCRIPT-01: what the customer said in an audio.
+    transcript:
+      row.message_type === 'audio' && row.transcript_status
+        ? Object.freeze({
+            status: row.transcript_status,
+            text:
+              row.transcript_status === 'ok'
+                ? String(
+                    decryptInboxMessageEnvelope(
+                      row.transcript_envelope,
+                      `message-transcript:${row.id}`,
+                      repository.messageEnvelopeKey,
+                      true,
+                    ).text ?? '',
+                  )
+                : null,
+          })
+        : null,
     type: row.message_type,
   });
 }

@@ -16,6 +16,7 @@ const EVENT_TYPES = new Set([
   'message.send.requested',
   'message.send.unknown',
   'message.sent',
+  'message.transcribed',
   'workflow.failed',
 ]);
 const EVENTS_WITH_RESOLVABLE_CONVERSATION = new Set([
@@ -281,7 +282,7 @@ export function createN8nIntegrationService({
         eventId: identifier(input?.event_id, 'event_id', 512),
         eventType,
         externalMessageId: optionalString(input?.external_message_id, 512),
-        failure: input?.failure ? plainObject(input.failure) : null,
+        failure: normalizeFailure(input?.failure, eventType),
         handoff: input?.handoff ? plainObject(input.handoff) : null,
         message: input?.message ? plainObject(input.message) : null,
         occurredAt,
@@ -301,6 +302,7 @@ export function createN8nIntegrationService({
           technical.workflowVersion,
         ),
         technical,
+        transcript: normalizeTranscript(input?.transcript, eventType),
         turn: normalizeTurn(input?.turn, eventType),
       });
       validateEventShape(normalized);
@@ -442,9 +444,106 @@ function validateEventShape(input) {
       'message.sent requires command_id and external_message_id',
     );
   }
+  if (
+    input.eventType === 'message.transcribed' &&
+    (!input.conversationId || !input.externalMessageId || !input.transcript)
+  ) {
+    throw new N8nValidationError(
+      'message.transcribed requires conversation_id, external_message_id and transcript',
+    );
+  }
   if (input.eventType === 'message.send.unknown' && !input.commandId) {
     throw new N8nValidationError('message.send.unknown requires command_id');
   }
+}
+
+const TRANSCRIPT_FAILURE_CODES = [
+  'TRANSCRIPTION_FAILED',
+  'TRANSCRIPTION_EMPTY',
+  'AUDIO_TOO_LARGE',
+];
+
+/**
+ * INBOX-DELIVERY-02: `message.failed` and `message.send.unknown` carry only
+ * `failure.code`. A code outside the bounded pattern never reaches storage:
+ * it becomes the generic code of the event (`SEND_FAILED`, or
+ * `SEND_OUTCOME_UNKNOWN` when the outcome is unknown). Other events keep the
+ * previous contract.
+ *
+ * @param {unknown} value @param {string} eventType
+ */
+function normalizeFailure(value, eventType) {
+  if (!value) return null;
+  const failure = /** @type {Record<string, unknown>} */ (plainObject(value));
+  if (!['message.failed', 'message.send.unknown'].includes(eventType)) {
+    return failure;
+  }
+  if (Object.keys(failure).some((key) => key !== 'code')) {
+    throw new N8nValidationError('failure only accepts code');
+  }
+  const fallback =
+    eventType === 'message.failed' ? 'SEND_FAILED' : 'SEND_OUTCOME_UNKNOWN';
+  return Object.freeze({
+    code:
+      typeof failure.code === 'string' &&
+      /^[A-Z0-9_]{1,64}$/u.test(failure.code)
+        ? failure.code
+        : fallback,
+  });
+}
+
+/**
+ * INBOX-AUDIO-TRANSCRIPT-01: `{status: 'ok', text}` or
+ * `{status: 'failed', code}`, nothing else.
+ *
+ * @param {unknown} value @param {string} eventType
+ */
+function normalizeTranscript(value, eventType) {
+  if (value === undefined || value === null) return null;
+  if (eventType !== 'message.transcribed') {
+    throw new N8nValidationError(
+      'transcript is only allowed on message.transcribed',
+    );
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new N8nValidationError('transcript must be an object');
+  }
+  const transcript = /** @type {Record<string, unknown>} */ (value);
+  if (transcript.status === 'ok') {
+    if (
+      Object.keys(transcript).some((key) => !['status', 'text'].includes(key))
+    ) {
+      throw new N8nValidationError('transcript ok only carries text');
+    }
+    const text = transcript.text;
+    if (
+      typeof text !== 'string' ||
+      text.trim().length < 1 ||
+      text.length > 4000
+    ) {
+      throw new N8nValidationError('transcript.text is invalid');
+    }
+    return Object.freeze({ code: null, status: 'ok', text });
+  }
+  if (transcript.status === 'failed') {
+    if (
+      Object.keys(transcript).some((key) => !['status', 'code'].includes(key))
+    ) {
+      throw new N8nValidationError('transcript failed only carries code');
+    }
+    if (
+      typeof transcript.code !== 'string' ||
+      !TRANSCRIPT_FAILURE_CODES.includes(transcript.code)
+    ) {
+      throw new N8nValidationError('transcript.code is unsupported');
+    }
+    return Object.freeze({
+      code: transcript.code,
+      status: 'failed',
+      text: null,
+    });
+  }
+  throw new N8nValidationError('transcript.status is unsupported');
 }
 
 const TURN_ANSWER_STATUSES = [
