@@ -241,7 +241,7 @@ As migrações são expand-only, compatíveis com a release atual, e vão num PR
 próprio, implantado e aplicado à mão no console da API antes do PR do código:
 o inbound novo lê colunas da 0048. Depois vem a publicação do workflow. Passo a passo:
 [runbook da VND-L03](docs/runbooks/vendedor-l03-implantacao.md). Teste com
-PostgreSQL real: `npm run test:vendedor:live`.
+PostgreSQL real: `node --test --test-concurrency=1 test/vendedor-evolucao-postgres-live.test.js`.
 
 Contrato, diagnóstico e rollout: [n8n](docs/integrations/n8n/README.md) e
 [ator técnico](docs/runbooks/automation-executor.md).

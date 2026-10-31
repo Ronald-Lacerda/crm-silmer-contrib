@@ -581,7 +581,7 @@ migrações 0046–0048 (merge, deploy e aplicação no console), depois PR do
 código, depois a publicação do n8n
 ([runbook](../../../docs/runbooks/vendedor-l03-implantacao.md)). O código lê
 colunas da 0048 no inbound; subir a API antes da migração perderia mensagens.
-Teste com PostgreSQL real: `npm run test:vendedor:live`.
+Teste com PostgreSQL real: `node --test --test-concurrency=1 test/vendedor-evolucao-postgres-live.test.js`.
 
 - [x] **AGENTE-FAIL-01 — falha do bot vira handoff** (AGT-05, AGT-09, ORC-08).
       Erro do modelo, do parser, do agente ou da decisão vira

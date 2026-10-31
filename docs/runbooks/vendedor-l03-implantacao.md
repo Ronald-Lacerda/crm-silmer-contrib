@@ -28,7 +28,7 @@ texto de cliente, nome, telefone, chave ou URL com token.
 
 - Os dois PRs prontos e rebaseados sobre `master`, com o CI verde: o PR das
   migrações e o PR do código.
-- Gates locais executados, inclusive `npm run test:vendedor:live` (PostgreSQL
+- Gates locais executados, inclusive `node --test --test-concurrency=1 test/vendedor-evolucao-postgres-live.test.js` (PostgreSQL
   real, dados sintéticos).
 - Autorização do proprietário para publicar o workflow principal.
 - Backup do export vivo do workflow principal no n8n (113 nós, adaptado ao
