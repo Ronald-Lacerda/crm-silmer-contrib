@@ -831,6 +831,16 @@ test('false positive: the own e-mail, phone or a reference link is an order from
     'Meu celular é esse mesmo',
     'Segue o link de referência: https://exemplo.invalid/camisa, quero algo parecido',
     'https://exemplo.invalid/foto essa é a referência',
+    // VND-L03 (QA M4): how the customer found the Silmer, or their own device.
+    'Passei pelo instagram de vocês e quero 30 camisetas',
+    'passei o olho no insta de vocês e gostei',
+    'Respondo pelo celular depois',
+    'Vi vocês no direct de uma amiga',
+    'Gostei do atendimento pelo instagram de vocês',
+    'Quero o mesmo modelo para todos',
+    'Quero igual da foto',
+    'Vou repetir a estampa nas costas',
+    'No ano passado vi vocês num evento',
   ]) {
     const result = decide(context(text, { briefing: shirtWithout('colors') }), {
       external_context: false,
@@ -851,6 +861,14 @@ test('false positive negative: asking to move channel or citing an order elsewhe
     'Me passa o contato do vendedor',
     'Já falei com a moça da loja',
     'Quero igual ao pedido anterior',
+    // VND-L03 (QA M4): a repeated order is not from scratch.
+    'Quero repetir o pedido',
+    'Quero igual da última vez',
+    'Quero o mesmo do ano passado',
+    // A request to answer elsewhere still counts.
+    'Me passa os valores por e-mail',
+    'Me responde pelo whatsapp do vendedor',
+    'Prefiro falar pelo direct',
     'https://exemplo.invalid/p/abc quero essa',
   ]) {
     const result = decide(context(text, { briefing: shirtWithout('colors') }), {

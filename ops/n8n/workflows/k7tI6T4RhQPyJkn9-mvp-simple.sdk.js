@@ -2097,17 +2097,23 @@ const externalPatterns = [
   /\\bwa\\.me\\b/,
   /\\b(quero|queria|gostei|tem|teria)\\s+(d?ess|d?est|d?aquel)[ae]s?\\s+(camis\\w*|blusas?|pecas?|bones?|mochilas?|bolsas?|modelos?|aqui|ai)\\b/,
   /\\bpronta entrega\\b/,
-  // Send or answer by another channel.
-  /\\b(envi|mand|pass|retorn|respond|encaminh|cham)\\w*\\b.{0,40}\\b(por|pelo|pela|no|na|via|pro|pra|para)\\s+(o\\s+)?(meu\\s+|seu\\s+)?(e-?mails?|telefone|celular|whats\\w*|zap|wpp|direct|dm|inbox|insta\\w*)\\b/,
+  // Send or answer by another channel. VND-L03: "passei pelo instagram de vocês" or "respondo pelo
+  // celular depois" is not a request; saying how the customer found the Silmer (Instagram, direct)
+  // is an order from scratch. A request to send by e-mail or WhatsApp, or "me passa/responde/
+  // retorna ... por e-mail/telefone", is.
+  /\\b(envi|mand|encaminh)\\w*\\b.{0,40}\\b(por|pelo|pela|no|na|via|pro|pra|para)\\s+(o\\s+)?(meu\\s+|seu\\s+)?(e-?mails?|whats\\w*|zap|wpp)\\b/,
+  /\\bme\\s+(envi|mand|pass|retorn|respond|encaminh|cham)\\w*\\b.{0,40}\\b(por|pelo|pela|no|na|via|pro|pra|para)\\s+(o\\s+)?(meu\\s+|seu\\s+)?(e-?mails?|telefone|celular|whats\\w*|zap|wpp)\\b/,
   // A call.
   /\\b(me\\s+lig\\w*|(pode|poderia|consegue|conseguem|podem)\\s+(me\\s+)?lig\\w*|liga\\s+(pra|para)\\s+mim|(posso|vou|prefiro)\\s+(te\\s+|lhe\\s+)?lig\\w*|(uma|por)\\s+ligacao)\\b/,
-  // A talk by another channel.
-  /\\b(falar|fala|fale|conversar|conversamos|falamos|atendimento|atender)\\s+(comigo\\s+)?(por|pelo|pela|no|na|via)\\s+(e-?mails?|telefone|celular|ligacao|whats\\w*|zap|wpp|insta\\w*|direct|dm)\\b|\\bprefiro\\s+(por\\s+|pelo\\s+|no\\s+)?(e-?mails?|telefone|whats\\w*|zap)\\b/,
+  // A talk by another channel ("gostei do atendimento pelo insta" is not one).
+  /\\b(falar|fala|fale|conversar|conversamos|falamos)\\s+(comigo\\s+)?(por|pelo|pela|no|na|via)\\s+(e-?mails?|telefone|celular|ligacao|whats\\w*|zap|wpp|insta\\w*|direct|dm)\\b|\\bprefiro\\s+(por\\s+|pelo\\s+|no\\s+)?(e-?mails?|telefone|whats\\w*|zap)\\b/,
   // The Silmer's own contact.
   /\\b(qual|quais|passa|passe|manda|mande|envia|envie)\\s+(o\\s+|os\\s+)?(seu|seus|teu)\\s+(e-?mails?|telefones?|numeros?|contatos?|whats\\w*|zap|celular)\\b|\\b(e-?mails?|telefones?|numeros?|contatos?|whats\\w*|celular)\\s+(de|da|do|dos)\\s+(voces|vcs|silmer|loja|vendedor\\w*|atendente\\w*|responsavel)\\b/,
-  // An order or a talk elsewhere.
+  // An order or a talk elsewhere; VND-L03: a repeated order ("repetir o pedido", "igual da última
+  // vez", "o mesmo do ano passado").
   /\\bja\\s+(falei|conversei|combinei|fechei|acertei)\\s+com\\b/,
-  /\\b(pedido|orcamento)\\s+(anterior|passado)\\b|\\bigual\\s+(ao|a|o)\\s+(ultimo|anterior|passado)\\b|\\bja\\s+(fiz|fizemos|tinha feito)\\s+(um\\s+|o\\s+)?(pedido|orcamento)\\b/
+  /\\b(pedido|orcamento)\\s+(anterior|passado)\\b|\\bigual\\s+(ao|a|o)\\s+(ultimo|anterior|passado)\\b|\\bja\\s+(fiz|fizemos|tinha feito)\\s+(um\\s+|o\\s+)?(pedido|orcamento)\\b/,
+  /\\brepetir\\s+(o\\s+|aquele\\s+|meu\\s+|nosso\\s+)?(pedido|orcamento)\\b|\\b(igual|mesm[oa]s?)\\s+(da|do|de|ao|a|o)\\s+(ultima vez|vez passada|outra vez|ano passado|mes passado)\\b/
 ];
 // A link counts only with "quero essa", "tem esse?" or "isso aqui", and never as a reference.
 const linkedProduct = /https?:|www\\./.test(currentText) && !referencePhoto(currentText)
