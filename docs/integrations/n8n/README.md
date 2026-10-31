@@ -204,19 +204,25 @@ retorna `409`.
 ### Campos da ADR 052 (migrações 0046–0048)
 
 Todos são opcionais: um workflow que não os envia continua funcionando. O
-schema segue estrito, então o CRM com as migrações precisa estar implantado
-antes do workflow que os envia.
+schema segue estrito, e o CRM antigo recusa os campos novos com `400`. Por
+isso o `mvp-simple-20` só os envia quando a resposta do inbound traz a chave
+`contact_context`, que o CRM desta rodada sempre devolve (nula no primeiro
+contato). Sem a chave, o workflow faz o que a `mvp-simple-19` fazia: sem
+`turn`, sem id do vendedor (o nome segue no resumo), falha como `unsupported`,
+parceria como `human_requested` e sem `message.transcribed`.
 
 - **Motivos novos de handoff.** `handoff.reason` aceita `automation_failure`
   (falha do modelo, do parser, do agente ou da decisão) e `partnership`
   (parceria, revenda, atacado e nota fiscal). Sem `summary`, o handoff de
   `automation_failure` recebe um resumo fixo do CRM.
 - **Vendedor pedido pelo nome.** `handoff.requested_seller_id` leva o id de
-  um item de `sellers`. O CRM grava em `crm.handoffs.preferred_user_id`
+  um item de `sellers` (`^[A-Za-z0-9_-]{1,128}$`; os ids reais são
+  `user-<hex>`). O CRM grava em `crm.handoffs.preferred_user_id`
   (`text`, porque `crm.users.id` é `text`). Id que não é Vendedor ativo é
   ignorado e auditado como `PREFERRED_SELLER_NOT_ACTIVE`; o handoff é criado
-  mesmo assim, sem dono. A lista e o detalhe da Inbox mostram
-  `handoff.preferredSellerFirstName`.
+  mesmo assim, sem dono. A lista da Inbox mostra
+  `handoff.preferredSellerFirstName`; `GET .../conversations/{id}/handoff`
+  devolve `preferred_seller: {id, first_name}` ao lado de `handoff`.
 - **Telemetria `turn`.** `message.send.requested` e `handoff.requested`
   aceitam um objeto estrito, só com códigos, contagens e tempos. Chave
   desconhecida dá `400`.
@@ -256,12 +262,12 @@ TRANSCRIPT_TARGET_INVALID`. Um `failed` pode virar `ok`; um `ok` gravado não
   `subject_ids` (vazio sem vínculo). Áudio com transcrição `ok` vem com o
   texto e `transcribed: true`. O workflow filtra pelo Assunto do turno só
   quando há mais de um.
-- **Cliente recorrente.** O inbound devolve `contact_context`:
-  `previous_cycles`, `last_closed_at` (data em São Paulo), `last_outcome`
-  (`concluido`, `sem_pedido` ou nulo) e até 3 `previous_orders` com
-  `order_number`, `status`, `product_type` (tipo do primeiro item da ficha,
-  até 80 caracteres) e `created_month`. Ficam de fora os pedidos de teste e os
-  desta conversa, e nunca há valores, endereço, financeiro ou arquivos.
+- **Cliente recorrente.** O inbound devolve `contact_context` só com
+  `previous_cycles`, `previous_orders_count` (0 a 99, sem pedidos de teste
+  nem os desta conversa) e `last_closed_at` (data em São Paulo). Lista de
+  pedidos e desfecho saíram por minimização (RULES 8 e 13). Quando uma das
+  contagens é maior que zero, o prompt recebe só "Cliente recorrente: já foi
+  atendido pela Silmer antes.", sem número, produto, pedido ou data.
 - **Encerrar resolve o handoff.** Ao encerrar a conversa, o handoff ativo vai
   para `resolved` na mesma transação, com `reason_code='conversation_closed'`
   no histórico. Handoff sem dono recebe como `assigned_user_id` quem encerrou,
@@ -1096,32 +1102,49 @@ workflow principal a `mvp-simple-20`. Regras no SDK, cobertas por
 - **Tempos.** Modelo com timeout de 30 s e `maxRetries: 1`; transcrição com
   30 s. O pior caso, um áudio com as duas chamadas no limite, fica em cerca de
   112 s, abaixo do `executionTimeout` de 120 s.
-- **Transcrição.** `Áudio não lido? (MVP)`, `Preparar transcrição do áudio
-(MVP)` e `CRM - Registrar transcrição do áudio (MVP)` mandam
-  `message.transcribed` (ok ou falha) com chave estável, numa chamada de 5 s
-  sem retry que não segura a resposta ao cliente.
+- **Transcrição.** `Áudio não lido? (MVP)`, `CRM aceita a transcrição?
+(MVP)`, `Preparar transcrição do áudio (MVP)` e `CRM - Registrar
+transcrição do áudio (MVP)` mandam `message.transcribed` (ok ou falha) com
+  chave fixa por mensagem, numa chamada de 5 s sem retry que não segura a
+  resposta ao cliente.
+- **CRM antigo.** Os campos novos só vão quando o inbound traz
+  `contact_context` (seção "Campos da ADR 052"); contra um CRM antigo o bot
+  continua respondendo como na `mvp-simple-19`.
 - **Telemetria.** `turn` vai na reserva e nos handoffs, com latência do
   recebimento até a decisão e `media_kind`.
 - **Contexto.** Histórico filtrado por `subject_ids` quando há mais de um
   Assunto; o áudio entra com o texto transcrito. Cliente recorrente
-  (`contact_context`) pode ouvir "Que bom falar com você de novo".
+  (`contact_context` com contagem maior que zero) pode ouvir "Que bom falar
+  com você de novo"; o pedido é tratado como novo.
 - **Handoff.** `requested_seller_id` do vendedor pedido pelo nome. Parceria,
   revenda, atacado e nota fiscal usam `partnership`.
 - **Falsos positivos corrigidos.** O próprio e-mail ou telefone do cliente,
-  link de referência, "loja" sozinha e fotos das peças não transferem.
-  "Sim" só grava a arte logo depois da pergunta da arte. "Faixa etária" e "na
-  faixa de" não são bandeira, e "jogo" sozinho não é modelo.
+  link de referência, "loja" sozinha e fotos das peças não transferem. Contar
+  como conheceu a Silmer ou como vai responder também não: "passei pelo
+  instagram", "respondo pelo celular", "gostei do atendimento pelo
+  instagram". Continuam transferindo os pedidos de outro canal ("me passa os
+  valores por e-mail", "prefiro falar pelo direct"). "Sim" só grava a arte
+  logo depois da pergunta da arte. "Faixa etária" e "na faixa de" não são
+  bandeira, e "jogo" sozinho não é modelo.
+- **Pedido repetido** transfere: "repetir o pedido", "igual da última vez",
+  "o mesmo do ano passado", "igual ao pedido anterior".
 - **Tom e horário.** Aviso de preço sem "Ótima pergunta!". Os feriados
   nacionais de 2026 e 2027 (com Carnaval, Sexta-feira Santa e Corpus Christi)
   fecham o dia no aviso de horário. Feriados do ES e municipais não estão
   cobertos.
 
-Mudanças sobre o snapshot anterior: 4 nós novos (os três da transcrição e o
-handoff de falha), o cabeçalho `X-Silmer-Workflow-Version` em
-`mvp-simple-20` nos nós HTTP do CRM, os nós do Vendedor e as conexões dos
-nós novos e dos ramos de erro. Os settings não mudam.
+Mudanças sobre o snapshot anterior: 5 nós novos (95 no snapshot), que são os
+quatro da transcrição e o handoff de falha. Mudam também o cabeçalho
+`X-Silmer-Workflow-Version` (`mvp-simple-20`) nos nós HTTP do CRM, os nós do
+Vendedor e as conexões dos nós novos e dos ramos de erro. Os settings não
+mudam.
 
-Ordem de implantação: CRM (merge e deploy), migrações 0046–0048 aplicadas à
-mão, worker com `ASSISTANT_STALL_MINUTES` e só então a publicação do workflow,
-como delta sobre o export vivo (Evolution). O passo a passo e o rollback estão
+O gerador do Evolution precisa copiar os 5 nós novos e preservar
+`contact_context` na resposta do `CRM - Registrar inbound` e do
+`CRM - Reler conversa`; sem ele, o workflow vivo fica no modo da
+`mvp-simple-19`.
+
+Ordem de implantação: PR das migrações 0046–0048 (merge, deploy e aplicação
+no console), depois PR do código, worker com as envs e só então a publicação
+do workflow, como delta sobre o export vivo (Evolution). O passo a passo e o rollback estão
 no [runbook da VND-L03](../../runbooks/vendedor-l03-implantacao.md).
