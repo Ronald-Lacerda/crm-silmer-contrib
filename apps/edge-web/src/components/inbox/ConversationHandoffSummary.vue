@@ -58,7 +58,11 @@ async function load() {
     if (own !== controller) return;
     const handoff = response.data?.handoff ?? null;
     summary.value = handoff?.summary ?? '';
-    preferredSeller.value = preferredSellerFirstName(handoff);
+    // INBOX-HANDOFF-02: `preferred_seller` sits beside `handoff` in the
+    // answer (the API client keeps the keys as sent).
+    preferredSeller.value = handoff
+      ? preferredSellerFirstName(response.data)
+      : '';
     unavailable.value = !handoff;
     error.value = '';
   } catch (cause) {

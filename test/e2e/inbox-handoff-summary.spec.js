@@ -107,14 +107,16 @@ async function setup(page, options = {}) {
                 createdAt: conversation.handoff.createdAt,
                 id: conversation.handoff.id,
                 reasonCode: conversation.handoff.reasonCode,
-                preferredSeller: options.preferredSeller
-                  ? { id: 'seller-9', firstName: options.preferredSeller }
-                  : null,
                 status: conversation.handoff.status,
                 summary: SUMMARY,
                 version: 1,
               }
             : null,
+          // INBOX-HANDOFF-02: beside the handoff, as the API answers.
+          preferred_seller:
+            conversation?.handoff && options.preferredSeller
+              ? { id: 'seller-9', first_name: options.preferredSeller }
+              : null,
         },
       });
     }

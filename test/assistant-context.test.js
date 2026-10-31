@@ -34,6 +34,22 @@ test('reads the asked seller from the list, the handoff and the contract', () =>
     }),
     'Duda',
   );
+  // The handoff read answers `{handoff, preferred_seller}`; the whole
+  // answer is read, never the handoff object alone.
+  assert.equal(
+    preferredSellerFirstName({
+      handoff: { id: 'h-1', status: 'pending' },
+      preferred_seller: { id: 'u-3', first_name: 'Eva' },
+    }),
+    'Eva',
+  );
+  assert.equal(
+    preferredSellerFirstName({
+      handoff: { id: 'h-1' },
+      preferred_seller: null,
+    }),
+    '',
+  );
   assert.equal(preferredSellerFirstName({ preferredSeller: null }), '');
   assert.equal(preferredSellerFirstName(null), '');
   assert.equal(preferredSellerFirstName({ preferredSellerFirstName: 42 }), '');
