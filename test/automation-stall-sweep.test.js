@@ -13,6 +13,10 @@ import {
   readAssistantStallMinutes,
 } from '../modules/n8n-integration/src/index.js';
 import { createSafeLogger } from '../modules/shared/src/index.js';
+import {
+  ASSISTANT_STALL_MINUTES as OPERATION_STALL_MINUTES,
+  createOperationReadService,
+} from '../apps/api/src/operation-runtime.js';
 
 const database = /** @type {any} */ ({
   query: async () => ({ rows: [] }),
@@ -90,9 +94,10 @@ test('AGENTE-FAIL-01: a failed sweep logs only a bounded code and the next poll 
   await scheduler.poll();
   await scheduler.poll();
   assert.equal(calls, 2);
-  assert.equal(records.length, 1);
+  assert.equal(records.length, 2);
   assert.equal(records[0].event, 'worker_job_failed');
   assert.equal(records[0].job_type, AUTOMATION_STALL_SWEEP_JOB);
+  assert.equal(records[1].event, 'automation_stall_sweep_completed');
   assert.doesNotMatch(JSON.stringify(records), /5527999999999|Cliente/u);
   await scheduler.stop();
 });
@@ -147,4 +152,72 @@ test('AGENTE-FAIL-01: the worker loads the sweep from the domain module at its b
     loadAutomationStallSweeper(database, {}, async () => ({})),
     { code: 'AUTOMATION_STALL_SWEEPER_UNAVAILABLE' },
   );
+});
+
+test('AGENTE-FAIL-01: each sweep logs its counts and the codes of the conversations that failed', async () => {
+  const records = /** @type {any[]} */ ([]);
+  const scheduler = new AutomationStallScheduler({
+    logger: createSafeLogger({
+      service: 'crm-silmer-worker',
+      sink: (record) => records.push(record),
+    }),
+    sweeper: {
+      sweep: async () => ({
+        candidates: 4,
+        errorCodes: ['55P03', '55P03', 'conversa 5527999999999'],
+        failed: 3,
+        handedOff: 1,
+      }),
+    },
+  });
+  await scheduler.poll();
+  assert.deepEqual(
+    {
+      candidates: records[0].candidates,
+      event: records[0].event,
+      failed: records[0].failed,
+      handed_off: records[0].handed_off,
+      job_type: records[0].job_type,
+    },
+    {
+      candidates: 4,
+      event: 'automation_stall_sweep_completed',
+      failed: 3,
+      handed_off: 1,
+      job_type: AUTOMATION_STALL_SWEEP_JOB,
+    },
+  );
+  assert.equal(records[0].redacted_field_count, undefined);
+  const failures = records.filter(
+    (record) => record.event === 'worker_job_failed',
+  );
+  assert.equal(failures.length, 2);
+  assert.doesNotMatch(JSON.stringify(records), /5527999999999|conversa/u);
+});
+
+test('AGENTE-FAIL-01: the Painel counts stalled conversations with the sweep rule and window', async () => {
+  const seen = /** @type {any[]} */ ([]);
+  const service = createOperationReadService({
+    clock: () => new Date('2026-10-30T12:00:00.000Z'),
+    contactRepository: {},
+    countStalled: async (now) => {
+      seen.push(now.toISOString());
+      return 3;
+    },
+    cursorKey: Buffer.alloc(32, 1),
+    handoffRepository: {},
+    inboxRepository: {
+      async summary(/** @type {any} */ input) {
+        seen.push(input.stallMinutes);
+        return {
+          assistant: { stallMinutes: input.stallMinutes, stalledCount: 9 },
+        };
+      },
+    },
+    stallMinutes: 7,
+  });
+  const summary = await service.summarizeInbox({ actorId: 'user-1' });
+  assert.deepEqual(summary.assistant, { stallMinutes: 7, stalledCount: 3 });
+  assert.deepEqual(seen, [7, '2026-10-30T12:00:00.000Z']);
+  assert.equal(ASSISTANT_STALL_MINUTES.default, OPERATION_STALL_MINUTES);
 });

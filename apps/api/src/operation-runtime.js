@@ -23,6 +23,7 @@ import {
 } from '@crm-silmer/contacts';
 import { PostgresInboxReadRepository } from '@crm-silmer/inbox-channels';
 import {
+  ASSISTANT_STALL_MINUTES as ASSISTANT_STALL_RANGE,
   AUTOMATION_MESSAGE_CAP,
   countStalledConversations,
   readAssistantStallMinutes,
@@ -43,8 +44,10 @@ const CONVERSATION_STATES = new Set([
 const CHANNELS = new Set(['instagram', 'whatsapp', 'site_chat']);
 const AUTOMATION_STATES = new Set(['assistant', 'human']);
 // Painel: a client message the assistant left unanswered this long counts as
-// a stalled conversation in the assistant's health.
-export const ASSISTANT_STALL_MINUTES = 10;
+// a stalled conversation in the assistant's health. AGENTE-FAIL-01: the same
+// `ASSISTANT_STALL_MINUTES` the worker sweep uses (default 5), so the Painel
+// card and the sweep never disagree.
+export const ASSISTANT_STALL_MINUTES = ASSISTANT_STALL_RANGE.default;
 
 export class OperationReadError extends Error {
   /** @param {number} statusCode @param {string} code @param {string} [field] */
@@ -65,7 +68,7 @@ export const ASSISTANT_PERFORMANCE_DAYS = Object.freeze({
   min: 1,
 });
 
-/** @param {{clock?: () => Date, contactRepository: any, cursorKey: Buffer, database?: any, handoffRepository: any, inboxRepository: any, countStalled?: (now: Date) => Promise<number>, assistantMessageCap?: number}} dependencies */
+/** @param {{clock?: () => Date, contactRepository: any, cursorKey: Buffer, database?: any, handoffRepository: any, inboxRepository: any, countStalled?: ((now: Date) => Promise<number>) | null, assistantMessageCap?: number, stallMinutes?: number}} dependencies */
 export function createOperationReadService({
   clock = () => new Date(),
   contactRepository,
@@ -73,8 +76,9 @@ export function createOperationReadService({
   database,
   handoffRepository,
   inboxRepository,
-  countStalled = async () => 0,
+  countStalled = null,
   assistantMessageCap = AUTOMATION_MESSAGE_CAP,
+  stallMinutes = ASSISTANT_STALL_MINUTES,
 }) {
   if (!contactRepository || typeof contactRepository !== 'object') {
     throw new TypeError('contactRepository is required');
@@ -97,10 +101,20 @@ export function createOperationReadService({
      * @param {{actorId: string}} input
      */
     async summarizeInbox(input) {
-      return inboxRepository.summary({
+      const now = clock();
+      const summary = await inboxRepository.summary({
         actorId: requireId(input?.actorId, 'ACTOR_ID'),
-        now: clock(),
-        stallMinutes: ASSISTANT_STALL_MINUTES,
+        now,
+        stallMinutes,
+      });
+      if (!countStalled) return summary;
+      // The sweep's own rule (revision fence and failed replies).
+      return Object.freeze({
+        ...summary,
+        assistant: Object.freeze({
+          ...summary.assistant,
+          stalledCount: await countStalled(now),
+        }),
       });
     },
     /**
@@ -135,7 +149,7 @@ export function createOperationReadService({
           to: to.toISOString(),
         }),
         ...aggregates,
-        stalled_now: await countStalled(to),
+        stalled_now: countStalled ? await countStalled(to) : 0,
       });
     },
     /**
@@ -402,6 +416,7 @@ export function createOperationReadRuntime(database, options = {}) {
   const service = createOperationReadService({
     countStalled: (now) =>
       countStalledConversations(database, now, stallMinutes),
+    stallMinutes,
     contactRepository: new PostgresContactReadRepository({
       database,
       envelopeKey: contactKey,

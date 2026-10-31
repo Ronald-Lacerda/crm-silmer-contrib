@@ -67,6 +67,8 @@ if (connectionString) {
     });
     const reads = createOperationReadService({
       clock: () => READ_AT,
+      // The repository rule under a 10-minute window, as before.
+      stallMinutes: 10,
       contactRepository: {},
       cursorKey: Buffer.alloc(32, 75),
       handoffRepository: {},

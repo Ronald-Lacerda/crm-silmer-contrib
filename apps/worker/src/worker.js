@@ -333,7 +333,23 @@ export class AutomationStallScheduler {
     if (this.inFlight) return this.inFlight;
     this.inFlight = this.sweeper
       .sweep()
-      .then(() => {})
+      .then((/** @type {any} */ result) => {
+        // Counts and codes only: never a conversation id or customer data.
+        const counts = {
+          candidates: Number(result?.candidates ?? 0),
+          failed: Number(result?.failed ?? 0),
+          handed_off: Number(result?.handedOff ?? 0),
+          job_type: AUTOMATION_STALL_SWEEP_JOB,
+        };
+        this.logger.info('automation_stall_sweep_completed', counts);
+        for (const code of new Set(result?.errorCodes ?? [])) {
+          this.logger.error('worker_job_failed', {
+            error_code: technicalErrorCode({ code }),
+            job_type: AUTOMATION_STALL_SWEEP_JOB,
+            queue: 'default',
+          });
+        }
+      })
       .catch((error) => {
         this.logger.error('worker_job_failed', {
           error_code: technicalErrorCode(error),

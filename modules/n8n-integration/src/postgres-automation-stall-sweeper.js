@@ -21,6 +21,8 @@ export const AUTOMATION_STALL_SWEEP_JOB = 'automation.stall.sweep';
 const SWEEP_ACTOR = 'system:automation-stall-sweep';
 const SLA_MINUTES = 240;
 export const ASSISTANT_STALL_LOOKBACK_HOURS = 24;
+/** A reply still `sending` after this long did not reach the customer. */
+export const ASSISTANT_SENDING_GRACE_MINUTES = 2;
 
 /**
  * `ASSISTANT_STALL_MINUTES`: absent means the default; an integer outside the
@@ -44,13 +46,20 @@ export function readAssistantStallMinutes(value) {
 }
 
 /**
- * The stalled-conversation rule, shared by the sweep and its re-check under
- * the conversation lock: the assistant owns an open, unarchived conversation,
- * its last customer message arrived after the assistant's last message,
- * before `$1` and after `$2`, and no handoff is open. Arrival is the CRM's
- * receive time (`created_at`), so a message the provider delivers late is not
- * "old". The lower bound (24 hours, the WhatsApp service window) keeps the
- * first run after deploy from flooding the queue with long-dead cycles.
+ * The stalled-conversation rule, shared by the sweep, its re-check under the
+ * conversation lock and the Painel count. It follows the automation fence,
+ * not the clock order of two rows: the assistant owns an open, unarchived
+ * conversation without an open handoff, and its latest inbound revision
+ *
+ * - was never consumed by a turn (`inbound_revision > claimed_revision`), or
+ * - was consumed by a reply that did not go out: `failed` or
+ *   `outcome_unknown` (status or delivery), or still `sending` after
+ *   `$3` (two minutes).
+ *
+ * The age is that of the customer's latest message (the CRM receive time),
+ * older than `$1` and newer than `$2`. The lower bound (24 hours, the
+ * WhatsApp service window) keeps the first run after deploy from flooding
+ * the queue with long-dead cycles.
  */
 const STALLED_CONVERSATIONS = `
   SELECT conversation.id, inbound.received_at
@@ -60,14 +69,8 @@ const STALLED_CONVERSATIONS = `
     FROM crm.messages message
     WHERE message.conversation_id = conversation.id
       AND message.direction = 'inbound'
+      AND message.inbound_revision = conversation.inbound_revision
   ) inbound ON true
-  LEFT JOIN LATERAL (
-    SELECT max(message.created_at) replied_at
-    FROM crm.messages message
-    WHERE message.conversation_id = conversation.id
-      AND message.direction = 'outbound'
-      AND message.author_kind = 'assistant'
-  ) assistant ON true
   WHERE conversation.automation_state = 'assistant'
     AND conversation.terminal_at IS NULL
     AND conversation.archived_at IS NULL
@@ -75,8 +78,24 @@ const STALLED_CONVERSATIONS = `
     AND inbound.received_at IS NOT NULL
     AND inbound.received_at <= $1::timestamptz
     AND inbound.received_at > $2::timestamptz
-    AND (assistant.replied_at IS NULL
-      OR inbound.received_at > assistant.replied_at)
+    AND (
+      conversation.inbound_revision > conversation.claimed_revision
+      OR NOT EXISTS (
+        SELECT 1
+        FROM crm.n8n_events reservation
+        JOIN crm.messages reply
+          ON reply.id = reservation.message_id
+         AND reply.conversation_id = conversation.id
+        WHERE reservation.conversation_id = conversation.id
+          AND reservation.event_type = 'message.send.requested'
+          AND reservation.source_revision = conversation.inbound_revision
+          AND reply.direction = 'outbound'
+          AND reply.author_kind = 'assistant'
+          AND reply.status NOT IN ('failed', 'outcome_unknown')
+          AND (reply.delivery_status IS NULL
+            OR reply.delivery_status NOT IN ('failed', 'outcome_unknown'))
+          AND NOT (reply.status = 'sending'
+            AND reply.created_at <= $3::timestamptz)))
     AND NOT EXISTS (
       SELECT 1 FROM crm.handoffs open_handoff
       WHERE open_handoff.conversation_id = conversation.id
@@ -138,7 +157,12 @@ export class PostgresAutomationStallSweeper {
     this.batchSize = batchSize;
   }
 
-  /** @returns {Promise<{candidates: number, handedOff: number}>} */
+  /**
+   * One failing conversation (a lock timeout, say) never aborts the batch:
+   * its bounded error code is kept and the sweep goes on.
+   *
+   * @returns {Promise<{candidates: number, handedOff: number, failed: number, errorCodes: readonly string[]}>}
+   */
   async sweep() {
     const now = validNow(this.clock);
     const window = stallWindow(now, this.stallMinutes);
@@ -146,20 +170,31 @@ export class PostgresAutomationStallSweeper {
       await this.database.query(
         `${STALLED_CONVERSATIONS}
          ORDER BY inbound.received_at, conversation.id
-         LIMIT $3`,
-        [window.before, window.after, this.batchSize],
+         LIMIT $4`,
+        [...windowValues(window), this.batchSize],
       )
     ).rows;
     let handedOff = 0;
+    /** @type {string[]} */
+    const errorCodes = [];
     for (const candidate of candidates) {
-      if (await this.#handOff(candidate.id, window, now)) {
-        handedOff += 1;
+      try {
+        if (await this.#handOff(candidate.id, window, now)) {
+          handedOff += 1;
+        }
+      } catch (error) {
+        errorCodes.push(boundedErrorCode(error));
       }
     }
-    return Object.freeze({ candidates: candidates.length, handedOff });
+    return Object.freeze({
+      candidates: candidates.length,
+      errorCodes: Object.freeze(errorCodes),
+      failed: errorCodes.length,
+      handedOff,
+    });
   }
 
-  /** @param {string} conversationId @param {{before: string, after: string}} window @param {Date} now */
+  /** @param {string} conversationId @param {StallWindow} window @param {Date} now */
   async #handOff(conversationId, window, now) {
     try {
       return await this.database.transaction(async (client) => {
@@ -176,8 +211,8 @@ export class PostgresAutomationStallSweeper {
         // this sweep waited wins, and nothing is written.
         const still = (
           await client.query(
-            `${STALLED_CONVERSATIONS} AND conversation.id = $3`,
-            [window.before, window.after, conversationId],
+            `${STALLED_CONVERSATIONS} AND conversation.id = $4`,
+            [...windowValues(window), conversationId],
           )
         ).rows[0];
         if (!still) return false;
@@ -313,20 +348,41 @@ export async function countStalledConversations(database, now, stallMinutes) {
   const row = (
     await database.query(
       `SELECT count(*)::integer AS total FROM (${STALLED_CONVERSATIONS}) stalled`,
-      [window.before, window.after],
+      windowValues(window),
     )
   ).rows[0];
   return Number(row?.total ?? 0);
 }
 
-/** @param {Date} now @param {number} stallMinutes */
+/**
+ * @typedef {{before: string, after: string, sendingBefore: string}} StallWindow
+ * @param {Date} now @param {number} stallMinutes
+ * @returns {StallWindow}
+ */
 function stallWindow(now, stallMinutes) {
   return {
     after: new Date(
       now.getTime() - ASSISTANT_STALL_LOOKBACK_HOURS * 60 * 60_000,
     ).toISOString(),
     before: new Date(now.getTime() - stallMinutes * 60_000).toISOString(),
+    sendingBefore: new Date(
+      now.getTime() - ASSISTANT_SENDING_GRACE_MINUTES * 60_000,
+    ).toISOString(),
   };
+}
+
+/** @param {StallWindow} window */
+function windowValues(window) {
+  return [window.before, window.after, window.sendingBefore];
+}
+
+/** @param {unknown} error */
+function boundedErrorCode(error) {
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String(error.code)
+      : '';
+  return /^[A-Z0-9_]{1,64}$/u.test(code) ? code : 'STALL_HANDOFF_FAILED';
 }
 
 /** @param {() => Date} clock */

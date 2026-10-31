@@ -232,6 +232,22 @@ async function setup(pool) {
       ...extra,
     });
 
+  /**
+   * The provider accepted the reply reserved by `reply(inbound, eventId)`.
+   * @param {any} inbound @param {string} eventId
+   */
+  const sent = (inbound, eventId) =>
+    n8n.recordEvent({
+      command_id: `command-${eventId}`,
+      conversation_id: inbound.conversation_id,
+      event_id: `sent-${eventId}`,
+      event_type: 'message.sent',
+      external_message_id: `wamid.out.${eventId}`,
+      occurred_at: clock.now.toISOString(),
+      schema_version: '1.0',
+      technical: technical(`sent-${eventId}`),
+    });
+
   /** @param {string} conversationId */
   const version = async (conversationId) =>
     Number(
@@ -263,6 +279,7 @@ async function setup(pool) {
     reply,
     repository,
     requestHandoff,
+    sent,
     technical,
     version,
   };
@@ -514,9 +531,16 @@ if (connectionString) {
             1,
           );
           const first = await env.sweeper.sweep();
-          assert.deepEqual(first, { candidates: 1, handedOff: 1 });
+          assert.deepEqual(first, {
+            candidates: 1,
+            errorCodes: [],
+            failed: 0,
+            handedOff: 1,
+          });
           assert.deepEqual(await env.sweeper.sweep(), {
             candidates: 0,
+            errorCodes: [],
+            failed: 0,
             handedOff: 0,
           });
           const conversation = (
@@ -599,6 +623,7 @@ if (connectionString) {
         async () => {
           const answered = await env.receive('5527990000401', 'wamid.ok.1');
           await env.reply(answered, 'reply-ok-1');
+          await env.sent(answered, 'reply-ok-1');
           const archived = await env.receive('5527990000402', 'wamid.arch.1');
           await pool.query(
             'UPDATE crm.conversations SET archived_at=$2 WHERE id=$1',
@@ -1436,6 +1461,177 @@ if (connectionString) {
           assert.doesNotMatch(
             JSON.stringify(third.contact_context),
             /12345|pix|Cliente Sintética|Moletom|Camisa polo/u,
+          );
+        },
+      );
+
+      await t.test(
+        'AGENTE-FAIL-01: a reply that failed, ended unknown or is stuck sending does not count as an answer',
+        async () => {
+          /** @param {string} suffix */
+          const answeredWith = async (suffix) => {
+            const inbound = await env.receive(
+              `55279900011${suffix}`,
+              `wamid.m1.${suffix}`,
+            );
+            await env.reply(inbound, `reply-m1-${suffix}`);
+            return inbound;
+          };
+          const failed = await answeredWith('01');
+          await env.sent(failed, 'reply-m1-01');
+          await env.n8n.recordEvent({
+            conversation_id: failed.conversation_id,
+            event_id: 'failed-m1-01',
+            event_type: 'message.failed',
+            external_message_id: 'wamid.out.reply-m1-01',
+            failure: { code: 'META_131047' },
+            occurred_at: env.clock.now.toISOString(),
+            schema_version: '1.0',
+            technical: env.technical('failed-m1-01'),
+          });
+          const unknown = await answeredWith('02');
+          await env.n8n.recordEvent({
+            command_id: 'command-reply-m1-02',
+            conversation_id: unknown.conversation_id,
+            event_id: 'unknown-m1-02',
+            event_type: 'message.send.unknown',
+            occurred_at: env.clock.now.toISOString(),
+            schema_version: '1.0',
+            technical: env.technical('unknown-m1-02'),
+          });
+          const stuck = await answeredWith('03');
+          const delivered = await answeredWith('04');
+          await env.sent(delivered, 'reply-m1-04');
+          // A delivery receipt that ended unknown is not an answer either.
+          const deliveredUnknownStatus = await answeredWith('05');
+          await env.sent(deliveredUnknownStatus, 'reply-m1-05');
+          await pool.query(
+            `UPDATE crm.messages SET delivery_status='outcome_unknown'
+             WHERE command_id='command-reply-m1-05'`,
+          );
+          // The customer wrote long ago, but the reply went out a minute ago
+          // and is still sending: within the 2-minute grace, an answer.
+          const freshSending = await env.receive(
+            '5527990001106',
+            'wamid.m1.06',
+          );
+          const handedOff = async (/** @type {any} */ inbound) =>
+            Number(
+              (
+                await pool.query(
+                  `SELECT count(*)::integer AS total FROM crm.handoffs
+                   WHERE conversation_id=$1 AND reason_code='automation_failure'`,
+                  [inbound.conversation_id],
+                )
+              ).rows[0].total,
+            );
+          env.advance(6);
+          await env.reply(freshSending, 'reply-m1-06');
+          env.advance(1);
+          await env.sweeper.sweep();
+          assert.deepEqual(
+            await Promise.all(
+              [
+                failed,
+                unknown,
+                stuck,
+                delivered,
+                deliveredUnknownStatus,
+                freshSending,
+              ].map(handedOff),
+            ),
+            [1, 1, 1, 0, 1, 0],
+          );
+        },
+      );
+
+      await t.test(
+        'AGENTE-FAIL-01: the sweep follows the revision fence, not the clock order of the rows',
+        async () => {
+          // A new customer revision whose receive time reads earlier than the
+          // reply to the previous revision is still unanswered.
+          const first = await env.receive('5527990001201', 'wamid.b1.1');
+          await env.reply(first, 'reply-b1-1');
+          await env.sent(first, 'reply-b1-1');
+          const second = await env.receive('5527990001201', 'wamid.b1.2');
+          assert.equal(second.source_revision, 2);
+          await pool.query(
+            `UPDATE crm.messages SET created_at = created_at - interval '1 minute',
+                    occurred_at = occurred_at - interval '1 minute'
+             WHERE external_message_id='wamid.b1.2'`,
+          );
+          // A reply to the latest revision that reads earlier than its
+          // inbound (clock taken before the lock) is still an answer.
+          const other = await env.receive('5527990001202', 'wamid.b1.3');
+          await env.reply(other, 'reply-b1-3');
+          await env.sent(other, 'reply-b1-3');
+          await pool.query(
+            `UPDATE crm.messages SET created_at = created_at - interval '1 minute',
+                    occurred_at = occurred_at - interval '1 minute'
+             WHERE command_id='command-reply-b1-3'`,
+          );
+          env.advance(6);
+          await env.sweeper.sweep();
+          const reasons = await pool.query(
+            `SELECT conversation_id FROM crm.handoffs
+             WHERE conversation_id = ANY($1) AND reason_code='automation_failure'`,
+            [[first.conversation_id, other.conversation_id]],
+          );
+          assert.deepEqual(
+            reasons.rows.map((/** @type {any} */ row) => row.conversation_id),
+            [first.conversation_id],
+          );
+        },
+      );
+
+      await t.test(
+        'AGENTE-FAIL-01: one failing conversation does not abort the batch',
+        async () => {
+          const blocked = await env.receive('5527990001301', 'wamid.b2.1');
+          const free = await env.receive('5527990001302', 'wamid.b2.2');
+          env.advance(6);
+          const holder = await pool.connect();
+          try {
+            await holder.query('BEGIN');
+            await holder.query(
+              'SELECT id FROM crm.conversations WHERE id=$1 FOR UPDATE',
+              [blocked.conversation_id],
+            );
+            const result = await env.sweeper.sweep();
+            assert.ok(result.failed >= 1);
+            assert.ok(result.errorCodes.includes('55P03'));
+            assert.ok(result.handedOff >= 1);
+          } finally {
+            await holder.query('ROLLBACK');
+            holder.release();
+          }
+          const states = await pool.query(
+            `SELECT id, automation_state FROM crm.conversations
+             WHERE id = ANY($1) ORDER BY id`,
+            [[blocked.conversation_id, free.conversation_id]],
+          );
+          assert.deepEqual(
+            Object.fromEntries(
+              states.rows.map((/** @type {any} */ row) => [
+                row.id,
+                row.automation_state,
+              ]),
+            ),
+            {
+              [blocked.conversation_id]: 'assistant',
+              [free.conversation_id]: 'human',
+            },
+          );
+          // The next run hands the blocked one off.
+          assert.ok((await env.sweeper.sweep()).handedOff >= 1);
+          assert.equal(
+            (
+              await pool.query(
+                'SELECT automation_state FROM crm.conversations WHERE id=$1',
+                [blocked.conversation_id],
+              )
+            ).rows[0].automation_state,
+            'human',
           );
         },
       );

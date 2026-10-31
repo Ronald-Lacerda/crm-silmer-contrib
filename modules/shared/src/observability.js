@@ -19,9 +19,13 @@ export const REDACTED_FIELD_NAMES = Object.freeze([
 ]);
 
 const allowedContextFields = new Set([
+  // AGENTE-FAIL-01: counts of one stall sweep.
+  'candidates',
   'correlation_id',
   'duration_ms',
   'error_code',
+  'failed',
+  'handed_off',
   'job_type',
   'metric',
   'outcome',
@@ -40,6 +44,7 @@ const allowedEvents = new Set([
   'api_request_failed',
   'api_request_started',
   'api_start_failed',
+  'automation_stall_sweep_completed',
   'metric_observed',
   'synthetic_failure',
   'worker_job_failed',

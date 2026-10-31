@@ -425,10 +425,11 @@ test('Painel: the Inbox summary reads the server clock and maps counts without e
   assert.match(myOrders.sql, /manual_owner_id = \$1/u);
   assert.match(myOrders.sql, /conversation\.assigned_user_id = \$1/u);
   // The reader, "now" and the stall threshold are bound, never inlined.
+  // AGENTE-FAIL-01: the default threshold is the sweep's, 5 minutes.
   assert.deepEqual(queue.values, [
     'seller-1',
     '2026-10-15T15:00:00.000Z',
-    '2026-10-15T14:50:00.000Z',
+    '2026-10-15T14:55:00.000Z',
   ]);
   assert.match(queue.sql, /handoff\.due_at <= \$2::timestamptz/u);
   assert.match(queue.sql, /conversation\.archived_at IS NULL/u);
