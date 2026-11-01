@@ -2173,7 +2173,7 @@ revisão.
   saldo insuficiente e assinatura do webhook).
 
 - **Evidência local (29/10/2026):** Node 24.20.0 / npm 11.19.0; `npm run
-  validate` passou (1.393 testes aprovados, cinco ignorados); diff check
+validate` passou (1.393 testes aprovados, cinco ignorados); diff check
   limpo. Revisão adversarial de QA/segurança corrigida antes do commit:
   falha de rede em compra não é reenviada (pede reconciliação), produtos
   declarados somam o valor segurado de cada embalagem, saldo insuficiente só
@@ -2217,7 +2217,7 @@ revisão.
   execução restrita falhou por EPERM em links/processos; o gate passou fora
   dessa restrição. Suíte PostgreSQL dedicada adicionada ao CI, sem PostgreSQL
   ou Docker disponíveis localmente; não confundir unitários com esse gate.
-- **Estado operacional:** cadastro Sandbox e aplicativo OAuth concluídos com
+- **Preparação operacional (antes da publicação):** cadastro Sandbox e aplicativo OAuth concluídos com
   aceite explícito, limite de 1.000 envios e saldo fictício. A troca do e-mail
   aguarda SMS do provedor. Após aprovação específica, sete variáveis privadas
   foram salvas na API e conferidas por leitura, preservando os valores prévios
@@ -2239,5 +2239,21 @@ revisão.
   reexecução do CI antes da publicação.
 - **Operação e rollback:** [runbook](../../../docs/runbooks/melhor-envio.md).
 - **Publicação:** [PR #258](https://github.com/romulosutil/crm-silmer/pull/258),
-  um commit na branch `codex/melhor-envio-connection`; aguardando gates do CI e
-  ativação/consentimento da conta de teste.
+  integrada após CI completo por rebase em
+  `09c259e61abcb30402e616aeca136c604fd734f3`. CI da master também passou,
+  incluindo publicação das imagens. API, edge e worker publicados na mesma
+  revisão e saudáveis; backup Local Disk concluído antes da migration 0049
+  (uma aplicada, repetição zero, checksum e tabelas conferidos). Readiness
+  público `ready`. Flag habilitada somente no sandbox, preservando as demais
+  variáveis. O probe remoto encontrou query no access log do Traefik; rota
+  exata de callback protegida, preservando middleware/TLS observados. Probe
+  ao vivo posterior omitiu code/state/Referer e registrou o controle positivo.
+  [Evidências e configuração](../../../docs/runbooks/melhor-envio.md).
+  Consentimento mínimo concluído após os aceites específicos do proprietário;
+  conta conectada em testes, válida até 01/12/2026. Cotação com CEPs e pacote
+  sintéticos aprovados retornou quatro opções (PAC, SEDEX, Jadlog .Package e
+  .Com), com valores/prazos e Mini Envios indisponível. Sem compra, etiqueta
+  ou alteração de pedido. API reiniciada sem rebuild; apenas a nova instância
+  saudável permaneceu, readiness `ready`, conta conectada preservada e a mesma
+  cotação retornou as quatro opções novamente. Homologação de compra de
+  etiquetas e ativação de produção permanecem fora desta fatia.

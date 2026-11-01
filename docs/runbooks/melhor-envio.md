@@ -49,6 +49,53 @@ retirar a integração.
 
 ## Recuperação e diagnóstico
 
+### Callback no Traefik do EasyPanel
+
+O access log do Traefik 3.6.7 inclui a query do pedido HTTP. Proteger apenas
+o nginx não protege o código OAuth no proxy externo. Antes de conectar uma
+conta, conferir a rota HTTPS efetiva no dashboard do Traefik e acrescentar
+uma rota de maior prioridade para o caminho exato do callback, com
+`observability.accessLogs=false`. Preservar entrypoint, serviço, middlewares,
+opções TLS e certificado da rota atual; não desabilitar os logs globais.
+
+Configuração observada e aplicada em 01/11/2026, mesclada no `http.routers`
+customizado existente do EasyPanel:
+
+```json
+{
+  "silmer-melhor-envio-callback": {
+    "entryPoints": ["https"],
+    "rule": "Host(`crm.silmer.com.br`) && Path(`/melhor-envio`)",
+    "priority": 10000,
+    "service": "espectro-mvp_silmer-edge-web-1",
+    "middlewares": ["bad-gateway-error-page@file"],
+    "tls": {
+      "options": "default",
+      "certResolver": "letsencrypt",
+      "domains": [{ "main": "crm.silmer.com.br" }]
+    },
+    "observability": { "accessLogs": false }
+  }
+}
+```
+
+Esse fragmento não substitui o documento completo: preservar os demais
+campos, incluindo `n8n-security-headers`. Nomes dependem da configuração
+efetiva e devem ser reconferidos se o domínio/serviço mudar. O reload é
+dinâmico, sem reiniciar o proxy. Rollback remove somente essa rota adicional
+ou restaura a configuração customizada anterior preservada privadamente;
+desabilitar a integração antes de restaurar logs do callback.
+
+Verificar o stream de logs **ao vivo**: enviar primeiro um callback com
+code/state/Referer sintéticos e depois um GET em outro caminho com marcador
+de controle. O controle deve aparecer e os marcadores do callback devem
+estar ausentes. Confirmar callback HTTPS 200, `private, no-store`,
+`Referrer-Policy: no-referrer`, headers existentes e HTTP → HTTPS. A tela de
+logs pode carregar um trecho histórico antigo antes de acompanhar o stream;
+ausência de um probe enviado antes da assinatura não é evidência suficiente.
+
+### Falhas da integração
+
 - **Não configurado:** conferir nomes, ambiente, HTTPS/callback, User-Agent
   com e-mail e tamanho da chave, sem imprimir valores.
 - **Estado inválido/expirado:** iniciar conexão na mesma sessão; não repetir
@@ -95,7 +142,60 @@ retirar a integração.
   diretiva de access log. Isso não comprova os argumentos efetivos do proxy;
   manter o gate de ausência de code/state/Referer em logs antes do OAuth real.
 
+### Publicação autorizada
+
+- [PR #258](https://github.com/romulosutil/crm-silmer/pull/258) integrada por
+  rebase em `09c259e61abcb30402e616aeca136c604fd734f3`, após
+  [CI da PR](https://github.com/romulosutil/crm-silmer/actions/runs/41356852137)
+  completo. O [CI da master](https://github.com/romulosutil/crm-silmer/actions/runs/41358341331)
+  também concluiu estáticos, PostgreSQL, E2E/axe e build/scan/publicação das
+  imagens com sucesso. Um job Dependabot separado falhou; não é o pipeline
+  da entrega.
+- Backup prévio `silmer-pre-mev-t138-20261101` concluído no PostgreSQL:
+  783 kB, 22:39:56 UTC, no provedor Local Disk. Isso não comprova backup
+  externo ou um drill de restauração. Revisão anterior recuperável:
+  `2da566be5f79427adde071c70fc1b7957f057589`.
+- API, edge-web e worker observados na revisão publicada, em execução e
+  saudáveis. IDs das imagens construídas pelo EasyPanel (não confundir com
+  os digests publicados no GHCR): runtime/API/worker
+  `sha256:f130b5226d33ec07e456c7ede119545b05de8569214dd087ed13cab72a007f0c`;
+  edge-web `sha256:7aef46a21ad1c9eeb2e14202d6eb93bf3f02d8f668e39a663a38708aaafa0ca9`.
+- Ledger anterior em 0048. CLI expand da nova API aplicou exatamente uma
+  migration; repetição aplicou zero. Ledger 0049 conferido com checksum
+  `8aab647c6b8d8888843de476cedadd6331f2df8a4c3fadf86d6d0f6037d299f4`,
+  e ambas as tabelas existentes. Readiness público retornou `ready`.
+- `MELHOR_ENVIO_ENABLED=true`, com ambiente `sandbox`, salvo por substituição
+  verificada do documento privado, alterando somente a flag. API reiniciada
+  sem rebuild; interface confirmou conta desconectada em testes. As demais
+  variáveis e a configuração de autoDeploy foram preservadas.
+- Probe inicial demonstrou vazamento de marcadores sintéticos no Traefik.
+  Rota adicional acima aplicada após conferir no dashboard os controles
+  originais. A revisão automática rejeitou a primeira proposta sem essa
+  comprovação; a configuração corrigida preserva middleware e TLS efetivos.
+  Probe ao vivo de 22:57:31 UTC: callback 200 sem marcadores no stream,
+  controle positivo em outro caminho presente; HTTPS e headers preservados.
+- Consentimento Sandbox concluído com somente cotação e transportadoras,
+  após autorizações específicas para termos, endereço sintético e regras
+  finais de postagem exigidas pelo provedor. Usada a unidade de teste
+  `Agencia SP platform-3`; geolocalização do operador não foi solicitada.
+  A tentativa longa inicial não concluiu no CRM; nova tentativa com estado
+  novo conectou, mantendo o prazo e a proteção de uso único do estado.
+  Interface confirmou conta conectada em testes e validade até 01/12/2026.
+- Cotação remota no Sandbox com dados aprovados: CEPs públicos de teste
+  01001-000 → 20040-002, 1.000 g, largura 20 cm, altura 15 cm, comprimento
+  10 cm e valor segurado de R$ 100. Retornaram quatro opções: PAC, SEDEX,
+  Jadlog .Package e .Com, com valores e prazos exibidos; Mini Envios apareceu
+  indisponível, coerente com a embalagem. Esses resultados são de testes,
+  não condições comerciais de produção. Nenhum pedido, etiqueta ou compra.
+- API reiniciada sem rebuild após a conexão. Conferido que apenas a nova
+  instância permaneceu em execução, saudável, com a mesma imagem. Readiness
+  retornou `ready`; reload do CRM preservou a conta conectada. A mesma cotação
+  foi repetida e retornou as mesmas quatro opções, validando persistência
+  dos tokens e uso pela nova instância. Renovação por expiração permanece
+  coberta pelos testes dedicados, sem forçar expiração da conta conectada.
+
 Fontes oficiais verificadas em 01/11/2026:
 [autenticação](https://docs.melhorenvio.com.br/docs/autenticacao-1),
 [autorização](https://docs.melhorenvio.com.br/reference/fluxo-de-autoriza%C3%A7%C3%A3o)
 e [introdução da API](https://docs.melhorenvio.com.br/reference/introducao-api-melhor-envio).
+Configuração por rota: [observabilidade do Traefik](https://doc.traefik.io/traefik/reference/routing-configuration/http/routing/observability/).
