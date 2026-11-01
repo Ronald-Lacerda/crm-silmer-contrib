@@ -58,6 +58,8 @@ const copies = [
     'runtime/modules/work-management/package.json',
   ],
   ['modules/shared/src', 'runtime/modules/shared/src'],
+  ['modules/shipping/src', 'runtime/modules/shipping/src'],
+  ['modules/shipping/package.json', 'runtime/modules/shipping/package.json'],
   ['modules/shared/package.json', 'runtime/modules/shared/package.json'],
 ];
 

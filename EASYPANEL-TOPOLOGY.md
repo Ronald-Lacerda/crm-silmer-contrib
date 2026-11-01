@@ -1,5 +1,17 @@
 # Topologia EasyPanel — CRM Silmer
 
+## Melhor Envio — T138 (01/11/2026)
+
+Sem serviço novo: somente a API recebe `MELHOR_ENVIO_ENABLED`,
+`MELHOR_ENVIO_ENVIRONMENT`, `MELHOR_ENVIO_CLIENT_ID`, `MELHOR_ENVIO_CLIENT_SECRET`,
+`MELHOR_ENVIO_REDIRECT_URI`, `MELHOR_ENVIO_USER_AGENT` e
+`MELHOR_ENVIO_ENVELOPE_KEY`. Tokens rotativos ficam cifrados no PostgreSQL
+existente (migration 0049), com chave em backup privado separado. Não colocar
+segredos no edge, worker ou build. Preservar a configuração de autoDeploy
+encontrada: a consulta inicial mostrou API desabilitada e edge/worker
+habilitados; ativação exige publicar os artefatos compatíveis e verificar
+health/migration/digest conforme o [runbook](docs/runbooks/melhor-envio.md).
+
 ## Ponte Evolution/Baileys — 29/10/2026
 
 Conforme a [ADR 050](docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md),

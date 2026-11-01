@@ -141,6 +141,7 @@ const navItems = computed(() =>
         ...(isAdmin.value
           ? [
               { to: '/financeiro', label: 'Financeiro', icon: 'orders' },
+              { to: '/melhor-envio', label: 'Melhor Envio', icon: 'orders' },
               { to: '/usuarios', label: 'Usuários', icon: 'team' },
             ]
           : []),

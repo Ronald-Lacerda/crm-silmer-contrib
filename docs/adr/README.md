@@ -1,5 +1,11 @@
 # Architecture Decision Records
 
+## Decisão de 01/11/2026
+
+- [053 — Conexão e cotação administrativa do Melhor Envio](053-conexao-e-cotacao-administrativa-melhor-envio.md),
+  continuidade T137/ME-0: OAuth mínimo, tokens cifrados no PostgreSQL e menu
+  administrativo; decisões comerciais/compra da RFC 038 continuam separadas.
+
 ## Decisão de 30/10/2026
 
 - [052 — Vendedor mensurável e com mais contexto](052-vendedor-mensuravel-e-com-mais-contexto.md),

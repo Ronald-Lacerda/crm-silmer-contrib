@@ -51,6 +51,7 @@ const OPERATIONAL_READ_ACTIONS = new Set([
   'finance.read',
   // AGENTE-OBS-01: manager only (COMMERCIAL_ADMIN), see authorization.js.
   'assistant.performance.read',
+  'shipping.manage',
 ]);
 
 /**
@@ -236,7 +237,8 @@ export function createIdentityApiRuntime(database, environment = process.env) {
     async authorizeOperational(input) {
       if (
         !OPERATIONAL_ACTIONS.has(input.action) &&
-        !FINANCE_ACTIONS.has(input.action)
+        !FINANCE_ACTIONS.has(input.action) &&
+        input.action !== 'shipping.manage'
       ) {
         throw new IdentityHttpError(403, 'FORBIDDEN');
       }

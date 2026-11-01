@@ -190,6 +190,233 @@ const newWorkspace = () =>
 const lockChange = (before, after) =>
   change('package-lock.json', JSON.stringify(before), JSON.stringify(after));
 
+/** Existing app and target workspaces, with a new exact local dependency. */
+function existingEdgeFixture() {
+  const ownerPath = 'apps/api/package.json';
+  const beforeManifest = {
+    ...localManifest('api'),
+    scripts: { start: 'node src/server.js' },
+    dependencies: { example: '1.0.0', '@crm-silmer/contacts': '0.0.0' },
+  };
+  const afterManifest = structuredClone(beforeManifest);
+  const beforeLock = /** @type {any} */ (lockFixture());
+  beforeLock.packages['apps/api'] = {
+    name: beforeManifest.name,
+    version: beforeManifest.version,
+    dependencies: { ...beforeManifest.dependencies },
+  };
+  beforeLock.packages['node_modules/@crm-silmer/api'] = {
+    resolved: 'apps/api',
+    link: true,
+  };
+  beforeLock.packages['modules/shipping'] = {
+    name: '@crm-silmer/shipping',
+    version: '0.0.0',
+  };
+  beforeLock.packages['node_modules/@crm-silmer/shipping'] = {
+    resolved: 'modules/shipping',
+    link: true,
+  };
+  const afterLock = structuredClone(beforeLock);
+  /** @type {Record<string,any>} */ const beforeManifests = {
+    ...structuredClone(manifests),
+    [ownerPath]: beforeManifest,
+  };
+  /** @type {Record<string,any>} */ const afterManifests = {
+    ...structuredClone(manifests),
+    [ownerPath]: afterManifest,
+  };
+  return {
+    ownerPath,
+    beforeManifest,
+    afterManifest,
+    beforeLock,
+    afterLock,
+    beforeManifests,
+    afterManifests,
+    changes: () => [
+      change(
+        ownerPath,
+        JSON.stringify(beforeManifest),
+        JSON.stringify(afterManifest),
+      ),
+      lockChange(beforeLock, afterLock),
+    ],
+    /** @param {string} path @param {'before'|'after'} side */
+    read: (path, side) =>
+      JSON.stringify(
+        path === 'package-lock.json'
+          ? side === 'before'
+            ? beforeLock
+            : afterLock
+          : (side === 'before' ? beforeManifests : afterManifests)[path],
+      ),
+    /** @param {string} [version] */
+    addShipping(version = '0.0.0') {
+      Object.assign(afterManifest.dependencies, {
+        '@crm-silmer/shipping': version,
+      });
+      afterLock.packages['apps/api'].dependencies = {
+        ...afterManifest.dependencies,
+      };
+    },
+  };
+}
+
+test('existing private workspace may add or remove only an exact verified local dependency', () => {
+  const added = existingEdgeFixture();
+  added.addShipping();
+  assert.equal(needsReview(added.changes(), added.read), false);
+  assert.equal(needsReview(added.changes().toReversed(), added.read), false);
+  const removed = existingEdgeFixture();
+  delete (
+    /** @type {any} */ (removed.afterManifest.dependencies)[
+      '@crm-silmer/contacts'
+    ]
+  );
+  removed.afterLock.packages['apps/api'].dependencies = {
+    ...removed.afterManifest.dependencies,
+  };
+  assert.equal(needsReview(removed.changes(), removed.read), false);
+});
+
+test('local edges do not hide external versions, origins, integrity, flags or unknown lock metadata', () => {
+  for (const [key, value] of Object.entries({
+    version: '2.0.0',
+    resolved: 'https://other.invalid/package.tgz',
+    integrity: 'sha512-changed',
+    dev: true,
+    optional: true,
+    hasInstallScript: true,
+    unknown: 'unrecognized-metadata',
+  })) {
+    const fixture = existingEdgeFixture();
+    fixture.addShipping();
+    fixture.afterLock.packages['node_modules/example'][key] = value;
+    assert.equal(needsReview(fixture.changes(), fixture.read), true, key);
+  }
+  for (const operation of ['add', 'remove', 'version']) {
+    const fixture = existingEdgeFixture();
+    fixture.addShipping();
+    if (operation === 'add')
+      Object.assign(fixture.afterManifest.dependencies, { external: '1.0.0' });
+    else if (operation === 'remove')
+      delete (/** @type {any} */ (fixture.afterManifest.dependencies).example);
+    else fixture.afterManifest.dependencies.example = '2.0.0';
+    fixture.afterLock.packages['apps/api'].dependencies = {
+      ...fixture.afterManifest.dependencies,
+    };
+    assert.equal(needsReview(fixture.changes(), fixture.read), true, operation);
+  }
+});
+
+test('local edges never exempt scripts, Actions, optional/dev dependencies or unknown manifest changes', () => {
+  for (const extra of [
+    { scripts: { start: 'node src/server.js', postinstall: 'node setup.js' } },
+    { scripts: {} },
+    { devDependencies: { '@crm-silmer/shipping': '0.0.0' } },
+    { optionalDependencies: { '@crm-silmer/shipping': '0.0.0' } },
+    { overrides: { example: '2.0.0' } },
+    { unknown: 'unrecognized-metadata' },
+  ]) {
+    const fixture = existingEdgeFixture();
+    fixture.addShipping();
+    Object.assign(fixture.afterManifest, extra);
+    assert.equal(
+      needsReview(fixture.changes(), fixture.read),
+      true,
+      JSON.stringify(extra),
+    );
+  }
+  const fixture = existingEdgeFixture();
+  fixture.addShipping();
+  assert.equal(
+    needsReview(
+      [
+        ...fixture.changes(),
+        change(workflow, ref, ref.replace('abc123', 'def456')),
+      ],
+      fixture.read,
+    ),
+    true,
+  );
+});
+
+test('existing workspace edge fails closed for aliases, spoofed targets, missing snapshots and inconsistent lock', () => {
+  for (const version of [
+    '*',
+    '^0.0.0',
+    'npm:example@1.0.0',
+    'file:../../modules/shipping',
+    '1.0.0',
+  ]) {
+    const fixture = existingEdgeFixture();
+    fixture.addShipping(version);
+    assert.equal(needsReview(fixture.changes(), fixture.read), true, version);
+  }
+  /** @type {((fixture:ReturnType<typeof existingEdgeFixture>)=>void)[]} */
+  const mutations = [
+    (f) => {
+      f.afterManifests['modules/shipping/package.json'].private = false;
+    },
+    (f) => {
+      f.afterManifests['modules/shipping/package.json'].name =
+        '@crm-silmer/impostor';
+    },
+    (f) => {
+      delete f.afterManifests['modules/shipping/package.json'];
+    },
+    (f) => {
+      f.afterLock.packages['node_modules/@crm-silmer/shipping'] = {
+        ...externalPackage,
+      };
+    },
+    (f) => {
+      f.afterLock.packages['node_modules/@crm-silmer/shipping'].resolved =
+        '../shipping';
+    },
+    (f) => {
+      f.afterLock.packages[
+        'node_modules/@crm-silmer/shipping'
+      ].hasInstallScript = true;
+    },
+    (f) => {
+      delete f.afterLock.packages['apps/api'].dependencies[
+        '@crm-silmer/shipping'
+      ];
+    },
+    (f) => {
+      f.afterLock.lockfileVersion = 2;
+    },
+    (f) => {
+      f.afterManifest.private = false;
+    },
+    (f) => {
+      f.afterManifests[f.ownerPath] = {};
+    },
+  ];
+  for (const mutate of mutations) {
+    const fixture = existingEdgeFixture();
+    fixture.addShipping();
+    mutate(fixture);
+    assert.equal(needsReview(fixture.changes(), fixture.read), true);
+  }
+  const fixture = existingEdgeFixture();
+  fixture.addShipping();
+  assert.equal(needsReview(fixture.changes()), true);
+  const manifestOnly = existingEdgeFixture();
+  manifestOnly.addShipping();
+  manifestOnly.afterLock.packages['apps/api'].dependencies = {
+    ...manifestOnly.beforeManifest.dependencies,
+  };
+  assert.equal(
+    needsReview([manifestOnly.changes()[0]], manifestOnly.read),
+    true,
+  );
+  fixture.afterLock.packages['apps/api'].dependencies = [];
+  assert.equal(needsReview(fixture.changes(), fixture.read), true);
+});
+
 test('local workspace registration and existing internal dependency sync need no external review', () => {
   const before = lockFixture();
   const after = JSON.parse(JSON.stringify(before));
@@ -372,6 +599,17 @@ test('CLI reads committed workspace manifests and reports an external change aft
   try {
     git(['init', '-q']);
     const lock = /** @type {any} */ (lockFixture());
+    const app = existingEdgeFixture().beforeManifest;
+    lock.packages['apps/api'] = {
+      name: app.name,
+      version: app.version,
+      dependencies: { ...app.dependencies },
+    };
+    lock.packages['node_modules/@crm-silmer/api'] = {
+      resolved: 'apps/api',
+      link: true,
+    };
+    save('apps/api/package.json', app);
     save('package-lock.json', lock);
     for (const [path, value] of Object.entries(manifests)) {
       if (!path.includes('/shipping/')) save(path, value);
@@ -390,9 +628,20 @@ test('CLI reads committed workspace manifests and reports an external change aft
       '@crm-silmer/contacts': '0.0.0',
     };
     save('package-lock.json', lock);
-    const local = run(base, commit());
+    const localHead = commit();
+    const local = run(base, localHead);
     assert.equal(local.status, 0, local.stderr);
     assert.equal(local.stdout, 'required=false\n');
+    Object.assign(app.dependencies, { '@crm-silmer/shipping': '0.0.0' });
+    lock.packages['apps/api'].dependencies = { ...app.dependencies };
+    save('apps/api/package.json', app);
+    save('package-lock.json', lock);
+    const edgeHead = commit();
+    for (const compareBase of [base, localHead]) {
+      const internal = run(compareBase, edgeHead);
+      assert.equal(internal.status, 0, internal.stderr);
+      assert.equal(internal.stdout, 'required=false\n');
+    }
     lock.packages['node_modules/example'].integrity = 'sha512-changed';
     save('package-lock.json', lock);
     const external = run(base, commit());

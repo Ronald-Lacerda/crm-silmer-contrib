@@ -7,6 +7,7 @@ import ClientsView from './views/ClientsView.vue';
 import DashboardView from './views/DashboardView.vue';
 import FinanceView from './views/FinanceView.vue';
 import InboxView from './views/InboxView.vue';
+import MelhorEnvioView from './views/MelhorEnvioView.vue';
 import OrdersView from './views/OrdersView.vue';
 import OrderView from './views/OrderView.vue';
 import UsersView from './views/UsersView.vue';
@@ -69,6 +70,15 @@ export const router = createRouter({
       path: '/financeiro',
       component: FinanceView,
       meta: { requiresFinance: true, title: 'Financeiro' },
+    },
+    {
+      path: '/melhor-envio',
+      component: MelhorEnvioView,
+      meta: {
+        requiresAdmin: true,
+        title: 'Melhor Envio',
+        viewKey: 'melhor-envio',
+      },
     },
     {
       path: '/usuarios',

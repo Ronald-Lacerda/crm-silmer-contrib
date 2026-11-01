@@ -31,12 +31,11 @@ function newLocalWorkspace(path, content) {
 }
 
 /**
- * Remove only verified workspace records, links and exact local dependencies.
- * Keep every external package field, including integrity, resolved and flags.
+ * Verify each private workspace against its committed manifest and exact link.
  * @param {string} content
  * @param {(path: string) => string} readManifest
  */
-function externalLock(content, readManifest) {
+function verifiedWorkspaces(content, readManifest) {
   const lock = JSON.parse(content);
   if (
     lock.lockfileVersion !== 3 ||
@@ -71,6 +70,17 @@ function externalLock(content, readManifest) {
       manifest: actual,
     });
   }
+  return { lock, packages, locals };
+}
+
+/**
+ * Remove only verified workspace records, links and exact local dependencies.
+ * Keep every external package field, including integrity, resolved and flags.
+ * @param {string} content
+ * @param {(path: string) => string} readManifest
+ */
+function externalLock(content, readManifest) {
+  const { lock, packages, locals } = verifiedWorkspaces(content, readManifest);
   for (const [name, local] of locals) {
     const entry = { ...packages[local.path] };
     delete entry.name;
@@ -92,6 +102,53 @@ function externalLock(content, readManifest) {
     delete packages[`node_modules/${name}`];
   }
   return { ...lock, packages };
+}
+
+/**
+ * Existing workspace manifests may change only exact private workspace edges.
+ * All other fields (scripts, external dependencies, flags, unknown metadata)
+ * remain intact for comparison, and the lock must agree with the manifest.
+ * @param {string} path
+ * @param {string} content
+ * @param {string} lockContent
+ * @param {(path: string) => string} readManifest
+ */
+function externalManifest(path, content, lockContent, readManifest) {
+  const workspace = path.replace(/\/package\.json$/, '');
+  if (path !== `${workspace}/package.json` || !workspacePath.test(workspace))
+    throw new Error('Unsupported workspace manifest');
+  const { packages, locals } = verifiedWorkspaces(lockContent, readManifest);
+  const actual = JSON.parse(content);
+  const local = locals.get(actual.name);
+  if (
+    !local ||
+    local.path !== workspace ||
+    actual.version !== '0.0.0' ||
+    actual.type !== 'module' ||
+    !isDeepStrictEqual(actual, local.manifest) ||
+    !isDeepStrictEqual(
+      actual.dependencies ?? {},
+      packages[workspace].dependencies ?? {},
+    )
+  )
+    throw new Error('Unverified workspace manifest');
+  const result = { ...actual };
+  if (actual.dependencies !== undefined) {
+    if (
+      !actual.dependencies ||
+      typeof actual.dependencies !== 'object' ||
+      Array.isArray(actual.dependencies)
+    )
+      throw new Error('Invalid workspace dependencies');
+    const dependencies = { ...actual.dependencies };
+    for (const [name, version] of Object.entries(dependencies)) {
+      if (version === '0.0.0' && locals.get(name)?.version === version)
+        delete dependencies[name];
+    }
+    if (Object.keys(dependencies).length) result.dependencies = dependencies;
+    else delete result.dependencies;
+  }
+  return result;
 }
 
 // Recognize only simple scalar uses keys. Unrecognized syntax is deliberately
@@ -134,9 +191,36 @@ export function actionReferences(content) {
  * @param {(path: string, side: 'before' | 'after') => string} readManifest
  */
 export function needsReview(changes, readManifest = () => '') {
+  /** @param {'before'|'after'} side */
+  const readLock = (side) => {
+    const changed = changes.find((entry) => entry.path === 'package-lock.json');
+    if (changed && changed.status !== 'M')
+      throw new Error('Unsupported lockfile change');
+    return changed ? changed[side] : readManifest('package-lock.json', side);
+  };
   for (const { path, status, before, after } of changes) {
     if (manifest.test(path)) {
       if (status === 'A' && newLocalWorkspace(path, after)) continue;
+      if (
+        status === 'M' &&
+        workspacePath.test(path.replace(/\/package\.json$/, ''))
+      ) {
+        try {
+          if (
+            isDeepStrictEqual(
+              externalManifest(path, before, readLock('before'), (file) =>
+                readManifest(file, 'before'),
+              ),
+              externalManifest(path, after, readLock('after'), (file) =>
+                readManifest(file, 'after'),
+              ),
+            )
+          )
+            continue;
+        } catch {
+          // Missing/inconsistent snapshots and unknown structures fail closed.
+        }
+      }
       if (path === 'package-lock.json' && status === 'M') {
         try {
           if (

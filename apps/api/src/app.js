@@ -19,6 +19,7 @@ import { registerChatMediaStatusRoutes } from './chat-media-status-routes.js';
 import { registerChatMediaContentRoutes } from './chat-media-content-routes.js';
 import { registerIdentityRoutes } from './identity-routes.js';
 import { registerFinanceRoutes } from './finance-routes.js';
+import { registerShippingRoutes } from './shipping-routes.js';
 import { registerN8nRoutes } from './n8n-routes.js';
 import { registerN8nCommandMediaRoutes } from './n8n-command-media-routes.js';
 import { registerOperationRoutes } from './operation-routes.js';
@@ -55,6 +56,7 @@ export const WEBHOOK_REQUESTS_PER_SECOND = 20;
  *   operations?: any,
  *   orders?: any,
  *   finance?: any,
+ *   shipping?: any,
  *   orderPdfRenderer?: (html: string) => Promise<Buffer>,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime
  *   subjects?: Record<string, any>,
@@ -307,6 +309,15 @@ export function createApi(options = {}, runtime = {}) {
       );
   }
 
+  if (runtime.shipping) {
+    api.register(async (shippingScope) => {
+      await shippingScope.register(rateLimit, { global: false });
+      registerShippingRoutes(shippingScope, runtime.shipping, (request) => ({
+        correlationId:
+          requests.get(request)?.correlationId ?? 'shipping-request',
+      }));
+    });
+  }
   if (runtime.finance) {
     registerFinanceRoutes(api, runtime.finance, (request) => ({
       correlationId:

@@ -1,6 +1,9 @@
 # RFC 038 — Frete e etiqueta pelo Melhor Envio
 
 Status: em revisão desde 29/10/2026.
+Decisão parcial em 01/11/2026: [ADR 053](../adr/053-conexao-e-cotacao-administrativa-melhor-envio.md)
+autoriza conexão OAuth e cotação administrativa (T138), com tokens rotativos
+cifrados no PostgreSQL. As decisões D1–D9 e as demais fatias permanecem abertas.
 Responsável: Tech Lead. Aprovador: proprietário (PO). O contador valida a
 decisão fiscal (D6).
 Requisitos propostos: MEV-01 a MEV-16 (seção 5). Ainda não estão em

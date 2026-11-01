@@ -86,6 +86,7 @@ const operationalActions = OPERATIONAL_ACTIONS;
 const actionCapabilities = new Map([
   // AGENTE-OBS-01: "Desempenho do Vendedor" is the manager's panel.
   ['assistant.performance.read', CAPABILITIES.COMMERCIAL_ADMIN],
+  ['shipping.manage', CAPABILITIES.COMMERCIAL_ADMIN],
   ['conversation.archive', CAPABILITIES.COMMERCIAL_ADMIN],
   ['order-form.approve', CAPABILITIES.COMMERCIAL_ADMIN],
   ['order-form.cancel', CAPABILITIES.COMMERCIAL_ADMIN],

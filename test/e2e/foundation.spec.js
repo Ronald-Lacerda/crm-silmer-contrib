@@ -428,6 +428,7 @@ test('keeps Pedidos in the menu after Caixa de Entrada, active across its pages'
     'Pedidos',
     'Clientes',
     'Financeiro',
+    'Melhor Envio',
     'Usuários',
     'Conta',
   ]);
@@ -453,6 +454,7 @@ test('keeps Pedidos in the menu after Caixa de Entrada, active across its pages'
   const sheet = page.getByRole('region', { name: 'Mais opções' });
   await expect(sheet.getByRole('link')).toHaveText([
     'Financeiro',
+    'Melhor Envio',
     'Usuários',
     'Conta',
   ]);

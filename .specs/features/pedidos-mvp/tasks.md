@@ -2194,3 +2194,50 @@ revisão.
   (335 aprovados, sete ignorados). `npm audit --audit-level=high` passou,
   com uma vulnerabilidade baixa e duas moderadas preexistentes, sem mudança
   de dependências externas nesta correção; `git diff --check` limpo.
+
+### T138: Conexão OAuth e cotação administrativa do Melhor Envio
+
+- **Requisitos:** MEVC-01–08 na [spec própria](../melhor-envio/spec.md),
+  continuidade T137/ME-0 e MEV-13 parcial; [ADR 053](../../../docs/adr/053-conexao-e-cotacao-administrativa-melhor-envio.md).
+- **Entrega:** menu administrativo, OAuth com scopes mínimos, estado de uso
+  único por sessão, tokens cifrados, renovação com reserva durável/fencing,
+  desconexão auditada e cotação manual com medidas/peso explícitos. Migration
+  expand 0049, empacotamento runtime, proteção do callback nos logs do edge e
+  inventário privado da API. Não altera pedidos ou regras comerciais/fiscais.
+- **Verificação:** unitários/API, matriz de perfis/sessão/CSRF, expiração/replay,
+  concorrência/rollback de OAuth e refresh, vazamento de segredos, E2E/axe e
+  teste PostgreSQL dedicado integrado ao CI. Gate completo, commit e push.
+- **Evidência local em 01/11/2026:** Node 24.20.0 / npm 11.19.0;
+  `npm run validate` passou com 1.606 testes aprovados e sete ignorados. A
+  suíte E2E completa teve 397 aprovações e sete skips; uma expectativa de menu
+  foi atualizada nas versões desktop/mobile e o cenário passou na reexecução.
+  Oito cenários novos de conexão/cotação/ACL/teclado/axe passaram. Audit no
+  nível high passou (nove vulnerabilidades baixas/moderadas preexistentes;
+  nenhuma dependência externa alterada). `git diff --check` limpo. A primeira
+  execução restrita falhou por EPERM em links/processos; o gate passou fora
+  dessa restrição. Suíte PostgreSQL dedicada adicionada ao CI, sem PostgreSQL
+  ou Docker disponíveis localmente; não confundir unitários com esse gate.
+- **Estado operacional:** cadastro Sandbox e aplicativo OAuth concluídos com
+  aceite explícito, limite de 1.000 envios e saldo fictício. A troca do e-mail
+  aguarda SMS do provedor. Após aprovação específica, sete variáveis privadas
+  foram salvas na API e conferidas por leitura, preservando os valores prévios
+  e `MELHOR_ENVIO_ENABLED=false`, sem deploy. Sessão administrativa do CRM
+  confirmada. Consentimento OAuth, cotação real e logs do proxy externo seguem
+  pendentes; não declarar conta conectada, homologação ou produção pronta.
+- **Revisão/CI:** callback do nginx protegido contra cache e vazamento em
+  access/error logs; smoke real do CI verifica HTML/404, headers e marcadores
+  sintéticos nos dois streams. O primeiro gate PostgreSQL encontrou self-grant
+  inválido na fixture nova; corrigido para o bootstrap com `granted_by=NULL`,
+  preservando a constraint e a ACL. No CI da revisão `65eb625`, PostgreSQL,
+  nginx real, E2E/axe (398 aprovados, sete skips), audit e estáticos passaram.
+  Classificador corrigido para reconhecer somente dependências exatas entre
+  workspaces privados verificados no manifesto e lock dos dois commits; muda
+  apenas a ligação interna API → frete. Treze testes incluindo negativos e
+  CLI Git real passaram; comparação real retorna `required=false`. Dependências
+  externas, scripts, flags, Actions e dados inconsistentes continuam exigindo
+  revisão. O serviço de dependency review não está disponível no repositório;
+  reexecução do CI antes da publicação.
+- **Operação e rollback:** [runbook](../../../docs/runbooks/melhor-envio.md).
+- **Publicação:** [PR #258](https://github.com/romulosutil/crm-silmer/pull/258),
+  um commit na branch `codex/melhor-envio-connection`; aguardando gates do CI e
+  ativação/consentimento da conta de teste.

@@ -1,5 +1,17 @@
 # TDD — CRM Silmer MVP
 
+## Melhor Envio — T138 (01/11/2026)
+
+Conforme [ADR 053](docs/adr/053-conexao-e-cotacao-administrativa-melhor-envio.md),
+`modules/shipping` é composto por `shipping-runtime.js` e `shipping-routes.js`
+na API. `/api/v1/shipping/melhor-envio/{status,authorize,complete,quote,disconnect}`
+exige ação administrativa `shipping.manage`, sessão humana e CSRF nas escritas.
+Migration expand 0049 adiciona conexão cifrada e estado OAuth de uso único
+por usuário/sessão, com reserva durável e fencing para renovação. A UI Vue
+`/melhor-envio` remove o callback da URL e cota uma embalagem com medidas/peso
+explícitos. Nenhum dado do destinatário, frete ou preço é gravado no pedido.
+Configuração/rollback e evidências no [runbook](docs/runbooks/melhor-envio.md).
+
 ## Transporte aprovado — Evolution/Baileys (29/10/2026)
 
 A [ADR 050](docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md) autoriza

@@ -1,5 +1,15 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Melhor Envio — conexão e cotação administrativa (01/11/2026)
+
+A [ADR 053](docs/adr/053-conexao-e-cotacao-administrativa-melhor-envio.md)
+liga T137 à API e ao menu Melhor Envio, exclusivos de administrador. OAuth
+mínimo permite cálculo e transportadoras. Tokens cifrados ficam no PostgreSQL,
+com renovação reservada e estado de uso único por sessão. Cotação manual não
+muda pedido nem compra etiqueta. Decisões comerciais/fiscais e Expedição da
+RFC 038 permanecem abertas. [Contrato](.specs/features/melhor-envio/spec.md)
+e [ativação](docs/runbooks/melhor-envio.md), tarefa T138.
+
 ## Ponte aprovada — Evolution/Baileys (29/10/2026)
 
 A [ADR 050](docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md) substitui

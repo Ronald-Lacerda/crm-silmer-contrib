@@ -279,6 +279,48 @@ function runtimeFor(user) {
   return createIdentityApiRuntime(database, environment);
 }
 
+test('T138: Melhor Envio requires live administrative access for reads and writes', async () => {
+  assert.equal(OPERATIONAL_ACTIONS.has('shipping.manage'), false);
+  const profiles = [
+    { functionName: 'Vendedor', capabilities: ['COMMERCIAL_ADMIN'] },
+    { functionName: 'Vendedor', capabilities: [] },
+    { functionName: 'Financeiro', capabilities: [] },
+    {
+      functionName: 'Vendedor',
+      capabilities: ['COMMERCIAL_ADMIN'],
+      disabledAt: '2026-11-01T12:00:00Z',
+    },
+  ];
+  for (const [index, profile] of profiles.entries()) {
+    const identity = runtimeFor(/** @type {any} */ (profile));
+    const input = {
+      action: 'shipping.manage',
+      sessionToken: 'opaque',
+      csrfToken: 'csrf',
+    };
+    for (const check of [
+      () => identity.authorizeOperationalRead(input),
+      () => identity.authorizeOperational(input),
+    ]) {
+      if (index === 0) assert.equal((await check()).actor.id, 'actor');
+      else await assert.rejects(check(), { code: 'FORBIDDEN' });
+    }
+  }
+  assert.throws(
+    () =>
+      authorize(
+        {
+          id: 'automation',
+          kind: 'assistant',
+          functionName: 'Vendedor',
+          capabilities: ['COMMERCIAL_ADMIN'],
+        },
+        'shipping.manage',
+      ),
+    { code: 'FORBIDDEN' },
+  );
+});
+
 test('FINQ-03/16: runtime reads and writes enforce live finance role instead of widening seller access', async () => {
   const finance = runtimeFor({ functionName: 'Financeiro', capabilities: [] });
   const admin = runtimeFor({
