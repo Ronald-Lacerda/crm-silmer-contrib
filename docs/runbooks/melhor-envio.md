@@ -1,5 +1,46 @@
 # Melhor Envio — conexão e cotação
 
+## Cotação na conversa vinculada ao pedido — T139
+
+[ADR 054](../adr/054-cotacao-na-conversa-vinculada-ao-pedido.md), MEVQ-01–08.
+O responsável humano ou administrador abre **Cotar frete** na conversa e
+escolhe explicitamente o Assunto com Pedido. Um CEP na mensagem oferece
+atalho para preencher o destino. Informar CEP de origem, peso total, medidas
+e seguro da embalagem; consultar e escolher o serviço para vincular a
+estimativa. A seleção não muda o Valor final. A resposta sugerida vai para o
+campo de composição e preserva o rascunho, com revisão e envio humanos.
+
+Para ativar a entrega, aplicar migration expand 0050 antes da API e edge da
+mesma revisão, mantendo a configuração e a conta T138. Não há novo scope,
+credencial ou serviço. `shipping.quote` permite a cotação operacional; a
+administração da conta continua exigindo `shipping.manage`.
+
+CEPs e resposta do provedor ficam no envelope cifrado da cotação no
+PostgreSQL. A chave privada `MELHOR_ENVIO_ENVELOPE_KEY` também protege essas
+estimativas; preservar sua cópia segura separada para recovery. Não rotacionar
+a chave sem considerar as cotações históricas. Audit e idempotência não
+armazenam CEP em claro; backups seguem os controles comerciais existentes.
+O vínculo ao pedido e a estimativa seguem a classe `commercial-documents` do
+catálogo aprovado; esta fatia não altera prazos ou aprovações daquele catálogo.
+
+Alterar o pedido torna a estimativa desatualizada por versão, mesmo quando a
+edição não envolve a grade. Repetir consulta com entradas diferentes substitui
+a anterior; editar entradas no diálogo descarta o resultado local. Se houver
+troca de responsável, Assunto ou atendimento durante uma consulta, a API
+recusa o vínculo. Refazer a seleção do alvo após atualizar o atendimento.
+Conta desconectada/indisponível pede ação do administrador; não usar preços
+manuais como se fossem resultado da integração.
+
+Homologar com dados sintéticos: vendedor dono, administrador, outro vendedor
+e Financeiro; dois Assuntos com pedidos diferentes; cálculo, escolha, reload,
+mudança de grade, erro do provedor e resposta tardia; teclado/foco no diálogo
+e revisão do composer sem envio. Conferir Valor final/status inalterados.
+Compra, etiqueta e validade comercial fixa continuam fora da entrega.
+
+Rollback: voltar API e edge para a revisão anterior preservada, sem remover
+a migration aditiva nem os envelopes. A cotação administrativa T138 permanece
+disponível naquela revisão. Não restaurar banco como primeira medida.
+
 T138 / MEVC-01–08 / ADR 053. Conta verificada não significa API conectada.
 
 ## Preparar e ativar

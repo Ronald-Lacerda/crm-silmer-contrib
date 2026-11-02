@@ -4,6 +4,7 @@ import {
   createHash,
   randomBytes,
 } from 'node:crypto';
+import { createConversationShippingRuntime } from './conversation-shipping-runtime.js';
 import { PostgresAuditTrail } from '@crm-silmer/audit-privacy';
 import { authorize } from '@crm-silmer/identity-access';
 import {
@@ -139,7 +140,7 @@ function decrypt(envelope, key, contextKey) {
 
 /** Recheck the current user under locks before handling credentials.
  * @param {any} client @param {any} supplied */
-async function lockActor(client, supplied) {
+async function lockActor(client, supplied, action = 'shipping.manage') {
   const { rows } = await client.query(
     `SELECT u.id, f.function_name FROM crm.users u JOIN crm.user_functions f ON f.user_id=u.id WHERE u.id=$1 AND u.disabled_at IS NULL FOR SHARE OF u,f`,
     [supplied?.id],
@@ -155,7 +156,7 @@ async function lockActor(client, supplied) {
     functionName: rows[0].function_name,
     capabilities: grants.rows.map((/** @type {any} */ row) => row.capability),
   };
-  authorize(actor, 'shipping.manage');
+  authorize(actor, action);
   return actor;
 }
 
@@ -361,10 +362,10 @@ export function createShippingApiRuntime(database, options) {
   }
   /** Return an error marker so token failure metadata commits before throwing.
    * @param {any} input */
-  async function accessToken(input) {
+  async function accessToken(input, action = 'shipping.manage') {
     const result = await database.transaction(
       async (/** @type {any} */ client) => {
-        await lockActor(client, input.actor);
+        await lockActor(client, input.actor, action);
         const row = await lockConnection(client);
         if (row.reconnect_required)
           throw new ShippingHttpError(409, 'MELHOR_ENVIO_RECONNECT_REQUIRED');
@@ -424,7 +425,7 @@ export function createShippingApiRuntime(database, options) {
       });
     } catch (error) {
       await database.transaction(async (/** @type {any} */ client) => {
-        await lockActor(client, input.actor);
+        await lockActor(client, input.actor, action);
         const row = await lockConnection(client);
         if (
           Number(row.version) === Number(result.version) &&
@@ -435,7 +436,7 @@ export function createShippingApiRuntime(database, options) {
       throw error;
     }
     return database.transaction(async (/** @type {any} */ client) => {
-      await lockActor(client, input.actor);
+      await lockActor(client, input.actor, action);
       const row = await lockConnection(client);
       if (
         Number(row.version) !== Number(result.version) ||
@@ -451,7 +452,39 @@ export function createShippingApiRuntime(database, options) {
       return { token: renewed.accessToken, version: saved.version };
     });
   }
+  /** @param {any} input @param {string} [action] */
+  async function calculate(input, action = 'shipping.manage') {
+    requireConfigured();
+    const body = quotePayload(input.body);
+    const credentials = await accessToken(input, action);
+    try {
+      const client = createMelhorEnvioClient({
+        ...oauth,
+        getAccessToken: () => credentials.token,
+      });
+      return quoteProjection(await client.calculate(body));
+    } catch (error) {
+      if (error instanceof MelhorEnvioError && error.kind === 'auth') {
+        await database.transaction(async (/** @type {any} */ client) => {
+          await lockActor(client, input.actor, action);
+          const row = await lockConnection(client);
+          if (Number(row.version) === Number(credentials.version))
+            await reconnect(client, input);
+        });
+      }
+      throw error;
+    }
+  }
+  const conversationQuotes = createConversationShippingRuntime(database, {
+    key: config.key,
+    environment: config.environment,
+    contextKey: config.contextKey,
+    clock,
+    requireConfigured,
+    calculate: (/** @type {any} */ input) => calculate(input, 'shipping.quote'),
+  });
   return Object.freeze({
+    conversationQuotes,
     /** @param {any} input */
     authorizeRead: (input) => options.access.authorizeRead(input),
     /** @param {any} input */
@@ -547,28 +580,7 @@ export function createShippingApiRuntime(database, options) {
       });
     },
     /** @param {any} input */
-    async quote(input) {
-      requireConfigured();
-      const body = quotePayload(input.body);
-      const credentials = await accessToken(input);
-      try {
-        const client = createMelhorEnvioClient({
-          ...oauth,
-          getAccessToken: () => credentials.token,
-        });
-        return quoteProjection(await client.calculate(body));
-      } catch (error) {
-        if (error instanceof MelhorEnvioError && error.kind === 'auth') {
-          await database.transaction(async (/** @type {any} */ client) => {
-            await lockActor(client, input.actor);
-            const row = await lockConnection(client);
-            if (Number(row.version) === Number(credentials.version))
-              await reconnect(client, input);
-          });
-        }
-        throw error;
-      }
-    },
+    quote: calculate,
     /** @param {any} input */
     async disconnect(input) {
       requireConfigured();

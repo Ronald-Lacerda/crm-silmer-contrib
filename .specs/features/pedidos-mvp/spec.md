@@ -16,6 +16,12 @@
 
 ## Baseline vigente
 
+Cotação na conversa vinculada ao pedido: os critérios
+[MEVQ-01–08](../melhor-envio/spec.md#cotação-na-conversa-e-no-pedido--t139),
+autorizados em 02/11/2026 pela ADR 054, complementam este contrato em T139.
+O serviço escolhido é uma estimativa separada do Valor final; não cria outro
+status, não muda a ficha confirmada e não autoriza compra de etiquetas.
+
 O código atual seleciona ficha-canonical-v5 (ADR 020 / TEC-01..08), com aprovação provisória do PO; assinatura física de Rose e Operação é gate separado. TEC supersede PFI/PIM/REV nos pontos de Técnica, origem da arte, Estampa (referência) e rótulos. As seções de verificação datadas abaixo são histórico de entregas e não comprovam homologação, deploy ou aceite externo atuais.
 
 ## Problema original e resultado

@@ -226,6 +226,7 @@ onBeforeUnmount(clear);
       /></template>
       <template #send><slot name="send" :recording-active="active" /></template>
       <template #tools>
+        <slot name="tools" :disabled="disabled || active || sending" />
         <button
           ref="startButton"
           type="button"

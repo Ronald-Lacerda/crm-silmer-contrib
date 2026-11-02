@@ -6,6 +6,152 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /conversations/{conversationId}/shipping-quotes:
+    post:
+      operationId: quoteConversationShipping
+      summary: Consulta frete para Assunto e Pedido explícitos no atendimento humano
+      description: >-
+        T139 / MEVQ-01–08. Apenas responsável humano ativo ou administrador.
+        Confere vínculo e versão antes e depois do cálculo. Peso e medidas são
+        explícitos; não muda total/status nem compra ou envia. Replays usam a
+        mesma chave e revalidam o acesso. Dados persistidos são cifrados.
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+          idempotencyKey: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                [
+                  subjectId,
+                  orderId,
+                  orderVersion,
+                  fromPostalCode,
+                  toPostalCode,
+                  weightGrams,
+                  widthCm,
+                  heightCm,
+                  lengthCm,
+                  insuranceValueCents,
+                ]
+              properties:
+                subjectId: { type: string }
+                orderId: { type: string }
+                orderVersion: { type: integer, minimum: 1 }
+                fromPostalCode: { type: string }
+                toPostalCode: { type: string }
+                weightGrams: { type: integer, minimum: 1 }
+                widthCm: { type: integer, minimum: 1 }
+                heightCm: { type: integer, minimum: 1 }
+                lengthCm: { type: integer, minimum: 1 }
+                insuranceValueCents: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Resultado do provedor cifrado e vinculado ao alvo; selecionar serviço separadamente
+          content:
+            application/json:
+              schema:
+                {
+                  $ref: '#/components/schemas/ConversationShippingQuoteResponse',
+                }
+        '400': { description: Entrada ou chave idempotente inválida }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Conversa ou pedido não encontrado }
+        '409':
+          {
+            description: Alvo/versão mudou,
+            atendimento não humano,
+            replay divergente ou conexão exige reconexão,
+          }
+        '422': { description: Embalagem ou CEP inválido }
+        '429': { $ref: '#/components/responses/Throttled' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /conversations/{conversationId}/shipping-quotes/{quoteId}/select:
+    post:
+      operationId: selectConversationShippingService
+      summary: Vincula um serviço retornado como frete estimado do pedido
+      description: Aceita somente ID de serviço retornado pelo provedor; o navegador não define o preço.
+      security:
+        - sessionCookie: []
+          csrfHeader: []
+          idempotencyKey: []
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: quoteId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [subjectId, orderId, orderVersion, serviceId]
+              properties:
+                subjectId: { type: string }
+                orderId: { type: string }
+                orderVersion: { type: integer, minimum: 1 }
+                serviceId: { type: integer }
+      responses:
+        '200':
+          description: Estimativa selecionada com origem e instante, separada do valor comercial
+          content:
+            application/json:
+              schema:
+                {
+                  $ref: '#/components/schemas/ConversationShippingQuoteResponse',
+                }
+        '400': { description: Entrada ou chave idempotente inválida }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Alvo ou cotação não encontrado }
+        '409':
+          { description: Alvo, versão ou seleção mudou; exige nova consulta }
+        '422': { description: Serviço não pertence ao resultado }
+        '429': { $ref: '#/components/responses/Throttled' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /orders/{orderId}/shipping-quote:
+    get:
+      operationId: readOrderShippingQuote
+      summary: Consulta a estimativa selecionada com autorização de leitura do pedido
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Última estimativa selecionada ou quote null; stale indica versão/consulta superada
+          content:
+            application/json:
+              schema:
+                {
+                  $ref: '#/components/schemas/ConversationShippingQuoteResponse',
+                }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/OrderNotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /bootstrap/identity:
     post:
       operationId: bootstrapIdentity
@@ -2279,6 +2425,66 @@ components:
       required: true
       schema: { type: string, minLength: 1, maxLength: 128 }
   schemas:
+    ConversationShippingQuoteResponse:
+      type: object
+      additionalProperties: false
+      required: [quote]
+      properties:
+        quote:
+          oneOf:
+            - type: 'null'
+            - type: object
+              required:
+                [
+                  id,
+                  conversationId,
+                  subjectId,
+                  orderId,
+                  orderVersion,
+                  input,
+                  services,
+                  unavailable,
+                  totalPieces,
+                  createdAt,
+                  createdBy,
+                  selectedServiceId,
+                  stale,
+                ]
+              properties:
+                id: { type: string }
+                conversationId: { type: string }
+                subjectId: { type: string }
+                orderId: { type: string }
+                orderVersion: { type: integer }
+                environment: { type: string, enum: [sandbox, production] }
+                input:
+                  type: object
+                  description: CEPs, peso, medidas e seguro informados; cifrados na persistência
+                services:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, company, name, priceCents, deliveryDays]
+                    properties:
+                      id: { type: integer }
+                      company: { type: string }
+                      name: { type: string }
+                      priceCents: { type: integer, minimum: 0 }
+                      deliveryDays: { type: integer, minimum: 0 }
+                unavailable:
+                  type: array
+                  items: { type: object }
+                totalPieces: { type: integer }
+                selectedServiceId: { type: [integer, 'null'] }
+                selectedAt: { type: [string, 'null'], format: date-time }
+                createdAt: { type: string, format: date-time }
+                createdBy:
+                  type: object
+                  required: [id, name]
+                  properties:
+                    id: { type: string }
+                    name: { type: string }
+                stale: { type: boolean }
     FinanceCommand:
       type: object
       additionalProperties: false

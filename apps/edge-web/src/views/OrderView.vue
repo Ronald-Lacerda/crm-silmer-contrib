@@ -21,6 +21,7 @@ import OrderProgress from '../components/order/OrderProgress.vue';
 import OrderStoreDetails from '../components/order/OrderStoreDetails.vue';
 import OrderStoreCorrection from '../components/order/OrderStoreCorrection.vue';
 import OrderSummarySection from '../components/order/OrderSummarySection.vue';
+import OrderShippingEstimate from '../components/order/OrderShippingEstimate.vue';
 import { commandKey, request } from '../lib/api-client.js';
 import { usePhone } from '../lib/media-query.js';
 import {
@@ -767,6 +768,10 @@ onBeforeUnmount(() => {
           <OrderItemsSection :order="order" />
           <OrderArtworkSection :order="order" />
           <OrderObservationsSection :order="order" />
+          <OrderShippingEstimate
+            :order-id="order.id"
+            :revision="order.version"
+          />
           <OrderInfoStrips :order="order" />
         </div>
         <aside class="op-rail" aria-label="Gerar pedido">

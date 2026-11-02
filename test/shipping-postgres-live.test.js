@@ -246,7 +246,7 @@ if (!connectionString) {
         await connect();
         const count = tokenCalls;
         await pool.query(
-          `CREATE FUNCTION crm.shipping_test_audit_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.reason='SHIPPING_TOKEN_REFRESHED' THEN RAISE EXCEPTION 'synthetic audit failure'; END IF; RETURN NEW; END $$`,
+          `CREATE FUNCTION crm.shipping_test_audit_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.reason='SHIPPING_TOKEN_REFRESHED' THEN RAISE EXCEPTION 'synthetic audit failure'; END IF; RETURN NEW; END; $$`,
         );
         await pool.query(
           'CREATE TRIGGER shipping_test_audit_failure BEFORE INSERT ON crm.audit_events FOR EACH ROW EXECUTE FUNCTION crm.shipping_test_audit_failure()',
@@ -284,6 +284,272 @@ if (!connectionString) {
           code: 'FORBIDDEN',
         });
         assert.equal(tokenCalls, count);
+      },
+    );
+  });
+
+  test('T139: linked quotes use real transactions, ownership, encrypted results and idempotency', async (t) => {
+    await pool.query(
+      "INSERT INTO crm.user_capabilities(user_id,capability,granted_by) VALUES('shipping-admin','COMMERCIAL_ADMIN',NULL) ON CONFLICT DO NOTHING",
+    );
+    await pool.query(
+      "INSERT INTO crm.users(id,email,password_hash,name) VALUES('shipping-seller','shipping-seller@example.test','$argon2id$synthetic','Shipping Seller'),('shipping-other','shipping-other@example.test','$argon2id$synthetic','Shipping Other')",
+    );
+    await pool.query(
+      "INSERT INTO crm.user_functions(user_id,function_name) VALUES('shipping-seller','Vendedor'),('shipping-other','Vendedor')",
+    );
+    await pool.query(
+      "INSERT INTO crm.contacts(id,created_at,updated_at) VALUES('quote-contact',$1,$1)",
+      [NOW],
+    );
+    await pool.query(
+      `INSERT INTO crm.contact_identities(id,current_contact_id,provider,provider_account_id,channel,external_identity_lookup_hash,identity_kind,phone_status,identity_envelope,created_at,updated_at)
+      VALUES('quote-identity','quote-contact','meta','synthetic-shipping','whatsapp',$1,'phone','confirmed',$2::jsonb,$3,$3)`,
+      [
+        'e'.repeat(64),
+        JSON.stringify({ algorithm: 'AES-256-GCM', version: 1, keyVersion: 1 }),
+        NOW,
+      ],
+    );
+    await pool.query(
+      `INSERT INTO crm.conversations(id,contact_identity_id,provider,provider_account_id,external_conversation_id,cycle_number,assigned_user_id,automation_state,opened_at,last_message_at)
+      VALUES('quote-conversation','quote-identity','meta','synthetic-shipping','synthetic-shipping-cycle',1,'shipping-seller','human',$1,$1)`,
+      [NOW],
+    );
+    await pool.query(
+      `INSERT INTO crm.orders(id,number_sequence,number,conversation_id,contact_id,status,fab_code,ficha_envelope,total_pieces,created_by_kind,created_by,created_at,updated_at)
+      VALUES('quote-order',1,'01-CRM','quote-conversation','quote-contact','pendente','01','{}'::jsonb,4,'user','shipping-seller',$1,$1)`,
+      [NOW],
+    );
+    await pool.query(
+      `INSERT INTO crm.conversation_subjects(id,conversation_id,contact_id,order_id,kind,position,created_by,created_by_kind,created_at,updated_at)
+      VALUES('quote-subject','quote-conversation','quote-contact','quote-order','pedido',1,'shipping-seller','human',$1,$1)`,
+      [NOW],
+    );
+    let calculations = 0;
+    /** @type {()=>Promise<void>} */ let duringCalculate = async () => {};
+    const runtime = createShippingApiRuntime(db, {
+      access: {},
+      environment: ENV,
+      clock: () => NOW,
+      fetch: async (/** @type {string} */ url) => {
+        if (url.endsWith('/oauth/token'))
+          return reply({
+            access_token: 'synthetic-seller-access',
+            refresh_token: 'synthetic-seller-refresh',
+            expires_in: 2592000,
+          });
+        calculations++;
+        await duringCalculate();
+        return reply([
+          {
+            id: 1,
+            name: 'PAC',
+            company: { name: 'Correios' },
+            price: '22.50',
+            delivery_time: 5,
+          },
+        ]);
+      },
+    });
+    const state = new URL(
+      (await runtime.authorize(INPUT)).authorizationUrl,
+    ).searchParams.get('state');
+    await runtime.complete({ ...INPUT, state, code: 'synthetic-seller-code' });
+    const shipping = runtime.conversationQuotes;
+    const input = {
+      actor: { id: 'shipping-seller', kind: 'human' },
+      conversationId: 'quote-conversation',
+      correlationId: 'synthetic-linked-shipping',
+      idempotencyKey: 'linked-create',
+      body: {
+        subjectId: 'quote-subject',
+        orderId: 'quote-order',
+        orderVersion: 1,
+        ...QUOTE,
+      },
+    };
+    /** @type {any} */ let quote;
+    await t.test(
+      'seller uses server credentials while account management remains forbidden',
+      async () => {
+        await assert.rejects(runtime.status(input), { code: 'FORBIDDEN' });
+        const results = await Promise.all([
+          shipping.quote(input),
+          shipping.quote(input),
+        ]);
+        quote = results[0].quote;
+        assert.equal(results[1].quote.id, quote.id);
+        assert.equal(quote.services[0].priceCents, 2250);
+        assert.equal(quote.totalPieces, 4);
+        assert.equal(
+          (
+            await pool.query(
+              'SELECT count(*)::int AS count FROM crm.shipping_quotes',
+            )
+          ).rows[0].count,
+          1,
+        );
+        const row = (await pool.query('SELECT * FROM crm.shipping_quotes'))
+          .rows[0];
+        assert.ok(!JSON.stringify(row).includes(QUOTE.toPostalCode));
+        assert.equal(row.quote_envelope.algorithm, 'AES-256-GCM');
+        const before = calculations;
+        await shipping.quote(input);
+        assert.equal(calculations, before);
+      },
+    );
+    const select = {
+      ...input,
+      quoteId: '',
+      idempotencyKey: 'linked-select',
+      body: {
+        subjectId: 'quote-subject',
+        orderId: 'quote-order',
+        orderVersion: 1,
+        serviceId: 1,
+      },
+    };
+    await t.test(
+      'selection is atomic, server priced and separate from the order value/version',
+      async () => {
+        select.quoteId = quote.id;
+        await assert.rejects(
+          shipping.select({
+            ...select,
+            body: { ...select.body, serviceId: 99 },
+          }),
+          { code: 'INVALID_SHIPPING_SERVICE' },
+        );
+        const selected = await shipping.select(select);
+        assert.equal(selected.quote.selectedServiceId, 1);
+        await shipping.select(select);
+        const order = (
+          await pool.query(
+            "SELECT version,final_amount_cents,status FROM crm.orders WHERE id='quote-order'",
+          )
+        ).rows[0];
+        assert.deepEqual(order, {
+          version: 1,
+          final_amount_cents: null,
+          status: 'pendente',
+        });
+        assert.equal(
+          (await shipping.read({ actor: input.actor, orderId: 'quote-order' }))
+            .quote.id,
+          quote.id,
+        );
+        await pool.query(
+          "UPDATE crm.conversations SET assigned_user_id='shipping-other' WHERE id='quote-conversation'",
+        );
+        await assert.rejects(shipping.select(select), { code: 'FORBIDDEN' });
+        await pool.query(
+          "UPDATE crm.conversations SET assigned_user_id='shipping-seller' WHERE id='quote-conversation'",
+        );
+      },
+    );
+    await t.test(
+      'a transfer during remote calculation cannot persist its result',
+      async () => {
+        duringCalculate = async () => {
+          await pool.query(
+            "UPDATE crm.conversations SET assigned_user_id='shipping-other' WHERE id='quote-conversation'",
+          );
+        };
+        await assert.rejects(
+          shipping.quote({ ...input, idempotencyKey: 'transfer-during-quote' }),
+          { code: 'FORBIDDEN' },
+        );
+        assert.equal(
+          (
+            await pool.query(
+              'SELECT count(*)::int AS count FROM crm.shipping_quotes',
+            )
+          ).rows[0].count,
+          1,
+        );
+        await pool.query(
+          "UPDATE crm.conversations SET assigned_user_id='shipping-seller' WHERE id='quote-conversation'",
+        );
+        duringCalculate = async () => {};
+      },
+    );
+    await t.test(
+      'an audit failure rolls selection and its command back together',
+      async () => {
+        await pool.query(
+          `CREATE FUNCTION crm.shipping_select_test_failure() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.action='shipping.quote.select' THEN RAISE EXCEPTION 'synthetic audit failure'; END IF; RETURN NEW; END; $$`,
+        );
+        await pool.query(
+          'CREATE TRIGGER shipping_select_test_failure BEFORE INSERT ON crm.audit_events FOR EACH ROW EXECUTE FUNCTION crm.shipping_select_test_failure()',
+        );
+        const before = (
+          await pool.query(
+            'SELECT selected_service_id,selected_at FROM crm.shipping_quotes WHERE id=$1',
+            [quote.id],
+          )
+        ).rows[0];
+        try {
+          await assert.rejects(
+            shipping.select({
+              ...select,
+              idempotencyKey: 'selection-rollback',
+            }),
+          );
+          assert.deepEqual(
+            (
+              await pool.query(
+                'SELECT selected_service_id,selected_at FROM crm.shipping_quotes WHERE id=$1',
+                [quote.id],
+              )
+            ).rows[0],
+            before,
+          );
+          assert.equal(
+            (
+              await pool.query(
+                "SELECT count(*)::int AS count FROM crm.shipping_quote_commands WHERE idempotency_key='selection-rollback'",
+              )
+            ).rows[0].count,
+            0,
+          );
+        } finally {
+          await pool.query(
+            'DROP TRIGGER shipping_select_test_failure ON crm.audit_events',
+          );
+          await pool.query('DROP FUNCTION crm.shipping_select_test_failure()');
+        }
+      },
+    );
+    await t.test(
+      'new destination invalidates prior selection and order edits require re-quote',
+      async () => {
+        const next = await shipping.quote({
+          ...input,
+          idempotencyKey: 'new-destination',
+          body: { ...input.body, toPostalCode: '30000000' },
+        });
+        const previous = await shipping.read({
+          actor: input.actor,
+          orderId: 'quote-order',
+        });
+        assert.equal(previous.quote.id, quote.id);
+        assert.equal(previous.quote.stale, true);
+        await assert.rejects(
+          shipping.select({ ...select, idempotencyKey: 'old-select' }),
+          { code: 'SHIPPING_QUOTE_STALE' },
+        );
+        await pool.query(
+          "UPDATE crm.orders SET version=version+1 WHERE id='quote-order'",
+        );
+        await assert.rejects(
+          shipping.select({
+            ...select,
+            quoteId: next.quote.id,
+            idempotencyKey: 'edited-order',
+          }),
+          { code: 'VERSION_CONFLICT' },
+        );
       },
     );
   });

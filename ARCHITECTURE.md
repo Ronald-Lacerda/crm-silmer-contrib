@@ -1,5 +1,16 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Melhor Envio — cotação na conversa e no pedido (02/11/2026)
+
+A [ADR 054](docs/adr/054-cotacao-na-conversa-vinculada-ao-pedido.md)
+complementa a ADR 053: T139 permite ao responsável humano ou administrador
+cotar na conversa para Assunto/Pedido explícitos e guardar o serviço escolhido
+como estimativa cifrada. A ação `shipping.quote` não concede administração da
+conta. Entradas físicas são explícitas; mudanças do pedido invalidam a
+estimativa por versão. A resposta é sugerida no composer, com envio humano.
+O Valor final e a ficha permanecem sob seus comandos comerciais existentes.
+Contrato MEVQ-01–08 e rollout no runbook do Melhor Envio.
+
 ## Melhor Envio — conexão e cotação administrativa (01/11/2026)
 
 A [ADR 053](docs/adr/053-conexao-e-cotacao-administrativa-melhor-envio.md)

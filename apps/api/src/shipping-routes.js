@@ -20,12 +20,23 @@ const PUBLIC_CODES = new Set([
   'MELHOR_ENVIO_INVALID_RESPONSE',
   'MELHOR_ENVIO_VALIDATION',
   'MELHOR_ENVIO_REJECTED',
+  'CONVERSATION_NOT_FOUND',
+  'CONVERSATION_NOT_HUMAN',
+  'ORDER_NOT_FOUND',
+  'ORDER_LOCKED',
+  'VERSION_CONFLICT',
+  'SHIPPING_TARGET_CHANGED',
+  'SHIPPING_QUOTE_NOT_FOUND',
+  'SHIPPING_QUOTE_STALE',
+  'SHIPPING_QUOTE_UNAVAILABLE',
+  'INVALID_SHIPPING_SERVICE',
+  'IDEMPOTENCY_KEY_REUSED',
 ]);
 
 /** @param {any} request @param {any} runtime @param {boolean} write */
-async function principal(request, runtime, write) {
+async function principal(request, runtime, write, action = 'shipping.manage') {
   const auth = {
-    action: 'shipping.manage',
+    action,
     authorization: request.headers.authorization,
     cookie: request.headers.cookie,
     origin: request.headers.origin,
@@ -144,6 +155,64 @@ export function registerShippingRoutes(api, runtime, contextFor) {
             ...(action === 'quote' ? { body: request.body } : {}),
           };
           return runtime[action](input);
+        }),
+    );
+  }
+  // T139: callers never receive OAuth credentials or administrative access.
+  if (!runtime.conversationQuotes) return;
+  api.get('/api/v1/orders/:orderId/shipping-quote', (request, reply) =>
+    respond(reply, async () => {
+      const authorized = await principal(request, runtime, false, 'order.read');
+      const { orderId } = /** @type {{orderId:string}} */ (request.params);
+      return runtime.conversationQuotes.read({ ...authorized, orderId });
+    }),
+  );
+  for (const operation of ['quote', 'select']) {
+    const path =
+      '/api/v1/conversations/:conversationId/shipping-quotes' +
+      (operation === 'select' ? '/:quoteId/select' : '');
+    api.post(
+      path,
+      {
+        bodyLimit: 8192,
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+      },
+      (request, reply) =>
+        respond(reply, async () => {
+          const authorized = await principal(
+            request,
+            runtime,
+            true,
+            'shipping.quote',
+          );
+          strictBody(
+            request.body,
+            operation === 'quote'
+              ? [
+                  'subjectId',
+                  'orderId',
+                  'orderVersion',
+                  'fromPostalCode',
+                  'toPostalCode',
+                  'weightGrams',
+                  'widthCm',
+                  'heightCm',
+                  'lengthCm',
+                  'insuranceValueCents',
+                ]
+              : ['subjectId', 'orderId', 'orderVersion', 'serviceId'],
+          );
+          const params =
+            /** @type {{conversationId:string,quoteId?:string}} */ (
+              request.params
+            );
+          return runtime.conversationQuotes[operation]({
+            ...authorized,
+            ...contextFor(request),
+            ...params,
+            idempotencyKey: request.headers['idempotency-key'],
+            body: request.body,
+          });
         }),
     );
   }

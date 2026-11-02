@@ -4,6 +4,12 @@ Status: em revisão desde 29/10/2026.
 Decisão parcial em 01/11/2026: [ADR 053](../adr/053-conexao-e-cotacao-administrativa-melhor-envio.md)
 autoriza conexão OAuth e cotação administrativa (T138), com tokens rotativos
 cifrados no PostgreSQL. As decisões D1–D9 e as demais fatias permanecem abertas.
+
+Decisão parcial em 02/11/2026: [ADR 054](../adr/054-cotacao-na-conversa-vinculada-ao-pedido.md)
+autoriza T139: cotação humana na conversa, Assunto/Pedido explícitos,
+estimativa persistida e resposta sugerida. MEV-02–04 são atendidos parcialmente,
+com peso/medidas explícitos; forma de entrega, tabela de pesos, validade
+comercial e decisões D1–D9 continuam abertas.
 Responsável: Tech Lead. Aprovador: proprietário (PO). O contador valida a
 decisão fiscal (D6).
 Requisitos propostos: MEV-01 a MEV-16 (seção 5). Ainda não estão em

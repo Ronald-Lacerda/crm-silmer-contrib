@@ -16,6 +16,7 @@ import AssistantTakeoverContext from '../components/inbox/AssistantTakeoverConte
 import AudioRecorder from '../components/inbox/AudioRecorder.vue';
 import ConversationHandoffSummary from '../components/inbox/ConversationHandoffSummary.vue';
 import ConversationOrderSummary from '../components/inbox/ConversationOrderSummary.vue';
+import ConversationShippingQuote from '../components/inbox/ConversationShippingQuote.vue';
 import MediaMessage from '../components/inbox/MediaMessage.vue';
 import MessageDeliveryNotice from '../components/inbox/MessageDeliveryNotice.vue';
 import MessageTranscript from '../components/inbox/MessageTranscript.vue';
@@ -130,6 +131,7 @@ const notify = inject('notify', () => {});
 const heading = ref(null);
 const searchInput = ref(null);
 const replyInput = ref(null);
+const shippingQuote = ref(null);
 const takeoverButton = ref(null);
 const nameInput = ref(null);
 const archiveConfirmationDialog = ref(null);
@@ -213,6 +215,33 @@ const subjectAnswers = ref({});
 /** @type {import('vue').Ref<Record<string, string>>} */
 const subjectAnswerErrors = ref({});
 const reply = ref('');
+
+/** T139: the seller reviews and sends; existing draft text is preserved. */
+async function addShippingDraft(text) {
+  if (!canReply.value) return;
+  const next = reply.value.trim() ? `${reply.value}\n\n${text}` : text;
+  if (next.length > 2000) {
+    notify(
+      'A resposta ultrapassa 2.000 caracteres. Reduza o rascunho antes de acrescentar o frete.',
+    );
+    return;
+  }
+  reply.value = next;
+  await nextTick();
+  replyInput.value?.focus();
+}
+
+/** @param {string} preview */
+function messagePostalCodes(preview) {
+  const found = new Set();
+  const pattern =
+    /(?<!\d)(?<!\d[./-])(\d{2})\.?(\d{3})-?(\d{3})(?!\d)(?![./-]\d)/gu;
+  for (const match of String(preview ?? '').matchAll(pattern)) {
+    const digits = `${match[1]}${match[2]}${match[3]}`;
+    if (!/^0+$/u.test(digits)) found.add(digits);
+  }
+  return [...found].map((digits) => `${digits.slice(0, 5)}-${digits.slice(5)}`);
+}
 const renaming = ref(false);
 const draftName = ref('');
 const renameBase = ref(null);
@@ -305,6 +334,12 @@ const canReply = computed(
     canAct.value &&
     !pendingHandoff.value &&
     active.value?.automationState === 'human',
+);
+const canQuoteShipping = computed(
+  () =>
+    canReply.value &&
+    sessionUser.value?.functionName === 'Vendedor' &&
+    (owner.value?.id === currentUserId.value || isAdmin.value),
 );
 const pendingHandoff = computed(
   () => active.value?.handoff?.status === 'pending',
@@ -2500,6 +2535,19 @@ onBeforeUnmount(() => {
                 >
               </div>
               <p>{{ message.preview }}</p>
+              <div
+                v-if="canQuoteShipping && message.direction === 'inbound'"
+                class="inline-actions"
+              >
+                <button
+                  v-for="postalCode in messagePostalCodes(message.preview)"
+                  :key="postalCode"
+                  type="button"
+                  @click="shippingQuote?.open($event.currentTarget, postalCode)"
+                >
+                  Cotar para CEP {{ postalCode }}
+                </button>
+              </div>
               <MediaMessage
                 v-if="
                   message.media ||
@@ -2688,7 +2736,7 @@ onBeforeUnmount(() => {
               </button>
             </div>
             <AudioRecorder
-              v-else
+              v-if="!needsTakeover"
               :key="active.id"
               :conversation-id="active.id"
               :expected-version="active.version"
@@ -2696,6 +2744,19 @@ onBeforeUnmount(() => {
               @sending-change="mediaSending = $event"
               @sent="mediaSent"
             >
+              <template #tools="{ disabled: quoteDisabled }">
+                <ConversationShippingQuote
+                  v-if="canQuoteShipping"
+                  ref="shippingQuote"
+                  :key="`shipping-${active.id}`"
+                  :conversation-id="active.id"
+                  :subjects="subjectState.subjects"
+                  :disabled="quoteDisabled || busy || mediaSending || !canReply"
+                  :has-draft="Boolean(reply.trim())"
+                  :revision="orderRevision"
+                  @draft="addShippingDraft"
+                />
+              </template>
               <template #message="{ recordingActive }">
                 <form
                   id="inbox-reply-form"

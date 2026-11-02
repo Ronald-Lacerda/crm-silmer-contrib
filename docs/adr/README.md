@@ -1,5 +1,11 @@
 # Architecture Decision Records
 
+## Decisão de 02/11/2026
+
+- [054 — Cotação na conversa vinculada ao pedido](054-cotacao-na-conversa-vinculada-ao-pedido.md),
+  T139: vendedor responsável/admin consulta e guarda estimativa com alvos
+  explícitos; resposta sugerida para envio humano e valor comercial preservado.
+
 ## Decisão de 01/11/2026
 
 - [053 — Conexão e cotação administrativa do Melhor Envio](053-conexao-e-cotacao-administrativa-melhor-envio.md),

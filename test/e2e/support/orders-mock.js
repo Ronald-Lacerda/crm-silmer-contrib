@@ -547,6 +547,15 @@ export async function mockOrders(page, options = {}) {
       return;
     }
 
+    // T139: ordinary order scenarios have no selected freight estimate.
+    if (
+      /^\/api\/v1\/orders\/[^/]+\/shipping-quote$/u.test(path) &&
+      request.method() === 'GET'
+    ) {
+      await route.fulfill({ json: { quote: null } });
+      return;
+    }
+
     const detail = /^\/api\/v1\/orders\/([^/]+)$/u.exec(path);
     if (detail && request.method() === 'GET') {
       options.onDetail?.(detail[1]);

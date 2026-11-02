@@ -2257,3 +2257,32 @@ validate` passou (1.393 testes aprovados, cinco ignorados); diff check
   saudável permaneceu, readiness `ready`, conta conectada preservada e a mesma
   cotação retornou as quatro opções novamente. Homologação de compra de
   etiquetas e ativação de produção permanecem fora desta fatia.
+
+### T139: Cotação na conversa vinculada ao pedido
+
+- **Requisitos:** [MEVQ-01–08](../melhor-envio/spec.md), MEV-02–04 parciais,
+  [ADR 054](../../../docs/adr/054-cotacao-na-conversa-vinculada-ao-pedido.md).
+- **Autorização:** proprietário em 02/11/2026; cotação no atendimento humano,
+  vínculo explícito Assunto/Pedido e estimativa, mantendo o valor comercial.
+- **Entrega:** ação operacional separada da administração OAuth; cálculo com
+  CEP/peso/medidas explícitos, seleção de serviço retornado pelo provedor,
+  estimativa cifrada e idempotente com origem/versão, leitura na conversa e
+  Pedido, sugestão no composer sem envio. Migration expand 0050.
+- **Verificação:** ACL por perfil/dono, alvos cruzados, versão e mudança
+  concorrente; idempotência, valores do provedor, cifra e ausência de PII;
+  regressão da conexão, E2E por teclado/axe e mobile; gates completos.
+- **Operação:** aplicar migration antes da API/UI; cotação usa a conta já
+  conectada e os scopes atuais. Rollback conserva tabelas e volta API/edge
+  juntos. [Runbook](../../../docs/runbooks/melhor-envio.md).
+- **Evidência local:** Node 24.20.0 / npm 11.19.0; `npm run validate` passou
+  com 1.612 testes aprovados, sete ignorados e build concluído. A execução
+  restrita encontrou EPERM em testes preexistentes; o gate passou fora dessa
+  restrição. E2E completo: 407 aprovados, sete ignorados e quatro 404 temporários
+  durante renovação do build; os quatro passaram na reexecução com artefato
+  estável. Os 13 cenários novos e regressões de teclado/mobile/axe passaram,
+  sem ampliar limites de altura. Audit high passou (nove achados baixos ou
+  moderados preexistentes, sem mudança de dependências); diff check limpo.
+- **Publicação:** [PR #260](https://github.com/romulosutil/crm-silmer/pull/260),
+  um commit da T139 sobre a entrega documental #259. Testes PostgreSQL reais
+  ampliados na suíte já executada pelo CI; indisponíveis localmente por falta
+  de banco. CI e homologação remota da nova UI são gates distintos da T138.

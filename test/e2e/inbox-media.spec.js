@@ -706,6 +706,11 @@ for (const viewport of [
       page.getByRole('button', { name: 'Anexar arquivo', exact: true }),
     ).toBeFocused();
     await page.keyboard.press('Tab');
+    // T139 adds a keyboard-accessible freight tool to this same toolbar.
+    await expect(
+      page.getByRole('button', { name: 'Cotar frete', exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(
       page.getByRole('button', { name: 'Gravar áudio', exact: true }),
     ).toBeFocused();

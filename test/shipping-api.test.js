@@ -37,6 +37,20 @@ function fixture() {
     authorizeRead: (/** @type {any} */ input) => check(input, false),
     authorizeWrite: (/** @type {any} */ input) => check(input, true),
     status: async () => status,
+    conversationQuotes: {
+      quote: async (/** @type {any} */ input) => {
+        calls.push({ action: 'conversation-quote', input });
+        return { quote: { id: 'quote-1' } };
+      },
+      select: async (/** @type {any} */ input) => {
+        calls.push({ action: 'conversation-select', input });
+        return { quote: { id: 'quote-1', selectedServiceId: 1 } };
+      },
+      read: async (/** @type {any} */ input) => {
+        calls.push({ action: 'conversation-read', input });
+        return { quote: null };
+      },
+    },
   };
   for (const action of ['authorize', 'complete', 'quote', 'disconnect'])
     runtime[action] = async (/** @type {any} */ input) => {
@@ -145,4 +159,113 @@ test('unexpected database/provider exceptions are bounded service errors', async
   assert.equal(response.statusCode, 503);
   assert.equal(response.json().code, 'SERVICE_UNAVAILABLE');
   assert.ok(!response.body.includes('private token'));
+});
+
+test('T139 conversation quotes use seller action, explicit targets, CSRF and idempotency header', async (t) => {
+  const { api, calls, runtime } = fixture();
+  t.after(() => api.close());
+  const payload = {
+    subjectId: 'subject-1',
+    orderId: 'order-1',
+    orderVersion: 1,
+    fromPostalCode: '01001000',
+    toPostalCode: '20040020',
+    weightGrams: 1000,
+    widthCm: 20,
+    heightCm: 15,
+    lengthCm: 10,
+    insuranceValueCents: 10000,
+  };
+  const url = '/api/v1/conversations/conversation-1/shipping-quotes';
+  const authorized = runtime.authorizeWrite;
+  runtime.authorizeWrite = (/** @type {any} */ input) => {
+    assert.equal(input.action, 'shipping.quote');
+    return authorized(input);
+  };
+  const response = await api.inject({
+    method: 'POST',
+    url,
+    headers: { ...HEADERS, 'idempotency-key': 'quote-key' },
+    payload,
+  });
+  assert.equal(response.statusCode, 200);
+  assert.equal(calls[0].input.idempotencyKey, 'quote-key');
+  assert.equal(calls[0].input.conversationId, 'conversation-1');
+  assert.deepEqual(calls[0].input.body, payload);
+  for (const body of [
+    { ...payload, priceCents: 1 },
+    { ...payload, subjectId: undefined },
+  ]) {
+    assert.equal(
+      (
+        await api.inject({
+          method: 'POST',
+          url,
+          headers: HEADERS,
+          payload: body,
+        })
+      ).statusCode,
+      400,
+    );
+  }
+  assert.equal(
+    (
+      await api.inject({
+        method: 'POST',
+        url,
+        headers: { ...HEADERS, 'x-csrf-token': '' },
+        payload,
+      })
+    ).statusCode,
+    403,
+  );
+  assert.equal(calls.length, 1);
+});
+
+test('T139 linked estimate read uses order.read and selection rejects client prices', async (t) => {
+  const { api, runtime, calls } = fixture();
+  t.after(() => api.close());
+  const authorized = runtime.authorizeRead;
+  runtime.authorizeRead = (/** @type {any} */ input) => {
+    assert.equal(input.action, 'order.read');
+    return authorized(input);
+  };
+  const read = await api.inject({
+    url: '/api/v1/orders/order-1/shipping-quote',
+    headers: HEADERS,
+  });
+  assert.equal(read.statusCode, 200);
+  assert.equal(read.headers['cache-control'], 'private, no-store');
+  assert.equal(calls[0].input.orderId, 'order-1');
+  const url =
+    '/api/v1/conversations/conversation-1/shipping-quotes/quote-1/select';
+  const payload = {
+    subjectId: 'subject-1',
+    orderId: 'order-1',
+    orderVersion: 1,
+    serviceId: 1,
+  };
+  assert.equal(
+    (
+      await api.inject({
+        method: 'POST',
+        url,
+        headers: HEADERS,
+        payload: { ...payload, priceCents: 1 },
+      })
+    ).statusCode,
+    400,
+  );
+  assert.equal(
+    (
+      await api.inject({
+        method: 'POST',
+        url,
+        headers: { ...HEADERS, 'idempotency-key': 'select-key' },
+        payload,
+      })
+    ).statusCode,
+    200,
+  );
+  assert.equal(calls[1].input.quoteId, 'quote-1');
 });

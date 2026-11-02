@@ -1,5 +1,21 @@
 # TDD — CRM Silmer MVP
 
+## Melhor Envio — T139 (02/11/2026)
+
+[ADR 054](docs/adr/054-cotacao-na-conversa-vinculada-ao-pedido.md), MEVQ-01–08:
+`POST /api/v1/conversations/:conversationId/shipping-quotes` calcula para
+`subjectId`, `orderId`, `orderVersion` e embalagem explícita;
+`POST /api/v1/conversations/:conversationId/shipping-quotes/:quoteId/select`
+seleciona um serviço retornado, com os mesmos alvos/versionamento.
+`GET /api/v1/orders/:orderId/shipping-quote` consulta a estimativa autorizada.
+A ação operacional `shipping.quote` é independente de `shipping.manage`.
+O servidor confere dono, modo humano, conversa aberta, vínculo e versão antes
+e depois do efeito remoto. Resultados e CEPs persistidos são cifrados com
+contexto por cotação; auditoria e idempotência não guardam PII em claro.
+Uma versão posterior do pedido exige nova consulta. Não há mudança de valor
+comercial, status, pagamento ou envio automático. O fluxo administrativo T138
+abaixo conserva seu contrato independente.
+
 ## Melhor Envio — T138 (01/11/2026)
 
 Conforme [ADR 053](docs/adr/053-conexao-e-cotacao-administrativa-melhor-envio.md),
