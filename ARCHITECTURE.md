@@ -1,5 +1,16 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Saúde e erros — acesso operacional restrito (02/11/2026)
+
+A [ADR 055](docs/adr/055-central-de-erros-restrita-a-conta-operadora.md)
+autoriza o menu Saúde e erros somente para a conta operadora designada e
+ativa, com capacidade administrativa, validada na API e no shell Vue.
+Ocorrências técnicas agrupadas e triagem versionada/auditada ficam no
+PostgreSQL existente. O recorte inicial cobre 5xx da API e falhas persistidas
+de jobs e comandos n8n, sem payloads ou reenvios. Contrato OPS-ERR-01–08,
+tarefa OPS-ERR-T01 e [runbook](docs/runbooks/saude-erros.md). Monitor externo
+e notificações da issue #11 continuam com seus gates independentes.
+
 ## Melhor Envio — cotação na conversa e no pedido (02/11/2026)
 
 A [ADR 054](docs/adr/054-cotacao-na-conversa-vinculada-ao-pedido.md)

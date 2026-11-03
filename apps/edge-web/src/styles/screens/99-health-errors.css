@@ -1,0 +1,135 @@
+.health-errors-page {
+  display: grid;
+  gap: var(--space-4);
+}
+.health-errors-page .page-heading,
+.health-errors-page p,
+.health-errors-page h2,
+.health-errors-page h3 {
+  margin: 0;
+}
+.health-errors-scope,
+.health-errors-checked,
+.health-errors-treatment-note,
+.health-error-source,
+.health-error-guidance,
+.health-error-detail {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+.health-errors-totals,
+.health-errors-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.health-errors-totals {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.health-errors-totals > li {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+}
+.health-errors-totals strong {
+  font-size: var(--text-2xl);
+  font-variant-numeric: tabular-nums;
+}
+.health-errors-content,
+.health-error-card {
+  display: grid;
+  gap: var(--space-4);
+  min-inline-size: 0;
+}
+.health-errors-toolbar,
+.health-error-heading,
+.health-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.health-errors-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.health-errors-page button,
+.health-errors-page select,
+.health-error-detail summary {
+  min-block-size: var(--target-min);
+}
+.health-error-card {
+  padding: var(--space-4);
+}
+.health-error-heading > div {
+  min-inline-size: 0;
+}
+.health-error-heading h3 {
+  margin-block-start: var(--space-1);
+  font-size: var(--text-base);
+  overflow-wrap: anywhere;
+}
+.health-error-status {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.health-error-status[data-state='new'] {
+  color: var(--status-error-text);
+  background: var(--status-error-surface);
+}
+.health-error-status[data-state='investigating'] {
+  color: var(--status-warning-text);
+  background: var(--status-warning-surface);
+}
+.health-error-status[data-state='resolved'] {
+  color: var(--status-success-text);
+  background: var(--status-success-surface);
+}
+.health-error-facts,
+.health-error-detail dl {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.health-error-facts {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+}
+.health-error-facts dt,
+.health-error-detail dt {
+  color: var(--color-text-muted);
+}
+.health-error-facts dd,
+.health-error-detail dd {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+}
+.health-error-detail summary {
+  display: list-item;
+  align-content: center;
+  color: var(--color-link);
+  cursor: pointer;
+}
+.health-error-detail[open] dl {
+  margin-block: var(--space-2);
+}
+.health-error-detail ol {
+  display: grid;
+  gap: var(--space-2);
+  padding-inline-start: var(--space-5);
+}
+.health-error-actions {
+  justify-content: flex-start;
+}
+.health-error-actions > span {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}

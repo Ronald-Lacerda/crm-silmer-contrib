@@ -1,5 +1,11 @@
 # Request for Comments
 
+## Decisão de 02/11/2026
+
+- [042 — Central de saúde e erros](042-central-de-saude-e-erros.md),
+  decidida na ADR 055: menu exclusivo da conta operadora, ocorrências
+  técnicas sem payloads e triagem auditada, sem reenvio de efeitos.
+
 ## Em revisão
 
 - [038 — Frete e etiqueta pelo Melhor Envio](038-frete-e-etiqueta-pelo-melhor-envio.md),

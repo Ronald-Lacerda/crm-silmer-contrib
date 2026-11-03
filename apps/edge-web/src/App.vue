@@ -17,6 +17,7 @@ import ThemeSwitcher from './components/ThemeSwitcher.vue';
 import { brand } from './brand/index.js';
 import { ApiError, request } from './lib/api-client.js';
 import { LiveEventStream } from './lib/event-stream.js';
+import { canReadHealthErrors } from './lib/health-errors.js';
 import { RETURN_QUERY, safeReturnPath } from './lib/return-path.js';
 
 const router = useRouter();
@@ -102,11 +103,13 @@ const isAdmin = computed(() =>
   (user.value.capabilities ?? []).includes('COMMERCIAL_ADMIN'),
 );
 const isFinance = computed(() => user.value.functionName === 'Financeiro');
+const canAccessHealthErrors = computed(() => canReadHealthErrors(user.value));
 const homePath = computed(() =>
   isFinance.value ? '/financeiro' : '/dashboard',
 );
 const canAccessCurrentRoute = computed(() => {
   if (isFinance.value) return ['/financeiro', '/conta'].includes(route.path);
+  if (route.meta.requiresHealthErrors) return canAccessHealthErrors.value;
   if (route.meta.requiresFinance) return isAdmin.value;
   return route.meta.requiresAdmin !== true || isAdmin.value;
 });
@@ -144,6 +147,9 @@ const navItems = computed(() =>
               { to: '/melhor-envio', label: 'Melhor Envio', icon: 'orders' },
               { to: '/usuarios', label: 'Usuários', icon: 'team' },
             ]
+          : []),
+        ...(canAccessHealthErrors.value
+          ? [{ to: '/saude-erros', label: 'Saúde e erros', icon: 'panel' }]
           : []),
         { to: '/conta', label: 'Conta', icon: 'account' },
       ],

@@ -272,6 +272,43 @@ A ADR 006 retirou cobrança, comprovante e status de pagamento do MVP. PAY-01..0
 
 ## Rastreabilidade
 
+### Saúde e erros — OPS-ERR (02/11/2026)
+
+Decisão do proprietário na [ADR 055](../../../docs/adr/055-central-de-erros-restrita-a-conta-operadora.md),
+proposta [RFC 042](../../../docs/rfc/042-central-de-saude-e-erros.md),
+tarefa OPS-ERR-T01. Complementa PRV-01 e a observabilidade da issue #11.
+
+1. **OPS-ERR-01:** WHEN a sessão pertence à conta humana ativa
+   `admin@crm-silmer.local` com `COMMERCIAL_ADMIN` THEN o shell SHALL oferecer
+   o menu Saúde e erros; outras contas SHALL não visualizar o item nem montar
+   a tela por acesso direto, inclusive outro administrador e Financeiro.
+2. **OPS-ERR-02:** WHEN a API recebe leitura ou triagem THEN SHALL autenticar
+   a sessão e conferir a identidade atual no banco e a capacidade, sem confiar
+   em e-mail, ator ou permissão informados pelo cliente; automação SHALL ser
+   negada e revogação/desativação SHALL impedir novo acesso.
+3. **OPS-ERR-03:** WHEN uma falha coberta ocorre THEN a central SHALL manter
+   ocorrência persistente agrupada por origem/código, contagem e primeira e
+   última ocorrência. O recorte inicial SHALL cobrir 5xx da API e falhas
+   duráveis de jobs/comandos n8n, com ingestão deduplicada.
+4. **OPS-ERR-04:** WHEN a central mostra ou persiste diagnóstico THEN SHALL
+   limitar os dados a códigos controlados, contagens, horários, versões e
+   IDs opacos permitidos; corpos, mensagens, dados de cliente, credenciais e
+   erros livres SHALL não aparecer. Retenção técnica SHALL ser de 30 dias.
+5. **OPS-ERR-05:** WHEN o operador altera Novo, Em análise ou Resolvido THEN
+   SHALL haver CSRF, origem, idempotência, versão e auditoria transacionais;
+   conflito SHALL exigir atualização e histórico SHALL registrar as mudanças.
+6. **OPS-ERR-06:** WHEN uma nova ocorrência chega a um grupo resolvido THEN
+   SHALL reabrir o grupo; repetição da coleta SHALL não aumentar sua contagem.
+   A triagem SHALL não reenviar mensagens nem alterar o efeito original.
+7. **OPS-ERR-07:** WHEN o operador navega por teclado ou usa uma tela estreita
+   THEN filtros, atualização, detalhes e triagem SHALL ser operáveis, com foco
+   previsível e anúncios; vazio, carregamento, falha, conflito e perda de
+   acesso SHALL ser explícitos e requisições SHALL ser canceladas ao sair.
+8. **OPS-ERR-08:** WHEN a central apresenta seus dados THEN SHALL informar
+   cobertura e instante da leitura, sem declarar monitor externo ou saúde
+   universal; notificações externas e indisponibilidade da VPS continuam nos
+   gates independentes da issue #11.
+
 | Grupo              | IDs             | Status                                                                                   |
 | ------------------ | --------------- | ---------------------------------------------------------------------------------------- |
 | Orquestração n8n   | ORC-01 a ORC-09 | WhatsApp implementado; homologação pendente; ORC-09 em CANAL-2                           |
@@ -283,6 +320,7 @@ A ADR 006 retirou cobrança, comprovante e status de pagamento do MVP. PAY-01..0
 | Privacidade        | PRV-01 a PRV-03 | Coberta no contrato; homologação pendente                                                |
 | PIX e boas-vindas  | PAY-01 a PAY-05 | Diferidos pela ADR 006; datas manuais não implementam cobrança                           |
 | Painel por papel   | PNL-01 a PNL-04 | PNL-01..03 cobertos em `ux/jornadas` (T130, `069ae76`); PNL-04 adiado pelo PO (D3, T131) |
+| Saúde e erros      | OPS-ERR-01 a OPS-ERR-08 | Central restrita à conta operadora; implementação e gates em OPS-ERR-T01 |
 
 **Cobertura:** 45 IDs preservados, incluindo 5 PAY diferidos e o PNL-04 adiado; implementação, homologação e aprovação externa têm estados distintos. Essa cobertura não representa aprovação humana dos gates operacionais. A decomposição em tarefas pertence ao Tech Lead.
 

@@ -1,5 +1,30 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## OPS-ERR-T01 — Saúde e erros (02/11/2026)
+
+Requisitos OPS-ERR-01–08, PRV-01 e INT-2/3; decisão do proprietário na
+[ADR 055](../../../docs/adr/055-central-de-erros-restrita-a-conta-operadora.md),
+[RFC 042](../../../docs/rfc/042-central-de-saude-e-erros.md) e
+[runbook](../../../docs/runbooks/saude-erros.md). Relacionada à issue #11,
+sem substituir os gates de monitor externo.
+
+- [x] Menu e rota exclusivos da conta operadora designada; API valida a
+      identidade atual, sem ampliar acesso aos demais administradores.
+- [x] Ocorrências persistentes e agrupadas, códigos sem PII, ingestão
+      deduplicada de falhas de jobs/n8n e captura de 5xx da API.
+- [x] Triagem versionada, idempotente, auditada e com histórico; recorrência
+      reabre o grupo e nenhuma ação repete o efeito de origem.
+- [x] Gates locais: `npm run validate` (1.621 aprovados, oito ignorados),
+      E2E/axe completo (423 aprovados, sete ignorados), auditoria sem high ou
+      critical e `git diff --check`. Node 24.20.0/npm 11.19.0; testes com
+      subprocessos/navegador precisaram de execução fora do sandbox Windows.
+      Revisão independente sem findings abertos.
+- [x] Entrega atômica preparada na branch `codex/health-errors-admin`.
+- [ ] Executar a suíte PostgreSQL real no CI (incluída no gate serial),
+      sem banco dedicado disponível nesta máquina. Ela cobre migração,
+      concorrência, rollback de auditoria, ACL atual, retenção e recriação.
+- [ ] Aplicar migration expand e conferir a tela no ambiente implantado.
+
 ## INBOX-IMG-VIEW-01 — ampliar e baixar fotos na Inbox (30/10/2026)
 
 IMG-12/13, MED-16/19/25 e regra técnica 3. Correção solicitada pelo operador;

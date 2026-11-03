@@ -6,6 +6,7 @@ import AssistantPerformanceView from './views/AssistantPerformanceView.vue';
 import ClientsView from './views/ClientsView.vue';
 import DashboardView from './views/DashboardView.vue';
 import FinanceView from './views/FinanceView.vue';
+import HealthErrorsView from './views/HealthErrorsView.vue';
 import InboxView from './views/InboxView.vue';
 import MelhorEnvioView from './views/MelhorEnvioView.vue';
 import OrdersView from './views/OrdersView.vue';
@@ -84,6 +85,11 @@ export const router = createRouter({
       path: '/usuarios',
       component: UsersView,
       meta: { requiresAdmin: true, title: 'Usuários' },
+    },
+    {
+      path: '/saude-erros',
+      component: HealthErrorsView,
+      meta: { requiresHealthErrors: true, title: 'Saúde e erros' },
     },
     { path: '/conta', component: AccountView, meta: { title: 'Conta' } },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' },

@@ -21,6 +21,8 @@ import { createConversationHandoffRuntime } from './conversation-handoff-runtime
 import { createConversationApiRuntime } from './conversation-runtime.js';
 import { createIdentityApiRuntime } from './identity-runtime.js';
 import { createFinanceApiRuntime } from './finance-runtime.js';
+import { createHealthErrorsRuntime } from './health-errors-runtime.js';
+import { registerHealthErrorsRoutes } from './health-errors-routes.js';
 import { createShippingApiRuntime } from './shipping-runtime.js';
 import { createN8nApiRuntime } from './n8n-runtime.js';
 import { createOperationReadRuntime } from './operation-runtime.js';
@@ -58,6 +60,7 @@ import { createSafeLogger, SERVICES } from '@crm-silmer/shared';
  *   operations?: Record<string, any>,
  *   orders?: ReturnType<typeof createOrderApiRuntime>,
  *   finance?: ReturnType<typeof createFinanceApiRuntime>,
+ *   healthErrors?: ReturnType<typeof createHealthErrorsRuntime>,
  *   shipping?: ReturnType<typeof createShippingApiRuntime>,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime,
  *   subjects?: Record<string, any>,
@@ -280,7 +283,70 @@ export function createServerApi(runtime = {}) {
   const database = runtime.database;
   const closeDatabase = database?.close;
   if (closeDatabase) {
+    // onClose hooks run in reverse registration order: the collector added
+    // below must finish using its transactions before the pool is closed.
     api.addHook('onClose', closeDatabase.bind(database));
+  }
+  const healthErrors =
+    runtime.healthErrors ??
+    (database && runtime.identity && environment.IDEMPOTENCY_ENVELOPE_KEY
+      ? createHealthErrorsRuntime({
+          database,
+          identity: runtime.identity,
+          envelopeKey: Buffer.from(
+            environment.IDEMPOTENCY_ENVELOPE_KEY,
+            'base64url',
+          ),
+        })
+      : undefined);
+  if (healthErrors) {
+    registerHealthErrorsRoutes(api, healthErrors);
+    /** @type {Set<Promise<unknown>>} */
+    const pendingIncidents = new Set();
+    /** @type {ReturnType<typeof setInterval> | undefined} */
+    let incidentCleanup;
+    api.addHook('onReady', async () => {
+      const purge = () => {
+        const pending = healthErrors.cleanup().catch(() => {
+          logger.error('api_request_failed', { error_code: 'UNHANDLED_ERROR' });
+        });
+        pendingIncidents.add(pending);
+        void pending.finally(() => pendingIncidents.delete(pending));
+      };
+      purge();
+      incidentCleanup = globalThis.setInterval(purge, 60 * 60_000);
+      incidentCleanup.unref();
+    });
+    api.addHook('onResponse', async (request, reply) => {
+      // Failure collection must never delay or replace the original response.
+      // The console's own errors are excluded to prevent a feedback loop.
+      if (
+        reply.statusCode < 500 ||
+        pendingIncidents.size >= 16 ||
+        request.routeOptions.url?.startsWith('/api/v1/admin/health-errors')
+      )
+        return;
+      const header = (/** @type {string} */ name) => {
+        const value = reply.getHeader(name);
+        return typeof value === 'string' ? value : undefined;
+      };
+      const pending = healthErrors
+        .recordApiFailure({
+          statusCode: reply.statusCode,
+          readiness: request.routeOptions.url === '/api/health/ready',
+          requestId: header('x-request-id'),
+          correlationId: header('x-correlation-id'),
+        })
+        .catch(() => {
+          logger.error('api_request_failed', { error_code: 'UNHANDLED_ERROR' });
+        });
+      pendingIncidents.add(pending);
+      void pending.finally(() => pendingIncidents.delete(pending));
+    });
+    api.addHook('onClose', async () => {
+      if (incidentCleanup) globalThis.clearInterval(incidentCleanup);
+      await Promise.allSettled(pendingIncidents);
+    });
   }
   return api;
 }

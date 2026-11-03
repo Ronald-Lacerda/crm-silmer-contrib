@@ -2,6 +2,10 @@
 
 ## Decisão de 02/11/2026
 
+- [055 — Central de erros restrita à conta operadora](055-central-de-erros-restrita-a-conta-operadora.md),
+  OPS-ERR-T01: Saúde e erros com acesso por conta e capacidade, agrupamento
+  de falhas e triagem auditada, preservando os gates de monitor externo.
+
 - [054 — Cotação na conversa vinculada ao pedido](054-cotacao-na-conversa-vinculada-ao-pedido.md),
   T139: vendedor responsável/admin consulta e guarda estimativa com alvos
   explícitos; resposta sugerida para envio humano e valor comercial preservado.

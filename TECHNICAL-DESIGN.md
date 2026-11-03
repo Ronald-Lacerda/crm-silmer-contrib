@@ -475,6 +475,15 @@ não herdam a retenção curta de mídia.
 
 ## 8. Deploy, recuperação e observabilidade
 
+A central **Saúde e erros** (ADR 055, OPS-ERR-T01) usa o shell Vue e o
+PostgreSQL existentes. A API exige a conta humana operadora designada,
+ativa e com `COMMERCIAL_ADMIN`, inclusive na consulta e no replay de uma
+triagem. Captura 5xx e ingestão idempotente dos estados de falha de
+jobs/comandos n8n produzem grupos por origem e código controlado, sem
+payload ou erro livre. A triagem usa versão, CSRF, idempotência e auditoria;
+recorrências reabrem grupos resolvidos. Retenção técnica de 30 dias e
+rollback expand-only no [runbook](docs/runbooks/saude-erros.md).
+
 Manter deploy automático GitHub→EasyPanel
 ([ADR 022](docs/adr/022-manter-deploy-automatico-github-easypanel.md)).
 Auditar origem/ref, gatilho, SHA implantado, build/imagem, saúde e rollback.

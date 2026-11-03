@@ -52,6 +52,7 @@ const OPERATIONAL_READ_ACTIONS = new Set([
   // AGENTE-OBS-01: manager only (COMMERCIAL_ADMIN), see authorization.js.
   'assistant.performance.read',
   'shipping.manage',
+  'health.errors.read',
 ]);
 
 /**
@@ -232,6 +233,42 @@ export function createIdentityApiRuntime(database, environment = process.env) {
 
   return Object.freeze({
     allowedOrigins,
+
+    /**
+     * OPS-ERR-01: the caller may bind authorization to its mutation transaction.
+     * The administration lock also serializes profile/email changes and replay.
+     * @param {{action: string, sessionToken: string, csrfToken?: string}} input
+     * @param {any} client
+     */
+    async authorizeHealthErrors(input, client) {
+      if (
+        !['health.errors.read', 'health.errors.update'].includes(input.action)
+      )
+        throw new IdentityHttpError(403, 'FORBIDDEN');
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended('identity-administration', 0))",
+      );
+      const service = identityService(client);
+      let session;
+      try {
+        session =
+          input.action === 'health.errors.read'
+            ? await service.authenticate(input.sessionToken)
+            : await service.assertCsrf(
+                input.sessionToken,
+                input.csrfToken ?? '',
+              );
+      } catch {
+        throw new IdentityHttpError(403, 'FORBIDDEN');
+      }
+      const user = await createPostgresIdentityRepository(client).findUserById(
+        session.userId,
+      );
+      if (!user || user.disabledAt)
+        throw new IdentityHttpError(403, 'FORBIDDEN');
+      authorize(user, input.action);
+      return { actor: { id: user.id, kind: 'human' } };
+    },
 
     /** @param {{action: string, csrfToken: string, sessionToken: string}} input */
     async authorizeOperational(input) {

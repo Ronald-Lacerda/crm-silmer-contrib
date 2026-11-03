@@ -128,7 +128,7 @@ function notFound(message) {
 }
 
 /**
- * @typedef {{ id: string, kind?: 'human'|'assistant', functionName: OperationalFunction, capabilities: Capability[] }} AccessActor
+ * @typedef {{ id: string, email?: string, kind?: 'human'|'assistant', functionName: OperationalFunction, capabilities: Capability[] }} AccessActor
  */
 
 /**
@@ -139,6 +139,17 @@ function notFound(message) {
  */
 export function authorize(actor, action) {
   if (actor.kind === 'assistant') throw forbidden('Forbidden');
+  // OPS-ERR-01: this console belongs to one current human account, not the
+  // administrator role. The identity runtime loads this email from PostgreSQL.
+  if (action === 'health.errors.read' || action === 'health.errors.update') {
+    if (
+      actor.functionName !== 'Vendedor' ||
+      !actor.capabilities.includes(CAPABILITIES.COMMERCIAL_ADMIN) ||
+      actor.email?.trim().toLowerCase() !== 'admin@crm-silmer.local'
+    )
+      throw forbidden('Forbidden');
+    return;
+  }
   if (FINANCE_ACTIONS.has(action)) {
     if (
       (actor.functionName === 'Financeiro' &&
