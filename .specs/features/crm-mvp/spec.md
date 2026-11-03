@@ -348,6 +348,15 @@ tarefa OPS-ERR-T01. Complementa PRV-01 e a observabilidade da issue #11.
    cobertura e instante da leitura, sem declarar monitor externo ou saúde
    universal; notificações externas e indisponibilidade da VPS continuam nos
    gates independentes da issue #11.
+9. **OPS-ERR-09:** WHEN o transporte legado WAHA foi descontinuado e o
+   operador arquiva suas pendências incertas THEN SHALL conferir um manifesto
+   versionado de comandos com reserva autenticada `waha-webjs-1`, registrar
+   autoria, horário e motivo e removê-los somente do recorte ativo. Comandos,
+   mensagens, jobs, tentativas e ocorrências históricas SHALL conservar seus
+   resultados e horários; arquivamento SHALL não resolver entrega nem reenviar.
+   Pendências Evolution SHALL permanecer ativas. Ativas e Histórico SHALL
+   distinguir contagens e datas, inclusive quando a mesma operação aparece
+   nas projeções de worker e n8n.
 
 | Grupo              | IDs                     | Status                                                                                   |
 | ------------------ | ----------------------- | ---------------------------------------------------------------------------------------- |
@@ -360,7 +369,7 @@ tarefa OPS-ERR-T01. Complementa PRV-01 e a observabilidade da issue #11.
 | Privacidade        | PRV-01 a PRV-03         | Coberta no contrato; homologação pendente                                                |
 | PIX e boas-vindas  | PAY-01 a PAY-05         | Diferidos pela ADR 006; datas manuais não implementam cobrança                           |
 | Painel por papel   | PNL-01 a PNL-04         | PNL-01..03 cobertos em `ux/jornadas` (T130, `069ae76`); PNL-04 adiado pelo PO (D3, T131) |
-| Saúde e erros      | OPS-ERR-01 a OPS-ERR-08 | Central restrita à conta operadora; implementação e gates em OPS-ERR-T01                 |
+| Saúde e erros      | OPS-ERR-01 a OPS-ERR-09 | Central restrita à conta operadora; implementação e gates em OPS-ERR-T01 e OPS-INBOX-ACK-04 |
 
 **Cobertura:** 45 IDs preservados, incluindo 5 PAY diferidos e o PNL-04 adiado; implementação, homologação e aprovação externa têm estados distintos. Essa cobertura não representa aprovação humana dos gates operacionais. A decomposição em tarefas pertence ao Tech Lead.
 

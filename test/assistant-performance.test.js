@@ -205,6 +205,7 @@ test('an older API without the fields reads a dash, not zero', () => {
     ['—', '—', '—', '—'],
   );
   assert.equal(summary.failureTotal, null);
+  assert.equal(summary.workflowFailureActivity, null);
   assert.deepEqual(summary.reasons, []);
   // A version name outside the contract never reaches the page.
   assert.deepEqual(
@@ -213,6 +214,43 @@ test('an older API without the fields reads a dash, not zero', () => {
     }).versions,
     [],
   );
+});
+
+test('workflow recurrence uses the API reference time without declaring historical failures resolved', () => {
+  const summary = performanceSummary({
+    ...ANSWER,
+    workflow_failure_activity: {
+      last_at: '2026-10-30T14:55:00.000Z',
+      last_hour: 3,
+      last_24_hours: 273,
+      measured_at: '2026-10-30T15:00:00.000Z',
+    },
+  });
+  assert.deepEqual(summary.workflowFailureActivity, {
+    lastAt: '30/10/2026, 11:55:00',
+    lastHour: '3',
+    lastDay: '273',
+    measuredAt: '30/10/2026, 12:00:00',
+  });
+  assert.equal(summary.failures[0].count, 2);
+  const empty = performanceSummary({
+    workflowFailureActivity: {
+      lastAt: null,
+      lastHour: 0,
+      last24Hours: 0,
+      measuredAt: '2026-10-30T15:00:00.000Z',
+    },
+  });
+  assert.equal(empty.workflowFailureActivity?.lastAt, '');
+  assert.equal(empty.workflowFailureActivity?.lastHour, '0');
+  assert.equal(empty.workflowFailureActivity?.lastDay, '0');
+  for (const value of [undefined, {}, { last_hour: 0, last_24_hours: 0 }]) {
+    assert.equal(
+      performanceSummary({ workflow_failure_activity: value })
+        .workflowFailureActivity,
+      null,
+    );
+  }
 });
 
 test('explains event counts and flags missing turns only when activity is known', () => {

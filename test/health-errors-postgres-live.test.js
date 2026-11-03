@@ -366,3 +366,506 @@ test(
     }
   },
 );
+
+test(
+  'OPS-INBOX-ACK-04 live: exact legacy manifest archives operational work without changing effects or history',
+  { skip: !connectionString },
+  async () => {
+    assert.equal(
+      new URL(/** @type {string} */ (connectionString)).pathname,
+      '/crm_silmer_test',
+    );
+    const pool = new Pool({ connectionString, max: 8 });
+    const database = {
+      query: pool.query.bind(pool),
+      transaction: (/** @type {any} */ work) => withTransaction(pool, work),
+    };
+    const identity = createIdentityApiRuntime(database, environment);
+    const runtime = createHealthErrorsRuntime({
+      database,
+      identity,
+      envelopeKey,
+    });
+    const api = createServerApi({
+      environment: {},
+      identity,
+      healthErrors: runtime,
+      logger: createSafeLogger({ service: 'crm-silmer-api', sink: () => {} }),
+    });
+    try {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await migrate(pool, { migrations: await loadMigrations() });
+      const admin = await seedUser(
+        pool,
+        'archive-admin',
+        'admin@crm-silmer.local',
+        'Vendedor',
+        true,
+      );
+      const otherAdmin = await seedUser(
+        pool,
+        'archive-other',
+        'other@example.test',
+        'Vendedor',
+        true,
+      );
+      const envelope = JSON.stringify({
+        algorithm: 'AES-256-GCM',
+        keyVersion: 1,
+        version: 1,
+      });
+      await pool.query(
+        "INSERT INTO crm.contacts(id,created_at,updated_at) VALUES('archive-contact',now(),now())",
+      );
+      await pool.query(
+        `INSERT INTO crm.contact_identities(id,current_contact_id,provider,provider_account_id,channel,
+          external_identity_lookup_hash,identity_kind,phone_status,identity_envelope,created_at,updated_at)
+         VALUES('archive-identity','archive-contact','meta','synthetic','instagram',$1,'handle','pending',$2::jsonb,now(),now())`,
+        ['b'.repeat(64), envelope],
+      );
+      for (const id of ['archive-conversation', 'archive-other-conversation'])
+        await pool.query(
+          `INSERT INTO crm.conversations(id,contact_identity_id,provider,provider_account_id,
+             external_conversation_id,cycle_number,state,automation_state,automation_epoch,version,opened_at,last_message_at)
+           VALUES($1,'archive-identity','meta','synthetic',$1,1,'nova','human',0,1,now(),now())`,
+          [id],
+        );
+
+      // Twelve retired commands, one current Evolution command and two jobs
+      // whose late confirmations were reconciled by the previous correction.
+      for (let index = 0; index < 15; index += 1) {
+        const known = index >= 13;
+        const status = known ? 'sent' : 'outcome_unknown';
+        const commandId = `archive-command-${index}`;
+        const messageId = `archive-message-${index}`;
+        await pool.query(
+          `INSERT INTO crm.messages(id,conversation_id,provider,provider_account_id,command_id,direction,
+             author_kind,author_id,message_type,content_envelope,key_version,status,occurred_at,created_at,
+             delivery_status,delivery_status_at,sent_at,external_message_id)
+           VALUES($1,'archive-conversation','meta','synthetic',$2,'outbound','human','archive-admin',
+             'text',$3::jsonb,1,$4,now(),now(),$4,now(),CASE WHEN $4='sent' THEN now() END,$5)`,
+          [
+            messageId,
+            commandId,
+            envelope,
+            status,
+            known ? `synthetic-external-${index}` : null,
+          ],
+        );
+        await pool.query(
+          `INSERT INTO crm.n8n_commands(command_id,conversation_id,message_id,action,actor_id,actor_kind,
+             automation_epoch,fingerprint,payload_envelope,status,last_error_code,retryable,retry_safe,
+             created_at,updated_at,completed_at,external_message_id)
+           VALUES($1,'archive-conversation',$2,'send_message','archive-admin','human',0,$3,$4::jsonb,$5,
+             CASE WHEN $5='sent' THEN NULL ELSE 'N8N_COMMAND_TIMEOUT' END,false,false,now(),now(),now(),$6)`,
+          [
+            commandId,
+            messageId,
+            'a'.repeat(64),
+            envelope,
+            status,
+            known ? `synthetic-external-${index}` : null,
+          ],
+        );
+        await pool.query(
+          `INSERT INTO crm.n8n_events(id,idempotency_scope,idempotency_key,external_event_id,event_type,
+             fingerprint,conversation_id,message_id,correlation_id,occurred_at,processed_at,
+             workflow_key,workflow_version,execution_id)
+           VALUES($1,'archive-fixture',$1,$1,'message.send.requested',$2,'archive-conversation',$3,$1,
+             now(),now(),'whatsapp-mvp',$4,$1)`,
+          [
+            `archive-event-${index}`,
+            'a'.repeat(64),
+            messageId,
+            index < 12 ? 'waha-webjs-1' : 'evolution-baileys-1',
+          ],
+        );
+        if (index === 0) continue; // The earliest WAHA command has no queue row.
+        const jobId = `archive-job-${index}`;
+        await pool.query(
+          `INSERT INTO crm.outbox_jobs(id,job_type,idempotency_key,message_id,n8n_command_id,status,
+             available_at,created_at,updated_at,completed_at,queue,attempt_count,max_attempts,effect_policy,last_error_code)
+           VALUES($1,'n8n.command.deliver',$2,$3,$2,'outcome_unknown',now(),now(),now(),now(),
+             'external_effects',1,8,'manual','N8N_COMMAND_TIMEOUT')`,
+          [jobId, commandId, messageId],
+        );
+        await pool.query(
+          `INSERT INTO crm.processing_attempts(id,job_id,attempt_no,worker_id,state,provider,started_at,
+             effect_started_at,heartbeat_at,finished_at,error_code,retry_safe)
+           VALUES($1,$2,1,'synthetic-worker','outcome_unknown','n8n',now(),now(),now(),now(),'N8N_COMMAND_TIMEOUT',false)`,
+          [`archive-attempt-${index}`, jobId],
+        );
+        await pool.query(
+          `INSERT INTO crm.reconciliation_items(id,job_id,status,reason,created_at)
+           VALUES($1,$2,'open','external_outcome_unknown',now())`,
+          [`archive-reconciliation-${index}`, jobId],
+        );
+      }
+      // An unrelated conversation's WAHA receipt cannot reclassify Evolution.
+      await pool.query(
+        `INSERT INTO crm.n8n_events(id,idempotency_scope,idempotency_key,external_event_id,event_type,
+           fingerprint,conversation_id,message_id,correlation_id,occurred_at,processed_at,
+           workflow_key,workflow_version,execution_id)
+         VALUES('archive-wrong-scope','archive-fixture','wrong-scope','wrong-scope','message.send.requested',
+           $1,'archive-other-conversation','archive-message-12','synthetic-correlation',now(),now(),
+           'whatsapp-mvp','waha-webjs-1','wrong-execution')`,
+        ['c'.repeat(64)],
+      );
+      const read = (view = 'active') =>
+        api.inject({
+          url: `/api/v1/admin/health-errors?view=${view}`,
+          headers: admin,
+        });
+      let answer = await read('history');
+      assert.equal(answer.statusCode, 200, answer.body);
+      assert.equal(answer.json().legacyArchive.count, 12);
+      assert.equal(
+        answer
+          .json()
+          .items.find(
+            (/** @type {any} */ item) => item.code === 'WORKER_OUTCOME_UNKNOWN',
+          ).occurrences,
+        14,
+      );
+      assert.equal(
+        answer
+          .json()
+          .items.find(
+            (/** @type {any} */ item) => item.code === 'N8N_OUTCOME_UNKNOWN',
+          ).occurrences,
+        13,
+      );
+      await pool.query(
+        "UPDATE crm.outbox_jobs SET status='completed',last_error_code=NULL WHERE id IN('archive-job-13','archive-job-14')",
+      );
+      await pool.query(
+        "UPDATE crm.reconciliation_items SET status='resolved',resolved_at=now() WHERE job_id IN('archive-job-13','archive-job-14')",
+      );
+      answer = await read();
+      const manifest = answer.json().legacyArchive;
+      assert.deepEqual(
+        answer
+          .json()
+          .items.map((/** @type {any} */ item) => item.activeCount)
+          .sort((/** @type {number} */ a, /** @type {number} */ b) => a - b),
+        [12, 13],
+      );
+
+      const archive = (
+        key = 'archive-exact',
+        body = manifest,
+        headers = admin,
+      ) =>
+        api.inject({
+          url: '/api/v1/admin/health-errors/legacy/archive',
+          method: 'POST',
+          headers: { ...headers, 'idempotency-key': key },
+          payload: body,
+        });
+      const originalEffects = async () => {
+        const snapshots = [];
+        for (const table of [
+          'n8n_commands',
+          'messages',
+          'outbox_jobs',
+          'processing_attempts',
+          'reconciliation_items',
+          'n8n_events',
+          'operational_incidents',
+          'operational_incident_receipts',
+          'operational_incident_history',
+        ])
+          snapshots.push(
+            (
+              await pool.query(
+                `SELECT to_jsonb(t) AS row FROM crm.${table} t ORDER BY to_jsonb(t)::text`,
+              )
+            ).rows,
+          );
+        return snapshots;
+      };
+      const original = await originalEffects();
+
+      // PostgreSQL revisions retain microseconds. Two changes within the same
+      // JavaScript millisecond must invalidate the reviewed manifest too.
+      const originalRevision = (
+        await pool.query(
+          "SELECT created_at::text AS created_at,updated_at::text AS updated_at FROM crm.n8n_commands WHERE command_id='archive-command-0'",
+        )
+      ).rows[0];
+      try {
+        // Keep this temporary fixture revision outside the diagnostics window
+        // so the comparison itself cannot manufacture historical occurrences.
+        await pool.query(
+          `UPDATE crm.n8n_commands SET created_at=now()-interval '32 days',
+             updated_at=date_trunc('milliseconds',now()-interval '31 days')+interval '100 microseconds'
+           WHERE command_id='archive-command-0'`,
+        );
+        const microsecondManifest = (await read()).json().legacyArchive;
+        await pool.query(
+          "UPDATE crm.n8n_commands SET updated_at=updated_at+interval '100 microseconds' WHERE command_id='archive-command-0'",
+        );
+        const nextRevision = (await read()).json().legacyArchive;
+        assert.equal(nextRevision.count, microsecondManifest.count);
+        assert.notEqual(
+          nextRevision.fingerprint,
+          microsecondManifest.fingerprint,
+        );
+        assert.equal(
+          (await archive('stale-microsecond-revision', microsecondManifest))
+            .statusCode,
+          409,
+        );
+      } finally {
+        await pool.query(
+          'UPDATE crm.n8n_commands SET created_at=$1::timestamptz,updated_at=$2::timestamptz WHERE command_id=$3',
+          [
+            originalRevision.created_at,
+            originalRevision.updated_at,
+            'archive-command-0',
+          ],
+        );
+      }
+      assert.deepEqual(await originalEffects(), original);
+      for (const headers of [
+        otherAdmin,
+        { ...admin, authorization: 'Basic synthetic' },
+        { ...admin, origin: 'https://other.example.test' },
+        { ...admin, 'x-csrf-token': 'wrong' },
+      ])
+        assert.equal(
+          (await archive('denied-archive', manifest, headers)).statusCode,
+          403,
+        );
+      assert.equal(
+        (
+          await archive('invalid-archive', {
+            ...manifest,
+            commandIds: ['archive-command-12'],
+          })
+        ).statusCode,
+        400,
+      );
+      assert.equal(
+        (
+          await archive('stale-archive', {
+            ...manifest,
+            fingerprint: '0'.repeat(64),
+          })
+        ).statusCode,
+        409,
+      );
+      assert.equal(
+        (await archive('wrong-count', { ...manifest, count: 11 })).statusCode,
+        409,
+      );
+      assert.deepEqual(await originalEffects(), original);
+
+      // A command outcome committed after the operator's GET invalidates the
+      // entire manifest; no partial archive is allowed while it changes.
+      const callbackTransaction = await pool.connect();
+      try {
+        await callbackTransaction.query('BEGIN');
+        await callbackTransaction.query(
+          "UPDATE crm.n8n_commands SET status='sent' WHERE command_id='archive-command-0'",
+        );
+        const concurrentArchive = archive('concurrent-command-outcome');
+        await callbackTransaction.query('COMMIT');
+        assert.equal((await concurrentArchive).statusCode, 409);
+      } finally {
+        await callbackTransaction.query('ROLLBACK');
+        callbackTransaction.release();
+      }
+      assert.equal(
+        (await pool.query('SELECT * FROM crm.n8n_command_operational_archives'))
+          .rows.length,
+        0,
+      );
+      await pool.query(
+        "UPDATE crm.n8n_commands SET status='outcome_unknown' WHERE command_id='archive-command-0'",
+      );
+      assert.deepEqual(await originalEffects(), original);
+
+      await pool.query(`CREATE FUNCTION crm.reject_synthetic_archive_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN IF NEW.action='health.errors.legacy_archive' THEN RAISE EXCEPTION 'synthetic audit failure'; END IF; RETURN NEW; END $$`);
+      await pool.query(
+        'CREATE TRIGGER reject_synthetic_archive_audit BEFORE INSERT ON crm.audit_events FOR EACH ROW EXECUTE FUNCTION crm.reject_synthetic_archive_audit()',
+      );
+      assert.equal((await archive('rollback-archive')).statusCode, 503);
+      assert.equal(
+        (await pool.query('SELECT * FROM crm.n8n_command_operational_archives'))
+          .rows.length,
+        0,
+      );
+      assert.equal(
+        (
+          await pool.query(
+            "SELECT * FROM crm.idempotency_records WHERE idempotency_key='rollback-archive'",
+          )
+        ).rows.length,
+        0,
+      );
+      await pool.query(
+        'DROP TRIGGER reject_synthetic_archive_audit ON crm.audit_events',
+      );
+      await pool.query('DROP FUNCTION crm.reject_synthetic_archive_audit()');
+
+      const results = await Promise.all([
+        archive('archive-race-a'),
+        archive('archive-race-b'),
+      ]);
+      assert.deepEqual(
+        results.map((result) => result.statusCode).sort(),
+        [200, 409],
+      );
+      const winnerIndex = results.findIndex(
+        (result) => result.statusCode === 200,
+      );
+      const winner = results[winnerIndex];
+      const winnerKey = winnerIndex === 0 ? 'archive-race-a' : 'archive-race-b';
+      assert.equal(winner.json().archivedCount, 12);
+      assert.deepEqual((await archive(winnerKey)).json(), winner.json());
+      assert.equal((await archive('stale-after-archive')).statusCode, 409);
+      assert.equal(
+        (await archive(winnerKey, { ...manifest, count: 11 })).statusCode,
+        409,
+      );
+      assert.deepEqual(await originalEffects(), original);
+      const markers = (
+        await pool.query(
+          'SELECT command_id,archived_by,reason_code,version FROM crm.n8n_command_operational_archives ORDER BY command_id',
+        )
+      ).rows;
+      assert.equal(markers.length, 12);
+      assert.equal(
+        markers.some((row) => row.command_id === 'archive-command-12'),
+        false,
+      );
+      assert.equal(
+        markers.every(
+          (row) => row.archived_by === 'archive-admin' && row.version === 1,
+        ),
+        true,
+      );
+      assert.equal(
+        (
+          await pool.query(
+            "SELECT * FROM crm.audit_events WHERE action='health.errors.legacy_archive'",
+          )
+        ).rows.length,
+        12,
+      );
+      answer = await read();
+      assert.equal(answer.json().legacyArchive.count, 0);
+      assert.equal(answer.json().items.length, 2);
+      assert.equal(answer.json().activeSummary.new, 2);
+      assert.equal(
+        answer
+          .json()
+          .items.every((/** @type {any} */ item) => item.activeCount === 1),
+        true,
+      );
+      assert.deepEqual(
+        (await read('history'))
+          .json()
+          .items.map((/** @type {any} */ item) => item.occurrences)
+          .sort((/** @type {number} */ a, /** @type {number} */ b) => a - b),
+        [13, 14],
+      );
+      assert.doesNotMatch(
+        answer.body,
+        /archive-command|archive-message|archive-contact|archive-admin|N8N_COMMAND_TIMEOUT/u,
+      );
+
+      await pool.query(
+        "UPDATE crm.users SET disabled_at=now() WHERE id='archive-admin'",
+      );
+      assert.equal((await archive(winnerKey)).statusCode, 403);
+      await pool.query(
+        "UPDATE crm.users SET disabled_at=NULL WHERE id='archive-admin'",
+      );
+
+      // Archival is not a delivery gate: an authenticated late callback remains
+      // valid and preserves the marker instead of granting another send.
+      const { PostgresN8nIntegrationRepository } =
+        await import('../modules/n8n-integration/src/postgres-repository.js');
+      const { createN8nIntegrationService } =
+        await import('../modules/n8n-integration/src/service.js');
+      const integration = createN8nIntegrationService({
+        repository: new PostgresN8nIntegrationRepository({
+          database,
+          envelopeKey,
+        }),
+      });
+      await integration.recordEvent({
+        schema_version: '1.0',
+        event_id: 'archive-late-confirmation',
+        event_type: 'message.sent',
+        command_id: 'archive-command-0',
+        conversation_id: 'archive-conversation',
+        external_message_id: 'synthetic-late-confirmation',
+        occurred_at: new Date().toISOString(),
+        technical: {
+          actor: 'AUTOMATION_EXECUTOR',
+          correlationId: 'synthetic-late-correlation',
+          credentialVersion: 'current',
+          executionId: 'archive-event-0',
+          idempotencyKey: 'archive-late-confirmation',
+          requestId: 'synthetic-late-request',
+          workflowKey: 'whatsapp-mvp',
+          workflowVersion: 'waha-webjs-1',
+        },
+      });
+      assert.equal(
+        (
+          await pool.query(
+            "SELECT status FROM crm.n8n_commands WHERE command_id='archive-command-0'",
+          )
+        ).rows[0].status,
+        'sent',
+      );
+      assert.equal(
+        (await pool.query('SELECT * FROM crm.n8n_command_operational_archives'))
+          .rows.length,
+        12,
+      );
+      assert.equal(
+        (await pool.query('SELECT * FROM crm.n8n_commands')).rows.length,
+        15,
+      );
+
+      // Diagnostic retention cannot erase the independent operational marker.
+      await pool.query(
+        "UPDATE crm.operational_incident_receipts SET observed_at=now()-interval '31 days'",
+      );
+      await pool.query(
+        "UPDATE crm.operational_incidents SET first_seen_at=now()-interval '31 days',last_seen_at=now()-interval '31 days'",
+      );
+      await runtime.cleanup();
+      assert.equal(
+        (await pool.query('SELECT * FROM crm.operational_incidents')).rows
+          .length,
+        0,
+      );
+      assert.equal(
+        (await pool.query('SELECT * FROM crm.n8n_command_operational_archives'))
+          .rows.length,
+        12,
+      );
+      const afterRetention = await read();
+      assert.equal(afterRetention.json().legacyArchive.count, 0);
+      assert.equal(
+        afterRetention
+          .json()
+          .items.every((/** @type {any} */ item) => item.activeCount === 1),
+        true,
+      );
+    } finally {
+      await api.close();
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await pool.end();
+    }
+  },
+);

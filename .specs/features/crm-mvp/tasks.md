@@ -600,6 +600,16 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
 
 ## Confiabilidade da Inbox — 24/10/2026
 
+- [ ] **OPS-INBOX-ACK-04 — arquivar triagem WAHA e esclarecer falhas atuais**
+      (OPS-ERR-03–09, MSG-02–03, ORC-08, AGENTE-OBS-01 / INT-2–3).
+      Arquivamento operacional autenticado, auditado e idempotente dos comandos
+      WAHA com manifesto conferido, sem alterar resultados incertos ou repetir
+      envios. Manter Evolution em análise; separar fontes atuais de ocorrências
+      históricas e mostrar recorrência recente de workflow.failed no desempenho.
+      Diagnosticar o workflow publicado com códigos controlados, sem payloads.
+      Gates: SQL sintético, ACL/conflitos/replay, teclado/axe, CI, migration,
+      publicação e verificação dos 12 registros reais e da pendência Evolution.
+
 - [x] **OPS-INBOX-ACK-02 — reconciliar fila após confirmação tardia**
       (MSG-02–03, ORC-08, INBOX-3 / INT-2). O poll conclui somente jobs n8n
       incertos com comando/mensagem sent, mesmo ID externo e evento

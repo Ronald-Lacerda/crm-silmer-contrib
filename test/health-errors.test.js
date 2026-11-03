@@ -5,6 +5,7 @@ import { createServerApi } from '../apps/api/src/server.js';
 import {
   createHealthErrorsRuntime,
   validateIncidentChange,
+  validateLegacyArchive,
 } from '../apps/api/src/health-errors-runtime.js';
 import { authorize } from '../modules/identity-access/src/authorization.js';
 import { createSafeLogger } from '../modules/shared/src/index.js';
@@ -49,6 +50,27 @@ test('OPS-ERR-03: triage accepts only a status and a positive numeric version', 
     });
 });
 
+test('OPS-INBOX-ACK-04: legacy archive accepts only a bounded count and exact manifest fingerprint', () => {
+  const input = { count: 12, fingerprint: 'a'.repeat(64) };
+  assert.deepEqual(validateLegacyArchive(input), input);
+  for (const candidate of [
+    null,
+    [],
+    {},
+    { ...input, count: 0 },
+    { ...input, count: 101 },
+    { ...input, count: '12' },
+    { ...input, count: 1.5 },
+    { ...input, fingerprint: 'not-a-manifest' },
+    { ...input, fingerprint: 'A'.repeat(64) },
+    { ...input, reason: 'private details' },
+    { ...input, commandIds: ['untrusted-command'] },
+  ])
+    assert.throws(() => validateLegacyArchive(candidate), {
+      code: 'INVALID_REQUEST',
+    });
+});
+
 test('OPS-ERR-01: foreign origins, Basic, missing/duplicate cookies and CSRF stop before querying data', async () => {
   let calls = 0;
   const runtime = createHealthErrorsRuntime({
@@ -86,6 +108,16 @@ test('OPS-ERR-01: foreign origins, Basic, missing/duplicate cookies and CSRF sto
     }),
     { code: 'FORBIDDEN' },
   );
+  await assert.rejects(
+    runtime.archiveLegacy({
+      origin: 'https://crm.example.test',
+      cookie: 'crm_session=test; crm_csrf=a',
+      csrfToken: 'b',
+      body: { count: 12, fingerprint: 'a'.repeat(64) },
+      idempotencyKey: 'archive',
+    }),
+    { code: 'FORBIDDEN' },
+  );
   assert.equal(calls, 0);
 });
 
@@ -116,6 +148,22 @@ test('OPS-ERR-01: a valid cookie still needs current identity authorization befo
     { code: 'FORBIDDEN' },
   );
   assert.deepEqual(queries, []);
+  await assert.rejects(
+    runtime.archiveLegacy({
+      cookie: 'crm_session=test; crm_csrf=a',
+      csrfToken: 'a',
+      origin: 'https://crm.example.test',
+      body: { count: 12, fingerprint: 'a'.repeat(64) },
+      idempotencyKey: 'archive',
+    }),
+    { code: 'FORBIDDEN' },
+  );
+  assert.equal(
+    queries.some((query) =>
+      /crm\.(n8n_commands|n8n_command_operational_archives)/u.test(query),
+    ),
+    false,
+  );
 });
 
 test('OPS-ERR-04: API collection persists no exception, body, URL, foreign code or invalid trace', async () => {

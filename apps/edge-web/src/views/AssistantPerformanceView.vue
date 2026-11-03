@@ -353,6 +353,28 @@ onBeforeUnmount(() => {
           podem incluir falhas fora das respostas do agente e não representam
           clientes afetados nem uma taxa de erro.
         </p>
+        <p
+          v-if="summary.workflowFailureActivity"
+          class="performance-explanation"
+        >
+          Recorrência do workflow:
+          {{ summary.workflowFailureActivity.lastHour }} na última hora e
+          {{ summary.workflowFailureActivity.lastDay }} nas últimas 24 horas,
+          até {{ summary.workflowFailureActivity.measuredAt }}
+          (horário de São Paulo).
+          <template v-if="summary.workflowFailureActivity.lastAt">
+            Último evento no período:
+            {{ summary.workflowFailureActivity.lastAt }}.
+          </template>
+          <template v-else>Nenhum evento no período consultado.</template>
+        </p>
+        <p v-else class="performance-explanation">
+          Recorrência recente indisponível neste servidor.
+        </p>
+        <p class="performance-explanation">
+          O histórico não representa pendências ativas. A ausência de novos
+          eventos não comprova que a causa foi corrigida.
+        </p>
         <p v-if="summary.failureTotal === null" class="performance-empty">
           Sem dados de falhas neste servidor.
         </p>

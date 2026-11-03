@@ -694,10 +694,19 @@ export class PostgresInboxReadRepository {
             ),
           () =>
             database.query(
-              `SELECT
-                 (SELECT count(*)::integer FROM crm.n8n_events
+              `WITH workflow AS (
+                 SELECT count(*)::integer workflow_failed,
+                   max(processed_at) workflow_last_at,
+                   count(*) FILTER (
+                     WHERE processed_at > $2::timestamptz - interval '1 hour'
+                   )::integer workflow_last_hour,
+                   count(*) FILTER (
+                     WHERE processed_at > $2::timestamptz - interval '24 hours'
+                   )::integer workflow_last_24_hours
+                 FROM crm.n8n_events
                   WHERE event_type='workflow.failed'
-                    AND processed_at > $1 AND processed_at <= $2) workflow_failed,
+                    AND processed_at > $1 AND processed_at <= $2
+               ) SELECT workflow.*,
                  (SELECT count(*)::integer FROM crm.messages
                   WHERE direction='outbound' AND author_kind='assistant'
                     AND created_at > $1 AND created_at <= $2
@@ -716,7 +725,8 @@ export class PostgresInboxReadRepository {
                     AND processed_at > $1 AND processed_at <= $2) transcription_failed,
                  (SELECT count(*)::integer FROM crm.handoffs
                   WHERE reason_code='automation_failure'
-                    AND created_at > $1 AND created_at <= $2) automation_failure_handoffs`,
+                    AND created_at > $1 AND created_at <= $2) automation_failure_handoffs
+               FROM workflow`,
               window,
             ),
           () =>
@@ -775,6 +785,16 @@ export class PostgresInboxReadRepository {
           automation_failure_handoffs: Number(
             fails.automation_failure_handoffs ?? 0,
           ),
+        }),
+        // OPS-INBOX-ACK-04 / OPS-ERR-08: recurrence uses the same server
+        // instant as the selected window; historical totals are not a queue.
+        workflow_failure_activity: Object.freeze({
+          last_at: fails.workflow_last_at
+            ? new Date(fails.workflow_last_at).toISOString()
+            : null,
+          last_hour: Number(fails.workflow_last_hour ?? 0),
+          last_24_hours: Number(fails.workflow_last_24_hours ?? 0),
+          measured_at: to.toISOString(),
         }),
         by_workflow_version: Object.freeze(
           versions.rows.map((/** @type {any} */ row) =>

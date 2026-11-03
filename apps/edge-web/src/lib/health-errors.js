@@ -19,6 +19,11 @@ export const HEALTH_ERROR_STATUSES = Object.freeze([
   { value: 'resolved', label: 'Resolvidos' },
 ]);
 
+export const HEALTH_ERROR_VIEWS = Object.freeze([
+  { value: 'active', label: 'Ativas' },
+  { value: 'history', label: 'Histórico (30 dias)' },
+]);
+
 /** @param {string} value */
 export function healthErrorStatus(value) {
   const labels = /** @type {Record<string, string>} */ ({

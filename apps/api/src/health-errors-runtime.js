@@ -55,6 +55,26 @@ export function validateIncidentChange(input) {
   };
 }
 
+/** @param {unknown} input */
+export function validateLegacyArchive(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    throw failure(400, 'INVALID_REQUEST');
+  const body = /** @type {Record<string, any>} */ (input);
+  if (
+    Object.keys(body).some((key) => !['count', 'fingerprint'].includes(key)) ||
+    !Number.isSafeInteger(body.count) ||
+    body.count < 1 ||
+    body.count > 100 ||
+    typeof body.fingerprint !== 'string' ||
+    !/^[a-f0-9]{64}$/u.test(body.fingerprint)
+  )
+    throw failure(400, 'INVALID_REQUEST');
+  return {
+    count: /** @type {number} */ (body.count),
+    fingerprint: body.fingerprint,
+  };
+}
+
 /** @param {any} row */
 function incidentView(row) {
   if (
@@ -69,6 +89,13 @@ function incidentView(row) {
     code: String(row.code),
     status: String(row.status),
     occurrences: Number(row.occurrences),
+    activeCount: Number(row.active_count ?? 0),
+    activeFirstSeenAt: row.active_first_seen_at
+      ? new Date(row.active_first_seen_at).toISOString()
+      : null,
+    activeLastSeenAt: row.active_last_seen_at
+      ? new Date(row.active_last_seen_at).toISOString()
+      : null,
     firstSeenAt: new Date(row.first_seen_at).toISOString(),
     lastSeenAt: new Date(row.last_seen_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
@@ -163,14 +190,14 @@ async function recordIncident(client, input) {
   );
 }
 
-const SOURCE_FAILURES_SQL = `
-  WITH sources AS (
+const SOURCE_STATES_SQL = `
     SELECT 'worker' AS source,
       CASE status WHEN 'retry' THEN 'WORKER_RETRY'
         WHEN 'dead_letter' THEN 'WORKER_DEAD_LETTER'
         ELSE 'WORKER_OUTCOME_UNKNOWN' END AS code,
       updated_at AS observed_at,
-      'worker:' || id || ':' || status || ':' || attempt_count::text AS receipt
+      'worker:' || id || ':' || status || ':' || attempt_count::text AS receipt,
+      n8n_command_id
     FROM crm.outbox_jobs
     WHERE status IN ('retry', 'dead_letter', 'outcome_unknown')
       AND updated_at >= now() - interval '30 days'
@@ -181,12 +208,15 @@ const SOURCE_FAILURES_SQL = `
         ELSE 'N8N_PROCESSING_EXPIRED' END,
       CASE WHEN status = 'processing' THEN locked_until ELSE updated_at END,
       'n8n:' || command_id || ':' || status || ':' ||
-        extract(epoch FROM CASE WHEN status = 'processing' THEN locked_until ELSE updated_at END)::text
+        extract(epoch FROM CASE WHEN status = 'processing' THEN locked_until ELSE updated_at END)::text,
+      command_id
     FROM crm.n8n_commands
     WHERE (status IN ('failed', 'outcome_unknown')
         OR (status = 'processing' AND locked_until < now()))
-      AND updated_at >= now() - interval '30 days'
-  ), candidates AS (
+      AND updated_at >= now() - interval '30 days'`;
+
+const SOURCE_FAILURES_SQL = `
+  WITH sources AS (${SOURCE_STATES_SQL}), candidates AS (
     SELECT source, code, observed_at,
       encode(sha256(convert_to(receipt, 'UTF8')), 'hex') AS event_key
     FROM sources
@@ -195,6 +225,65 @@ const SOURCE_FAILURES_SQL = `
   SELECT * FROM candidates c WHERE NOT EXISTS (
     SELECT 1 FROM crm.operational_incident_receipts r WHERE r.event_key = c.event_key
   ) ORDER BY observed_at ASC, event_key ASC LIMIT 501`;
+
+const ACTIVE_FAILURES_SQL = `WITH sources AS (${SOURCE_STATES_SQL})
+  SELECT source, code, count(*)::int AS active_count,
+    min(observed_at) AS active_first_seen_at, max(observed_at) AS active_last_seen_at
+  FROM sources s
+  WHERE observed_at <= now() AND observed_at >= now() - interval '30 days'
+    AND NOT EXISTS (SELECT 1 FROM crm.n8n_command_operational_archives a
+                    WHERE a.command_id = s.n8n_command_id)
+  GROUP BY source, code`;
+
+/** @param {any} client @param {any[]} rows */
+async function projectActivity(client, rows) {
+  const active = (await client.query(ACTIVE_FAILURES_SQL)).rows;
+  return rows.map((row) => {
+    const current = active.find(
+      (/** @type {any} */ source) =>
+        source.source === row.source && source.code === row.code,
+    );
+    const apiActive = row.source === 'api' && row.status !== 'resolved';
+    return incidentView({
+      ...row,
+      active_count: apiActive ? row.occurrences : (current?.active_count ?? 0),
+      active_first_seen_at: apiActive
+        ? row.first_seen_at
+        : current?.active_first_seen_at,
+      active_last_seen_at: apiActive
+        ? row.last_seen_at
+        : current?.active_last_seen_at,
+    });
+  });
+}
+
+/** @param {any} client @param {boolean} [lock] */
+async function legacyArchiveManifest(client, lock = false) {
+  const rows = (
+    await client.query(
+      `SELECT c.command_id, extract(epoch FROM c.updated_at)::text AS revision FROM crm.n8n_commands c
+     JOIN crm.messages m ON m.id=c.message_id AND m.command_id=c.command_id
+       AND m.conversation_id=c.conversation_id
+     WHERE c.status = 'outcome_unknown' AND c.action = 'send_message'
+       AND NOT EXISTS (SELECT 1 FROM crm.n8n_command_operational_archives a WHERE a.command_id=c.command_id)
+       AND EXISTS (
+         SELECT 1 FROM crm.n8n_events e WHERE e.message_id=c.message_id
+           AND e.conversation_id=c.conversation_id
+           AND e.event_type='message.send.requested'
+           AND e.workflow_version='waha-webjs-1'
+       )
+     ORDER BY c.command_id${lock ? ' FOR UPDATE OF c' : ''}`,
+    )
+  ).rows;
+  const fingerprint = createHash('sha256')
+    .update(
+      JSON.stringify(
+        rows.map((/** @type {any} */ row) => [row.command_id, row.revision]),
+      ),
+    )
+    .digest('hex');
+  return { rows, count: rows.length, fingerprint };
+}
 
 const SELECT_INCIDENT_SQL = `SELECT i.*, coalesce((
   SELECT jsonb_agg(h.entry ORDER BY h.occurred_at, h.version)
@@ -258,7 +347,10 @@ export function createHealthErrorsRuntime({
     async list(input) {
       const auth = credentials(input, false);
       const status = input.status ?? 'all';
+      const view = input.view ?? 'active';
       if (status !== 'all' && !STATUSES.has(status))
+        throw failure(400, 'INVALID_REQUEST');
+      if (!['active', 'history'].includes(view))
         throw failure(400, 'INVALID_REQUEST');
       return database.transaction(async (/** @type {any} */ client) => {
         await identity.authorizeHealthErrors(auth, client);
@@ -275,24 +367,32 @@ export function createHealthErrorsRuntime({
           });
         }
         const result = await client.query(
-          `${SELECT_INCIDENT_SQL} WHERE ($1 = 'all' OR i.status = $1)
-             AND i.last_seen_at >= now() - interval '30 days'
+          `${SELECT_INCIDENT_SQL} WHERE i.last_seen_at >= now() - interval '30 days'
            ORDER BY i.last_seen_at DESC, i.id LIMIT 100`,
-          [status],
         );
-        const counts = await client.query(
-          'SELECT status, count(*)::int AS count FROM crm.operational_incidents GROUP BY status',
-        );
+        const items = await projectActivity(client, result.rows);
         const summary = { new: 0, investigating: 0, resolved: 0 };
-        for (const row of counts.rows) {
-          if (STATUSES.has(row.status))
-            summary[
-              /** @type {'new'|'investigating'|'resolved'} */ (row.status)
-            ] = Number(row.count);
+        const activeSummary = { new: 0, investigating: 0, resolved: 0 };
+        for (const item of items) {
+          const key = /** @type {'new'|'investigating'|'resolved'} */ (
+            item.status
+          );
+          summary[key] += 1;
+          if (item.activeCount > 0) activeSummary[key] += 1;
         }
+        const manifest = await legacyArchiveManifest(client);
         return {
-          items: result.rows.map(incidentView),
+          items: items.filter(
+            (item) =>
+              (status === 'all' || item.status === status) &&
+              (view === 'history' || item.activeCount > 0),
+          ),
           summary,
+          activeSummary,
+          legacyArchive: {
+            count: manifest.count,
+            fingerprint: manifest.fingerprint,
+          },
           checkedAt: clock().toISOString(),
           collectionPending: sources.rows.length > 500,
         };
@@ -385,7 +485,79 @@ export function createHealthErrorsRuntime({
               `${SELECT_INCIDENT_SQL} WHERE i.id = $1`,
               [input.id],
             );
-            return incidentView(result.rows[0]);
+            return (await projectActivity(transaction, result.rows))[0];
+          },
+        );
+      });
+    },
+
+    /** @param {any} input */
+    async archiveLegacy(input) {
+      const auth = credentials(input, true);
+      const command = validateLegacyArchive(input.body);
+      if (
+        typeof input.idempotencyKey !== 'string' ||
+        !/^[A-Za-z0-9_.:-]{1,128}$/u.test(input.idempotencyKey)
+      )
+        throw failure(400, 'INVALID_REQUEST');
+      return database.transaction(async (/** @type {any} */ client) => {
+        await client.query("SET LOCAL lock_timeout = '1500ms'");
+        await client.query("SET LOCAL statement_timeout = '10s'");
+        const access = await identity.authorizeHealthErrors(auth, client);
+        await client.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended('operational-incidents', 0))",
+        );
+        const idempotency = new PostgresIdempotencyRecordStore({
+          database: {
+            query: client.query.bind(client),
+            transaction: (work) => work(client),
+          },
+          envelopeKey,
+        });
+        const action = 'health.errors.legacy_archive';
+        const target = { id: command.fingerprint, type: 'n8n-legacy-archive' };
+        return idempotency.execute(
+          {
+            action,
+            actor: access.actor.id,
+            correlationId: input.correlationId,
+            fingerprint: fingerprintCommand({
+              action,
+              command,
+              target,
+              version: command.count,
+            }),
+            key: input.idempotencyKey,
+            scope: `${access.actor.id}:${action}`,
+            target,
+            version: command.count,
+            reason: 'legacy_transport_retired_outcome_unknown',
+          },
+          async (transaction) => {
+            const manifest = await legacyArchiveManifest(transaction, true);
+            if (
+              manifest.count !== command.count ||
+              manifest.fingerprint !== command.fingerprint
+            )
+              throw failure(409, 'VERSION_CONFLICT');
+            const archivedAt = clock().toISOString();
+            for (const row of manifest.rows) {
+              await transaction.query(
+                `INSERT INTO crm.n8n_command_operational_archives
+               (command_id, archived_at, archived_by, reason_code, workflow_version)
+               VALUES ($1,$2,$3,'legacy_transport_retired_outcome_unknown','waha-webjs-1')`,
+                [row.command_id, archivedAt, access.actor.id],
+              );
+              await new PostgresAuditTrail(transaction).append({
+                action,
+                actor: access.actor.id,
+                correlationId: input.correlationId,
+                target: { id: row.command_id, type: 'n8n_command' },
+                version: 1,
+                reason: 'legacy_transport_retired_outcome_unknown',
+              });
+            }
+            return { archivedCount: manifest.count, archivedAt };
           },
         );
       });

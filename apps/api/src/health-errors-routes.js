@@ -51,13 +51,28 @@ export function registerHealthErrorsRoutes(api, runtime) {
       const query = /** @type {Record<string, unknown>} */ (
         request.query ?? {}
       );
-      if (Object.keys(query).some((key) => key !== 'status'))
+      if (Object.keys(query).some((key) => !['status', 'view'].includes(key)))
         throw Object.assign(new Error('INVALID_REQUEST'), {
           code: 'INVALID_REQUEST',
           statusCode: 400,
         });
-      return runtime.list({ ...headers(request), status: query.status });
+      return runtime.list({
+        ...headers(request),
+        status: query.status,
+        view: query.view,
+      });
     }),
+  );
+  api.post(
+    '/api/v1/admin/health-errors/legacy/archive',
+    async (request, reply) =>
+      respond(reply, () =>
+        runtime.archiveLegacy({
+          ...headers(request),
+          body: request.body,
+          idempotencyKey: request.headers['idempotency-key'],
+        }),
+      ),
   );
   api.patch('/api/v1/admin/health-errors/:id', async (request, reply) =>
     respond(reply, () => {

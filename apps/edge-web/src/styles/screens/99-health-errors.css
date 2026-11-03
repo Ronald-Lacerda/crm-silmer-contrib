@@ -11,6 +11,7 @@
 .health-errors-scope,
 .health-errors-checked,
 .health-errors-treatment-note,
+.health-errors-archive p,
 .health-error-source,
 .health-error-guidance,
 .health-error-detail {
@@ -45,6 +46,7 @@
   min-inline-size: 0;
 }
 .health-errors-toolbar,
+.health-errors-filters,
 .health-error-heading,
 .health-error-actions {
   display: flex;
@@ -132,4 +134,23 @@
 .health-error-actions > span {
   color: var(--color-text-muted);
   font-size: var(--text-sm);
+}
+.health-errors-page .health-errors-summary-title {
+  margin-block-end: var(--space-2);
+  font-size: var(--text-base);
+}
+.health-errors-archive,
+.health-errors-archive-review {
+  display: grid;
+  gap: var(--space-3);
+}
+.health-errors-archive {
+  padding: var(--space-4);
+}
+.health-errors-archive h2,
+.health-errors-archive h3 {
+  font-size: var(--text-base);
+}
+.health-errors-archive > button {
+  justify-self: start;
 }

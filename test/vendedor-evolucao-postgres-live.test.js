@@ -952,6 +952,50 @@ if (connectionString) {
       );
 
       await t.test(
+        'OPS-INBOX-ACK-04: workflow recurrence is bounded by the API clock and preserves historical totals',
+        async () => {
+          const now = env.clock.now;
+          const offsets = [-8 * 1440, -2 * 1440, -1440, -120, -60, -10, 10];
+          for (const [index, minutes] of offsets.entries()) {
+            const id = `workflow-recurrence-${index}`;
+            const at = new Date(now.getTime() + minutes * 60_000);
+            // Append immutable synthetic history at the intended timestamp;
+            // never rewrite an event after the production trigger accepts it.
+            await pool.query(
+              `INSERT INTO crm.n8n_events
+                (id,idempotency_scope,idempotency_key,external_event_id,
+                 event_type,fingerprint,correlation_id,outcome,
+                 occurred_at,processed_at,workflow_key,workflow_version,execution_id)
+               VALUES ($1,'workflow-recurrence',$1,$1,'workflow.failed',
+                 repeat('a',64),$1,'{"failureCode":"WORKFLOW_FAILED"}'::jsonb,
+                 $2,$2,'whatsapp-mvp','mvp-simple-14',$1)`,
+              [id, at],
+            );
+          }
+          const performance = await env.reads.assistantPerformance({ days: 7 });
+          assert.equal(performance.failures.workflow_failed, 5);
+          assert.deepEqual(performance.workflow_failure_activity, {
+            last_at: new Date(now.getTime() - 10 * 60_000).toISOString(),
+            last_hour: 1,
+            last_24_hours: 3,
+            measured_at: now.toISOString(),
+          });
+          // Future events and exact lower boundaries do not inflate counts.
+          // Advancing only the read clock leaves the historical total intact.
+          env.advance(25 * 60);
+          const quiet = await env.reads.assistantPerformance({ days: 7 });
+          assert.equal(quiet.failures.workflow_failed, 6);
+          assert.equal(quiet.workflow_failure_activity.last_hour, 0);
+          assert.equal(quiet.workflow_failure_activity.last_24_hours, 0);
+          assert.equal(
+            quiet.workflow_failure_activity.last_at,
+            new Date(now.getTime() + 10 * 60_000).toISOString(),
+          );
+          env.clock.now = now;
+        },
+      );
+
+      await t.test(
         'INBOX-AUDIO-TRANSCRIPT-01: the transcript is sealed, idempotent, read by the agent and shown in the Inbox',
         async () => {
           const phone = '5527990000801';

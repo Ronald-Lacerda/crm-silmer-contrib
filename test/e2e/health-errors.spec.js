@@ -15,6 +15,9 @@ const occurrence = {
   code: 'N8N_OUTCOME_UNKNOWN',
   status: 'new',
   occurrences: 3,
+  activeCount: 1,
+  activeFirstSeenAt: '2026-11-02T12:00:00.000Z',
+  activeLastSeenAt: '2026-11-02T15:00:00.000Z',
   firstSeenAt: '2026-11-02T12:00:00.000Z',
   lastSeenAt: '2026-11-02T15:00:00.000Z',
   version: 1,
@@ -24,16 +27,40 @@ const occurrence = {
 
 /**
  * @param {import('@playwright/test').Page} page
- * @param {{viewer?: Record<string,any>, empty?: boolean, unavailable?: boolean, conflict?: boolean, collectionPending?: boolean, delay?: Promise<unknown>, identityEvent?: Promise<unknown>}} [options]
+ * @param {{viewer?: Record<string,any>, empty?: boolean, unavailable?: boolean, conflict?: boolean, collectionPending?: boolean, delay?: Promise<unknown>, identityEvent?: Promise<unknown>, legacy?: boolean, archiveConflict?: boolean, archiveRefreshFailure?: boolean}} [options]
  */
 async function setup(page, options = {}) {
   await mockPainel(page);
   const viewer = { ...designatedAdmin, ...options.viewer };
   const item = structuredClone(occurrence);
+  if (options.legacy)
+    Object.assign(item, {
+      status: 'investigating',
+      occurrences: 13,
+      activeCount: 13,
+    });
+  const worker = {
+    ...structuredClone(occurrence),
+    id: 'incident-worker-synthetic',
+    source: 'worker',
+    code: 'WORKER_OUTCOME_UNKNOWN',
+    occurrences: 14,
+    activeCount: 12,
+    status: 'investigating',
+    activeFirstSeenAt: /** @type {string|null} */ (
+      occurrence.activeFirstSeenAt
+    ),
+    activeLastSeenAt: /** @type {string|null} */ (occurrence.activeLastSeenAt),
+  };
   /** @type {string[]} */
   const reads = [];
   /** @type {Record<string,any>[]} */
   const writes = [];
+  /** @type {Record<string,any>[]} */
+  const archives = [];
+  /** @type {string[]} */
+  const views = [];
+  let legacyCount = options.legacy ? 12 : 0;
   let unavailable = options.unavailable ?? false;
   let denied = 0;
   await page.context().addCookies([
@@ -61,12 +88,37 @@ async function setup(page, options = {}) {
   await page.route('**/api/v1/admin/health-errors**', async (route) => {
     const req = route.request();
     const status = new URL(req.url()).searchParams.get('status') ?? 'all';
+    const view = new URL(req.url()).searchParams.get('view') ?? 'active';
     const json = (/** @type {unknown} */ body, status = 200) =>
       route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify(body),
         status,
       });
+    if (req.method() === 'POST') {
+      expect(new URL(req.url()).pathname).toBe(
+        '/api/v1/admin/health-errors/legacy/archive',
+      );
+      expect(req.headers()['idempotency-key']).toBeTruthy();
+      expect(req.headers()['x-csrf-token']).toBe('synthetic-csrf');
+      const body = req.postDataJSON();
+      archives.push(body);
+      if (options.archiveConflict)
+        return json({ error: { code: 'VERSION_CONFLICT' } }, 409);
+      expect(body).toEqual({
+        count: 12,
+        fingerprint: 'legacy-synthetic-fingerprint',
+      });
+      legacyCount = 0;
+      // The worker job and n8n command represent the same remaining Evolution operation.
+      worker.activeCount = 1;
+      item.activeCount = 1;
+      if (options.archiveRefreshFailure) unavailable = true;
+      return json({
+        archivedCount: 12,
+        archivedAt: '2026-11-03T15:00:00.000Z',
+      });
+    }
     if (req.method() === 'PATCH') {
       const body = req.postDataJSON();
       writes.push(body);
@@ -82,18 +134,38 @@ async function setup(page, options = {}) {
       return json(item);
     }
     reads.push(status);
+    views.push(view);
     await options.delay;
     if (denied) return json({ error: { code: 'FORBIDDEN' } }, denied);
     if (unavailable)
       return json({ error: { code: 'SERVICE_UNAVAILABLE' } }, 503);
+    const allItems = options.empty
+      ? []
+      : options.legacy
+        ? [worker, item]
+        : [item];
+    const currentItems = allItems.filter(
+      (candidate) => candidate.activeCount > 0,
+    );
+    const countStatuses = (/** @type {typeof allItems} */ candidates) =>
+      Object.fromEntries(
+        ['new', 'investigating', 'resolved'].map((state) => [
+          state,
+          candidates.filter((candidate) => candidate.status === state).length,
+        ]),
+      );
     return json({
-      items:
-        options.empty || (status !== 'all' && status !== item.status)
-          ? []
-          : [item],
+      items: (view === 'active' ? currentItems : allItems).filter(
+        (candidate) => status === 'all' || candidate.status === status,
+      ),
+      activeSummary: countStatuses(currentItems),
+      legacyArchive: {
+        count: legacyCount,
+        fingerprint: legacyCount ? 'legacy-synthetic-fingerprint' : null,
+      },
       summary: {
         new: !options.empty && item.status === 'new' ? 1 : 0,
-        investigating: item.status === 'investigating' ? 1 : 0,
+        investigating: item.status === 'investigating' ? allItems.length : 0,
         resolved: item.status === 'resolved' ? 1 : 0,
       },
       checkedAt: '2026-11-02T15:05:00.000Z',
@@ -103,9 +175,14 @@ async function setup(page, options = {}) {
   return {
     reads,
     writes,
+    archives,
+    views,
     viewer,
     recover() {
       unavailable = false;
+    },
+    fail() {
+      unavailable = true;
     },
     deny(status = 403) {
       denied = status;
@@ -318,4 +395,175 @@ test('session change unmounts the console and removes the menu immediately', asy
   ).toHaveCount(0);
   await expect(page.getByText('OUTCOME_UNKNOWN')).toHaveCount(0);
   expect(mock.reads).toEqual(['all']);
+});
+
+test('OPS-INBOX-ACK-04: review and archive only the 12 WAHA pendencies by keyboard, preserving uncertain history', async ({
+  page,
+}) => {
+  const mock = await setup(page, { legacy: true });
+  await page.goto('/saude-erros');
+  await expect(
+    page.getByRole('combobox', { name: 'Consulta', exact: true }),
+  ).toHaveValue('active');
+  const archive = page.getByRole('button', {
+    name: 'Arquivar pendências do WAHA (12)',
+    exact: true,
+  });
+  await archive.focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByRole('heading', {
+      name: 'Revisar arquivamento de 12 pendências',
+    }),
+  ).toBeFocused();
+  await expect(
+    page.getByText(/Isso não marca envios como resolvidos/u),
+  ).toBeVisible();
+  expect(mock.archives).toEqual([]);
+  await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await expect(archive).toBeFocused();
+  await page.keyboard.press('Enter');
+  const accessibility = await new AxeBuilder({ page })
+    .include('#main-content')
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
+  await page.keyboard.press('Tab');
+  await expect(
+    page.getByRole('button', {
+      name: 'Confirmar arquivamento (12)',
+      exact: true,
+    }),
+  ).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByRole('heading', { name: 'Ocorrências', exact: true }),
+  ).toBeFocused();
+  await expect(page.getByRole('article')).toHaveCount(2);
+  const evolution = page.getByRole('article', {
+    name: 'Resultado do envio desconhecido',
+  });
+  await expect(evolution.locator('.health-error-status')).toHaveText(
+    'Em análise',
+  );
+  await expect(evolution.locator('.health-error-facts')).toContainText(
+    'Pendências atuais1',
+  );
+  await expect(
+    page
+      .getByRole('article', { name: 'Resultado de tarefa desconhecido' })
+      .locator('.health-error-facts'),
+  ).toContainText('Pendências atuais1');
+  await expect(
+    page.getByText(
+      /A mesma operação pode aparecer em Processamento e Automação n8n/u,
+    ),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole('status')
+      .filter({ hasText: '12 pendências do WAHA arquivadas' }),
+  ).toContainText('resultado incerto foram preservados');
+  expect(mock.archives).toHaveLength(1);
+  expect(mock.writes).toEqual([]);
+  await page
+    .getByRole('combobox', { name: 'Consulta', exact: true })
+    .selectOption('history');
+  await expect(page.getByRole('article')).toHaveCount(2);
+  const workerCard = page.getByRole('article', {
+    name: 'Resultado de tarefa desconhecido',
+  });
+  await expect(workerCard.locator('.health-error-facts')).toContainText(
+    'Ocorrências históricas (30 dias)14',
+  );
+  await expect(workerCard.locator('.health-error-facts')).toContainText(
+    'Pendências atuais1',
+  );
+  await expect(evolution.locator('.health-error-facts')).toContainText(
+    'Ocorrências históricas (30 dias)13',
+  );
+  await expect(
+    page.locator('.health-error-status').filter({ hasText: 'Resolvido' }),
+  ).toHaveCount(0);
+  expect(mock.views).toEqual(['active', 'active', 'history']);
+});
+
+test('archive conflict preserves the current list and requires a fresh review', async ({
+  page,
+}) => {
+  const mock = await setup(page, { legacy: true, archiveConflict: true });
+  await page.goto('/saude-erros');
+  const archive = page.getByRole('button', {
+    name: 'Arquivar pendências do WAHA (12)',
+    exact: true,
+  });
+  await archive.click();
+  await page
+    .getByRole('button', { name: 'Confirmar arquivamento (12)', exact: true })
+    .click();
+  await expect(page.getByRole('alert')).toContainText(
+    'As pendências do WAHA mudaram',
+  );
+  await expect(page.getByRole('alert')).toBeFocused();
+  await expect(page.getByRole('article')).toHaveCount(2);
+  await expect(archive).toHaveAttribute('aria-disabled', 'true');
+  await archive.click({ force: true });
+  expect(mock.archives).toHaveLength(1);
+  expect(mock.writes).toEqual([]);
+  await page.getByRole('button', { name: 'Atualizar', exact: true }).click();
+  await expect(archive).not.toHaveAttribute('aria-disabled', 'true');
+  await expect(
+    page.getByRole('button', {
+      name: 'Confirmar arquivamento (12)',
+      exact: true,
+    }),
+  ).toHaveCount(0);
+});
+
+test('a failed read after archive keeps the last snapshot and prevents a duplicate archive', async ({
+  page,
+}) => {
+  const mock = await setup(page, { legacy: true, archiveRefreshFailure: true });
+  await page.goto('/saude-erros');
+  const archive = page.getByRole('button', {
+    name: 'Arquivar pendências do WAHA (12)',
+    exact: true,
+  });
+  await archive.click();
+  await page
+    .getByRole('button', { name: 'Confirmar arquivamento (12)', exact: true })
+    .click();
+  await expect(page.getByRole('alert')).toContainText(
+    'última consulta bem-sucedida',
+  );
+  await expect(page.getByRole('article')).toHaveCount(2);
+  await expect(archive).toHaveAttribute('aria-disabled', 'true');
+  await archive.click({ force: true });
+  expect(mock.archives).toHaveLength(1);
+  expect(mock.writes).toEqual([]);
+  mock.recover();
+  await page.getByRole('button', { name: 'Atualizar', exact: true }).click();
+  await expect(page.getByRole('article')).toHaveCount(2);
+  await expect(archive).toHaveCount(0);
+});
+
+test('a failed history query preserves the active view label and counts', async ({
+  page,
+}) => {
+  const mock = await setup(page);
+  await page.goto('/saude-erros');
+  await expect(page.getByRole('article')).toHaveCount(1);
+  mock.fail();
+  await page
+    .getByRole('combobox', { name: 'Consulta', exact: true })
+    .selectOption('history');
+  await expect(page.getByRole('alert')).toContainText(
+    'última consulta bem-sucedida',
+  );
+  await expect(
+    page.getByRole('heading', { name: 'Grupos com pendências ativas' }),
+  ).toBeVisible();
+  await expect(page.locator('.health-error-facts')).toContainText(
+    'Pendências atuais1',
+  );
+  expect(mock.views).toEqual(['active', 'history']);
 });

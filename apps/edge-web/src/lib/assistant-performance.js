@@ -25,6 +25,11 @@ const dayFormatter = new Intl.DateTimeFormat('pt-BR', {
   month: '2-digit',
   timeZone: 'America/Sao_Paulo',
 });
+const instantFormatter = new Intl.DateTimeFormat('pt-BR', {
+  dateStyle: 'short',
+  timeStyle: 'medium',
+  timeZone: 'America/Sao_Paulo',
+});
 const percentFormatter = new Intl.NumberFormat('pt-BR', {
   maximumFractionDigits: 0,
   style: 'percent',
@@ -187,6 +192,27 @@ function failuresOf(data) {
   }));
 }
 
+/** @param {unknown} value */
+function instantOf(value) {
+  const time = Date.parse(String(value ?? ''));
+  return Number.isNaN(time) ? '' : instantFormatter.format(new Date(time));
+}
+
+/** @param {Record<string, any>} data */
+function workflowFailureActivityOf(data) {
+  const activity = data.workflow_failure_activity;
+  const lastHour = countOf(activity?.last_hour);
+  const lastDay = countOf(activity?.last_24_hours ?? activity?.last24_hours);
+  const measuredAt = instantOf(activity?.measured_at);
+  if (lastHour === null || lastDay === null || !measuredAt) return null;
+  return {
+    lastAt: instantOf(activity.last_at),
+    lastHour: countText(lastHour),
+    lastDay: countText(lastDay),
+    measuredAt,
+  };
+}
+
 /** @param {Record<string, any>} data @returns {PerformanceVersion[]} */
 function versionsOf(data) {
   const rows = Array.isArray(data.by_workflow_version)
@@ -280,6 +306,7 @@ function timingOf(data) {
  *   timing: PerformanceMetric[],
  *   failures: PerformanceFailure[],
  *   failureTotal: number|null,
+ *   workflowFailureActivity: {lastAt: string, lastHour: string, lastDay: string, measuredAt: string}|null,
  *   versions: PerformanceVersion[],
  *   telemetryMissing: boolean,
  *   versionsUnavailable: boolean,
@@ -311,6 +338,7 @@ export function performanceSummary(answer, requestedDays) {
       ? known.reduce((sum, failure) => sum + Number(failure.count), 0)
       : null,
     failures,
+    workflowFailureActivity: workflowFailureActivityOf(data),
     reasons: reasonsOf(data, handoffs ?? 0),
     timing: timingOf(data),
     totals: [

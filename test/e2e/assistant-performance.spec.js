@@ -36,6 +36,12 @@ function performance(days) {
       transcription_failed: 0,
       automation_failure_handoffs: 3,
     },
+    workflow_failure_activity: {
+      last_at: '2026-10-15T14:55:00.000Z',
+      last_hour: 1,
+      last_24_hours: 1,
+      measured_at: '2026-10-15T15:00:00.000Z',
+    },
     by_workflow_version: [
       { workflow_version: 'mvp-simple-12', turns: 120, handoffs: 10 },
     ],
@@ -128,6 +134,16 @@ test('the manager opens the agent performance from its card, by keyboard', async
   await expect(page.getByRole('region', { name: 'Falhas' })).toContainText(
     'Envios que falharam 2',
   );
+  const failures = page.getByRole('region', { name: 'Falhas' });
+  await expect(failures).toContainText(
+    'Recorrência do workflow: 1 na última hora e 1 nas últimas 24 horas, até 15/10/2026, 12:00:00',
+  );
+  await expect(failures).toContainText(
+    'Último evento no período: 15/10/2026, 11:55:00.',
+  );
+  await expect(failures).toContainText(
+    'A ausência de novos eventos não comprova que a causa foi corrigida.',
+  );
   await expect(
     page.getByRole('region', { name: 'Versões do workflow' }),
   ).toContainText('mvp-simple-12 120 turnos · 10 transferências');
@@ -184,6 +200,38 @@ test('a failed change of period keeps the numbers and names their window', async
   ).toBeFocused();
 });
 
+test('a quiet recent window preserves the accumulated failures and does not imply a fix', async ({
+  page,
+}) => {
+  await setup(page, {
+    answer: (days) => ({
+      body: {
+        ...performance(days),
+        failures: { ...performance(days).failures, workflow_failed: 961 },
+        workflow_failure_activity: {
+          last_at: '2026-10-13T14:55:00.000Z',
+          last_hour: 0,
+          last_24_hours: 0,
+          measured_at: '2026-10-15T15:00:00.000Z',
+        },
+      },
+    }),
+  });
+  await page.goto('/dashboard/agente');
+  const failures = page.getByRole('region', { name: 'Falhas' });
+  await expect(failures).toContainText('Eventos de falha do workflow 961');
+  await expect(failures).toContainText(
+    'Recorrência do workflow: 0 na última hora e 0 nas últimas 24 horas',
+  );
+  await expect(failures).toContainText(
+    'Último evento no período: 13/10/2026, 11:55:00.',
+  );
+  await expect(failures).toContainText(
+    'A ausência de novos eventos não comprova que a causa foi corrigida.',
+  );
+  await expect(failures).not.toContainText('Nenhuma falha no período.');
+});
+
 test('an empty window and a first failure read in plain words', async ({
   page,
 }) => {
@@ -227,6 +275,9 @@ test('an empty window and a first failure read in plain words', async ({
   );
   await expect(main).toContainText('Nenhuma transferência no período.');
   await expect(main).toContainText('Nenhuma falha no período.');
+  await expect(main).toContainText(
+    'Recorrência recente indisponível neste servidor.',
+  );
   await expect(main).toContainText(
     'Nenhuma versão registrou turnos no período.',
   );
