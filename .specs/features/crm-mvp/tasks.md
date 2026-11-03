@@ -600,6 +600,20 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
 
 ## Confiabilidade da Inbox — 24/10/2026
 
+- [ ] **OPS-INBOX-ACK-05 — corrigir correlação de recibos Evolution com LID**
+      (EVOL-01D, ORC-05/08, MSG-01–03, PRV-01 / INT-2–3).
+      Correção publicada em 03/11 no principal de 113 nós: ACK consulta ID
+      exato e direção outbound na mesma instância e aceita somente um registro
+      com telefone válido, sem criar alias de identidade inbound. Duplicatas,
+      identidade própria e alternativas contraditórias continuam bloqueadas.
+      Diagnóstico usa motivos controlados, sem payload/stack. Gates locais:
+      validate (1.650 aprovados, nove skips), E2E/axe (455 aprovados, sete skips),
+      observabilidade (15 aprovados), audit sem high/critical e revisão independente.
+      Os 40 demais workflows foram preservados. Falta observar recibo novo
+      natural no fluxo completo; nenhum envio ou callback histórico é repetido.
+      Comando Evolution antigo permanece incerto/em análise e os 12 WAHA
+      permanecem arquivados operacionalmente. [Evidências e limites](../../../docs/runbooks/evolution-baileys.md#recibos-com-lid--03112026).
+
 - [ ] **OPS-INBOX-ACK-04 — arquivar triagem WAHA e esclarecer falhas atuais**
       (OPS-ERR-03–09, MSG-02–03, ORC-08, AGENTE-OBS-01 / INT-2–3).
       Arquivamento operacional autenticado, auditado e idempotente dos comandos

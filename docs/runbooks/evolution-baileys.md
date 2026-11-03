@@ -189,6 +189,65 @@ somente desse cenário, com um worker, passou. Nenhum código de áudio mudou.
 `npm audit --audit-level=high` passou com os três avisos low/moderate existentes.
 Formatação dos documentos e `git diff --check` aprovados.
 
+### Recibos com LID — 03/11/2026
+
+Rastreabilidade: OPS-INBOX-ACK-05, EVOL-01D, ORC-05/08, MSG-01–03 e PRV-01.
+As seis falhas naturais entre 15:17:20 e 15:17:36 UTC eram
+`EVOLUTION_IDENTITY_UNRESOLVED` no conversor Evolution. Os IDs originais são
+90456, 90457, 90460, 90462, 90464 e 90466; os IDs 90458, 90459, 90461,
+90463, 90465 e 90467 pertencem ao tratamento do erro, não ao processamento
+original. A conclusão vem do event bus persistido, sem habilitar retenção
+de payloads ou repetir execuções. Ele não permite provar se cada evento era
+entrada ou recibo.
+
+O contrato upstream de `messages.update` não inclui `remoteJidAlt`. Mensagens
+enviadas podem estar persistidas com JID de telefone enquanto o recibo chega
+com LID; exigir ID+LID na consulta devolvia zero registros. Uma consulta
+somente leitura às duas mensagens recentes confirmou HTTP 200 e um registro
+outbound de ID exato, com telefone, na mesma instância para cada uma. O estado
+`PENDING` salvo não prova ausência de entrega: recibos e sua persistência têm
+contrato separado.
+
+O ACK com LID agora consulta ID exato e `fromMe: true` na instância configurada,
+com limite de dois registros para detectar ambiguidade. O conversor exige um
+único registro de mesmo ID antes de validar direção e telefone. Aceita JID de
+telefone sem alternativa ou com alternativa igual ao LID do callback; rejeita
+telefone próprio, direção errada, duplicatas e alternativas contraditórias.
+O vínculo LID+telefone explícito continua aceito. A exceção emite apenas status
+da mensagem; não cria Contato, Conversa ou alias reutilizável. Inbound mantém
+sua exigência anterior de identidade explícita. Nunca inferir telefone dos
+dígitos do LID nem usar o estado salvo como substituto do status do callback.
+
+Os helpers offline `ops/n8n/patch-evolution-ack-identity.mjs` e
+`ops/n8n/patch-evolution-failure-reasons.mjs` exigem o contexto revisado do
+export atual e preservam configuração privada. Alteram somente `jsonBody` da
+consulta, `jsCode` do conversor e `jsCode` do tratamento de falha. O diagnóstico
+emite enums fixos para identidade ou sintaxe conhecida nesse conversor e
+conserva os hashes anteriores para as demais falhas. Não imprime mensagem,
+stack, sufixo ou payload do erro.
+
+Publicação pela interface n8n conferida às 16:03:12 UTC (13:03 de Brasília):
+versão ativa `11f17d0b-448a-4b0b-9717-7214fbde858e`, 113 nós, delta de três
+nós, conexões/settings/credenciais preservados e 40 outros workflows intactos.
+Não houve restart do servidor nem execução de teste no principal. Backup e
+exports revisados ficam no diretório privado
+`/home/node/.n8n/silmer-recovery/20261103-ack-identity/`.
+SHA-256 de `before.json`:
+`f04290dc67b99c07d5bc684ea7f2bb2e7218fdeed1df1c6f75315287f5e89ade`.
+
+Gates locais: validate com 1.650 testes aprovados/nove skips, E2E/axe completo
+com 455 aprovados/sete skips, 15 testes de observabilidade, auditoria sem
+high/critical (um low e oito moderate preexistentes), diff check e revisão
+independente sem bloqueantes. Os 23 testes focados cobrem recibos permitidos,
+duplicatas, direção, aliases contraditórios, isolamento inbound e preservação
+do export. Isso valida o contrato reproduzível; aguarda-se recibo novo natural
+para homologar o caminho completo. Não reenviar mensagens ou callbacks antigos
+para obter essa prova e não resolver o comando Evolution incerto sem evidência.
+
+Rollback usa o export privado anterior somente no principal, com nova versão
+e publicação pela UI após revisão; preserva os demais workflows, o banco CRM,
+as 12 marcas de arquivo WAHA e todos os resultados incertos. Não reativar WAHA.
+
 ### Checklist acumulado
 
 - [x] Serviços dedicados criados pelo conector EasyPanel.

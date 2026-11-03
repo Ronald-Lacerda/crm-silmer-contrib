@@ -12,6 +12,9 @@ const MEDIA_UPLOAD = 'Evolution - Preparar bytes humanos (MVP)';
 const MEDIA_PREPARE = 'Preparar mensagem Evolution de midia (MVP)';
 const MEDIA_SEND = 'Evolution - Enviar midia humana (MVP)';
 
+export const EVOLUTION_IDENTITY_LOOKUP_BODY =
+  "={{ ({ where: { key: $json.event?.kind === 'ack' ? { id: $json.id, fromMe: true } : { id: $json.id, remoteJid: $json.chat } }, offset: 2, page: 1 }) }}";
+
 /** EVOL-01 / ORC-01..08 / INB-01 / MSG-01..04.
  * Contract: Evolution API tag 2.3.7, channel.service.ts sendDataWebhook,
  * webhook.controller.ts emit, whatsapp.baileys.service.ts messages.upsert/
@@ -151,18 +154,43 @@ export function convertEvolutionEvent(validated, mapping, config) {
   const pn = (/** @type {any} */ value) =>
     /^(\d{8,15})@s\.whatsapp\.net$/.exec(String(value ?? ''))?.[1] ?? null;
   let phone = validated.provider_phone;
+  // OPS-INBOX-ACK-05: correlate a receipt to one stored outbound message;
+  // this never establishes an inbound LID identity or a reusable phone alias.
   if (validated.needs_lid) {
     const records = mapping?.messages?.records;
-    const matches = Array.isArray(records)
-      ? records.filter(
-          (record) =>
-            record.key?.id === validated.id &&
-            record.key?.remoteJid === validated.chat &&
-            record.key?.fromMe === (validated.event.kind === 'ack') &&
-            pn(record.key?.remoteJidAlt),
-        )
-      : [];
-    phone = matches.length === 1 ? pn(matches[0].key.remoteJidAlt) : null;
+    phone = null;
+    if (validated.event?.kind === 'ack') {
+      // Count every same-ID record before checking direction or identity. A
+      // duplicate ID is ambiguous even when only one row looks usable.
+      const matches = Array.isArray(records)
+        ? records.filter((record) => record?.key?.id === validated.id)
+        : [];
+      const key = matches.length === 1 ? matches[0]?.key : null;
+      if (key?.fromMe === true) {
+        if (key.remoteJid === validated.chat) phone = pn(key.remoteJidAlt);
+        else if (pn(key.remoteJid)) {
+          const alternate = key.remoteJidAlt;
+          if (
+            alternate === undefined ||
+            alternate === null ||
+            alternate === '' ||
+            alternate === validated.chat
+          )
+            phone = pn(key.remoteJid);
+        }
+      }
+    } else {
+      const matches = Array.isArray(records)
+        ? records.filter(
+            (record) =>
+              record?.key?.id === validated.id &&
+              record?.key?.remoteJid === validated.chat &&
+              record?.key?.fromMe === false &&
+              pn(record?.key?.remoteJidAlt),
+          )
+        : [];
+      phone = matches.length === 1 ? pn(matches[0].key.remoteJidAlt) : null;
+    }
   }
   if (!phone || phone === config.ownNumber)
     throw new Error('EVOLUTION_IDENTITY_UNRESOLVED');
@@ -524,8 +552,7 @@ export function createEvolutionWorkflow(source, options) {
     specifyBody: 'json',
     // n8n closes a template at the first unescaped }}; adjacent object
     // braces would truncate the expression before offset/page.
-    jsonBody:
-      '={{ ({ where: { key: { id: $json.id, remoteJid: $json.chat } }, offset: 2, page: 1 }) }}',
+    jsonBody: EVOLUTION_IDENTITY_LOOKUP_BODY,
   };
   find(CONVERT).parameters.jsCode =
     `const convert=${convertEvolutionEvent.toString()};\nconst input=$('${VALIDATE}').item.json;return {json:convert(input,input.needs_lid?$json:null,${configured})};`;

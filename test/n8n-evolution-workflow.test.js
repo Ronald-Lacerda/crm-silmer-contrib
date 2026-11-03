@@ -355,6 +355,135 @@ test('ORC-05: LID requires exact same-key provider binding; digits alone are nev
   );
 });
 
+test('OPS-INBOX-ACK-05: a LID receipt correlates only to one exact stored outbound message', () => {
+  for (const [status, expected] of [
+    ['ERROR', 'failed'],
+    ['DELIVERY_ACK', 'delivered'],
+    ['READ', 'read'],
+    ['PLAYED', 'read'],
+  ]) {
+    const checked = validateEvolutionEvent(
+      ack({ remoteJid: '123456@lid', status }),
+      config,
+    );
+    assert.equal(checked.needs_lid, true);
+    const record = {
+      key: {
+        id: checked.id,
+        fromMe: true,
+        remoteJid: '5511000000001@s.whatsapp.net',
+      },
+      status: 'PENDING',
+    };
+    const mapping = { messages: { records: [record] } };
+    const before = JSON.stringify({ checked, mapping });
+    const converted = convertEvolutionEvent(checked, mapping, config);
+    assert.deepEqual(converted, {
+      metadata: { phone_number_id: config.ownNumber },
+      statuses: [
+        {
+          id: checked.id,
+          status: expected,
+          recipient_id: '5511000000001',
+          timestamp: String(checked.occurred_at_seconds),
+        },
+      ],
+    });
+    assert.equal('messages' in converted, false);
+    assert.equal('contacts' in converted, false);
+    assert.equal(JSON.stringify({ checked, mapping }), before);
+    for (const key of [
+      { ...record.key, remoteJidAlt: checked.chat },
+      {
+        ...record.key,
+        remoteJid: checked.chat,
+        remoteJidAlt: record.key.remoteJid,
+      },
+    ])
+      assert.deepEqual(
+        convertEvolutionEvent(
+          checked,
+          { messages: { records: [{ key }] } },
+          config,
+        ),
+        converted,
+      );
+  }
+});
+
+test('OPS-INBOX-ACK-05: duplicate IDs, wrong direction and contradictory or malformed ACK bindings fail closed', () => {
+  const checked = validateEvolutionEvent(
+    ack({ remoteJid: '123456@lid' }),
+    config,
+  );
+  const record = {
+    key: {
+      id: checked.id,
+      fromMe: true,
+      remoteJid: '5511000000001@s.whatsapp.net',
+    },
+  };
+  for (const records of [
+    [],
+    [null],
+    [{}],
+    [{ key: null }],
+    [record, record],
+    [record, { key: { ...record.key, fromMe: false } }],
+    [record, { key: { ...record.key, remoteJid: '999@lid' } }],
+    [{ key: { ...record.key, id: 'WRONG_MESSAGE' } }],
+    [{ key: { ...record.key, fromMe: false } }],
+    [{ key: { ...record.key, fromMe: 'true' } }],
+    [
+      {
+        key: { ...record.key, remoteJid: config.ownNumber + '@s.whatsapp.net' },
+      },
+    ],
+    [{ key: { ...record.key, remoteJid: '123@g.us' } }],
+    [{ key: { ...record.key, remoteJid: '123456@lid' } }],
+    [{ key: { ...record.key, remoteJidAlt: '999999@lid' } }],
+    [{ key: { ...record.key, remoteJidAlt: '123@g.us' } }],
+    [{ key: { ...record.key, remoteJidAlt: '5511000000002@s.whatsapp.net' } }],
+  ])
+    assert.throws(
+      () => convertEvolutionEvent(checked, { messages: { records } }, config),
+      /EVOLUTION_IDENTITY_UNRESOLVED/u,
+    );
+});
+
+test('OPS-INBOX-ACK-05: the ACK correlation exception never creates an inbound phone binding', () => {
+  const raw = event();
+  raw.data.key.remoteJid = '123456@lid';
+  const checked = validateEvolutionEvent(raw, config);
+  for (const records of [
+    [null],
+    [{ key: null }],
+    [
+      {
+        key: {
+          id: checked.id,
+          fromMe: false,
+          remoteJid: '5511000000001@s.whatsapp.net',
+        },
+      },
+    ],
+    [
+      {
+        key: {
+          id: checked.id,
+          fromMe: false,
+          remoteJid: '5511000000001@s.whatsapp.net',
+          remoteJidAlt: checked.chat,
+        },
+      },
+    ],
+  ])
+    assert.throws(
+      () => convertEvolutionEvent(checked, { messages: { records } }, config),
+      /EVOLUTION_IDENTITY_UNRESOLVED/u,
+    );
+});
+
 test('MSG-02: image/audio/video/document metadata keeps provider ID and drops raw media secrets', async () => {
   for (const [type, mime] of [
     ['image', 'image/png'],
@@ -436,6 +565,16 @@ test('EVOL-01/IMG-04: lookup JSON bodies survive n8n template boundaries before 
   )(context, upstream);
   assert.deepEqual(identity, {
     where: { key: { id: context.id, remoteJid: context.chat } },
+    offset: 2,
+    page: 1,
+  });
+  const ackIdentity = new Function(
+    '$json',
+    '$',
+    `return ${templateBody(identityBody)};`,
+  )({ ...context, event: { kind: 'ack' } }, upstream);
+  assert.deepEqual(ackIdentity, {
+    where: { key: { id: context.id, fromMe: true } },
     offset: 2,
     page: 1,
   });

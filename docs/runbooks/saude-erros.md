@@ -85,6 +85,22 @@ ficam em `/home/node/.n8n/silmer-recovery/20261103-failure-diagnostics/`.
 SHA-256 do export anterior:
 `55a19a1f2bdb82fcd9d8a1417cc55b4a10c8643fc03b9566813909ccefc188eb`.
 
+Na continuação de 03/11, seis eventos novos foram correlacionados ao conversor
+Evolution e ao motivo `EVOLUTION_IDENTITY_UNRESOLVED`. Os quatro arquivos do
+event bus disponíveis cobriam 927 falhas do principal entre 29/10 às
+15:31:31.248 UTC e 03/11 às 15:17:36.964 UTC: 648 de identidade, 267 com
+mensagem exata de sintaxe e 12 de outras causas. Essa cobertura difere da
+janela de sete dias do CRM; não subtrair as contagens nem atribuir todos os
+eventos antigos à mesma causa. Nenhum payload foi habilitado ou reexecutado.
+
+OPS-INBOX-ACK-05 publicou a correção do contrato de recibos LID e motivos
+controlados no principal, versão `11f17d0b-448a-4b0b-9717-7214fbde858e`,
+com três nós alterados e 40 outros workflows preservados. Contrato, backup,
+gates e limite da evidência no [runbook Evolution](evolution-baileys.md#recibos-com-lid--03112026).
+Somente recibo natural novo pode validar o caminho completo. O histórico de
+falhas permanece e o comando Evolution antigo continua incerto/em análise;
+publicar a correção não é confirmação de entrega desse comando.
+
 Cada grupo reúne uma origem e um código técnico controlado, com contagem,
 primeira e última ocorrência e histórico. **Em análise** registra que a conta
 operadora assumiu a investigação. **Resolver** encerra a triagem; **Reabrir**
