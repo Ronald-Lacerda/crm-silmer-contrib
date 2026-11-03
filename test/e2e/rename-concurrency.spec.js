@@ -140,14 +140,34 @@ async function mockConcurrentContact(page) {
 }
 
 /**
- * In the Inbox the client sits in the context panel, which a 1280 px screen
- * keeps closed until asked for.
+ * INBOX-UX-03: the Inbox opens the contact drawer through the person's name;
+ * the Clientes flow keeps its existing inline summary.
  *
  * @param {import('@playwright/test').Page} page @param {string} route
  */
 async function openClientDetails(page, route) {
   if (route !== '/inbox') return;
-  await page.getByRole('button', { name: 'Detalhes', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Dados de Studio Malu', exact: true })
+    .click();
+}
+
+/** @param {import('@playwright/test').Page} page @param {string} route @param {string} name */
+async function expectCurrentName(page, route, name) {
+  if (route === '/inbox') {
+    // A modal makes the background title inert: inspect the actual visible
+    // contact data rather than relying on a heading behind the drawer.
+    const displayedName = page
+      .getByRole('dialog', { name: 'Cadastro', exact: true })
+      .locator('dd')
+      .filter({ hasText: name });
+    await expect(displayedName).toBeVisible();
+    await expect(displayedName).toHaveText(name);
+  } else {
+    await expect(
+      page.getByRole('heading', { name, exact: true }),
+    ).toBeVisible();
+  }
 }
 
 for (const route of ['/clientes', '/inbox']) {
@@ -162,9 +182,7 @@ for (const route of ['/clientes', '/inbox']) {
       .getByRole('textbox', { name: 'Nome do contato' })
       .fill('Nome conferido');
     await page.getByRole('button', { name: 'Salvar nome' }).click();
-    await expect(
-      page.getByRole('heading', { name: 'Nome conferido' }),
-    ).toBeVisible();
+    await expectCurrentName(page, route, 'Nome conferido');
     await expect(
       page.getByRole('button', { name: 'Editar nome' }),
     ).toBeFocused();
@@ -206,8 +224,6 @@ for (const route of ['/clientes', '/inbox']) {
     await expect(
       page.getByRole('button', { name: 'Editar nome' }),
     ).toBeFocused();
-    await expect(
-      page.getByRole('heading', { name: 'Nome de outro vendedor' }),
-    ).toBeVisible();
+    await expectCurrentName(page, route, 'Nome de outro vendedor');
   });
 }

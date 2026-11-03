@@ -854,7 +854,9 @@ test('exposes the CRM screens as authenticated Vue routes', async ({
   await expect(
     page.getByRole('heading', { name: 'Caixa de Entrada' }),
   ).toBeFocused();
-  await expect(page.getByRole('button', { name: /Studio Malu/ })).toBeVisible();
+  await expect(
+    page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/ }),
+  ).toBeVisible();
 
   await page
     .getByRole('navigation', { name: 'Navegação principal' })
@@ -925,11 +927,13 @@ test('selects a conversation subject by keyboard and restores focus', async ({
   );
 
   await page.goto('/inbox');
-  // The subjects sit in the context panel, closed by default below 1440 px.
-  await page.getByRole('button', { name: 'Detalhes', exact: true }).click();
+  // INBOX-UX-03: subjects open on demand without narrowing the conversation.
+  await page
+    .getByRole('button', { name: 'Detalhes do atendimento', exact: true })
+    .click();
   const panel = page.locator('.subject-panel');
   // UXA-04: the badge and the button say they change what the agent uses.
-  await expect(panel.getByText('O agente usa este')).toBeVisible();
+  await expect(panel.getByText('Em foco')).toBeVisible();
   const select = panel.getByRole('button', {
     name: 'Usar este: fazer o agente usar Pedido 01-CRM',
   });
@@ -937,7 +941,7 @@ test('selects a conversation subject by keyboard and restores focus', async ({
   await select.focus();
   await select.press('Enter');
   await expect(
-    panel.getByRole('heading', { name: 'Pedidos e assuntos do atendimento' }),
+    panel.getByRole('heading', { name: 'Assuntos do atendimento' }),
   ).toBeFocused();
   await expect(panel.getByRole('status')).toHaveText(
     'Pronto. O agente passa a usar este.',
@@ -1570,7 +1574,7 @@ test('never offers to hand the conversation back to the AI and keeps the actions
   // sequence with no gap where the removed button was. PCX-13: "Encerrar
   // conversa" left the header for "Mais" and no primary sits here.
   await createOrder.focus();
-  for (const name of ['Mais ações', 'Detalhes']) {
+  for (const name of ['Mais ações', 'Detalhes do atendimento']) {
     await page.keyboard.press('Tab');
     await expect(actions.getByRole('button', { name })).toBeFocused();
   }
@@ -1605,11 +1609,11 @@ test('never offers to hand the conversation back to the AI and keeps the actions
   await page.keyboard.press('Enter');
   await page.keyboard.press('Enter');
   await expect(page.getByLabel('Transferir atendimento para')).toBeFocused();
-  // The contact sits with the client, in the context panel.
-  await actions.getByRole('button', { name: 'Detalhes' }).click();
+  // INBOX-UX-03: contact data opens from the person's name.
+  await page.getByRole('button', { name: 'Dados de Studio Malu' }).click();
   await expect(
     page
-      .getByRole('complementary', { name: 'Detalhes' })
+      .getByRole('dialog', { name: 'Cadastro' })
       .getByRole('link', { name: 'Ver contato' }),
   ).toHaveAttribute('href', '/clientes/contact-1');
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
@@ -1706,11 +1710,17 @@ test('identifies customer, assistant, and seller messages in the conversation', 
 
   await expect(
     page.locator(".message[data-from='cliente'] .msg-role"),
-  ).toHaveText('Cliente');
+  ).toHaveCount(0);
+  await expect(
+    page.locator(".message[data-from='cliente'] .msg-author"),
+  ).toHaveText('Studio Malu');
   // Glossário (achado 5): one name for the assistant, from the brand.
   await expect(
     page.locator(".message[data-from='agente'] .msg-author"),
   ).toHaveText('Agente');
+  await expect(
+    page.locator(".message[data-from='agente'] .msg-role"),
+  ).toHaveText('IA');
   await expect(
     page.locator(".message[data-from='humano'] .msg-author"),
   ).toHaveText('Vendedor');
@@ -1952,15 +1962,18 @@ test('shows the declared site phone instead of the synthetic chat ID', async ({
 }) => {
   await mockCrm(page, { siteChat: true });
   await page.goto('/inbox');
-  await expect(page.locator('.conv-identity')).toContainText(
-    /\+55 \(27\) 99999-1234\s*·\s*telefone informado no site/u,
+  await page.getByRole('button', { name: 'Dados de Studio Malu' }).click();
+  const profile = page.getByRole('dialog', { name: 'Cadastro' });
+  await expect(profile).toContainText(
+    /\+55 \(27\) 99999-1234\s*(?:·\s*)?telefone informado no site/u,
   );
   await expect(
     page.getByText('999001899004479995964365389745407152128'),
   ).toHaveCount(0);
+  await page.keyboard.press('Escape');
   await page.locator('#inbox-search').fill('5527999991234');
   await expect(
-    page.getByRole('button', { name: /Studio Malu/u }),
+    page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/u }),
   ).toBeVisible();
 });
 
@@ -2014,7 +2027,9 @@ test('refreshes the Inbox manually when live updates fail and keeps focus on liv
     },
   });
   await page.goto('/inbox');
-  await expect(page.getByRole('button', { name: /Studio Malu/ })).toBeVisible();
+  await expect(
+    page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/ }),
+  ).toBeVisible();
   // PCX-15: owner filtering stays available in the sheet across reconnects.
   await selectInboxFilters(page, 'Todas', 'Minhas');
   await expect
@@ -2075,16 +2090,18 @@ test('finds a new last message after the live event without moving search focus'
   });
   await mockCrm(page, { newMessageOnRefresh: true });
   await page.goto('/inbox');
-  await expect(page.getByRole('button', { name: /Studio Malu/ })).toBeVisible();
+  await expect(
+    page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/ }),
+  ).toBeVisible();
   const search = page.locator('#inbox-search');
   await expect(page.locator('#inbox-search-help')).toContainText(
     'até 100 conversas carregadas',
   );
   await search.fill('Mensagem nova');
   await expect(search).toBeFocused();
-  await expect(page.getByRole('button', { name: /Studio Malu/ })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/ }),
+  ).toHaveCount(0);
 
   await page.evaluate(() => {
     /** @type {any} */ (globalThis).__inboxSource.dispatchEvent(
@@ -2095,7 +2112,9 @@ test('finds a new last message after the live event without moving search focus'
   });
   // The refreshed message is searchable even though the compact card omits
   // its preview. Its appearance under this query proves the updated match.
-  await expect(page.getByRole('button', { name: /Studio Malu/ })).toBeVisible();
+  await expect(
+    page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/ }),
+  ).toBeVisible();
   await expect(page.locator('.inbox-list .conv-snippet')).toHaveCount(0);
   await expect(search).toBeFocused();
 });
@@ -2346,7 +2365,9 @@ test('PCX-14: on a 390 px phone the shortcuts fit, the sheet works by keyboard a
     /^Fechar pedidos\s*0$/u,
     /^Todas\s*1$/u,
   ]);
-  await expect(page.getByRole('button', { name: /Studio Malu/ })).toBeVisible();
+  await expect(
+    page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/ }),
+  ).toBeVisible();
 
   // Every shortcut whole on screen: no sideways scroll, nothing cut.
   const layout = await page.evaluate(() => {
@@ -2419,7 +2440,9 @@ test('PCX-14: on a 390 px phone the shortcuts fit, the sheet works by keyboard a
   // design.md §16: at most 24 on a 1366×768 notebook.
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto('/inbox');
-  await expect(page.getByRole('button', { name: /Studio Malu/ })).toBeVisible();
+  await expect(
+    page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/ }),
+  ).toBeVisible();
   await expect(page.locator('.conv-head')).toBeVisible();
   expect(await firstScreenControls(page)).toBeLessThanOrEqual(24);
 });
@@ -2526,7 +2549,9 @@ test('PCX-15: the Painel links retain owner and waiting filters in the summary',
   await expect(shortcut('Todas')).toHaveAttribute('aria-pressed', 'true');
   await expect(summary).toHaveCount(0);
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Studio Malu/ })).toBeVisible();
+  await expect(
+    page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/ }),
+  ).toBeVisible();
 });
 
 test('PCX-14: an empty filter is not an empty Inbox and offers "Limpar filtros"', async ({
@@ -2586,7 +2611,9 @@ test('PCX-14: a total that fails to load is left out, never guessed', async ({
     /^Fechar pedidos\s*$/u,
     /^Todas\s*1$/u,
   ]);
-  await expect(page.getByRole('button', { name: /Studio Malu/ })).toBeVisible();
+  await expect(
+    page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/ }),
+  ).toBeVisible();
 });
 
 test('PCX-15: names the next action and waits oldest first, with stop reasons in the chat', async ({
@@ -2672,11 +2699,11 @@ test('PCX-10: links the conversation header to its order, with the status in wor
   await expect(head.getByRole('link', { name: /pedido/i })).toHaveCount(0);
   await page
     .locator('.conv-actions')
-    .getByRole('button', { name: 'Detalhes' })
+    .getByRole('button', { name: 'Detalhes do atendimento' })
     .click();
   await expect(
     page
-      .getByRole('complementary', { name: 'Detalhes' })
+      .getByRole('dialog', { name: 'Atendimento' })
       .getByRole('region', { name: 'Pedido', exact: true }),
   ).toContainText('Sem pedido nesta conversa.');
   await expect(
@@ -2714,11 +2741,11 @@ test('PCX-10: updates the order link when the order changes elsewhere', async ({
   // Detalhes › Pedido reads the same, confirmed order.
   await page
     .locator('.conv-actions')
-    .getByRole('button', { name: 'Detalhes' })
+    .getByRole('button', { name: 'Detalhes do atendimento' })
     .click();
   await expect(
     page
-      .getByRole('complementary', { name: 'Detalhes' })
+      .getByRole('dialog', { name: 'Atendimento' })
       .getByRole('region', { name: 'Pedido', exact: true })
       .locator('.badge'),
   ).toHaveText('Confirmado');
@@ -2731,16 +2758,19 @@ test('PCX-12: summarises the order in Detalhes, opened and closed from the keybo
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.goto('/inbox');
 
-  // Enter opens the panel and the reader lands on its heading.
+  // Enter opens the overlay and focuses its close control.
   const toggle = page
     .locator('.conv-actions')
-    .getByRole('button', { name: 'Detalhes' });
+    .getByRole('button', { name: 'Detalhes do atendimento' });
   await toggle.focus();
   await page.keyboard.press('Enter');
-  const context = page.getByRole('complementary', { name: 'Detalhes' });
+  const context = page.getByRole('dialog', { name: 'Atendimento' });
   await expect(context).toBeVisible();
   await expect(
-    context.getByRole('heading', { level: 2, name: 'Detalhes' }),
+    context.getByRole('heading', { level: 2, name: 'Atendimento' }),
+  ).toBeVisible();
+  await expect(
+    context.getByRole('button', { name: 'Recolher detalhes' }),
   ).toBeFocused();
 
   // PCX-12: number, status, what is missing, items, pieces, amount and the
@@ -2748,12 +2778,16 @@ test('PCX-12: summarises the order in Detalhes, opened and closed from the keybo
   const summary = context.getByRole('region', { name: 'Pedido', exact: true });
   await expect(summary).toContainText('07-CRM');
   await expect(summary).toContainText('Pendente');
-  await expect(summary).toContainText(
-    'Falta para gerar: valor final e forma de pagamento.',
-  );
+  await summary.locator('summary', { hasText: 'Pendências do pedido' }).click();
+  await expect(
+    summary.getByRole('listitem').filter({ hasText: /^valor final$/u }),
+  ).toBeVisible();
+  await expect(
+    summary.getByRole('listitem').filter({ hasText: /^forma de pagamento$/u }),
+  ).toBeVisible();
   await expect(summary).toContainText('CAMISETA · GOLA OLÍMPICA');
   await expect(summary).toContainText('150 peças');
-  await expect(summary).toContainText('—');
+  await expect(summary).toContainText('A definir');
   await expect(
     summary.getByRole('link', { name: 'Abrir pedido' }),
   ).toHaveAttribute('href', '/pedidos/order-pendente?conversa=conversation-1');
@@ -2768,7 +2802,7 @@ test('PCX-12: summarises the order in Detalhes, opened and closed from the keybo
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('PCX-12: on a phone Detalhes › Pedido opens from "Mais" and Esc hands focus back', async ({
+test('PCX-12: on a phone the details icon opens Pedido and Esc hands focus back', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -2781,21 +2815,23 @@ test('PCX-12: on a phone Detalhes › Pedido opens from "Mais" and Esc hands foc
     .getByRole('link', { name: 'Abrir pedido 07-CRM, pendente' });
   expect((await link.boundingBox())?.height).toBeGreaterThanOrEqual(44);
 
-  const more = page.getByRole('button', { name: 'Mais ações' });
-  await more.focus();
+  const details = page.getByRole('button', { name: 'Detalhes do atendimento' });
+  await details.focus();
   await page.keyboard.press('Enter');
-  await expect(
-    page.getByRole('button', { name: 'Detalhes do atendimento' }),
-  ).toBeFocused();
-  await page.keyboard.press('Enter');
-  const context = page.getByRole('complementary', { name: 'Detalhes' });
+  const context = page.getByRole('dialog', { name: 'Atendimento' });
   await expect(context).toBeVisible();
   await expect(
-    context.getByRole('heading', { level: 2, name: 'Detalhes' }),
+    context.getByRole('button', { name: 'Recolher detalhes' }),
   ).toBeFocused();
-  await expect(
-    context.getByRole('region', { name: 'Pedido', exact: true }),
-  ).toContainText('Falta para gerar: valor final e forma de pagamento.');
+  const orderSummary = context.getByRole('region', {
+    name: 'Pedido',
+    exact: true,
+  });
+  await orderSummary
+    .locator('summary', { hasText: 'Pendências do pedido' })
+    .click();
+  await expect(orderSummary).toContainText('valor final');
+  await expect(orderSummary).toContainText('forma de pagamento');
 
   // The close button keeps a 44 px target, 8 px or more from the edge.
   const close = context.getByRole('button', { name: 'Recolher detalhes' });
@@ -2815,7 +2851,7 @@ test('PCX-12: on a phone Detalhes › Pedido opens from "Mais" and Esc hands foc
 
   await page.keyboard.press('Escape');
   await expect(context).toBeHidden();
-  await expect(more).toBeFocused();
+  await expect(details).toBeFocused();
 });
 
 test('PCX-10: reaches the order page from the header with the keyboard alone', async ({
@@ -2824,8 +2860,8 @@ test('PCX-10: reaches the order page from the header with the keyboard alone', a
   await mockCrm(page, { order: conversationOrder });
   await page.goto('/inbox/conversation-1');
 
-  // The link follows the name of the conversation in the tab order.
-  await page.getByRole('heading', { level: 2, name: 'Studio Malu' }).focus();
+  // The order link follows the name's new contact-data button.
+  await page.getByRole('button', { name: 'Dados de Studio Malu' }).focus();
   await page.keyboard.press('Tab');
   const link = page
     .locator('.conv-head')
@@ -2919,7 +2955,9 @@ test('drops the pending AI suggestion block from the conversation', async ({
   await mockCrm(page, { suggestion: true });
   await page.goto('/inbox');
 
-  await expect(page.getByRole('button', { name: /Studio Malu/ })).toBeVisible();
+  await expect(
+    page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/ }),
+  ).toBeVisible();
   // PCX-01/D21: the block is gone even when the read model still answers one.
   await expect(page.getByText('Sugestão pendente da IA')).toHaveCount(0);
   await expect(page.locator('.suggestion')).toHaveCount(0);
@@ -3266,7 +3304,9 @@ test('opens a conversation by its address and keeps the Inbox while moving betwe
     page.getByRole('heading', { level: 2, name: 'Igreja Nova Aliança' }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: /Igreja Nova Aliança/u }),
+    page
+      .locator('.inbox-list')
+      .getByRole('button', { name: /Igreja Nova Aliança/u }),
   ).toHaveAttribute('aria-current', 'true');
   await expect(
     page
@@ -3282,7 +3322,9 @@ test('opens a conversation by its address and keeps the Inbox while moving betwe
   ).toBeVisible();
 
   // Picking another one changes the address, not the Inbox around it.
-  const studio = page.getByRole('button', { name: /Studio Malu/u });
+  const studio = page
+    .locator('.inbox-list')
+    .getByRole('button', { name: /Studio Malu/u });
   await studio.click();
   await expect(page).toHaveURL('/inbox/conversation-1');
   await expect(
@@ -3325,7 +3367,10 @@ test('on a phone the address decides between the list and the conversation', asy
 
   await expect(page.locator('.inbox-list')).toBeVisible();
   await expect(page.locator('.inbox-conversation')).toBeHidden();
-  await page.getByRole('button', { name: /Studio Malu/u }).click();
+  await page
+    .locator('.inbox-list')
+    .getByRole('button', { name: /Studio Malu/u })
+    .click();
   await expect(page).toHaveURL('/inbox/conversation-1');
   await expect(
     page.getByRole('heading', { level: 2, name: 'Studio Malu' }),
@@ -3368,13 +3413,12 @@ test('on a phone the address decides between the list and the conversation', asy
   // PCX-11: waiting for a seller, an administrator creates the order from
   // here; "Encerrar conversa" closes the list (PCX-13).
   await expect(sheet.getByRole('button')).toHaveText([
-    'Detalhes do atendimento',
     'Criar pedido',
     'Arquivar conversa',
     'Encerrar conversa',
   ]);
   await expect(
-    sheet.getByRole('button', { name: 'Detalhes do atendimento' }),
+    sheet.getByRole('button', { name: 'Criar pedido' }),
   ).toBeFocused();
   for (const box of await sheet
     .getByRole('button')
@@ -3394,7 +3438,7 @@ test('on a phone the address decides between the list and the conversation', asy
   await page.getByRole('link', { name: 'Conversas', exact: true }).click();
   await expect(page).toHaveURL('/inbox');
   await expect(
-    page.getByRole('button', { name: /Studio Malu/u }),
+    page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/u }),
   ).toBeFocused();
 });
 
@@ -3471,7 +3515,7 @@ test('keeps the reply in view and opens the history on the latest message at 136
     ).toBeInViewport({ ratio: 1 });
     // On a 1366 notebook the conversation comes first: context on demand.
     await expect(
-      page.getByRole('complementary', { name: 'Detalhes' }),
+      page.getByRole('dialog', { name: 'Atendimento' }),
     ).toBeHidden();
     // The workspace fits the screen: the page itself never scrolls.
     expect(
@@ -3484,17 +3528,20 @@ test('keeps the reply in view and opens the history on the latest message at 136
   }
 });
 
-test('collapses the context panel and remembers it on this browser', async ({
+test('opens the context overlay on demand at wide widths and starts closed after reload', async ({
   page,
 }) => {
   await mockCrm(page);
-  // Wide enough to sit beside the conversation, the panel starts open.
+  // INBOX-UX-03: even a wide screen keeps secondary data behind the overlay.
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/inbox/conversation-1');
-  const context = page.getByRole('complementary', { name: 'Detalhes' });
+  const context = page.getByRole('dialog', { name: 'Atendimento' });
   const toggle = page
     .locator('.conv-actions')
-    .getByRole('button', { name: 'Detalhes' });
+    .getByRole('button', { name: 'Detalhes do atendimento' });
+  await expect(context).toBeHidden();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
   await expect(context).toBeVisible();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 
@@ -3611,11 +3658,16 @@ for (const storage of ['invalid', 'blocked']) {
     await expect(menu).toHaveAttribute('aria-expanded', 'false');
     await menu.click();
     await expect(menu).toHaveAttribute('aria-expanded', 'true');
-    const details = page.getByRole('button', { name: 'Detalhes', exact: true });
-    await expect(details).toHaveText('Detalhes');
+    const details = page.getByRole('button', {
+      name: 'Detalhes do atendimento',
+      exact: true,
+    });
+    await expect(details).toHaveAccessibleName('Detalhes do atendimento');
     await details.press('Enter');
     await expect(
-      page.getByRole('heading', { name: 'Detalhes do atendimento' }),
+      page
+        .getByRole('dialog', { name: 'Atendimento' })
+        .getByRole('button', { name: 'Recolher detalhes' }),
     ).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(details).toBeFocused();
@@ -3623,15 +3675,18 @@ for (const storage of ['invalid', 'blocked']) {
   });
 }
 
-test('formats the phone in the active conversation identity', async ({
+test('formats the phone in contact data without expanding the conversation header', async ({
   page,
 }) => {
   await mockCrm(page, { assistant: true });
 
   await page.goto('/inbox');
 
-  await expect(page.locator('.conv-identity')).toContainText(
-    '+55 (11) 99999-9999 · Com o agente',
+  await expect(page.locator('.conv-identity')).toContainText('Com o agente');
+  await expect(page.locator('.conv-identity')).not.toContainText('+55');
+  await page.getByRole('button', { name: 'Dados de Studio Malu' }).click();
+  await expect(page.getByRole('dialog', { name: 'Cadastro' })).toContainText(
+    '+55 (11) 99999-9999',
   );
 });
 

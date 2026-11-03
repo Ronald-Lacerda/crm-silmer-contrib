@@ -5,6 +5,7 @@ import { amountLabel } from '../../lib/order-format.js';
 import { dateTimeBR } from '../../lib/format.js';
 import { openDialog } from '../../lib/ui.js';
 import OrderShippingEstimate from '../order/OrderShippingEstimate.vue';
+import AppIcon from '../AppIcon.vue';
 
 const props = defineProps({
   conversationId: { type: String, required: true },
@@ -293,14 +294,11 @@ defineExpose({ open });
     <button
       type="button"
       title="Cotar frete"
+      aria-label="Cotar frete"
       :disabled="disabled"
       @click="open($event.currentTarget)"
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path
-          d="M3 6h11v11H3zM14 10h4l3 4v3h-7M7 17a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm11 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"
-        /></svg
-      ><span class="composer-tool-label">Cotar frete</span>
+      <AppIcon name="truck" /><span class="sr-only">Cotar frete</span>
     </button>
     <dialog
       ref="dialog"

@@ -1,6 +1,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
+import AppIcon from '../AppIcon.vue';
 import { ApiError, commandKey, request } from '../../lib/api-client.js';
+import { openDialog } from '../../lib/ui.js';
 
 const props = defineProps({
   conversationId: { type: String, required: true },
@@ -16,6 +18,16 @@ const fileInput = ref(null),
   attachButton = ref(null),
   captionInput = ref(null),
   sendButton = ref(null);
+const previewViewer = ref(null);
+const previewExpanded = ref(false);
+function openPreview(event) {
+  previewExpanded.value = true;
+  if (previewViewer.value) openDialog(previewViewer.value, event.currentTarget);
+}
+function closePreview() {
+  previewExpanded.value = false;
+  previewViewer.value?.close();
+}
 const file = ref(/** @type {File|null} */ (null)),
   preview = ref(''),
   kind = ref(''),
@@ -93,6 +105,7 @@ function cancel() {
   controller = null;
 }
 function clear() {
+  closePreview();
   cancel();
   if (preview.value) URL.revokeObjectURL(preview.value);
   preview.value = '';
@@ -422,7 +435,9 @@ watch(
     <div v-if="file" class="media-composer__review">
       <div class="media-composer__file-heading">
         <p>
-          {{ file.name }}
+          <span class="media-composer__filename" :title="file.name">{{
+            file.name
+          }}</span>
           <small>{{ (file.size / 1024 / 1024).toFixed(2) }} MiB</small>
         </p>
         <button
@@ -432,12 +447,46 @@ watch(
           aria-label="Remover anexo"
           @click="remove"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="m6 6 12 12M18 6 6 18" />
-          </svg>
+          <AppIcon name="close" />
         </button>
       </div>
-      <img v-if="kind === 'image'" :src="preview" alt="Prévia do anexo" />
+      <template v-if="kind === 'image'">
+        <button
+          type="button"
+          class="media-composer__image"
+          aria-label="Ampliar prévia do anexo"
+          aria-haspopup="dialog"
+          @click="openPreview"
+        >
+          <img :src="preview" alt="Prévia do anexo" /><span aria-hidden="true"
+            ><AppIcon name="maximize"
+          /></span>
+        </button>
+        <dialog
+          ref="previewViewer"
+          class="media-composer__viewer"
+          aria-label="Prévia ampliada do anexo"
+          @close="previewExpanded = false"
+          @click="
+            (event) => {
+              if (event.target === previewViewer) closePreview();
+            }
+          "
+        >
+          <button
+            type="button"
+            class="media-composer__remove"
+            aria-label="Fechar prévia ampliada"
+            @click="closePreview"
+          >
+            <AppIcon name="close" /></button
+          ><img
+            v-if="previewExpanded"
+            :src="preview"
+            alt="Prévia ampliada do anexo"
+          />
+        </dialog>
+      </template>
       <audio
         v-else-if="kind === 'audio'"
         :src="preview"
@@ -453,18 +502,23 @@ watch(
         aria-label="Prévia do vídeo"
       ></video>
       <template v-if="kind !== 'audio'">
-        <label :for="captionId">Legenda</label>
+        <label class="media-composer__sr-only" :for="captionId">Legenda</label>
         <textarea
           :id="captionId"
           ref="captionInput"
           v-model="caption"
           placeholder="Adicione uma legenda…"
-          rows="2"
+          rows="1"
           :disabled="disabled || state === 'sending' || Boolean(sendAttempt)"
           :aria-invalid="captionLength > 1024"
           :aria-describedby="`${captionId}-count`"
         ></textarea>
-        <p :id="`${captionId}-count`">{{ captionLength }}/1024 caracteres</p>
+        <p
+          :id="`${captionId}-count`"
+          :class="{ 'media-composer__sr-only': captionLength < 900 }"
+        >
+          {{ captionLength }}/1024 caracteres
+        </p>
       </template>
     </div>
     <slot v-else name="message" />
@@ -479,16 +533,12 @@ watch(
           ref="attachButton"
           type="button"
           title="Anexar arquivo"
+          aria-label="Anexar arquivo"
           :disabled="disabled || state === 'sending'"
           :aria-describedby="status ? statusId : undefined"
           @click="fileInput?.click()"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="m8 12 6-6a4 4 0 0 1 6 6l-8 8a6 6 0 0 1-8-8l8-8m-4 12 8-8a2 2 0 0 1 3 3l-8 8"
-            />
-          </svg>
-          <span class="composer-tool-label">Anexar arquivo</span>
+          <AppIcon name="paperclip" />
         </button>
         <slot name="tools" />
       </div>
@@ -507,18 +557,23 @@ watch(
           type="button"
           class="primary"
           :disabled="!sendAllowed"
-          @click="send"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="m3 3 18 9-18 9 4-9-4-9Zm4 9h14" />
-          </svg>
-          {{
+          :aria-label="
             state === 'blocked'
               ? 'Envio indisponível'
               : sendAttempt
                 ? 'Tentar enviar novamente'
                 : 'Enviar anexo'
-          }}
+          "
+          :title="
+            state === 'blocked'
+              ? 'Envio indisponível'
+              : sendAttempt
+                ? 'Tentar enviar novamente'
+                : 'Enviar anexo'
+          "
+          @click="send"
+        >
+          <AppIcon name="send" />
         </button>
         <slot v-else name="send" />
       </div>
@@ -538,8 +593,87 @@ watch(
 }
 .media-composer__review {
   display: grid;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
+}
+.media-composer__review:has(.media-composer__image) {
+  grid-template-columns: var(--space-16) minmax(0, 1fr);
+  align-items: center;
+}
+.media-composer__review:has(.media-composer__image)
+  > .media-composer__file-heading {
+  grid-column: 2;
+  grid-row: 1;
+  min-inline-size: 0;
+}
+.media-composer__review:has(.media-composer__image) > textarea,
+.media-composer__review:has(.media-composer__image) > p {
+  grid-column: 1 / -1;
+}
+.media-composer__sr-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.media-composer .media-composer__image {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  justify-self: start;
+  padding: 0;
+  inline-size: var(--space-16);
+  block-size: var(--space-16);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: zoom-in;
+}
+.media-composer__image img {
+  display: block;
+  inline-size: var(--space-16);
+  block-size: var(--space-16);
+  object-fit: cover;
+}
+.media-composer__image span {
+  position: absolute;
+  inset-inline-end: var(--space-1);
+  inset-block-end: var(--space-1);
+  display: grid;
+  place-items: center;
+  inline-size: var(--space-6);
+  block-size: var(--space-6);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+}
+.media-composer__viewer {
+  inline-size: min(48rem, calc(100% - var(--space-4)));
+  max-block-size: calc(100dvh - var(--space-4));
+  margin: auto;
+  padding: var(--space-4);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.media-composer__viewer::backdrop {
+  background: var(--color-overlay);
+}
+.media-composer__viewer button {
+  display: flex;
+  margin-inline-start: auto;
+  margin-block-end: var(--space-2);
+}
+.media-composer__viewer img {
+  display: block;
+  inline-size: 100%;
+  max-block-size: 70dvh;
+  object-fit: contain;
 }
 .media-composer__file-input {
   display: none;
@@ -560,6 +694,12 @@ watch(
   margin: 0;
   min-width: 0;
 }
+.media-composer__filename {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .media-composer__file-heading small {
   display: block;
   color: var(--color-text-muted);
@@ -573,8 +713,7 @@ watch(
   margin-inline-start: auto;
 }
 .media-composer__toolbar {
-  border-top: 1px solid var(--color-border);
-  padding-top: var(--space-3);
+  padding-top: 0;
 }
 .media-composer button,
 .media-composer :deep(button) {
@@ -582,13 +721,14 @@ watch(
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  min-width: 44px;
-  min-height: 44px;
+  min-width: var(--target-min);
+  min-height: var(--target-min);
+  padding: var(--space-2);
 }
 .media-composer svg,
 .media-composer :deep(svg) {
-  width: 20px;
-  height: 20px;
+  width: var(--space-4);
+  height: var(--space-4);
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
@@ -621,15 +761,19 @@ textarea {
   width: 100%;
 }
 textarea {
-  min-height: 5rem;
+  min-height: var(--control-height);
   resize: vertical;
 }
 @media (max-width: 480px) {
   .media-composer {
     padding: var(--space-3);
   }
-  .media-composer__tools {
-    flex: 1 1 100%;
+}
+@media (pointer: coarse) {
+  .media-composer button,
+  .media-composer :deep(button) {
+    min-width: var(--target-min);
+    min-height: var(--target-min);
   }
 }
 </style>

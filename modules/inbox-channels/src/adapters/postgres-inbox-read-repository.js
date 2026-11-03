@@ -116,6 +116,20 @@ const CURRENT_ORDER_JOIN = `LEFT JOIN LATERAL (
              LIMIT 1
            ) current_order ON true`;
 
+// CP-10 / INBOX-UX-03: mirror the closure guard, including pending orders
+// linked only by a subject. Do not change the canonical order or expose data
+// from another cycle: this projection is only an acknowledgement signal.
+const HAS_PENDING_ORDER = `EXISTS (
+             SELECT 1 FROM crm.orders pending_order
+             WHERE pending_order.conversation_id=conversation.id
+               AND pending_order.status='pendente'
+             UNION ALL
+             SELECT 1 FROM crm.conversation_subjects pending_subject
+             JOIN crm.orders linked_order ON linked_order.id=pending_subject.order_id
+             WHERE pending_subject.conversation_id=conversation.id
+               AND linked_order.status='pendente'
+           ) has_pending_order`;
+
 // The canonical header order remains unchanged. Review chooses one explicit,
 // actionable ready order across this conversation's orders and linked subjects.
 // A link to another cycle never transfers that order's ownership.
@@ -317,6 +331,7 @@ export class PostgresInboxReadRepository {
                   current_order.id order_id, current_order.number order_number,
                   current_order.status order_status,
                   current_order.ready_for_confirmation order_ready_for_confirmation,
+                  ${HAS_PENDING_ORDER},
                   review_order.id review_order_id,review_order.number review_order_number,
                   review_order.status review_order_status,
                   ${PRIORITY_PROJECTION},
@@ -410,6 +425,7 @@ export class PostgresInboxReadRepository {
                     current_order.number order_number,
                     current_order.status order_status,
                     current_order.ready_for_confirmation order_ready_for_confirmation,
+                    ${HAS_PENDING_ORDER},
                     review_order.id review_order_id,review_order.number review_order_number,
                     review_order.status review_order_status,
                     ${PRIORITY_PROJECTION}
@@ -909,6 +925,7 @@ function mapConversationSummary(row, repository) {
         }
       : null,
     id: row.id,
+    hasPendingOrder: row.has_pending_order === true,
     lastMessage,
     deliveryIssue: row.delivery_issue_status
       ? {

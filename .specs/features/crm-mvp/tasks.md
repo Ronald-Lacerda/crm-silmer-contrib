@@ -1,5 +1,45 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## INBOX-UX-03 — conversa compacta e mídia na Inbox (03/11/2026)
+
+INBOX-4, PCX-10/12/13/15, CP-07..10, IMG-12/13 e MED-01..03/09..13/16/19/25.
+Layout e simplificação dos botões de imagens autorizados pelo proprietário
+após revisão do protótipo clicável no chat. A emenda de apresentação fica em
+[pedidos-mvp](../pedidos-mvp/spec.md) e os fluxos, limites e rollback no
+[runbook](../../../docs/runbooks/inbox-compacta.md). Preserva Vue 3, tokens,
+fila/prioridades de INBOX-UX-02, permissões, pedidos e infraestrutura.
+
+- [x] Integrar compositor único com anexar, cotar frete, gravar e enviar por
+      ícones nomeados; reduzir avatares/ícones sem reduzir alvos de teclado e
+      toque; manter dicas sob demanda e estados de indisponibilidade visíveis.
+- [x] Abrir cadastro pelo nome, manter atendimento sobreposto à conversa e
+      organizar pedido, assuntos e resumo sem duplicar formulários visíveis.
+- [x] Simplificar imagens com miniatura clicável, ampliação, baixar e anexar
+      ao pedido por ações compactas; abrir seleção/confirmação do alvo somente
+      sob demanda, preservando ACL, bytes originais e retry idempotente.
+- [x] Apresentar áudio com reprodução, posição e volume reais; preservar a
+      transcrição automática em Atendimento › Resumo › Transcrições automáticas
+      e as falhas, sem onda sonora fictícia ou rótulos redundantes de mídia/autor.
+- [x] Expor `hasPendingOrder` na lista e no detalhe, incluindo pendentes
+      vinculados por qualquer Assunto, e exigir confirmação consciente no
+      encerramento. Preservar o guard transacional, o status dos pedidos e a
+      independência de arquivar; conflito 409 não autoriza aceite automático.
+- [x] Gates locais com Node 24.20.0/npm 11.19.0: `npm run validate`
+      (1.631 aprovados, oito skips), E2E/axe completo (450 aprovados, sete
+      skips), auditoria sem high/critical (um low e oito moderate
+      preexistentes), revisão independente sem bloqueantes e diff check limpo.
+- [ ] Executar cenários PostgreSQL reais de pedido direto, pendente apenas por
+      Assunto e vínculo confirmado no banco sintético dedicado/CI; registrar
+      eventual indisponibilidade local sem tratá-la como aceite live.
+      Localmente PostgreSQL/Docker e TEST_DATABASE_URL não estão disponíveis;
+      o cenário foi incluído na suíte PostgreSQL serial do CI.
+- [x] Preparar entrega atômica em `codex/inbox-mobile-first`, preservando
+      alterações locais de outras tarefas. Commit e push seguem o protocolo
+      1:1:1:1; CI e cenários PostgreSQL são gates antes da integração.
+- [ ] Conferir SHA/health e layout no ambiente implantado e observar o uso
+      por vendedores em notebook. Não enviar ou encerrar atendimentos reais
+      somente para validar apresentação.
+
 ## INBOX-UX-02 — prioridades do vendedor e alertas (03/11/2026)
 
 PCX-15a–f, PCX-03/04/13/14 e AGT-03/05. Proposta revisada e implementação

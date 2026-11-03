@@ -283,17 +283,16 @@ Workspace de altura fixa para a atendente (pesquisa UX de 15/10/2026, achado 1):
 a página ocupa exatamente a altura abaixo da barra superior e nunca rola; cada
 coluna rola por dentro.
 
-- **Colunas:** lista | conversa | contexto. O contexto (Detalhes do atendimento › Pedido,
-  assuntos, cliente) é recolhível pelo botão com texto visível `Detalhes` do cabeçalho; abre por
-  padrão a partir de 1440 px e a última escolha da pessoa vale naquele
-  navegador. No tablet o contexto cobre a conversa; no celular aparece um
-  painel por vez. Detalhes aberto pelo teclado leva o foco ao título; Esc
-  fecha e devolve o foco a quem abriu.
+- **Colunas (INBOX-UX-03):** lista | conversa. Atendimento e Cadastro abrem
+  somente sob demanda, em painéis modais sobrepostos em todas as larguras;
+  não comprimem o histórico nem reabrem por preferência antiga. O ícone
+  Detalhes abre Atendimento; o nome abre Cadastro. Escape fecha e devolve
+  foco ao acionador. Atendimento separa Pedidos e assuntos de Resumo.
 - **Celular primeiro (ADR 035):** desenhada para 390×844 e ampliada. Lista e
   conversa são telas separadas, com voltar; o cabeçalho mantém só o voltar,
-  o link do pedido quando há pedido, `Criar pedido` quando cabe (ver
-  "Cabeçalho da conversa") e `Mais`, que abre uma folha
-  inferior acima da barra de navegação (Detalhes do atendimento, Criar pedido
+  o nome clicável, o link do pedido quando há pedido, `Criar pedido` quando cabe (ver
+  "Cabeçalho da conversa"), o ícone Detalhes e `Mais`, que abre uma folha
+  inferior acima da barra de navegação (Criar pedido
   quando não cabe no cabeçalho, Transferir atendimento, Arquivar/Desarquivar, Encerrar). A
   resposta fica acima da barra; ao digitar, a barra sai e a resposta encosta
   no teclado (`interactive-widget=resizes-content`). Alvos de 44 px; nada
@@ -316,8 +315,10 @@ coluna rola por dentro.
 - **Lista:** nome, horário curto (hora hoje, dia no ano, data antes; a data
   completa no tooltip), trecho de uma linha, canal, estado, motivo e tempo
   parado. O item aberto usa `--color-selected`, sem borda lateral colorida.
-- **Cabeçalho da conversa:** compacto, nome, o link do pedido e uma linha de
-  identidade; sem ação primária (ela fica no composer). Com pedido, o link
+- **Cabeçalho da conversa:** compacto, nome clicável, o link do pedido e uma
+  linha com canal e atendimento. Telefone e cadastro ficam no painel do nome;
+  metadados ficam em Atendimento › Resumo. Assumir é a única primária antes
+  da tomada humana (PCX-15); depois Enviar é a primária no compositor. Com pedido, o link
   "Pedido NN-CRM" com o status em selo de texto abre `/pedidos/:id?conversa=`
   e acompanha `inbox.order.changed` (PCX-10); sem pedido, nada aparece.
   `Criar pedido` fica no cabeçalho só para o dono de conversa humana, sem
@@ -327,13 +328,15 @@ coluna rola por dentro.
   Encerrar conversa em todas as larguras, PCX-13) e o botão `Detalhes`.
   `Mais` abre pelo teclado no primeiro item e Esc devolve o foco. A gaveta do
   pedido e o botão "Pedido · status" foram removidos (T126).
-- **Detalhes › Pedido (PCX-12):** número, status, "Falta para gerar",
-  itens, total, valor e `Abrir pedido`, só para leitura, com carregando, erro
+- **Atendimento › Pedidos e assuntos (PCX-12):** número, status, itens,
+  total, valor e `Abrir pedido`, só para leitura; as pendências aparecem em
+  disclosure, agrupadas por item e pedido. Dados ainda indefinidos mostram
+  A definir, sem sugerir quantidade ou valor zero. Mantém carregando, erro
   com `Tentar novamente` e "Sem pedido nesta conversa." uma vez só.
 - **Histórico:** abre na última mensagem e acompanha as novas, salvo quando a
   pessoa rolou para ler algo antigo; conversa curta fica junto da resposta.
-- **Assumir no lugar do composer (PCX-13):** enquanto ninguém assumiu e quem
-  abre pode agir, o rodapé mostra o motivo da parada e o tempo parado
+- **Assumir no cabeçalho (PCX-15):** enquanto ninguém assumiu e quem
+  abre pode agir, a região abaixo do cabeçalho mostra o motivo da parada e o tempo parado
   (PCX-03), ou que o agente está atendendo e não volta depois (ADR 015), com
   `Assumir atendimento` como única primária da conversa. Depois de assumir,
   o campo de resposta aparece com `Enviar resposta` como única primária e
@@ -341,9 +344,10 @@ coluna rola por dentro.
   agir vê o composer desabilitado com o motivo.
 - **Resposta:** visível no rodapé da conversa assim que alguém a assume. Enter envia, Shift+Enter
   quebra a linha; em teclado de toque Enter só quebra a linha. Sem espaço,
-  Anexar e Gravar ficam só com ícone (nome acessível mantido) e Enviar continua
-  na mesma linha.
-- Conversa encerrada usa `Sem lead`; nunca reutilizar o estado visual `Perdido` do Kanban.
+  Anexar, Cotar frete, Gravar e Enviar ficam só com ícone (nome acessível e
+  dica mantidos), dentro de uma única caixa. O hint de envio fica sob demanda.
+- Conversa encerrada informa Atendimento concluído ou Sem pedido neste
+  atendimento; isso não altera status nem dados de pedidos (CP-07..10).
 
 ### Kanban Comercial
 
@@ -590,12 +594,19 @@ Contagem fora da navegação do app, com dados sintéticos, em 390×844 e
 fatias estão no "Resultado" do
 [RFC 024](docs/rfc/024-jornadas-com-menos-botoes.md).
 
-| Tela             | Celular                                                      | Notebook |
-| ---------------- | ------------------------------------------------------------ | -------- |
-| Pedido aberto    | ≤ 12; documento ≤ 1.800 px; ≤ 1 "Editar" visível; 1 primária | ≤ 16     |
-| Conversa         | ≤ 9 antes de assumir; ≤ 12 depois; cabeçalho ≤ 2             | ≤ 24     |
-| Caixa de Entrada | ≤ 15; barra de ferramentas de 7 para 5                       | ≤ 24     |
-| Pedidos          | ≤ 12, com o 1º cartão inteiro acima da barra inferior        | ≤ 19     |
+| Tela             | Celular                                                      | Notebook            |
+| ---------------- | ------------------------------------------------------------ | ------------------- |
+| Pedido aberto    | ≤ 12; documento ≤ 1.800 px; ≤ 1 "Editar" visível; 1 primária | ≤ 16                |
+| Conversa         | ≤ 9 antes de assumir; ≤ 12 depois; cabeçalho ≤ 4             | ≤ 24; cabeçalho ≤ 4 |
+| Caixa de Entrada | ≤ 15; barra de ferramentas de 7 para 5                       | ≤ 24                |
+| Pedidos          | ≤ 12, com o 1º cartão inteiro acima da barra inferior        | ≤ 19                |
+
+INBOX-UX-03, layout autorizado em 03/11/2026: os quatro controles do
+cabeçalho incluem o acesso ao cadastro pelo nome, pedido/criação/assumir,
+Detalhes e Mais. O novo acesso ao nome e Detalhes direto no celular passam
+a contar nesse limite; os orçamentos da primeira tela e a primária única
+permanecem. Detalhes não se repete no menu Mais. Ícones menores preservam
+alvos de pelo menos 40 px, com 44 px no compositor e no toque.
 
 ---
 

@@ -231,7 +231,12 @@ test('IMG-01/ARQ-02 Inbox owner attaches a received image to the explicitly sele
   const state = await setup(page, { receivedImage: true });
   const image = page.getByRole('img', { name: 'Imagem da conversa' });
   await expect(image).toBeVisible();
-  await page.getByLabel('Anexar imagem ao pedido').selectOption('order-1');
+  await page
+    .getByRole('button', { name: 'Anexar imagem ao pedido', exact: true })
+    .click();
+  await page
+    .getByRole('combobox', { name: 'Anexar imagem ao pedido' })
+    .selectOption('order-1');
   const attach = page.getByRole('button', {
     name: 'Anexar ao pedido',
     exact: true,
@@ -259,7 +264,9 @@ test('IMG-08 received image without attachment announces unavailable bytes', asy
       { exact: true },
     ),
   ).toBeVisible();
-  await expect(page.getByLabel('Anexar imagem ao pedido')).toHaveCount(0);
+  await expect(
+    page.getByRole('combobox', { name: 'Anexar imagem ao pedido' }),
+  ).toHaveCount(0);
   expect(state.orderUploads).toHaveLength(0);
   expect(state.sends).toHaveLength(0);
 });
@@ -276,7 +283,9 @@ for (const options of [
     await expect(
       page.getByRole('img', { name: 'Imagem da conversa' }),
     ).toBeVisible();
-    await expect(page.getByLabel('Anexar imagem ao pedido')).toHaveCount(0);
+    await expect(
+      page.getByRole('combobox', { name: 'Anexar imagem ao pedido' }),
+    ).toHaveCount(0);
     expect(state.orderUploads).toHaveLength(0);
   });
 }
@@ -754,6 +763,10 @@ for (const viewport of [
 
     await caption.focus();
     await caption.press('Shift+Tab');
+    await expect(
+      page.getByRole('button', { name: 'Ampliar prévia do anexo' }),
+    ).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
     const remove = page.getByRole('button', { name: 'Remover anexo' });
     await expect(remove).toBeFocused();
     await remove.press('Enter');

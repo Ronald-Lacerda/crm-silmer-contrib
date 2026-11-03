@@ -482,7 +482,7 @@ test('INBOX-UX-02: a ready linked order has an explicit header link and matching
   ).toHaveAttribute('href', '/pedidos/order-linked-ready?conversa=linked');
   await page
     .locator('.conv-actions')
-    .getByRole('button', { name: 'Detalhes', exact: true })
+    .getByRole('button', { name: 'Detalhes do atendimento', exact: true })
     .click();
   const summary = page.locator('.context-order-summary');
   await expect(summary).toContainText('07-CRM');

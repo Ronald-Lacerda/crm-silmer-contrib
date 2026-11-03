@@ -1,8 +1,9 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-// INBOX-AUDIO-TRANSCRIPT-01 (RFC 041): the seller reads what the automatic
-// transcription heard, under the customer's audio. Synthetic text only.
+// INBOX-AUDIO-TRANSCRIPT-01 / INBOX-UX-03: the seller can still read what
+// automatic transcription heard, on demand in the attendance summary.
+// Synthetic text only; the compact thread keeps the audio controls alone.
 const SHORT = 'Oi, queria 30 camisetas pretas para o time.';
 const LONG = `${'Quero fazer camisetas para a minha equipe de corrida, '.repeat(8)}e também bonés no mesmo tom.`;
 
@@ -99,13 +100,28 @@ async function setup(page) {
   });
 }
 
-test('shows the automatic transcript under each audio, full and selectable', async ({
+test('keeps automatic transcripts selectable in the attendance summary without cluttering the audio thread', async ({
   page,
 }) => {
   await setup(page);
   await page.goto('/inbox/conversation-1');
   const thread = page.getByRole('list', { name: 'Histórico da conversa' });
-  const short = thread.getByRole('listitem').nth(0);
+  await expect(thread.locator('.message-transcript')).toHaveCount(0);
+  await expect(thread).not.toContainText(SHORT);
+  const details = page.getByRole('button', {
+    name: 'Detalhes do atendimento',
+    exact: true,
+  });
+  await details.focus();
+  await page.keyboard.press('Enter');
+  const drawer = page.getByRole('dialog', { name: 'Atendimento', exact: true });
+  await drawer.getByRole('button', { name: 'Resumo', exact: true }).click();
+  const disclosure = drawer
+    .locator('summary')
+    .filter({ hasText: 'Transcrições automáticas' });
+  await disclosure.focus();
+  await page.keyboard.press('Enter');
+  const short = drawer.locator('[data-message-id="audio-short"]');
   await expect(short).toContainText('Transcrição automática');
   await expect(short).toContainText(SHORT);
   const userSelect = await short
@@ -114,18 +130,18 @@ test('shows the automatic transcript under each audio, full and selectable', asy
   expect(userSelect).not.toBe('none');
 
   // A failed transcription is a quiet note, not an alert.
-  const failed = thread.getByRole('listitem').nth(1);
+  const failed = drawer.locator('[data-message-id="audio-failed"]');
   await expect(failed).toContainText(
     'Não foi possível transcrever este áudio. Ouça a gravação.',
   );
   await expect(failed.getByRole('alert')).toHaveCount(0);
   // Without a transcript (older API or still transcribing) nothing appears.
-  await expect(thread.getByRole('listitem').nth(2)).not.toContainText(
-    'Transcrição',
+  await expect(drawer.locator('[data-message-id="audio-pending"]')).toHaveCount(
+    0,
   );
 
   // A long transcript opens in place by keyboard; nothing is lost.
-  const long = thread.getByRole('listitem').nth(3);
+  const long = drawer.locator('[data-message-id="audio-long"]');
   await expect(long).not.toContainText(LONG);
   await expect(long).toContainText('…');
   const more = long.getByRole('button', { name: 'Ler transcrição completa' });
@@ -151,10 +167,12 @@ test('shows the automatic transcript under each audio, full and selectable', asy
   );
   expect(stored).not.toContain('camisetas');
 
-  // Scoped to the transcripts: several audios in one thread repeat the
-  // "Mídia da mensagem" region of MediaMessage (a finding of its own).
+  // Scope includes the drawer, labels and disclosure hosting the transcripts.
   const axe = await new AxeBuilder({ page })
-    .include('.message-transcript')
+    .include('#inbox-context')
     .analyze();
   expect(axe.violations).toEqual([]);
+  await page.keyboard.press('Escape');
+  await expect(drawer).toBeHidden();
+  await expect(details).toBeFocused();
 });

@@ -1244,6 +1244,49 @@ prevalece entre rotas e recargas no navegador, com fallback sem storage.
 Destinos, autorização e navegação inferior móvel permanecem os mesmos.
 Benchmark e limites: [registro de produto](../../../docs/product/benchmark-inbox-2026-10-29.md).
 
+Emenda visual autorizada em 03/11/2026, tarefa
+[INBOX-UX-03](../crm-mvp/tasks.md): PCX-10/12/13 passa a adotar a apresentação
+compacta aprovada no protótipo, mantendo as prioridades e a tomada humana de
+PCX-15. A posição e a forma dos controles abaixo superam a emenda visual de
+29/10; os comandos, as permissões e os estados comerciais permanecem vigentes.
+
+- O cabeçalho mantém a identidade e o link compacto ao pedido canônico, sem
+  trocar o alvo por inferência. Clicar no nome abre os dados disponíveis do
+  contato em painel sobreposto, com acesso ao cadastro; detalhes secundários
+  do atendimento ficam em outro painel sobreposto, sem comprimir o histórico.
+  Ambos fecham por botão/Escape e devolvem foco ao controle de abertura.
+- Detalhes organiza Pedidos e assuntos e Resumo em grupos previsíveis. O
+  resumo do pedido continua somente leitura, com número, status, itens e
+  valores alinhados; pendências de PIT-06 aparecem agrupadas e sob demanda.
+  Quantidade/valor não informados não devem sugerir uma definição comercial
+  de zero. Busca, vínculo e criação de Assunto ficam sob divulgação progressiva,
+  mantendo indicação explícita do alvo e os comandos existentes de CP-11..17.
+- O compositor reúne texto e ações de anexar, cotar frete, gravar e enviar.
+  Ícones e avatares menores não reduzem alvos: 40 px no ponteiro fino e 44 px
+  no toque. Ações por ícone têm nome acessível e dica por hover/foco; o hint de
+  Enter para enviar e Shift + Enter para nova linha fica sob demanda, sem
+  ocupar uma linha permanente. Autoria da IA e início do contato permanecem
+  identificáveis. Assumir atendimento continua sendo a única primária até o
+  claim, conforme PCX-15, sem retorno ao agente.
+- Imagens usam miniatura clicável e ampliação; baixar e anexar ao pedido são
+  ações compactas. Seleção e confirmação do pedido-alvo aparecem somente ao
+  solicitar o vínculo. Permanecem os contratos IMG-12/13, MED-16/19/25,
+  autenticação, bytes originais e idempotência. Áudio usa controles reais de
+  reprodução, posição e volume, sem onda sonora fictícia. A transcrição
+  automática existente fica em Atendimento › Resumo, no disclosure Transcrições
+  automáticas, preservando APIs e componente. Não ocupa a trilha de chat nem
+  introduz link Ver transcrição ou rótulos Áudio/Imagem/Cliente redundantes.
+- CP-10 considera pendentes diretos e vinculados por qualquer Assunto,
+  incluindo Assunto que não está em foco e pedido de outro ciclo. O sinal
+  `hasPendingOrder` da lista/detalhe orienta a confirmação da interface sem
+  substituir a validação transacional. Uma leitura antiga ou conflito exige
+  atualizar o contexto e obter ciência humana; nunca completar o aceite
+  automaticamente. Encerrar preserva status, dados e vínculos dos pedidos;
+  arquivar continua independente do encerramento (CP-07..10).
+
+Operação, verificação e rollback no
+[runbook da Inbox compacta](../../../docs/runbooks/inbox-compacta.md).
+
 ### Lista de Pedidos
 
 12. **PLI-09** A lista de Pedidos SHALL ter três chips (Todos, Meus

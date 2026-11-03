@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import AppIcon from '../AppIcon.vue';
 import { ApiError, commandKey, upload } from '../../lib/api-client.js';
 import { openDialog } from '../../lib/ui.js';
 import {
@@ -24,6 +25,63 @@ const expanded = ref(false);
 const downloading = ref(false);
 const downloadError = ref('');
 const downloadUrls = new Map();
+const orderFormOpen = ref(false);
+const orderToggle = ref(null);
+const orderSelect = ref(null);
+const audioElement = ref(null);
+const playing = ref(false);
+const duration = ref(0);
+const currentTime = ref(0);
+const volume = ref(1);
+const volumeOpen = ref(false);
+const volumeToggle = ref(null);
+watch(volume, (value) => {
+  if (audioElement.value) audioElement.value.volume = value;
+});
+async function closeVolume() {
+  volumeOpen.value = false;
+  await nextTick();
+  volumeToggle.value?.focus();
+}
+const audioPercent = computed(() =>
+  duration.value ? (currentTime.value / duration.value) * 100 : 0,
+);
+const clockTime = (value) => {
+  const seconds = Math.max(0, Math.floor(Number(value) || 0));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+};
+function audioProgress() {
+  const audio = audioElement.value;
+  if (!audio) return;
+  duration.value = Number.isFinite(audio.duration) ? audio.duration : 0;
+  currentTime.value = audio.currentTime;
+}
+async function toggleAudio() {
+  const audio = audioElement.value;
+  if (!audio) return;
+  if (!audio.paused) return audio.pause();
+  try {
+    await audio.play();
+  } catch {
+    failed.value = true;
+  }
+}
+function seekAudio(event) {
+  if (!audioElement.value || !duration.value) return;
+  audioElement.value.currentTime =
+    (Number(event.target.value) / 100) * duration.value;
+  audioProgress();
+}
+function changeVolume(event) {
+  volume.value = Number(event.target.value);
+  if (audioElement.value) audioElement.value.volume = volume.value;
+}
+async function toggleOrderForm() {
+  if (saving.value) return;
+  orderFormOpen.value = !orderFormOpen.value;
+  await nextTick();
+  (orderFormOpen.value ? orderSelect.value : orderToggle.value)?.focus();
+}
 
 function openImage(event) {
   if (unavailable.value || !viewer.value) return;
@@ -205,6 +263,24 @@ watch(unavailable, async (value) => {
   noticeElement.value?.focus();
 });
 watch(
+  () => props.orders.map((order) => order.id),
+  async (ids) => {
+    if (ids.length) {
+      if (orderId.value && !ids.includes(orderId.value)) orderId.value = '';
+      return;
+    }
+    const moveFocus =
+      orderTools.value?.contains(document.activeElement) ||
+      document.activeElement === orderToggle.value;
+    orderFormOpen.value = false;
+    orderId.value = '';
+    if (!moveFocus) return;
+    await nextTick();
+    if (unavailable.value) noticeElement.value?.focus();
+    else player.value?.querySelector('button')?.focus();
+  },
+);
+watch(
   () => [
     props.media.mediaId,
     props.media.kind,
@@ -220,6 +296,12 @@ watch(
     saved.value = '';
     saveError.value = '';
     orderId.value = '';
+    orderFormOpen.value = false;
+    playing.value = false;
+    duration.value = 0;
+    currentTime.value = 0;
+    volume.value = 1;
+    volumeOpen.value = false;
     failed.value = false;
   },
 );
@@ -249,16 +331,34 @@ watch(
           alt="Imagem da conversa"
           @error="failed = true"
         />
-        <span>Ampliar imagem</span>
+        <span class="media-message__expand" aria-hidden="true"
+          ><AppIcon name="maximize"
+        /></span>
       </button>
       <div ref="imageTools" class="media-message__actions">
         <button
           type="button"
+          class="media-message__icon"
+          aria-label="Baixar imagem"
+          title="Baixar imagem"
           :aria-disabled="downloading || undefined"
           :aria-busy="downloading || undefined"
           @click="downloadImage"
         >
-          {{ downloading ? 'Baixando imagem…' : 'Baixar imagem' }}
+          <AppIcon name="download" />
+        </button>
+        <button
+          v-if="orders.length"
+          ref="orderToggle"
+          type="button"
+          class="media-message__icon"
+          aria-label="Anexar imagem ao pedido"
+          title="Anexar imagem ao pedido"
+          :aria-expanded="orderFormOpen"
+          :aria-controls="`${selectionId}-form`"
+          @click="toggleOrderForm"
+        >
+          <AppIcon name="paperclip" />
         </button>
         <p v-if="downloadError" role="alert">{{ downloadError }}</p>
       </div>
@@ -272,14 +372,25 @@ watch(
       >
         <div class="media-message__viewer-panel">
           <div class="media-message__actions">
-            <button type="button" @click="closeImage">Fechar imagem</button>
             <button
               type="button"
+              class="media-message__icon"
+              aria-label="Fechar imagem"
+              title="Fechar imagem"
+              @click="closeImage"
+            >
+              <AppIcon name="close" />
+            </button>
+            <button
+              type="button"
+              class="media-message__icon"
+              aria-label="Baixar imagem"
+              title="Baixar imagem"
               :aria-disabled="downloading || undefined"
               :aria-busy="downloading || undefined"
               @click="downloadImage"
             >
-              {{ downloading ? 'Baixando imagem…' : 'Baixar imagem' }}
+              <AppIcon name="download" />
             </button>
           </div>
           <p v-if="downloadError" role="alert">{{ downloadError }}</p>
@@ -292,15 +403,79 @@ watch(
         </div>
       </dialog>
     </div>
-    <audio
+    <div
       v-else-if="media.kind === 'audio'"
       ref="player"
-      :src="contentUrl"
-      controls
-      preload="metadata"
-      aria-label="Áudio da conversa"
-      @error="failed = true"
-    ></audio>
+      class="media-message__audio"
+      role="group"
+      aria-label="Mensagem de voz"
+    >
+      <audio
+        ref="audioElement"
+        :src="contentUrl"
+        preload="metadata"
+        aria-label="Áudio da conversa"
+        @loadedmetadata="audioProgress"
+        @durationchange="audioProgress"
+        @timeupdate="audioProgress"
+        @play="playing = true"
+        @pause="playing = false"
+        @ended="playing = false"
+        @error="failed = true"
+      ></audio>
+      <button
+        type="button"
+        class="media-message__play"
+        :aria-label="
+          playing ? 'Pausar mensagem de voz' : 'Reproduzir mensagem de voz'
+        "
+        :title="playing ? 'Pausar' : 'Reproduzir'"
+        @click="toggleAudio"
+      >
+        <AppIcon :name="playing ? 'pause' : 'play'" />
+      </button>
+      <input
+        class="media-message__seek"
+        type="range"
+        min="0"
+        max="100"
+        step="0.1"
+        :value="audioPercent"
+        aria-label="Posição da mensagem de voz"
+        :aria-valuetext="`${clockTime(currentTime)} de ${clockTime(duration)}`"
+        :disabled="!duration"
+        @input="seekAudio"
+      />
+      <span class="media-message__time">{{
+        clockTime(playing || currentTime ? currentTime : duration)
+      }}</span>
+      <div
+        class="media-message__volume"
+        @keydown.esc.stop.prevent="closeVolume"
+      >
+        <button
+          ref="volumeToggle"
+          type="button"
+          class="media-message__icon"
+          aria-label="Volume da mensagem de voz"
+          title="Volume"
+          :aria-expanded="volumeOpen"
+          @click="volumeOpen = !volumeOpen"
+        >
+          <AppIcon :name="volume ? 'volume' : 'volume-muted'" />
+        </button>
+        <label v-if="volumeOpen" class="media-message__volume-control"
+          >Volume<input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            :value="volume"
+            aria-label="Volume"
+            @input="changeVolume"
+        /></label>
+      </div>
+    </div>
     <video
       v-else-if="media.kind === 'video'"
       ref="player"
@@ -311,12 +486,21 @@ watch(
       @error="failed = true"
     ></video>
     <div
-      v-if="!unavailable && media.kind === 'image' && orders.length"
+      v-if="
+        !unavailable && media.kind === 'image' && orders.length && orderFormOpen
+      "
+      :id="`${selectionId}-form`"
       ref="orderTools"
       class="media-message__order"
+      @keydown.esc.stop.prevent="toggleOrderForm"
     >
       <label :for="selectionId">Anexar imagem ao pedido</label>
-      <select :id="selectionId" v-model="orderId" :disabled="saving">
+      <select
+        :id="selectionId"
+        ref="orderSelect"
+        v-model="orderId"
+        :disabled="saving"
+      >
         <option value="">Selecione o pedido</option>
         <option v-for="order in orders" :key="order.id" :value="order.id">
           {{ order.number }}
@@ -346,17 +530,110 @@ watch(
   margin-top: var(--space-2);
 }
 .media-message__preview {
+  position: relative;
+  display: block;
+  width: 15rem;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-surface-raised);
+  border: 0;
+  border-radius: var(--radius-md);
+  cursor: zoom-in;
+}
+.media-message__preview img {
+  width: 100%;
+  max-height: 15rem;
+  object-fit: cover;
+  border-radius: inherit;
+}
+.media-message__expand {
+  position: absolute;
+  inset-inline-end: var(--space-2);
+  inset-block-end: var(--space-2);
+  display: grid;
+  place-items: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+}
+.media-message .app-icon {
+  width: var(--space-4);
+  height: var(--space-4);
+}
+.media-message .media-message__icon,
+.media-message .media-message__play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-inline-size: var(--control-height);
+  min-block-size: var(--control-height);
+  padding: var(--space-2);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 0;
+}
+.media-message .media-message__play {
+  color: var(--color-link);
+  background: var(--color-selected);
+  border-radius: var(--radius-pill);
+}
+.media-message__audio {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  inline-size: 18rem;
+  max-inline-size: 100%;
+}
+.media-message__audio audio {
+  display: none;
+}
+.media-message__seek {
+  flex: 1;
+  min-inline-size: 3rem;
+  inline-size: 100%;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--color-link);
+}
+.media-message__time {
+  flex: none;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.media-message__volume {
+  position: relative;
+}
+.media-message__volume-control {
+  position: absolute;
+  inset-inline-end: 0;
+  inset-block-end: 100%;
+  z-index: 1;
   display: grid;
   gap: var(--space-2);
-  max-width: 100%;
-  padding: var(--space-2);
-  cursor: zoom-in;
+  inline-size: 9rem;
+  padding: var(--space-3);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.media-message__volume-control input {
+  min-inline-size: 0;
+  inline-size: 100%;
+  padding: 0;
+  accent-color: var(--color-link);
 }
 .media-message__actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-  margin-top: var(--space-2);
+  margin-top: var(--space-1);
 }
 .media-message button {
   min-block-size: var(--target-min);
@@ -383,6 +660,16 @@ watch(
 .media-message__viewer img {
   width: 100%;
   max-height: 75dvh;
+}
+@media (pointer: coarse) {
+  .media-message .media-message__icon,
+  .media-message .media-message__play {
+    min-inline-size: var(--target-min);
+    min-block-size: var(--target-min);
+  }
+  .media-message__seek {
+    min-block-size: var(--target-min);
+  }
 }
 img,
 video {

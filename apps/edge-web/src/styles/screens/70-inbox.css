@@ -4,8 +4,8 @@
  * The page takes exactly the height left under the top bar and never
  * scrolls: the list, the history and the context panel scroll inside their
  * own columns, so the reply field stays in view on a 1366×768 notebook.
- * Wide: list | conversation | context. Tablet: the context covers the
- * conversation on demand. Phone: one pane at a time, the list or the
+ * Wide/tablet: list | conversation; details overlay on demand.
+ * Phone: one pane at a time, the list or the
  * conversation opened by its address (/inbox/:conversationId).
  */
 .app-frame:has(> #main-content > .inbox-page) {
@@ -246,9 +246,7 @@
 }
 
 .inbox-workspace[data-context='open'] {
-  grid-template-columns:
-    var(--inbox-list-column) minmax(0, 1fr)
-    var(--inbox-context-column);
+  grid-template-columns: var(--inbox-list-column) minmax(0, 1fr);
 }
 
 .inbox-list-pane,
@@ -1402,5 +1400,327 @@
   .inbox-context {
     inline-size: 100%;
     border-radius: 0;
+  }
+}
+
+/* INBOX-UX-03: compact conversation; secondary information never takes a column. */
+.inbox-page dialog.inbox-context {
+  position: fixed;
+  inset: 0 0 0 auto;
+  inline-size: min(24rem, 100%);
+  max-inline-size: 100%;
+  block-size: 100dvh;
+  max-block-size: 100dvh;
+  margin: 0;
+  padding: 0;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 0;
+  border-inline-start: 1px solid var(--color-border);
+  border-radius: 0;
+  box-shadow: var(--shadow-overlay);
+}
+
+.inbox-page dialog.inbox-context:not([open]) {
+  display: none;
+}
+.inbox-page dialog.inbox-context[open] {
+  display: block;
+}
+.inbox-page dialog.inbox-context::backdrop {
+  background: var(--color-overlay);
+}
+.inbox-context-head {
+  padding: var(--space-4) var(--space-5);
+  border-radius: 0;
+}
+.inbox-context-head h2 {
+  font-size: var(--text-lg);
+}
+.context-tabs {
+  display: flex;
+  gap: var(--space-5);
+  margin-inline: var(--space-5);
+  border-block-end: 1px solid var(--color-border-subtle);
+}
+.context-tabs button {
+  min-block-size: var(--control-height);
+  padding: var(--space-2) 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  background: transparent;
+  border: 0;
+  border-block-end: 2px solid transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+.context-tabs button[aria-pressed='true'] {
+  color: var(--color-text);
+  border-block-end-color: var(--color-focus);
+}
+.inbox-context .context-section,
+.inbox-context .subject-panel {
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+.inbox-context .context-facts {
+  gap: 0;
+}
+.inbox-context .context-facts > div {
+  display: grid;
+  grid-template-columns: minmax(6rem, 0.8fr) minmax(0, 1.2fr);
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+  border-block-end: 1px solid var(--color-border-subtle);
+}
+.inbox-context .context-facts dt,
+.inbox-context .context-facts dd {
+  font-size: var(--text-xs);
+}
+.context-order-summary .context-order {
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.context-order-summary .context-order strong {
+  font-size: var(--text-lg);
+}
+.context-order-items li {
+  gap: var(--space-4);
+}
+.context-order-items li > :last-child {
+  flex: none;
+  color: var(--color-text-muted);
+}
+.context-order-summary .context-order-missing {
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+.context-order-missing summary {
+  min-block-size: var(--control-height);
+  padding-block: var(--space-2);
+  cursor: pointer;
+}
+.context-order-gap-group h4 {
+  margin: var(--space-3) 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+.context-order-gap-group ul {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding-inline-start: var(--space-4);
+}
+.subject-list {
+  gap: var(--space-3);
+}
+.subject-list li {
+  gap: var(--space-2);
+  padding-block: var(--space-3);
+  border-block-end: 1px solid var(--color-border-subtle);
+}
+.subject-list li > span {
+  flex: 1 1 9rem;
+}
+.subject-add-toggle {
+  justify-self: start;
+}
+.subject-actions {
+  padding-block: var(--space-2);
+}
+.conv-contact-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--control-height);
+  max-inline-size: 100%;
+  padding: 0;
+  color: var(--color-text);
+  font: inherit;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.conv-contact-name > span:not(.contact-avatar) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conv-contact-name > .app-icon {
+  flex: none;
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+.contact-avatar,
+.message .message-avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  font-size: var(--text-sm);
+  background: var(--color-selected);
+  border-radius: var(--radius-pill);
+}
+.message .message-avatar {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  font-size: var(--text-xs);
+}
+.conv-head {
+  gap: var(--space-2);
+  padding-block: var(--space-2);
+}
+.conv-title h2 {
+  font-size: var(--text-base);
+}
+.conv-identity {
+  margin-block-start: 0;
+}
+.conv-actions {
+  flex: none;
+  gap: var(--space-1);
+}
+.conv-actions > .conv-context-toggle,
+.conv-more > button {
+  min-inline-size: var(--control-height);
+  min-block-size: var(--control-height);
+  padding: 0;
+}
+.conv-actions .app-icon {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+.inbox-composer {
+  border-block-start: 0;
+}
+.inbox-composer .audio-recorder {
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+}
+.inbox-composer
+  .audio-recorder
+  .media-composer:not(:has(.media-composer__review)) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  column-gap: var(--space-2);
+}
+.inbox-composer
+  .media-composer
+  > :not(.composer):not(.media-composer__toolbar) {
+  grid-column: 1 / -1;
+}
+.inbox-composer .composer {
+  min-inline-size: 0;
+}
+.inbox-composer .composer textarea {
+  min-block-size: var(--control-height);
+  padding: var(--space-2);
+  font-size: var(--text-sm);
+  background: transparent;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+}
+.inbox-composer .audio-recorder .media-composer__toolbar {
+  flex-wrap: nowrap;
+  align-items: end;
+  gap: var(--space-2);
+}
+.inbox-composer .media-composer__tools,
+.inbox-composer .media-composer__actions {
+  gap: var(--space-1);
+}
+.inbox-composer .media-composer__tools button,
+.inbox-composer .media-composer__actions button,
+.inbox-composer .conversation-shipping-action > button {
+  min-inline-size: var(--target-min);
+  min-block-size: var(--target-min);
+  padding-inline: var(--space-2);
+}
+.inbox-composer .media-composer__tools .app-icon,
+.inbox-composer .media-composer__actions .app-icon,
+.inbox-composer .conversation-shipping-action .app-icon {
+  inline-size: 1rem;
+  block-size: 1rem;
+}
+.composer-order-context {
+  justify-self: start;
+  gap: var(--space-2);
+  min-block-size: var(--control-height-sm);
+  padding: 0 var(--space-2);
+  color: var(--color-link);
+  font-size: var(--text-xs);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.composer-order-context .app-icon {
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
+}
+.context-transcripts {
+  font-size: var(--text-xs);
+}
+.context-transcripts summary {
+  min-block-size: var(--target-min);
+  padding-block: var(--space-2);
+  cursor: pointer;
+}
+.context-transcript-entry {
+  padding-block: var(--space-3);
+}
+.context-transcript-entry > time {
+  color: var(--color-text-muted);
+}
+
+@container (width < 30rem) {
+  .inbox-composer
+    .audio-recorder
+    .media-composer:not(:has(.media-composer__review)) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .inbox-composer .media-composer__toolbar {
+    inline-size: 100%;
+  }
+}
+@media (max-width: 768px) {
+  .conv-actions {
+    flex-basis: auto;
+    margin-inline-start: auto;
+  }
+  .conv-head {
+    flex-wrap: nowrap;
+  }
+  .conv-title-row {
+    gap: 0;
+  }
+  .conv-title-row h2 {
+    inline-size: 100%;
+  }
+  .conv-order-link {
+    min-block-size: var(--target-min);
+    font-size: var(--text-xs);
+  }
+  .conv-identity {
+    font-size: var(--text-xs);
+  }
+  .inbox-page dialog.inbox-context {
+    inline-size: min(24rem, 100%);
+  }
+  .inbox-composer .composer textarea {
+    font-size: var(--text-base);
+  }
+  .conv-actions > .conv-context-toggle,
+  .conv-more > button,
+  .inbox-composer .media-composer__tools button,
+  .inbox-composer .media-composer__actions button {
+    min-inline-size: var(--target-min);
+    min-block-size: var(--target-min);
   }
 }

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import AppIcon from '../AppIcon.vue';
 import MediaComposer from './MediaComposer.vue';
 const props = defineProps({
   conversationId: { type: String, required: true },
@@ -231,31 +232,31 @@ onBeforeUnmount(clear);
           ref="startButton"
           type="button"
           title="Gravar áudio"
+          aria-label="Gravar áudio"
           :disabled="disabled || active || sending"
           @click="start"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path
-              d="M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0V5Zm-3 6v1a6 6 0 0 0 12 0v-1m-6 7v4m-4 0h8"
-            />
-          </svg>
-          <span class="composer-tool-label">Gravar áudio</span>
+          <AppIcon name="mic" />
         </button>
         <button
           v-if="state === 'recording'"
           ref="stopButton"
           type="button"
+          aria-label="Parar gravação"
+          title="Parar gravação"
           @click="stop"
         >
-          Parar gravação
+          <AppIcon name="square" />
         </button>
         <button
           v-if="active || recording"
           type="button"
+          aria-label="Descartar gravação"
+          title="Descartar gravação"
           :disabled="sending"
           @click="discard"
         >
-          Descartar gravação
+          <AppIcon name="trash" />
         </button>
       </template>
       <template #recording-status>

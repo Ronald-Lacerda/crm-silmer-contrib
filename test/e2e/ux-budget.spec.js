@@ -59,7 +59,9 @@ const SCREENS = [
     budgets: {
       caixaPrimeiraTela: 15, // (10)
       conversaAntes: 9, // (3)
-      conversaCabecalho: 2, // (1 antes de assumir; 2 depois)
+      // INBOX-UX-03: approved name→Cadastro action plus order/takeover,
+      // details and More; secondary actions remain on demand in both sizes.
+      conversaCabecalho: 4,
       conversaDepois: 12, // (7)
       editar: 1, // (1)
       painel: { gestor: 11, vendedor: 7 }, // (10 e 6)
@@ -73,7 +75,8 @@ const SCREENS = [
     budgets: {
       caixaPrimeiraTela: 24, // (17)
       conversaAntes: 24, // (12)
-      conversaCabecalho: 3, // (1 antes de assumir; 3 depois)
+      // INBOX-UX-03: the same four compact header actions as on the phone.
+      conversaCabecalho: 4,
       conversaDepois: 24, // (17)
       editar: 5, // (5)
       painel: { gestor: 12, vendedor: 7 }, // (11 e 6)
@@ -100,7 +103,9 @@ for (const screen of SCREENS) {
       await mockInbox(page);
       await page.goto('/inbox');
       await expect(
-        page.getByRole('button', { name: /Cliente Sintético 1/u }),
+        page
+          .locator('.inbox-list')
+          .getByRole('button', { name: /Cliente Sintético 1/u }),
       ).toBeVisible();
       await expect(page.locator('.inbox-list-summary')).not.toHaveText(
         'Carregando conversas…',

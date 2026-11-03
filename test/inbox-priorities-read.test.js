@@ -53,7 +53,11 @@ function harness(rows) {
         return {
           rows: sql.includes('SELECT count(*)::integer count')
             ? [{ count: 174 }]
-            : rows,
+            : /^\s*SELECT message\.id|^\s*SELECT id, conversation_id, source_message_id/u.test(
+                  sql,
+                )
+              ? []
+              : rows,
         };
       },
     },
@@ -102,6 +106,63 @@ test('INBOX-UX-02: projection is minimal and readiness comes from persisted orde
   assert.equal(page.items[0].order.readyForConfirmation, false);
   assert.equal(page.items[0].waitingSince, null);
   assert.equal(page.items[0].deliveryIssue, null);
+});
+
+test('CP-10: closure acknowledgement signal includes subject-only pending orders without replacing the canonical order', async () => {
+  /** @type {Array<[Record<string, any>, boolean]>} */
+  const cases = [
+    [syntheticRow({ has_pending_order: true }), true],
+    [
+      syntheticRow({
+        has_pending_order: true,
+        order_id: null,
+        review_order_id: null,
+      }),
+      true,
+    ],
+    [
+      syntheticRow({
+        has_pending_order: false,
+        order_status: 'confirmado',
+        review_order_id: null,
+      }),
+      false,
+    ],
+    [
+      syntheticRow({
+        has_pending_order: false,
+        order_id: null,
+        review_order_id: null,
+      }),
+      false,
+    ],
+  ];
+  for (const [row, expected] of cases) {
+    const { repository, calls } = harness([row]);
+    const page = await repository.list({ limit: 1 });
+    const detail = await repository.get(row.id);
+    for (const summary of [page.items[0], detail.conversation]) {
+      assert.equal(summary.hasPendingOrder, expected);
+      assert.equal(summary.order?.id ?? null, row.order_id);
+      assert.equal(
+        summary.order?.status ?? null,
+        row.order_id ? row.order_status : null,
+      );
+      assert.doesNotMatch(
+        JSON.stringify(summary),
+        /envelope|ciphertext|ficha/u,
+      );
+    }
+    for (const { sql } of calls.filter(({ sql }) =>
+      sql.includes('has_pending_order'),
+    )) {
+      assert.match(sql, /pending_order\.conversation_id=conversation\.id/u);
+      assert.match(sql, /pending_order\.status='pendente'/u);
+      assert.match(sql, /pending_subject\.conversation_id=conversation\.id/u);
+      assert.match(sql, /linked_order\.id=pending_subject\.order_id/u);
+      assert.match(sql, /linked_order\.status='pendente'/u);
+    }
+  }
 });
 
 test('INBOX-UX-02: actor, readiness and waiting predicates apply to page and global count', async () => {

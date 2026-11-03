@@ -343,6 +343,9 @@ test('IMG-01/ARQ-02 explicitly selects the order and attaches original image byt
     });
   });
   await page.goto(`${origin}/__media-message?orders`);
+  await page
+    .getByRole('button', { name: 'Anexar imagem ao pedido', exact: true })
+    .click();
   const button = page.getByRole('button', {
     name: 'Anexar ao pedido',
     exact: true,
@@ -350,7 +353,9 @@ test('IMG-01/ARQ-02 explicitly selects the order and attaches original image byt
   await button.focus();
   await page.keyboard.press('Enter');
   expect(attempts).toHaveLength(0);
-  await page.getByLabel('Anexar imagem ao pedido').selectOption('order-two');
+  await page
+    .getByRole('combobox', { name: 'Anexar imagem ao pedido' })
+    .selectOption('order-two');
   await button.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('alert')).toContainText('Arquivos indisponíveis');
@@ -391,7 +396,12 @@ test('IMG-02 expired content never uploads an order file', async ({ page }) => {
   await page.route('**/api/v1/conversations/**/content', (route) =>
     route.fulfill({ status: 410, body: '' }),
   );
-  await page.getByLabel('Anexar imagem ao pedido').selectOption('order-one');
+  await page
+    .getByRole('button', { name: 'Anexar imagem ao pedido', exact: true })
+    .click();
+  await page
+    .getByRole('combobox', { name: 'Anexar imagem ao pedido' })
+    .selectOption('order-one');
   await page
     .getByRole('button', { name: 'Anexar ao pedido', exact: true })
     .click();
@@ -414,6 +424,32 @@ test('IMG-02 no editable order or lost image offers no attachment command', asyn
   ).toHaveCount(0);
 });
 
+test('INBOX-UX-03 removing available orders restores focus from their removed selector to the image', async ({
+  page,
+}) => {
+  await page.goto(`${origin}/__media-message?orders`);
+  await page
+    .getByRole('button', { name: 'Anexar imagem ao pedido', exact: true })
+    .click();
+  const selector = page.getByRole('combobox', {
+    name: 'Anexar imagem ao pedido',
+  });
+  await expect(selector).toBeFocused();
+  await selector.selectOption('order-one');
+  // An SSE update changes availability without moving focus to an action first.
+  await page
+    .getByRole('button', { name: 'Remover pedidos disponíveis' })
+    .evaluate((button) => /** @type {HTMLButtonElement} */ (button).click());
+  await expect(selector).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Anexar imagem ao pedido', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Ampliar imagem' }),
+  ).toBeFocused();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
 test('IMG-06 GIF renders and attaches its original bytes', async ({ page }) => {
   const uploads = /** @type {import('@playwright/test').Request[]} */ ([]);
   await page.route('**/api/v1/orders/*/files', (route) => {
@@ -429,7 +465,12 @@ test('IMG-06 GIF renders and attaches its original bytes', async ({ page }) => {
       image.evaluate((el) => /** @type {HTMLImageElement} */ (el).naturalWidth),
     )
     .toBe(1);
-  await page.getByLabel('Anexar imagem ao pedido').selectOption('order-one');
+  await page
+    .getByRole('button', { name: 'Anexar imagem ao pedido', exact: true })
+    .click();
+  await page
+    .getByRole('combobox', { name: 'Anexar imagem ao pedido' })
+    .selectOption('order-one');
   await page
     .getByRole('button', { name: 'Anexar ao pedido', exact: true })
     .click();
@@ -453,7 +494,12 @@ test('IMG-07 full order announces the five-file limit and preserves keyboard ret
     }),
   );
   await page.goto(origin + '/__media-message?orders');
-  await page.getByLabel('Anexar imagem ao pedido').selectOption('order-one');
+  await page
+    .getByRole('button', { name: 'Anexar imagem ao pedido', exact: true })
+    .click();
+  await page
+    .getByRole('combobox', { name: 'Anexar imagem ao pedido' })
+    .selectOption('order-one');
   const button = page.getByRole('button', {
     name: 'Anexar ao pedido',
     exact: true,
@@ -487,7 +533,12 @@ test('IMG-08 image bytes with unsupported MIME are never uploaded', async ({
     uploads.push(route.request());
     return route.fulfill({ json: {} });
   });
-  await page.getByLabel('Anexar imagem ao pedido').selectOption('order-one');
+  await page
+    .getByRole('button', { name: 'Anexar imagem ao pedido', exact: true })
+    .click();
+  await page
+    .getByRole('combobox', { name: 'Anexar imagem ao pedido' })
+    .selectOption('order-one');
   await page
     .getByRole('button', { name: 'Anexar ao pedido', exact: true })
     .click();
@@ -501,7 +552,7 @@ for (const kind of ['audio', 'video']) {
   }) => {
     await page.goto(`${origin}/__media-message?kind=${kind}`);
     const player = page.locator(kind);
-    await expect(player).toHaveAttribute('controls', '');
+    if (kind === 'video') await expect(player).toHaveAttribute('controls', '');
     await expect(player).toHaveAttribute('preload', 'metadata');
     await expect(player).not.toHaveAttribute('autoplay', /.*/);
     await expect
@@ -546,13 +597,53 @@ test('MED-25 lost transition restores focus from removed native player to notice
   page,
 }) => {
   await page.goto(`${origin}/__media-message?kind=audio`);
-  const player = page.locator('audio');
-  await player.focus();
+  await page
+    .getByRole('button', { name: 'Reproduzir mensagem de voz' })
+    .focus();
   await page
     .getByRole('button', { name: 'Marcar arquivo perdido' })
     .evaluate((element) => /** @type {HTMLButtonElement} */ (element).click());
   await expect(page.locator('audio')).toHaveCount(0);
   await expect(page.getByRole('status')).toBeFocused();
+});
+
+test('INBOX-UX-03 message voice controls seek and adjust volume by keyboard', async ({
+  page,
+}) => {
+  await page.goto(`${origin}/__media-message?kind=audio`);
+  const seek = page.getByRole('slider', { name: 'Posição da mensagem de voz' });
+  await expect(seek).toBeEnabled();
+  await seek.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect
+    .poll(() =>
+      page
+        .locator('audio')
+        .evaluate(
+          (element) => /** @type {HTMLMediaElement} */ (element).currentTime,
+        ),
+    )
+    .toBeGreaterThan(0);
+  const volumeToggle = page.getByRole('button', {
+    name: 'Volume da mensagem de voz',
+  });
+  await volumeToggle.click();
+  const volume = page.getByRole('slider', { name: 'Volume', exact: true });
+  await volume.focus();
+  await page.keyboard.press('Home');
+  await expect
+    .poll(() =>
+      page
+        .locator('audio')
+        .evaluate(
+          (element) => /** @type {HTMLMediaElement} */ (element).volume,
+        ),
+    )
+    .toBe(0);
+  await page.keyboard.press('Escape');
+  await expect(volume).toHaveCount(0);
+  await expect(volumeToggle).toBeFocused();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
 test('MED-25 content failure restores focus from removed player to notice', async ({
@@ -564,7 +655,9 @@ test('MED-25 content failure restores focus from removed player to notice', asyn
     contentRoute = route;
   });
   await page.goto(`${origin}/__media-message?kind=audio`);
-  await page.locator('audio').focus();
+  await page
+    .getByRole('button', { name: 'Reproduzir mensagem de voz' })
+    .focus();
   await expect.poll(() => Boolean(contentRoute)).toBe(true);
   await /** @type {import('@playwright/test').Route | null} */ (
     contentRoute
@@ -648,11 +741,16 @@ for (const kind of ['audio', 'video']) {
       .toBeGreaterThanOrEqual(1);
     await page.getByRole('button', { name: 'Marcar arquivo perdido' }).focus();
     await page.keyboard.press('Tab');
-    expect(
-      await player.evaluate(
-        (element) => element === globalThis.document.activeElement,
-      ),
-    ).toBe(true);
+    if (kind === 'audio')
+      await expect(
+        page.getByRole('button', { name: 'Reproduzir mensagem de voz' }),
+      ).toBeFocused();
+    else
+      expect(
+        await player.evaluate(
+          (element) => element === globalThis.document.activeElement,
+        ),
+      ).toBe(true);
     await page.keyboard.press('Space');
     await expect
       .poll(() =>

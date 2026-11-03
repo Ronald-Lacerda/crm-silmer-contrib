@@ -4,7 +4,6 @@ import { request } from '../../lib/api-client.js';
 import {
   amountLabel,
   itemPieces,
-  joinPt,
   missingFieldLabels,
   orderStatusLabel,
 } from '../../lib/order-format.js';
@@ -43,12 +42,17 @@ const statusTone = computed(() =>
   current.value?.status === 'confirmado' ? 'success' : 'warning',
 );
 /** PIT-06: the same words the order page uses for what blocks "Gerar". */
-const missingText = computed(() => {
-  if (detail.value?.status !== 'pendente') return '';
-  const labels = missingFieldLabels(detail.value.missingFields ?? []);
-  return labels.length
-    ? `Falta para gerar: ${joinPt(labels)}.`
-    : 'Pronto para gerar.';
+const missingGroups = computed(() => {
+  if (detail.value?.status !== 'pendente') return [];
+  const groups = new Map();
+  for (const field of detail.value.missingFields ?? []) {
+    const match = /^items\[(\d+)\]\./u.exec(field);
+    const group = match ? `Item ${Number(match[1]) + 1}` : 'Pedido';
+    const label = missingFieldLabels([field])[0];
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(label);
+  }
+  return [...groups].map(([label, fields]) => ({ label, fields }));
 });
 const items = computed(() =>
   (detail.value?.ficha?.items ?? []).map(
@@ -150,26 +154,53 @@ onBeforeUnmount(() => controller?.abort());
         <button type="button" @click="retry">Tentar novamente</button>
       </div>
       <template v-else-if="detail">
-        <p v-if="missingText" class="context-order-missing">
-          {{ missingText }}
-        </p>
         <ul class="context-order-items" aria-label="Itens do pedido">
           <li v-for="item in items" :key="item.key">
             <span>{{ item.label }}</span>
-            <span>{{ item.pieces }} peças</span>
+            <span>{{
+              item.pieces > 0 ? `${item.pieces} peças` : 'A definir'
+            }}</span>
           </li>
           <li v-if="!items.length">Nenhum item registrado.</li>
         </ul>
         <dl class="context-facts context-order-facts">
           <div>
             <dt>Total de peças</dt>
-            <dd>{{ detail.totalPieces ?? 0 }} peças</dd>
+            <dd>
+              {{
+                detail.totalPieces > 0
+                  ? `${detail.totalPieces} peças`
+                  : 'A definir'
+              }}
+            </dd>
           </div>
           <div>
             <dt>Valor</dt>
-            <dd>{{ amountLabel(detail.finalAmountCents) }}</dd>
+            <dd>
+              {{
+                detail.finalAmountCents > 0
+                  ? amountLabel(detail.finalAmountCents)
+                  : 'A definir'
+              }}
+            </dd>
           </div>
         </dl>
+        <details v-if="missingGroups.length" class="context-order-missing">
+          <summary>Pendências do pedido</summary>
+          <div
+            v-for="group in missingGroups"
+            :key="group.label"
+            class="context-order-gap-group"
+          >
+            <h4>{{ group.label }}</h4>
+            <ul>
+              <li v-for="field in group.fields" :key="field">{{ field }}</li>
+            </ul>
+          </div>
+        </details>
+        <p v-else-if="detail.status === 'pendente'" class="op-hint">
+          Pronto para gerar.
+        </p>
       </template>
       <div class="inline-actions">
         <RouterLink class="button-link" :to="orderPath"

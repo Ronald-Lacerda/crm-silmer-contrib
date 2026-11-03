@@ -157,6 +157,44 @@ async function ready(page) {
   ).toBeEnabled();
 }
 
+test('INBOX-UX-03 image review keeps a long filename and caption compact with an expandable preview', async ({
+  page,
+}) => {
+  await setup(page);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await select(
+    page,
+    'referencia-da-estampa-da-camiseta-infantil-para-a-turma-da-escola.png',
+  );
+  await ready(page);
+  const review = page.locator('.media-composer__review');
+  const box = await review.boundingBox();
+  expect(box?.height).toBeLessThan(180);
+  const caption = page.getByLabel('Legenda');
+  await expect(caption).toHaveAttribute('rows', '1');
+  const counter = page.getByText('0/1024 caracteres', { exact: true });
+  const counterBox = await counter.boundingBox();
+  expect(counterBox?.width).toBeLessThanOrEqual(1);
+  expect(counterBox?.height).toBeLessThanOrEqual(1);
+  await expect(caption).toHaveAccessibleDescription('0/1024 caracteres');
+  await caption.fill('a'.repeat(900));
+  const nearLimitCounter = page.getByText('900/1024 caracteres', {
+    exact: true,
+  });
+  await expect(nearLimitCounter).toBeVisible();
+  const nearLimitBox = await nearLimitCounter.boundingBox();
+  expect(nearLimitBox?.width).toBeGreaterThan(1);
+  expect(nearLimitBox?.height).toBeGreaterThan(1);
+  await page.getByRole('button', { name: 'Ampliar prévia do anexo' }).click();
+  await expect(
+    page.getByRole('dialog', { name: 'Prévia ampliada do anexo' }),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(
+    page.getByRole('button', { name: 'Ampliar prévia do anexo' }),
+  ).toBeFocused();
+});
+
 for (const [reason, message] of [
   [
     'stale_signatures',

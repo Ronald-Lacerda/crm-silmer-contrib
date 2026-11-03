@@ -111,7 +111,6 @@ const SHORTCUTS = Object.freeze([
   }),
   Object.freeze({ label: 'Todas', queue: 'all', tab: 'all', value: 'all' }),
 ]);
-const CONTEXT_STORAGE_KEY = 'crm.inbox.contextOpen';
 const LIST_TIME = new Intl.DateTimeFormat('pt-BR', {
   hour: '2-digit',
   minute: '2-digit',
@@ -160,7 +159,16 @@ const moreMenu = ref(null);
 const contextToggle = ref(null);
 const transferSelect = ref(null);
 const moreOpen = ref(false);
-const contextOpen = ref(initialContextOpen());
+const contextOpen = ref(false);
+const contextDialog = ref(null);
+const contactDialog = ref(null);
+const contextTab = ref('orders');
+const subjectActionsOpen = ref(false);
+const contactLoading = ref(false);
+const contactError = ref('');
+const contactDetail = ref(null);
+const closeError = ref('');
+let contactController;
 const query = ref('');
 // Painel: each indicator opens the Inbox already filtered
 // (`?fila=minhas|sem-responsavel`, `?situacao=aguardando|agente|vendedor`).
@@ -456,6 +464,15 @@ const canClose = computed(
     !isTerminal.value &&
     (isAdmin.value || owner.value?.id === currentUserId.value),
 );
+/** CP-10: includes pending orders linked only by a subject of this cycle. */
+const hasPendingOrder = computed(
+  () =>
+    Boolean(active.value?.hasPendingOrder) ||
+    active.value?.order?.status === 'pendente' ||
+    subjectState.value.subjects.some(
+      (subject) => subject.orderStatus === 'pendente',
+    ),
+);
 const availableSubjectOrders = computed(() =>
   subjectState.value.orders.filter(
     (order) =>
@@ -590,7 +607,6 @@ const canArchiveActive = computed(
 /** "Mais" holds what the header does not show, and only when there is any. */
 const hasMoreActions = computed(
   () =>
-    isPhone.value ||
     createOrderInMore.value ||
     canClose.value ||
     canTransfer.value ||
@@ -759,75 +775,68 @@ function waitingFor(conversation) {
   return since ? elapsedSince(since, now.value) : '';
 }
 
-/** Wide screens show list, conversation and context side by side. */
-function isWide() {
-  return globalThis.matchMedia?.('(min-width: 1200px)').matches ?? true;
-}
-
 /** Phones show one pane at a time: the list or the open conversation. */
 function isSinglePane() {
   return globalThis.matchMedia?.('(max-width: 768px)').matches ?? false;
 }
 
-/**
- * The context column opens by default only where the conversation keeps its
- * room beside it (1440 px and up); on a 1366 notebook the conversation comes
- * first. Whatever the reader chose last wins (a per-browser convenience).
- */
-function initialContextOpen() {
-  if (!isWide()) return false;
-  const roomy = globalThis.matchMedia?.('(min-width: 1440px)').matches ?? true;
-  try {
-    const stored = globalThis.localStorage?.getItem(CONTEXT_STORAGE_KEY);
-    return stored === null || stored === undefined ? roomy : stored === 'true';
-  } catch {
-    return roomy;
-  }
-}
-
 /** @param {boolean} [open] */
 async function toggleContext(open = !contextOpen.value) {
   contextOpen.value = open;
-  if (isWide()) {
-    try {
-      globalThis.localStorage?.setItem(CONTEXT_STORAGE_KEY, String(open));
-    } catch {
-      // Storage may be blocked; the panel still works for this visit.
-    }
-  }
   await nextTick();
-  if (open) {
-    // Opened on purpose, at any width: the reader lands on its heading.
-    /** @type {HTMLElement|null} */ (
-      globalThis.document.querySelector('#inbox-context-title')
-    )?.focus();
-  } else {
-    // On a phone the panel opens from the "Mais" sheet instead.
-    (contextToggle.value ?? moreToggle.value)?.focus();
+  const dialog = contextDialog.value;
+  if (!(dialog instanceof HTMLDialogElement)) return;
+  if (open && !dialog.open)
+    openDialog(dialog, contextToggle.value ?? moreToggle.value);
+  else if (!open) dialog.close();
+}
+
+/** Contact data is fetched only on deliberate opening and never persisted. */
+async function loadContactDetails() {
+  const id = active.value?.contact.id;
+  if (!id) return;
+  contactController?.abort();
+  const controller = new AbortController();
+  contactController = controller;
+  contactLoading.value = true;
+  contactError.value = '';
+  try {
+    const response = await request(
+      `/api/v1/contacts/${encodeURIComponent(id)}`,
+      { signal: controller.signal },
+    );
+    if (controller === contactController && active.value?.contact.id === id)
+      contactDetail.value = response.data.contact;
+  } catch (cause) {
+    if (controller === contactController && cause?.name !== 'AbortError')
+      contactError.value =
+        'Não foi possível carregar os dados completos do contato.';
+  } finally {
+    if (controller === contactController) contactLoading.value = false;
   }
 }
 
-function openContextFromMore() {
-  closeMore();
-  void toggleContext(true);
-}
-
-/**
- * Esc closes the panel and hands focus back to whoever opened it. A search
- * box keeps its own Esc, which clears what was typed.
- *
- * @param {KeyboardEvent} event
- */
-function closeContextOnEscape(event) {
-  const target = event.target;
-  if (
-    target instanceof HTMLInputElement &&
-    target.type === 'search' &&
-    target.value
-  ) {
+/** @param {MouseEvent} event */
+function openContact(event) {
+  if (!contactDialog.value || !(event.currentTarget instanceof HTMLElement))
     return;
-  }
-  if (contextOpen.value) void toggleContext(false);
+  contactDetail.value = null;
+  openDialog(contactDialog.value, event.currentTarget);
+  void loadContactDetails();
+}
+
+/** @param {MouseEvent} event */
+function closeDrawerOnBackdrop(event) {
+  const dialog = event.currentTarget;
+  if (!(dialog instanceof HTMLDialogElement) || event.target !== dialog) return;
+  const bounds = dialog.getBoundingClientRect();
+  if (
+    event.clientX < bounds.left ||
+    event.clientX > bounds.right ||
+    event.clientY < bounds.top ||
+    event.clientY > bounds.bottom
+  )
+    dialog.close();
 }
 
 /** @param {string} id */
@@ -1025,10 +1034,12 @@ function openCloseConfirmation(trigger) {
     return;
   closureOutcome.value = 'concluido';
   acknowledgePending.value = false;
+  closeError.value = '';
   openDialog(dialog, trigger);
 }
 
 async function confirmClose() {
+  if (hasPendingOrder.value && !acknowledgePending.value) return;
   const closed = await runCommand(
     'close',
     {
@@ -1042,6 +1053,9 @@ async function confirmClose() {
     closeConfirmationDialog.value?.close();
     await nextTick();
     heading.value?.focus();
+  } else {
+    closeError.value = error.value;
+    acknowledgePending.value = false;
   }
 }
 
@@ -1068,15 +1082,27 @@ function messageAuthorLabel(message) {
  * @param {{authorKind?: unknown, direction?: unknown}} message
  */
 function messageRoleLabel(message) {
-  return messageFrom(message) === 'cliente' ? 'Cliente' : '';
+  return messageFrom(message) === 'agente' ? 'IA' : '';
 }
 
 /** @param {{authorKind?: unknown, direction?: unknown}} message */
 function messageInitials(message) {
   const from = messageFrom(message);
-  if (from === 'cliente') return 'C';
-  if (from === 'humano') return 'V';
-  return brand.assistant.name.slice(0, 1).toLocaleUpperCase('pt-BR');
+  if (from === 'cliente') return '🙂';
+  if (from === 'humano') return '🧑‍💼';
+  return '✦';
+}
+
+/** Hide transport labels while retaining genuine captions on media. @param {Record<string, any>} message */
+function messageCaption(message) {
+  const caption = String(message.preview ?? '');
+  return (message.media ||
+    ['audio', 'image', 'video'].includes(message.type)) &&
+    /^(áudio|audio|imagem|foto|vídeo|video)(?:\s+(?:recebid[oa]|enviad[oa]))?\.?$/iu.test(
+      caption.trim(),
+    )
+    ? ''
+    : caption;
 }
 
 /** INBOX-DELIVERY-01: consult the existing attempt; never create another send.
@@ -1277,6 +1303,13 @@ async function selectConversation(id, silent = false) {
   const controller = new AbortController();
   detailController = controller;
   if (activeId.value !== id) {
+    contextDialog.value?.close();
+    contactDialog.value?.close();
+    contextOpen.value = false;
+    contextTab.value = 'orders';
+    subjectActionsOpen.value = false;
+    contactController?.abort();
+    contactDetail.value = null;
     deliveryCheckNotice.value = '';
     deliveryCheckError.value = '';
     deliveryCheckFailedId.value = '';
@@ -2020,6 +2053,9 @@ onMounted(() => {
   }, 30_000);
 });
 onBeforeUnmount(() => {
+  contextDialog.value?.close();
+  contactDialog.value?.close();
+  contactController?.abort();
   phoneQuery?.removeEventListener('change', phoneChanged);
   listController?.abort();
   countController?.abort();
@@ -2282,10 +2318,20 @@ onBeforeUnmount(() => {
               <div class="conv-title-row">
                 <h2
                   :id="`conversation-${active.id}`"
+                  :aria-label="active.contact.label"
                   ref="conversationHeading"
                   tabindex="-1"
                 >
-                  {{ active.contact.label }}
+                  <button
+                    type="button"
+                    class="conv-contact-name"
+                    :aria-label="`Dados de ${active.contact.label}`"
+                    @click="openContact"
+                  >
+                    <span class="contact-avatar" aria-hidden="true">🙂</span>
+                    <span>{{ active.contact.label }}</span
+                    ><AppIcon name="chevron-down" />
+                  </button>
                 </h2>
                 <!-- PCX-10: the order is a place to go, not a status dressed
                      as a button. The status reads as text in its badge; with
@@ -2313,21 +2359,6 @@ onBeforeUnmount(() => {
               </div>
               <p class="conv-identity">
                 {{ CHANNEL_LABELS[active.channel] }} ·
-                <template v-if="active.channel === 'site_chat'">
-                  {{
-                    active.contact.phone
-                      ? formatPhoneNumber(active.contact.phone)
-                      : 'Telefone do chat indisponível'
-                  }}
-                  <template v-if="active.contact.phone">
-                    · telefone informado no site</template
-                  >
-                  ·
-                </template>
-                <template
-                  v-else-if="active.contact.label !== active.contact.externalId"
-                  >{{ formatPhoneNumber(active.contact.externalId) }} ·
-                </template>
                 {{ serviceLabel }}
               </p>
             </div>
@@ -2389,15 +2420,6 @@ onBeforeUnmount(() => {
                   :hidden="!moreOpen"
                 >
                   <button
-                    v-if="isPhone"
-                    type="button"
-                    aria-controls="inbox-context"
-                    :aria-expanded="contextOpen"
-                    @click="openContextFromMore"
-                  >
-                    <AppIcon name="panel" />Detalhes do atendimento
-                  </button>
-                  <button
                     v-if="createOrderInMore"
                     type="button"
                     :aria-disabled="orderCreating || busy ? 'true' : undefined"
@@ -2443,17 +2465,17 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <button
-                v-if="!isPhone"
                 ref="contextToggle"
                 type="button"
                 class="quiet conv-context-toggle"
                 title="Detalhes do atendimento"
+                aria-label="Detalhes do atendimento"
                 aria-controls="inbox-context"
                 :aria-expanded="contextOpen"
                 @click="toggleContext()"
               >
                 <AppIcon name="panel" />
-                <span>Detalhes</span>
+                <span class="sr-only">Detalhes</span>
               </button>
             </div>
           </header>
@@ -2576,7 +2598,15 @@ onBeforeUnmount(() => {
                   >{{ messageWhen(message.occurredAt) }}</time
                 >
               </div>
-              <p>{{ message.preview }}</p>
+              <p
+                v-if="
+                  !message.media &&
+                  !['audio', 'image', 'video'].includes(message.type) &&
+                  messageCaption(message)
+                "
+              >
+                {{ messageCaption(message) }}
+              </p>
               <div
                 v-if="canQuoteShipping && message.direction === 'inbound'"
                 class="inline-actions"
@@ -2607,12 +2637,16 @@ onBeforeUnmount(() => {
                   message.direction === 'inbound' ? imageAttachmentOrders : []
                 "
               />
-              <!-- INBOX-AUDIO-TRANSCRIPT-01: what the transcription heard. -->
-              <MessageTranscript
-                v-if="message.transcript"
-                :message-id="message.id"
-                :transcript="message.transcript"
-              />
+              <p
+                v-if="
+                  (message.media ||
+                    ['audio', 'image', 'video'].includes(message.type)) &&
+                  messageCaption(message)
+                "
+                class="message-media-caption"
+              >
+                {{ messageCaption(message) }}
+              </p>
               <small v-if="message.deliveryMode === 'dev'"
                 >DEV: envio simulado</small
               >
@@ -2780,12 +2814,22 @@ onBeforeUnmount(() => {
                   @submit.prevent="sendReply"
                 >
                   <label for="reply" class="sr-only">Responder</label>
+                  <button
+                    v-if="headerOrder"
+                    type="button"
+                    class="composer-order-context"
+                    @click="toggleContext(true)"
+                  >
+                    <AppIcon name="orders" />{{ headerOrder.number }} ·
+                    {{ orderStatusLabel(headerOrder.status)
+                    }}<AppIcon name="chevron-down" />
+                  </button>
                   <textarea
                     id="reply"
                     ref="replyInput"
                     v-model="reply"
-                    rows="2"
-                    placeholder="Digite uma mensagem…"
+                    rows="1"
+                    placeholder="Escreva uma mensagem…"
                     maxlength="2000"
                     :disabled="
                       busy || mediaSending || recordingActive || !canReply
@@ -2793,7 +2837,11 @@ onBeforeUnmount(() => {
                     aria-describedby="reply-help"
                     @keydown="replyKeydown"
                   ></textarea>
-                  <p id="reply-help" class="composer-help">
+                  <p
+                    id="reply-help"
+                    class="composer-help"
+                    :class="{ 'sr-only': canReply }"
+                  >
                     <template v-if="isTerminal"
                       >A conversa está encerrada.</template
                     >
@@ -2817,6 +2865,12 @@ onBeforeUnmount(() => {
                   type="submit"
                   form="inbox-reply-form"
                   class="primary"
+                  aria-label="Enviar resposta"
+                  :title="
+                    touchInput
+                      ? 'Enviar resposta'
+                      : 'Enviar resposta · Enter envia; Shift+Enter quebra a linha'
+                  "
                   :disabled="
                     busy ||
                     mediaSending ||
@@ -2825,10 +2879,8 @@ onBeforeUnmount(() => {
                     !reply.trim()
                   "
                 >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path d="m3 3 18 9-18 9 4-9-4-9Zm4 9h14" />
-                  </svg>
-                  Enviar resposta
+                  <AppIcon name="send" />
+                  <span class="sr-only">Enviar resposta</span>
                 </button>
               </template>
             </AudioRecorder>
@@ -2843,18 +2895,17 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <aside
+      <dialog
         v-if="active"
+        ref="contextDialog"
         id="inbox-context"
         class="inbox-context"
         aria-labelledby="inbox-context-title"
-        :hidden="!contextOpen"
-        @keydown.esc="closeContextOnEscape"
+        @close="contextOpen = false"
+        @click="closeDrawerOnBackdrop"
       >
         <div class="inbox-context-head">
-          <h2 id="inbox-context-title" tabindex="-1">
-            Detalhes do atendimento
-          </h2>
+          <h2 id="inbox-context-title" tabindex="-1">Atendimento</h2>
           <button
             type="button"
             class="quiet"
@@ -2865,98 +2916,218 @@ onBeforeUnmount(() => {
           </button>
         </div>
 
-        <ConversationOrderSummary
-          :conversation-id="active.id"
-          :order="headerOrder"
-          :read-by-id="
-            Boolean(headerOrder && headerOrder.id !== active.order?.id)
-          "
-          :open="contextOpen"
-          :revision="orderRevision"
-        />
+        <div
+          class="context-tabs"
+          role="group"
+          aria-label="Seções do atendimento"
+        >
+          <button
+            type="button"
+            :aria-pressed="contextTab === 'orders'"
+            @click="contextTab = 'orders'"
+          >
+            Pedidos e assuntos
+          </button>
+          <button
+            type="button"
+            :aria-pressed="contextTab === 'summary'"
+            @click="contextTab = 'summary'"
+          >
+            Resumo
+          </button>
+        </div>
+        <div v-show="contextTab === 'orders'">
+          <ConversationOrderSummary
+            :conversation-id="active.id"
+            :order="headerOrder"
+            :read-by-id="
+              Boolean(headerOrder && headerOrder.id !== active.order?.id)
+            "
+            :open="contextOpen"
+            :revision="orderRevision"
+          />
 
-        <section class="subject-panel" aria-labelledby="subject-panel-title">
-          <!-- UXA-04: the seller's words, and what each action changes. -->
-          <h3 id="subject-panel-title" ref="subjectHeading" tabindex="-1">
-            Pedidos e assuntos do atendimento
-          </h3>
-          <p v-if="subjectError" role="alert">{{ subjectError }}</p>
-          <p v-if="subjectNotice" role="status">{{ subjectNotice }}</p>
-          <p v-if="!subjectState.subjects.length" class="op-hint">
-            Ainda não há assunto classificado. As mensagens permanecem no
-            histórico.
-          </p>
-          <ul v-else class="subject-list">
-            <li v-for="subject in subjectState.subjects" :key="subject.id">
-              <span>{{ subjectLabel(subject) }}</span>
-              <strong v-if="subject.isCurrent" class="badge" data-tone="info"
-                >O agente usa este</strong
-              >
-              <button
-                v-else-if="canClose"
-                type="button"
-                :aria-label="`Usar este: fazer o agente usar ${subjectLabel(subject)}`"
-                :disabled="subjectBusy"
-                @click="subjectCommand('select', subject.id)"
-              >
-                Usar este
-              </button>
-            </li>
-          </ul>
-          <div v-if="canClose" class="subject-actions">
+          <section class="subject-panel" aria-labelledby="subject-panel-title">
+            <!-- UXA-04: the seller's words, and what each action changes. -->
+            <h3 id="subject-panel-title" ref="subjectHeading" tabindex="-1">
+              Assuntos do atendimento
+            </h3>
+            <p v-if="subjectError" role="alert">{{ subjectError }}</p>
+            <p v-if="subjectNotice" role="status">{{ subjectNotice }}</p>
+            <p v-if="!subjectState.subjects.length" class="op-hint">
+              Ainda não há assunto classificado. As mensagens permanecem no
+              histórico.
+            </p>
+            <ul v-else class="subject-list">
+              <li v-for="subject in subjectState.subjects" :key="subject.id">
+                <span>{{ subjectLabel(subject) }}</span>
+                <strong v-if="subject.isCurrent" class="badge" data-tone="info"
+                  >Em foco</strong
+                >
+                <button
+                  v-else-if="canClose"
+                  type="button"
+                  :aria-label="`Usar este: fazer o agente usar ${subjectLabel(subject)}`"
+                  :disabled="subjectBusy"
+                  @click="subjectCommand('select', subject.id)"
+                >
+                  Usar este
+                </button>
+              </li>
+            </ul>
             <button
+              v-if="canClose"
               type="button"
-              :disabled="subjectBusy"
-              @click="subjectCommand('create')"
+              class="subject-add-toggle"
+              :aria-expanded="subjectActionsOpen"
+              aria-controls="subject-add-actions"
+              @click="subjectActionsOpen = !subjectActionsOpen"
             >
-              Novo assunto sem pedido
+              Adicionar assunto
             </button>
-            <form
-              class="subject-order-search"
-              @submit.prevent="loadSubjects(active.id)"
+            <div
+              v-if="canClose"
+              v-show="subjectActionsOpen"
+              id="subject-add-actions"
+              class="subject-actions"
             >
-              <label :for="`subject-order-query-${active.id}`">
-                Buscar pedido pelo número
-              </label>
-              <input
-                :id="`subject-order-query-${active.id}`"
-                v-model="subjectOrderQuery"
-                type="search"
-                maxlength="40"
-                autocomplete="off"
-              />
-              <button type="submit" :disabled="subjectBusy">Buscar</button>
-            </form>
-            <label :for="`subject-order-${active.id}`">Vincular pedido</label>
-            <select
-              :id="`subject-order-${active.id}`"
-              v-model="selectedSubjectOrderId"
-            >
-              <option value="">Selecione um pedido</option>
-              <option
-                v-for="order in availableSubjectOrders"
-                :key="order.id"
-                :value="order.id"
+              <button
+                type="button"
+                :disabled="subjectBusy"
+                @click="subjectCommand('create')"
               >
-                {{ order.number }} · {{ orderStatusLabel(order.status) }}
-              </option>
-            </select>
-            <button
-              type="button"
-              :disabled="subjectBusy || !selectedSubjectOrderId"
-              @click="subjectCommand('create', selectedSubjectOrderId)"
+                Novo assunto sem pedido
+              </button>
+              <form
+                class="subject-order-search"
+                @submit.prevent="loadSubjects(active.id)"
+              >
+                <label :for="`subject-order-query-${active.id}`">
+                  Buscar pedido pelo número
+                </label>
+                <input
+                  :id="`subject-order-query-${active.id}`"
+                  v-model="subjectOrderQuery"
+                  type="search"
+                  maxlength="40"
+                  autocomplete="off"
+                />
+                <button type="submit" :disabled="subjectBusy">Buscar</button>
+              </form>
+              <label :for="`subject-order-${active.id}`">Vincular pedido</label>
+              <select
+                :id="`subject-order-${active.id}`"
+                v-model="selectedSubjectOrderId"
+              >
+                <option value="">Selecione um pedido</option>
+                <option
+                  v-for="order in availableSubjectOrders"
+                  :key="order.id"
+                  :value="order.id"
+                >
+                  {{ order.number }} · {{ orderStatusLabel(order.status) }}
+                </option>
+              </select>
+              <button
+                type="button"
+                :disabled="subjectBusy || !selectedSubjectOrderId"
+                @click="subjectCommand('create', selectedSubjectOrderId)"
+              >
+                Criar assunto do pedido
+              </button>
+            </div>
+            <p v-if="subjectState.ordersHasMore" class="op-hint">
+              Há mais pedidos deste cliente. Busque pelo número para localizar o
+              pedido desejado.
+            </p>
+          </section>
+        </div>
+        <section
+          v-show="contextTab === 'summary'"
+          class="context-section"
+          aria-label="Resumo do atendimento"
+        >
+          <dl class="context-facts">
+            <div>
+              <dt>Responsável</dt>
+              <dd>{{ ownerLabel }}</dd>
+            </div>
+            <div>
+              <dt>Canal</dt>
+              <dd>{{ CHANNEL_LABELS[active.channel] }}</dd>
+            </div>
+            <div>
+              <dt>Atendimento</dt>
+              <dd>{{ serviceLabel }}</dd>
+            </div>
+            <div v-if="active.closureOutcome">
+              <dt>Encerramento</dt>
+              <dd>
+                {{
+                  active.closureOutcome === 'concluido'
+                    ? 'Atendimento concluído'
+                    : 'Sem pedido neste atendimento'
+                }}
+                · {{ dateTimeBR(active.terminalAt) }}
+              </dd>
+            </div>
+          </dl>
+          <details
+            v-if="detail?.messages?.some((message) => message.transcript)"
+            class="context-transcripts"
+          >
+            <summary>Transcrições automáticas</summary>
+            <div
+              v-for="message in detail.messages.filter(
+                (entry) => entry.transcript,
+              )"
+              :key="message.id"
+              :data-message-id="message.id"
+              class="context-transcript-entry"
             >
-              Criar assunto do pedido
+              <time :datetime="message.occurredAt">{{
+                dateTimeBR(message.occurredAt)
+              }}</time>
+              <MessageTranscript
+                :message-id="message.id"
+                :transcript="message.transcript"
+              />
+            </div>
+          </details>
+        </section>
+      </dialog>
+      <dialog
+        v-if="active"
+        ref="contactDialog"
+        class="inbox-context inbox-contact"
+        aria-labelledby="contact-drawer-title"
+        @close="
+          contactController?.abort();
+          contactDetail = null;
+          renaming = false;
+        "
+        @click="closeDrawerOnBackdrop"
+      >
+        <div class="inbox-context-head">
+          <h2 id="contact-drawer-title">Cadastro</h2>
+          <button
+            type="button"
+            class="quiet"
+            aria-label="Fechar cadastro"
+            @click="contactDialog?.close()"
+          >
+            <AppIcon name="close" />
+          </button>
+        </div>
+        <section class="context-section" aria-labelledby="context-client-title">
+          <h3 id="context-client-title" class="sr-only">Dados do contato</h3>
+          <p v-if="contactLoading" role="status">Carregando cadastro…</p>
+          <div v-if="contactError" role="alert">
+            <p>{{ contactError }}</p>
+            <button type="button" @click="loadContactDetails">
+              Tentar novamente
             </button>
           </div>
-          <p v-if="subjectState.ordersHasMore" class="op-hint">
-            Há mais pedidos deste cliente. Busque pelo número para localizar o
-            pedido desejado.
-          </p>
-        </section>
-
-        <section class="context-section" aria-labelledby="context-client-title">
-          <h3 id="context-client-title">Cliente</h3>
           <form v-if="renaming" class="rename-form" @submit.prevent="saveName">
             <label :for="`name-${active.id}`">Nome do contato</label>
             <input
@@ -2999,19 +3170,32 @@ onBeforeUnmount(() => {
               <dt>Nome</dt>
               <dd>{{ active.contact.label }}</dd>
             </div>
-            <div v-if="active.automationState === 'human'">
-              <dt>Responsável</dt>
-              <dd>{{ ownerLabel }}</dd>
-            </div>
-            <div v-if="active.closureOutcome">
-              <dt>Encerramento</dt>
+            <div>
+              <dt>Telefone</dt>
               <dd>
                 {{
-                  active.closureOutcome === 'concluido'
-                    ? 'Atendimento concluído'
-                    : 'Sem pedido neste atendimento'
+                  formatPhoneNumber(
+                    contactDetail?.phone ??
+                      active.contact.phone ??
+                      (active.channel === 'site_chat'
+                        ? null
+                        : active.contact.externalId),
+                  )
                 }}
-                · {{ dateTimeBR(active.terminalAt) }}
+                <small v-if="active.channel === 'site_chat'"
+                  >telefone informado no site</small
+                >
+              </dd>
+            </div>
+            <div>
+              <dt>E-mail</dt>
+              <dd>{{ contactDetail?.email || 'Não informado' }}</dd>
+            </div>
+            <div v-if="contactDetail?.registration?.city">
+              <dt>Cidade</dt>
+              <dd>
+                {{ contactDetail.registration.city }} ·
+                {{ contactDetail.registration.state }}
               </dd>
             </div>
           </dl>
@@ -3027,7 +3211,7 @@ onBeforeUnmount(() => {
             </RouterLink>
           </div>
         </section>
-      </aside>
+      </dialog>
     </div>
     <dialog
       ref="closeConfirmationDialog"
@@ -3052,7 +3236,8 @@ onBeforeUnmount(() => {
             Sem pedido neste atendimento
           </label>
         </fieldset>
-        <label v-if="active?.order?.status === 'pendente'">
+        <p v-if="closeError" role="alert">{{ closeError }}</p>
+        <label v-if="hasPendingOrder">
           <input v-model="acknowledgePending" type="checkbox" required />
           Há um pedido pendente. Confirmo que desejo encerrar esta conversa sem
           alterar o pedido.

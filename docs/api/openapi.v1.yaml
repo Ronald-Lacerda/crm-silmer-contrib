@@ -3203,6 +3203,13 @@ components:
             number: { type: string }
             status: { type: string, const: pendente }
             readyForConfirmation: { type: boolean, const: true }
+        hasPendingOrder:
+          type: boolean
+          description: >-
+            Há pedido pendente ligado diretamente à conversa ou por Assunto,
+            mesmo que order seja null ou confirmado. Exige confirmação
+            consciente para encerrar o atendimento sem alterar os pedidos
+            (CP-10); não substitui a validação transacional do comando.
         requiresAttention: { type: boolean }
         waitingSince:
           type: [string, 'null']

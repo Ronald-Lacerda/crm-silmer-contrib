@@ -122,6 +122,7 @@ if (connectionString) {
         conversationId: received.conversation.id,
       });
       assert.equal(conversation.messages[0].preview, `PII-canary-${runId}`);
+      assert.equal(conversation.conversation.hasPendingOrder, false);
 
       const firstContacts = await reads.listContacts({ limit: 1 });
       assert.equal(firstContacts.totalCount, 2);
@@ -278,6 +279,16 @@ if (connectionString) {
       await insertOrder(1, primary, 'confirmado');
       await insertOrder(2, primary, 'pendente');
       await insertOrder(3, waitingOld, 'confirmado');
+      assert.equal(
+        (await reads.getConversation({ conversationId: primary })).conversation
+          .hasPendingOrder,
+        true,
+      );
+      assert.equal(
+        (await reads.getConversation({ conversationId: waitingOld }))
+          .conversation.hasPendingOrder,
+        false,
+      );
 
       const waiting = await reads.listInbox({ pendingHandoff: true });
       assert.equal(waiting.totalCount, 2);
@@ -548,6 +559,7 @@ if (connectionString) {
           .totalCount,
         0,
       );
+
       await pool.query(
         `UPDATE crm.orders SET missing_fields='{}',total_pieces=1,
         final_amount_cents=1000,payment_condition='pix' WHERE id=$1`,
@@ -865,6 +877,66 @@ if (connectionString) {
         (await reads.listInbox({ workQueue: 'closing' }, { actorId: sellerId }))
           .totalCount,
         0,
+      );
+
+      // CP-10 / INBOX-UX-03: an incomplete order from another cycle must
+      // still require acknowledgement when it is linked only by a subject.
+      // It is intentionally not an actionable reviewOrder or canonical order.
+      const pendingSourceCycle = await openConversation(
+        'subject-only-source',
+        '2026-09-08T10:00:00.000Z',
+      );
+      const subjectOnlyCycle = await openConversation(
+        'subject-only-pending',
+        '2026-09-08T11:00:00.000Z',
+      );
+      await pool.query(
+        `UPDATE crm.contact_identities target_identity
+         SET current_contact_id=source_identity.current_contact_id
+         FROM crm.conversations source,crm.contact_identities source_identity,
+              crm.conversations target
+         WHERE source.id=$1 AND source_identity.id=source.contact_identity_id
+           AND target.id=$2 AND target_identity.id=target.contact_identity_id`,
+        [pendingSourceCycle, subjectOnlyCycle],
+      );
+      await insertOrder(6, pendingSourceCycle, 'pendente');
+      await pool.query(
+        `INSERT INTO crm.conversation_subjects
+         (id,conversation_id,contact_id,order_id,kind,position,is_current,created_by,created_by_kind,created_at,updated_at)
+         SELECT $1,conversation.id,identity.current_contact_id,$3,'pedido',1,false,$4,'human',$5,$5
+         FROM crm.conversations conversation
+         JOIN crm.contact_identities identity ON identity.id=conversation.contact_identity_id
+         WHERE conversation.id=$2`,
+        [
+          `subject-pending-only-${runId}`,
+          subjectOnlyCycle,
+          `order-6-${runId}`,
+          sellerId,
+          NOW,
+        ],
+      );
+      const subjectOnly = await reads.getConversation({
+        conversationId: subjectOnlyCycle,
+      });
+      assert.equal(subjectOnly.conversation.order, null);
+      assert.equal(subjectOnly.conversation.reviewOrder, null);
+      assert.equal(subjectOnly.conversation.hasPendingOrder, true);
+      const allConversations = await reads.listInbox({ limit: 100 });
+      assert.equal(
+        allConversations.items.find(
+          (/** @type {any} */ item) => item.id === subjectOnlyCycle,
+        ).hasPendingOrder,
+        true,
+      );
+      await insertOrder(7, pendingSourceCycle, 'confirmado');
+      await pool.query(
+        'UPDATE crm.conversation_subjects SET order_id=$2 WHERE id=$1',
+        [`subject-pending-only-${runId}`, `order-7-${runId}`],
+      );
+      assert.equal(
+        (await reads.getConversation({ conversationId: subjectOnlyCycle }))
+          .conversation.hasPendingOrder,
+        false,
       );
     } finally {
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
