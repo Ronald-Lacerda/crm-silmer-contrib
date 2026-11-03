@@ -41,6 +41,10 @@ Rollback: voltar API e edge para a revisão anterior preservada, sem remover
 a migration aditiva nem os envelopes. A cotação administrativa T138 permanece
 disponível naquela revisão. Não restaurar banco como primeira medida.
 
+A migration 0050 foi aplicada em produção após a integração da PR #260:
+[evidência de 02/11/2026](melhor-envio-migration-0050.md), com backup prévio,
+repetição idempotente e recuperação do readiness para HTTP 200.
+
 T138 / MEVC-01–08 / ADR 053. Conta verificada não significa API conectada.
 
 ## Preparar e ativar
