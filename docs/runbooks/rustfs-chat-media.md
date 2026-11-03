@@ -344,10 +344,15 @@ pelas tabelas de comandos e mensagens. conversation_id contraditório retorna
 essa conversa canônica. Essa resolução preserva respostas automáticas que
 possuem mensagem reservada sem linha na outbox humana.
 Confirmação conhecida message.sent converte o comando outcome_unknown para
-sent, limpa last_error_code e conserva retryable/retry_safe=false. Jobs e
-itens de reconciliação preexistentes permanecem intactos como evidência do
-efeito incerto (inclusive o item open para revisão operacional); o callback
-não os reabre, apaga ou agenda outra tentativa. A prova SQL inclui esse histórico.
+sent, limpa last_error_code e conserva retryable/retry_safe=false. O callback
+não reabre nem agenda jobs. Desde OPS-INBOX-ACK-02, o próximo poll da fila
+reconcilia até 100 jobs n8n.command.deliver em outcome_unknown: exige comando
+send_message em sent, mensagem sent na mesma conversa/comando com ID externo
+igual ao comando e evento imutável message.sent da mensagem/conversa.
+Somente então o job vira completed e o item open vira resolved na mesma
+transação. Tentativas, eventos, motivo e criação do item e ocorrências do
+painel permanecem como histórico. Sem essa prova, nada é resolvido ou reenviado.
+[Diagnóstico, validação e rollback](inbox-delivery-feedback.md#reconciliação-da-fila-após-confirmação-tardia--03112026).
 
 Contrato T11 de envio humano: messageType=text/image/audio/video. Para mídia,
 content é `{mediaId,caption?}`; caption somente image/video, no máximo1024

@@ -560,6 +560,15 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
 
 ## Confiabilidade da Inbox — 24/10/2026
 
+- [x] **OPS-INBOX-ACK-02 — reconciliar fila após confirmação tardia**
+      (MSG-02–03, ORC-08, INBOX-3 / INT-2). O poll conclui somente jobs n8n
+      incertos com comando/mensagem sent, mesmo ID externo e evento
+      autenticado message.sent. Fecha o item de reconciliação sem alterar
+      tentativas ou reexecutar envio; prova ausente preserva a pendência.
+      Cenários de concorrência, locks e replay para banco sintético dedicado;
+      publicação e conferência dos registros reais são gates operacionais.
+      [Diagnóstico e operação](../../../docs/runbooks/inbox-delivery-feedback.md#reconciliação-da-fila-após-confirmação-tardia--03112026).
+
 - [x] **OPS-INBOX-ACK-01 — validar confirmação do comando CRM → n8n.**
       HTTP 200/202 exige `accepted: true` e `command_id` correspondente. Corpo
       ausente, inválido ou genérico e confirmação de outro comando preservam

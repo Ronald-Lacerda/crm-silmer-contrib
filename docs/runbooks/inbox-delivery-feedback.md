@@ -30,6 +30,61 @@ permanece separado do incidente antigo; não se atribui automaticamente ao WAHA.
 Conteúdo, telefones, IDs pessoais, UUIDs dos registros e segredos ficam fora
 desta evidência versionada.
 
+## Reconciliação da fila após confirmação tardia — 03/11/2026
+
+OPS-INBOX-ACK-02 / MSG-02–03, ORC-08 e INT-2. Consultas somente leitura no
+console da API no EasyPanel, sem conteúdo ou destinatários, encontraram:
+
+- 14 jobs `n8n.command.deliver` em `outcome_unknown`, todos com timeout HTTP.
+- 12 desses jobs vinculados a comandos ainda incertos; outro comando incerto
+  não tinha job nesse estado. Total: 13 comandos sem confirmação conclusiva.
+- Dois jobs vinculados a comandos e mensagens `sent`, com ID externo e evento
+  autenticado `message.sent`. O mais recente recebeu a confirmação cerca de
+  0,45 segundo após o timeout de 10 segundos. O outro é de 29/10.
+
+O callback já reconciliava comando e mensagem. A fila conservava o estado
+incerto como histórico e não voltava a examiná-lo. Isso explica o alerta do
+worker mais recente sem um novo comando n8n incerto; não demonstra falha de
+entrega desse envio. Os 13 comandos restantes continuam exigindo evidência
+individual do destino. Não atribuir todos eles ao transporte atual ou ao
+mesmo motivo. As referências de Saúde e erros agrupam origem/código e não
+são IDs de job, comando ou mensagem.
+
+O workflow principal estava ativo no n8n, com 113 nós, e a tabela consultada
+não preservava execuções dele. Isso limita a investigação dos envios antigos;
+não comprova ausência de execução nem permite concluir que o envio falhou.
+
+O poll agora reconcilia até 100 jobs incertos da própria fila, após recuperar
+leases expiradas. A prova exige comando `send_message` em `sent`, mensagem
+`sent` da mesma conversa e comando, ID externo não nulo e igual nos dois
+registros e evento imutável `message.sent` da mesma mensagem/conversa.
+Somente o job é bloqueado, com `SKIP LOCKED`; callback ainda não confirmado
+fica para o poll seguinte. Na mesma transação, o job passa a `completed` e o
+item aberto a `resolved`, preservando motivo e criação. Não muda comandos,
+mensagens, tentativas, eventos nem contagem histórica de incidentes.
+
+Nenhum handler de envio é chamado por essa reconciliação. Jobs sem prova,
+outra fila, falhas de outro tipo e IDs divergentes permanecem intactos.
+O histórico de timeout continua consultável nas tentativas; `completed`
+significa confirmação conhecida do envio, não leitura pelo destinatário.
+Marcar o grupo resolvido no painel continua sendo triagem humana separada.
+
+Não aumentar o timeout para 30 segundos sem considerar o lease de 30 segundos
+e a renovação efetiva do job: o heartbeat geral do worker só publica métrica.
+Esse ajuste não faz parte desta correção. O workflow vivo e os efeitos incertos
+não devem ser reexecutados para testar a mudança.
+
+Validação: cenários SQL de confirmação tardia, prova ausente/inconsistente,
+concorrência, bloqueio temporário e repetição, com dados sintéticos no banco
+dedicado; gates gerais do projeto. Não usar o banco CRM real nesses testes.
+Gate local com Node 24.20.0/npm 11.19.0: `npm run validate` aprovado,
+1.630 testes aprovados e oito ignorados. Auditoria no nível alto aprovada;
+nove achados baixos/moderados preexistentes, sem mudança de dependências.
+Os dez cenários novos de PostgreSQL exigem `TEST_DATABASE_URL` e rodam no CI;
+o gate local sem banco não os executa. Revisão Backend/QA sem bloqueantes.
+Rollback: publicar o worker anterior, mantendo jobs já reconciliados e todo
+o histórico. Sem migration, restauração de banco ou replay de mensagens.
+
 ## Atendimento e investigação
 
 **Ainda não conseguimos confirmar o envio** informa resultado incerto.

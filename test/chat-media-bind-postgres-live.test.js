@@ -13,6 +13,7 @@ import {
   PostgresInboxRepository,
 } from '../modules/inbox-channels/src/index.js';
 import { PostgresChatMediaUploadRepository } from '../modules/integration-reliability/src/postgres-chat-media-upload-repository.js';
+import { PostgresJobQueue } from '../modules/integration-reliability/src/postgres-job-queue.js';
 import { PostgresN8nCommandOutbox } from '../modules/n8n-integration/src/postgres-command-outbox.js';
 import { encryptJson } from '../modules/n8n-integration/src/crypto.js';
 
@@ -909,6 +910,239 @@ if (connectionString) {
       'read',
     );
     assert.equal((await snapshot()).used, '100');
+  });
+  async function sendForReconciliation() {
+    const fixture = await mediaPanelCommand();
+    const queue = new PostgresJobQueue({ database });
+    const [job] = await queue.claim({
+      queue: 'external_effects',
+      workerId: 'synthetic-n8n-worker',
+      leaseMs: 60_000,
+    });
+    assert.ok(job);
+    assert.equal(job.jobType, 'n8n.command.deliver');
+    assert.equal(job.commandId, fixture.row.command_id);
+    const attempt = {
+      attemptId: job.attemptId,
+      jobId: job.id,
+      workerId: 'synthetic-n8n-worker',
+    };
+    assert.equal(
+      await queue.markEffectStarted({ ...attempt, provider: 'n8n' }),
+      true,
+    );
+    assert.equal(
+      (
+        await fixture.integration.recordEvent(
+          fixture.event('reconcile-reserve'),
+        )
+      ).send_authorized,
+      true,
+    );
+    const timeout = () =>
+      queue.settle({
+        ...attempt,
+        outcome: 'outcome_unknown',
+        errorCode: 'N8N_COMMAND_TIMEOUT',
+      });
+    const confirm = async () => {
+      const event = fixture.event('reconcile-sent', {
+        event_type: 'message.sent',
+        external_message_id: 'synthetic-provider-message',
+      });
+      delete event.message;
+      delete event.source_revision;
+      await fixture.integration.recordEvent(event);
+    };
+    const state = async () =>
+      (
+        await pool.query(
+          `SELECT to_jsonb(j) AS job, to_jsonb(r) AS reconciliation
+           FROM crm.outbox_jobs j
+           LEFT JOIN crm.reconciliation_items r ON r.job_id=j.id
+           WHERE j.id=$1`,
+          [job.id],
+        )
+      ).rows[0];
+    const evidence = async () => ({
+      effects: await effects(),
+      attempts: (
+        await pool.query(
+          'SELECT to_jsonb(a) AS attempt FROM crm.processing_attempts a WHERE job_id=$1 ORDER BY attempt_no',
+          [job.id],
+        )
+      ).rows,
+      countsAndQuota: await snapshot(),
+    });
+    const poll = (workerId = 'synthetic-reconciler') =>
+      queue.claim({ queue: 'external_effects', workerId });
+    return { ...fixture, job, timeout, confirm, state, evidence, poll };
+  }
+  for (const callbackOrder of ['before-timeout', 'after-timeout'])
+    test(`OPS-INBOX-ACK-02: ${callbackOrder} confirmation settles the job without another send`, async () => {
+      const f = await sendForReconciliation();
+      if (callbackOrder === 'before-timeout') await f.confirm();
+      assert.equal(await f.timeout(), true);
+      if (callbackOrder === 'after-timeout') {
+        const uncertain = await f.state();
+        const evidence = await f.evidence();
+        assert.deepEqual(await f.poll(), []);
+        assert.deepEqual(await f.state(), uncertain);
+        assert.deepEqual(await f.evidence(), evidence);
+        await f.confirm();
+      }
+      const before = await f.state();
+      assert.equal(before.job.status, 'outcome_unknown');
+      assert.equal(before.reconciliation.status, 'open');
+      const evidence = await f.evidence();
+      assert.equal(evidence.attempts.length, 1);
+      assert.equal(evidence.attempts[0].attempt.state, 'outcome_unknown');
+      assert.equal(
+        evidence.attempts[0].attempt.error_code,
+        'N8N_COMMAND_TIMEOUT',
+      );
+
+      // Competing pollers may reconcile the evidence, never claim the send.
+      assert.deepEqual(
+        await Promise.all([f.poll('reconciler-a'), f.poll('reconciler-b')]),
+        [[], []],
+      );
+      const completed = await f.state();
+      assert.equal(completed.job.status, 'completed');
+      assert.equal(completed.job.last_error_code, null);
+      assert.equal(completed.job.attempt_count, 1);
+      assert.equal(completed.reconciliation.status, 'resolved');
+      assert.ok(completed.reconciliation.resolved_at);
+      assert.equal(
+        completed.reconciliation.reason,
+        before.reconciliation.reason,
+      );
+      assert.equal(
+        completed.reconciliation.created_at,
+        before.reconciliation.created_at,
+      );
+      assert.deepEqual(await f.evidence(), evidence);
+      assert.deepEqual(await f.poll(), []);
+      assert.deepEqual(await f.state(), completed);
+    });
+  test('OPS-INBOX-ACK-02: an expired sending lease reconciles a committed callback in the same poll', async () => {
+    const f = await sendForReconciliation();
+    await f.confirm();
+    await pool.query(
+      "UPDATE crm.outbox_jobs SET locked_until=now()-interval '1 second' WHERE id=$1",
+      [f.job.id],
+    );
+    const before = await f.evidence();
+    assert.equal(before.attempts.length, 1);
+    assert.equal(before.attempts[0].attempt.state, 'sending');
+
+    assert.deepEqual(await f.poll(), []);
+    const completed = await f.state();
+    assert.equal(completed.job.status, 'completed');
+    assert.equal(completed.job.attempt_count, 1);
+    assert.equal(completed.job.last_error_code, null);
+    assert.equal(completed.reconciliation.status, 'resolved');
+    assert.equal(
+      completed.reconciliation.reason,
+      'lease_expired_after_effect_started',
+    );
+    const after = await f.evidence();
+    assert.deepEqual(after.effects, before.effects);
+    assert.deepEqual(after.countsAndQuota, before.countsAndQuota);
+    assert.equal(after.attempts.length, 1);
+    assert.equal(after.attempts[0].attempt.id, before.attempts[0].attempt.id);
+    assert.equal(after.attempts[0].attempt.state, 'outcome_unknown');
+    assert.equal(after.attempts[0].attempt.error_code, 'WORKER_LEASE_EXPIRED');
+    assert.equal(after.attempts[0].attempt.retry_safe, false);
+    assert.deepEqual(await f.poll(), []);
+    assert.deepEqual(await f.state(), completed);
+    assert.deepEqual(await f.evidence(), after);
+  });
+  for (const missingProof of [
+    'unknown-command',
+    'missing-event',
+    'different-external-id',
+    'missing-external-id',
+    'different-queue',
+  ])
+    test(`OPS-INBOX-ACK-02: ${missingProof} leaves the uncertain job for investigation`, async () => {
+      const f = await sendForReconciliation();
+      assert.equal(await f.timeout(), true);
+      if (missingProof === 'missing-event') {
+        // A transport acknowledgement alone is not a provider callback.
+        await pool.query(
+          `UPDATE crm.n8n_commands SET status='sent',external_message_id=$2,
+             last_error_code=NULL WHERE command_id=$1`,
+          [f.row.command_id, 'synthetic-provider-message'],
+        );
+        await pool.query(
+          `UPDATE crm.messages SET status='sent',delivery_status='sent',delivery_status_at=now(),
+             external_message_id=$2,sent_at=now() WHERE id=$1`,
+          [f.sent.id, 'synthetic-provider-message'],
+        );
+      } else if (missingProof !== 'unknown-command') {
+        await f.confirm();
+        if (missingProof === 'different-queue') {
+          await pool.query('UPDATE crm.outbox_jobs SET queue=$2 WHERE id=$1', [
+            f.job.id,
+            'synthetic-other-effects',
+          ]);
+        } else {
+          await pool.query(
+            'UPDATE crm.n8n_commands SET external_message_id=$2 WHERE command_id=$1',
+            [
+              f.row.command_id,
+              missingProof === 'missing-external-id'
+                ? null
+                : 'synthetic-unrelated-message',
+            ],
+          );
+        }
+      }
+      const before = await f.state();
+      const evidence = await f.evidence();
+      assert.deepEqual(await f.poll(), []);
+      assert.deepEqual(await f.state(), before);
+      assert.deepEqual(await f.evidence(), evidence);
+    });
+  test('OPS-INBOX-ACK-02: reconciliation preserves an already closed item', async () => {
+    const f = await sendForReconciliation();
+    await f.timeout();
+    await f.confirm();
+    await pool.query(
+      "UPDATE crm.reconciliation_items SET status='resolved',resolved_at=now() WHERE job_id=$1",
+      [f.job.id],
+    );
+    const before = await f.state();
+    const evidence = await f.evidence();
+    assert.deepEqual(await f.poll(), []);
+    const after = await f.state();
+    assert.equal(after.job.status, 'completed');
+    assert.deepEqual(after.reconciliation, before.reconciliation);
+    assert.deepEqual(await f.evidence(), evidence);
+  });
+  test('OPS-INBOX-ACK-02: a locked confirmed job is skipped and reconciled on the next poll', async () => {
+    const f = await sendForReconciliation();
+    await f.timeout();
+    await f.confirm();
+    const before = await f.state();
+    const evidence = await f.evidence();
+    const holder = await pool.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query(
+        'SELECT id FROM crm.outbox_jobs WHERE id=$1 FOR UPDATE',
+        [f.job.id],
+      );
+      assert.deepEqual(await f.poll(), []);
+      assert.deepEqual(await f.state(), before);
+    } finally {
+      await holder.query('ROLLBACK');
+      holder.release();
+    }
+    assert.deepEqual(await f.poll(), []);
+    assert.equal((await f.state()).job.status, 'completed');
+    assert.deepEqual(await f.evidence(), evidence);
   });
   test('T12/MED-06: text outbox wire shape and reservation stay compatible', async () => {
     const f = await mediaPanelCommand('text');

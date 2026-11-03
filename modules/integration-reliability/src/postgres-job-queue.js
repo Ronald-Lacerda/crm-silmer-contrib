@@ -148,6 +148,11 @@ export class PostgresJobQueue {
     return this.#database.transaction(async (client) => {
       await setTransactionBounds(client);
       await this.#recoverExpired(client, claimedAt, normalizedQueue);
+      await this.#reconcileConfirmedN8nSends(
+        client,
+        claimedAt,
+        normalizedQueue,
+      );
       const selected = await client.query(
         `SELECT id, job_type, idempotency_key, channel_event_id,
                 transient_media_id, message_id, chat_media_id, queue, priority, available_at,
@@ -425,6 +430,50 @@ export class PostgresJobQueue {
       );
       return true;
     });
+  }
+
+  /**
+   * OPS-INBOX-ACK-02: a late, authenticated message.sent can settle the command
+   * after its HTTP request timed out. Reconcile the queue on the next poll;
+   * never claim that uncertain effect again or rewrite its attempt history.
+   * Lock only jobs, so callback transactions need not acquire queue locks.
+   * @param {Queryable} client @param {Date} now @param {string} queue
+   */
+  async #reconcileConfirmedN8nSends(client, now, queue) {
+    await client.query(
+      `WITH confirmed AS (
+         SELECT j.id
+         FROM crm.outbox_jobs j
+         JOIN crm.n8n_commands c ON c.command_id = j.n8n_command_id
+         JOIN crm.messages m ON m.id = c.message_id
+         WHERE j.queue = $1 AND j.job_type = 'n8n.command.deliver'
+           AND j.status = 'outcome_unknown'
+           AND c.action = 'send_message' AND c.status = 'sent'
+           AND m.command_id = c.command_id
+           AND m.conversation_id = c.conversation_id AND m.status = 'sent'
+           AND m.external_message_id IS NOT NULL
+           AND m.external_message_id = c.external_message_id
+           AND EXISTS (
+             SELECT 1 FROM crm.n8n_events e
+             WHERE e.message_id = m.id
+               AND e.conversation_id = c.conversation_id
+               AND e.event_type = 'message.sent'
+           )
+         ORDER BY j.updated_at, j.id
+         FOR UPDATE OF j SKIP LOCKED LIMIT 100
+       ), completed AS (
+         UPDATE crm.outbox_jobs j
+         SET status = 'completed', last_error_code = NULL,
+             updated_at = greatest(j.updated_at, $2::timestamptz),
+             completed_at = greatest(j.completed_at, $2::timestamptz)
+         FROM confirmed WHERE j.id = confirmed.id
+         RETURNING j.id
+       )
+       UPDATE crm.reconciliation_items r
+       SET status = 'resolved', resolved_at = greatest(r.created_at, $2::timestamptz)
+       FROM completed WHERE r.job_id = completed.id AND r.status = 'open'`,
+      [queue, now],
+    );
   }
 
   /** @param {Queryable} client @param {Date} now @param {string} queue */
