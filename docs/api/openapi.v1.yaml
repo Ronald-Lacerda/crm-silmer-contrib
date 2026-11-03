@@ -471,6 +471,17 @@ paths:
             com handoff pendente, ordenadas pelo tempo parado (a espera mais
             antiga primeiro); quando false, só conversas sem handoff pendente.
             Combina com os demais filtros.
+        - name: workQueue
+          in: query
+          schema: { type: string, enum: [attention, closing] }
+          description: >-
+            Fila pessoal vinculada ao ator da sessão. attention inclui handoff
+            sem dono e ações humanas pendentes do próprio vendedor; closing
+            inclui um pedido pendente não teste validado para revisão, com
+            alvo explícito em reviewOrder, direto ou vinculado por Assunto.
+            Exclui outros responsáveis e conversas terminais/arquivadas.
+            Filtro, total e ordem por maior espera são aplicados antes de LIMIT;
+            o cursor assinado também é vinculado ao ator.
         - {
             name: archived,
             in: query,
@@ -3171,6 +3182,9 @@ components:
                 id: { type: string }
                 number: { type: string, pattern: '^[0-9]{2,}-CRM$' }
                 status: { $ref: '#/components/schemas/OrderStatus' }
+                readyForConfirmation:
+                  type: boolean
+                  description: Validação persistida do pedido pendente; não é inferida do handoff ou da pré-ficha.
             - { type: 'null' }
         lastMessage:
           {
@@ -3180,7 +3194,30 @@ components:
                 { type: 'null' },
               ],
           }
+        reviewOrder:
+          type: [object, 'null']
+          additionalProperties: false
+          description: Pedido elegível para revisão, com alvo explícito; não substitui order canônico.
+          properties:
+            id: { type: string }
+            number: { type: string }
+            status: { type: string, const: pendente }
+            readyForConfirmation: { type: boolean, const: true }
         requiresAttention: { type: boolean }
+        waitingSince:
+          type: [string, 'null']
+          format: date-time
+          description: Espera humana; avisos do bot não reiniciam o instante.
+        queuePosition:
+          type: string
+          format: date-time
+          description: Instante estável de ordenação/cursor das filas workQueue.
+        deliveryIssue:
+          type: [object, 'null']
+          additionalProperties: false
+          properties:
+            status: { type: string, enum: [failed, outcome_unknown] }
+            occurredAt: { type: string, format: date-time }
         openedAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         archivedAt: { type: [string, 'null'], format: date-time }
@@ -3578,6 +3615,7 @@ components:
       required: [id, functionName]
       properties:
         id: { type: string }
+        name: { type: [string, 'null'] }
         functionName: { type: string, enum: [Vendedor] }
     TaskView:
       type: object

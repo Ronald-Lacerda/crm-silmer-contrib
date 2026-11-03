@@ -115,6 +115,39 @@ test('forwards the waiting-for-seller filter as a boolean', async () => {
   await api.close();
 });
 
+test('INBOX-UX-02: work queues receive only the authenticated actor', async () => {
+  const reads = /** @type {any[]} */ ([]);
+  const { api, headers } = harness({
+    async listInbox(/** @type {any} */ input, /** @type {any} */ access) {
+      reads.push({ input, access });
+      return { items: [], nextCursor: null, totalCount: 0 };
+    },
+  });
+  try {
+    for (const workQueue of ['attention', 'closing']) {
+      const result = await api.inject({
+        headers,
+        method: 'GET',
+        url: `/api/v1/inbox/conversations?workQueue=${workQueue}&limit=1`,
+      });
+      assert.equal(result.statusCode, 200);
+      assert.deepEqual(reads.at(-1), {
+        input: { workQueue, limit: 1 },
+        access: { actorId: 'operator-1' },
+      });
+    }
+    const forged = await api.inject({
+      headers,
+      method: 'GET',
+      url: '/api/v1/inbox/conversations?workQueue=attention&actorId=another-seller',
+    });
+    assert.equal(forged.statusCode, 400);
+    assert.equal(reads.length, 2);
+  } finally {
+    await api.close();
+  }
+});
+
 test('publishes authorized Contact list and detail read models', async () => {
   const { api, calls, headers } = harness();
   const list = await api.inject({

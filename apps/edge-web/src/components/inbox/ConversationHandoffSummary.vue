@@ -96,7 +96,9 @@ watch(
     preferredSeller.value = '';
     error.value = '';
     unavailable.value = false;
-    expanded.value = props.handoff?.status === 'pending';
+    expanded.value =
+      props.handoff?.status === 'pending' &&
+      props.handoff?.reasonCode !== 'unsupported';
     void load();
   },
   { immediate: true },

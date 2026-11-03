@@ -366,6 +366,8 @@ de `docs/phase0/FICHA-PDF-REVIEW-V3.md`.
    atalhos Todas · Aguardando · Minhas com contagem.
 3. **PCX-03** WHEN a conversa tem handoff pendente THEN SHALL mostrar o motivo
    da parada (a partir do `reason_code`) e há quanto tempo está parada.
+   Emendado por PCX-15 (03/11/2026): a próxima ação e a espera ficam no card;
+   o motivo legível e seu registro ficam abaixo do cabeçalho do chat.
 4. **PCX-04** WHEN "Aguardando vendedor" está selecionado THEN a lista SHALL
    ordenar por tempo parado, do maior para o menor.
 5. **PCX-05** SHALL continuar funcionando como hoje: fila Todas/Minhas/Sem
@@ -1218,6 +1220,8 @@ LOJ-33, LOJ-34, REV-06, REV-10 e FIN-02.
     foco. A reivindicação continua atômica (ADR 009). Quem não pode assumir
     SHALL NOT ver o botão ativo e SHALL ver o motivo em texto. "Encerrar
     conversa" SHALL ficar em "Mais" em todas as larguras (emenda PCX-05).
+    Emendado por PCX-15: Assumir fica no cabeçalho, com o motivo abaixo dele;
+    permanece a única primária até assumir e levar o foco ao composer.
 11. **PCX-14** A fila da Caixa de Entrada SHALL ter a busca, os atalhos Todas
     · Aguardando vendedor · Meus atendimentos, cada um com contagem e seleção neutra, e o botão
     "Filtros", que abre uma folha com Situação (Todas, Aguardando vendedor,

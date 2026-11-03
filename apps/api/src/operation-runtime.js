@@ -227,8 +227,8 @@ export function createOperationReadService({
         scope: 'contacts',
       });
     },
-    /** @param {any} input */
-    async listInbox(input = {}) {
+    /** @param {any} input @param {{actorId?: string}} [access] */
+    async listInbox(input = {}, access = {}) {
       rejectUnknownKeys(input, [
         'assignedUserId',
         'archived',
@@ -239,8 +239,20 @@ export function createOperationReadService({
         'pendingHandoff',
         'state',
         'unassignedHumanHandoff',
+        'workQueue',
       ]);
       const filters = {};
+      if (input.workQueue !== undefined) {
+        filters.workQueue = requireChoice(
+          input.workQueue,
+          new Set(['attention', 'closing']),
+        );
+        // The route supplies the current session, never a query parameter.
+        filters.actorId = requireId(access.actorId, 'ACTOR_ID');
+        if (input.archived === true || input.archived === 'true') {
+          throw new OperationReadError(400, 'INVALID_FILTER');
+        }
+      }
       if (input.assignedUserId !== undefined) {
         filters.assignedUserId = requireId(
           input.assignedUserId,
@@ -301,9 +313,11 @@ export function createOperationReadService({
         scope: 'inbox',
         // The waiting list is ordered by how long the handoff has waited,
         // so its cursor continues from that instant instead of the last message.
-        ...(filters.pendingHandoff === true
-          ? { position: (/** @type {any} */ item) => item.handoff.createdAt }
-          : {}),
+        ...(filters.workQueue
+          ? { position: (/** @type {any} */ item) => item.queuePosition }
+          : filters.pendingHandoff === true
+            ? { position: (/** @type {any} */ item) => item.handoff.createdAt }
+            : {}),
       });
     },
     /** @param {{after?: unknown}} [input] */

@@ -32,11 +32,12 @@ import {
   formatPhoneNumber,
   messageText,
 } from '../lib/format.js';
+import { elapsedSince, orderStatusLabel } from '../lib/order-format.js';
 import {
-  elapsedSince,
-  handoffReasonLabel,
-  orderStatusLabel,
-} from '../lib/order-format.js';
+  conversationHandoffTitle,
+  conversationNextAction,
+  conversationWaitingSince,
+} from '../lib/inbox-priority.js';
 import { openDialog } from '../lib/ui.js';
 
 const ADMIN_CAPABILITY = 'COMMERCIAL_ADMIN';
@@ -52,6 +53,16 @@ const LIVE_REFRESH_DELAY_MS = 250;
  */
 const STATE_TABS = Object.freeze([
   Object.freeze({ label: 'Todas', params: {}, value: 'all' }),
+  Object.freeze({
+    label: 'Atender',
+    params: { workQueue: 'attention' },
+    value: 'attention',
+  }),
+  Object.freeze({
+    label: 'Fechar pedidos',
+    params: { workQueue: 'closing' },
+    value: 'closing',
+  }),
   Object.freeze({
     label: 'Aguardando vendedor',
     params: { pendingHandoff: 'true' },
@@ -86,19 +97,19 @@ const QUEUE_FILTERS = Object.freeze([
  * summary under the toolbar.
  */
 const SHORTCUTS = Object.freeze([
-  Object.freeze({ label: 'Todas', queue: 'all', tab: 'all', value: 'all' }),
   Object.freeze({
-    label: 'Aguardando vendedor',
+    label: 'Atender',
     queue: 'all',
-    tab: 'waiting',
-    value: 'waiting',
+    tab: 'attention',
+    value: 'attention',
   }),
   Object.freeze({
-    label: 'Meus atendimentos',
-    queue: 'mine',
-    tab: 'all',
-    value: 'mine',
+    label: 'Fechar pedidos',
+    queue: 'all',
+    tab: 'closing',
+    value: 'closing',
   }),
+  Object.freeze({ label: 'Todas', queue: 'all', tab: 'all', value: 'all' }),
 ]);
 const CONTEXT_STORAGE_KEY = 'crm.inbox.contextOpen';
 const LIST_TIME = new Intl.DateTimeFormat('pt-BR', {
@@ -155,6 +166,8 @@ const query = ref('');
 // (`?fila=minhas|sem-responsavel`, `?situacao=aguardando|agente|vendedor`).
 const route = useRoute();
 const ROUTE_STATE_TAB = Object.freeze({
+  atender: 'attention',
+  fechar: 'closing',
   agente: 'assistant',
   aguardando: 'waiting',
   vendedor: 'human',
@@ -164,7 +177,8 @@ const ROUTE_QUEUE = Object.freeze({
   'sem-responsavel': 'unassignedHumanHandoff',
 });
 const stateTab = ref(
-  ROUTE_STATE_TAB[String(route.query.situacao ?? '')] ?? 'all',
+  ROUTE_STATE_TAB[String(route.query.situacao ?? '')] ??
+    (route.query.situacao || route.query.fila ? 'all' : 'attention'),
 );
 const queueFilter = ref(ROUTE_QUEUE[String(route.query.fila ?? '')] ?? 'all');
 const filterSheet = ref(null);
@@ -263,6 +277,7 @@ const subjectCommandKeys = new Map();
 /** "Separar como novo assunto" already created, while its link is retried. */
 const separatedSubjects = new Map();
 let refreshTimer = 0;
+let waitingClockTimer;
 let orderChangedLive = false;
 let threadFollowsLatest = true;
 
@@ -275,18 +290,31 @@ const filtered = computed(() => {
           .includes(needle),
       )
     : conversations.value;
-  if (stateTab.value !== 'waiting') return matching;
+  if (!['waiting', 'attention', 'closing'].includes(stateTab.value))
+    return matching;
   // PCX-04: whoever has waited longest is read first. The read model already
   // answers in this order, but the rule is kept where the waiting time is
   // rendered so a local search or a silent refresh cannot reshuffle the queue.
   return [...matching].sort((left, right) =>
-    String(left.handoff?.createdAt ?? '').localeCompare(
-      String(right.handoff?.createdAt ?? ''),
+    String(
+      left.queuePosition ??
+        conversationWaitingSince(left) ??
+        left.updatedAt ??
+        '',
+    ).localeCompare(
+      String(
+        right.queuePosition ??
+          conversationWaitingSince(right) ??
+          right.updatedAt ??
+          '',
+      ),
     ),
   );
 });
 const visibleConversationLabel = computed(() => {
   const count = filtered.value.length;
+  if (!query.value.trim() && totalCount.value > count)
+    return `${count} de ${totalCount.value} conversas`;
   return `${count} ${count === 1 ? 'conversa' : 'conversas'}`;
 });
 const liveStatusMessage = computed(() => {
@@ -322,9 +350,20 @@ const ownerLabel = computed(() => {
   if (!owner.value) return 'Sem responsável';
   if (owner.value.id === currentUserId.value) return 'Você';
   return (
+    owner.value.name ??
     assignableUsers.value.find((user) => user.id === owner.value.id)?.name ??
     'Outro vendedor'
   );
+});
+const serviceLabel = computed(() => {
+  if (!active.value) return '';
+  if (isTerminal.value) return conversationLabel(active.value);
+  if (pendingHandoff.value) return 'Aguardando vendedor';
+  if (active.value.automationState === 'assistant')
+    return `Com ${brand.assistant.reference}`;
+  return owner.value
+    ? `Em atendimento · ${ownerLabel.value}`
+    : 'Sem responsável';
 });
 const transferOptions = computed(() =>
   assignableUsers.value.filter((user) => user.id !== currentUserId.value),
@@ -383,7 +422,13 @@ const takeoverReason = computed(() => {
         title: 'O agente parou para não misturar pedidos.',
       };
     }
-    return { detail: waiting, title: stopReason(conversation) };
+    return {
+      detail:
+        conversation.handoff.reasonCode === 'unsupported'
+          ? `${waiting} A automação encaminhou esta conversa para atendimento humano. Consulte o registro no resumo da transferência.`
+          : waiting,
+      title: conversationHandoffTitle(conversation),
+    };
   }
   const assistant = brand.assistant.reference;
   return {
@@ -470,9 +515,12 @@ const imageAttachmentOrders = computed(() => {
   return [...orders.values()];
 });
 /** PCX-10: the order the conversation has, as a link to its page. */
+const headerOrder = computed(
+  () => active.value?.reviewOrder ?? active.value?.order ?? null,
+);
 const orderPath = computed(() =>
-  active.value?.order
-    ? `/pedidos/${encodeURIComponent(active.value.order.id)}?conversa=${encodeURIComponent(active.value.id)}`
+  headerOrder.value
+    ? `/pedidos/${encodeURIComponent(headerOrder.value.id)}?conversa=${encodeURIComponent(active.value.id)}`
     : '',
 );
 /**
@@ -480,7 +528,7 @@ const orderPath = computed(() =>
  * 04-CRM", "Pendente"), so voice control finds it by what it shows.
  */
 const orderLinkLabel = computed(() => {
-  const order = active.value?.order;
+  const order = headerOrder.value;
   if (!order) return undefined;
   const status = orderStatusLabel(order.status).toLocaleLowerCase('pt-BR');
   return `Abrir pedido ${order.number}, ${status}`;
@@ -697,36 +745,18 @@ function focusAfterFilterChange() {
   (next ?? /** @type {HTMLElement|null} */ (filtersButton.value))?.focus();
 }
 
-/**
- * PCX-03: a conversation only stops for a reason, and the reason is what the
- * seller needs before opening it. A code this build does not know reads as
- * "Aguardando vendedor" instead of disappearing.
- *
- * @param {{handoff?: {status?: string, reasonCode?: unknown}|null}} conversation
- */
-function stopReason(conversation) {
-  return conversation.handoff?.status === 'pending'
-    ? handoffReasonLabel(conversation.handoff.reasonCode)
-    : '';
+/** INBOX-UX-02: one operational label, never a stack of technical badges. @param {Record<string, any>} conversation */
+function nextAction(conversation) {
+  const name = assignableUsers.value.find(
+    (user) => user.id === conversation.assignedUser?.id,
+  )?.name;
+  return conversationNextAction(conversation, currentUserId.value, name);
 }
 
-/**
- * INBOX-HANDOFF-02: "Cliente pediu: Ana" while the handoff waits for someone.
- *
- * @param {{handoff?: Record<string, any>|null}} conversation
- */
-function askedSeller(conversation) {
-  return conversation.handoff?.status === 'pending'
-    ? preferredSellerLabel(preferredSellerFirstName(conversation.handoff))
-    : '';
-}
-
-/** PCX-03/A02: still since the handoff was raised, not since the last message. */
-/** @param {{handoff?: {status?: string, createdAt?: unknown}|null}} conversation */
+/** PCX-15: official human wait; automatic messages do not reset its clock. @param {Record<string, any>} conversation */
 function waitingFor(conversation) {
-  if (conversation.handoff?.status !== 'pending') return '';
-  const elapsed = elapsedSince(conversation.handoff.createdAt, now.value);
-  return elapsed === '' ? '' : `parado há ${elapsed}`;
+  const since = conversationWaitingSince(conversation);
+  return since ? elapsedSince(since, now.value) : '';
 }
 
 /** Wide screens show list, conversation and context side by side. */
@@ -1985,6 +2015,9 @@ onMounted(() => {
   heading.value?.focus();
   void refreshInbox();
   void loadAssignableUsers();
+  waitingClockTimer = globalThis.setInterval(() => {
+    now.value = new Date();
+  }, 30_000);
 });
 onBeforeUnmount(() => {
   phoneQuery?.removeEventListener('change', phoneChanged);
@@ -1994,6 +2027,7 @@ onBeforeUnmount(() => {
   deliveryCheckController?.abort();
   subjectController?.abort();
   if (refreshTimer) globalThis.clearTimeout(refreshTimer);
+  globalThis.clearInterval(waitingClockTimer);
 });
 </script>
 
@@ -2163,6 +2197,13 @@ onBeforeUnmount(() => {
         </div>
         <p class="inbox-list-summary" role="status">
           {{ loading ? 'Carregando conversas…' : visibleConversationLabel }}
+          <span
+            v-if="
+              !loading && ['attention', 'closing', 'waiting'].includes(stateTab)
+            "
+          >
+            · Maior espera primeiro</span
+          >
         </p>
         <ul class="inbox-list" aria-label="Conversas" :aria-busy="loading">
           <li v-for="conversation in filtered" :key="conversation.id">
@@ -2174,52 +2215,27 @@ onBeforeUnmount(() => {
               @click="openConversation(conversation.id)"
             >
               <span class="conv-top">
-                <span class="conv-name">{{ conversation.contact.label }}</span>
-                <time
-                  class="conv-time"
-                  :datetime="conversation.updatedAt"
-                  :title="dateTimeBR(conversation.updatedAt)"
-                  >{{ listWhen(conversation.updatedAt) }}</time
-                >
-              </span>
-              <span class="conv-snippet">{{
-                messageText(conversation.lastMessage)
-              }}</span>
-              <span class="conv-meta">
-                <span class="conv-channel">{{
-                  CHANNEL_LABELS[conversation.channel]
+                <span class="conv-name" :title="conversation.contact.label">{{
+                  conversation.contact.label
                 }}</span>
                 <span
-                  class="badge"
-                  :data-tone="conversation.requiresAttention ? 'error' : 'info'"
-                >
-                  {{ conversationLabel(conversation) }}
-                </span>
-                <span
-                  v-if="stopReason(conversation)"
-                  class="badge"
-                  data-tone="error"
-                  >{{ stopReason(conversation) }}</span
-                >
-                <span v-if="waitingFor(conversation)" class="conv-waiting">{{
-                  waitingFor(conversation)
-                }}</span>
-                <span
-                  v-if="askedSeller(conversation)"
-                  class="badge"
-                  data-tone="info"
-                  >{{ askedSeller(conversation) }}</span
+                  v-if="conversation.state === 'nova' && !conversation.handoff"
+                  class="conv-new"
+                  >Nova</span
                 >
                 <span
-                  v-if="
-                    conversation.assignedUser &&
-                    conversation.assignedUser.id !== currentUserId
-                  "
-                  class="badge"
-                  data-tone="info"
-                  >Outro vendedor</span
+                  v-if="waitingFor(conversation)"
+                  class="conv-waiting"
+                  :title="`Aguardando desde ${dateTimeBR(conversationWaitingSince(conversation))}`"
+                  ><span class="sr-only">Espera: </span
+                  >{{ waitingFor(conversation) }}</span
                 >
               </span>
+              <span
+                class="conv-next-action"
+                :data-tone="nextAction(conversation).tone || undefined"
+                >{{ nextAction(conversation).label }}</span
+              >
             </button>
           </li>
           <li v-if="!loading && !filtered.length" class="empty-list">
@@ -2275,23 +2291,23 @@ onBeforeUnmount(() => {
                      as a button. The status reads as text in its badge; with
                      no order nothing shows here (Detalhes › Pedido says so). -->
                 <RouterLink
-                  v-if="active.order"
+                  v-if="headerOrder"
                   ref="orderLink"
                   class="conv-order-link"
                   :to="orderPath"
                   :aria-label="orderLinkLabel"
                 >
                   <span class="conv-order-number"
-                    >Pedido {{ active.order.number }}</span
+                    >Pedido {{ headerOrder.number }}</span
                   >
                   <span
                     class="badge"
                     :data-tone="
-                      active.order.status === 'confirmado'
+                      headerOrder.status === 'confirmado'
                         ? 'success'
                         : 'warning'
                     "
-                    >{{ orderStatusLabel(active.order.status) }}</span
+                    >{{ orderStatusLabel(headerOrder.status) }}</span
                   >
                 </RouterLink>
               </div>
@@ -2306,15 +2322,13 @@ onBeforeUnmount(() => {
                   <template v-if="active.contact.phone">
                     · telefone informado no site</template
                   >
+                  ·
                 </template>
-                <template v-else>{{
-                  formatPhoneNumber(active.contact.externalId)
-                }}</template>
-                ·
-                {{ conversationLabel(active) }}
-                <template v-if="active.automationState === 'human'">
-                  · {{ ownerLabel }}
+                <template
+                  v-else-if="active.contact.label !== active.contact.externalId"
+                  >{{ formatPhoneNumber(active.contact.externalId) }} ·
                 </template>
+                {{ serviceLabel }}
               </p>
             </div>
             <!-- No primary here: the conversation's one primary action sits
@@ -2324,6 +2338,18 @@ onBeforeUnmount(() => {
                  conversation it never goes back to the bot, so there is no
                  hand-back action here. -->
             <div class="conv-actions">
+              <button
+                v-if="needsTakeover"
+                ref="takeoverButton"
+                type="button"
+                class="primary"
+                aria-describedby="takeover-reason"
+                :aria-disabled="busy ? 'true' : undefined"
+                :aria-busy="busy ? 'true' : undefined"
+                @click="takeOver"
+              >
+                Assumir atendimento
+              </button>
               <button
                 v-if="createOrderInHeader"
                 type="button"
@@ -2343,11 +2369,12 @@ onBeforeUnmount(() => {
                   ref="moreToggle"
                   type="button"
                   aria-label="Mais ações"
+                  title="Mais ações"
                   aria-controls="conv-more-menu"
                   :aria-expanded="moreOpen"
                   @click="toggleMore"
                 >
-                  Mais <AppIcon name="chevron-down" />
+                  <AppIcon name="more" />
                 </button>
                 <div
                   v-if="moreOpen && isPhone"
@@ -2430,6 +2457,21 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </header>
+
+          <div
+            v-if="needsTakeover || pendingHandoff"
+            class="inbox-takeover handoff-reason"
+          >
+            <div id="takeover-reason" class="inbox-takeover-reason">
+              <strong>{{ takeoverReason.title }}</strong>
+              <span>{{ takeoverReason.detail }}</span>
+              <AssistantTakeoverContext
+                v-if="!pendingHandoff && active.automationState === 'assistant'"
+                :conversation-id="active.id"
+                :revision="active.updatedAt ?? ''"
+              />
+            </div>
+          </div>
 
           <p v-if="!canAct && !isTerminal" class="inbox-notice">
             Esta conversa está sob responsabilidade de outro vendedor. Só quem
@@ -2705,36 +2747,10 @@ onBeforeUnmount(() => {
             </li>
           </ol>
 
-          <div class="inbox-composer">
+          <div v-if="!needsTakeover" class="inbox-composer">
             <!-- PCX-13: until a person has the conversation, taking it is the
                  one action where the reply would be, with why it stopped and
                  for how long (PCX-03). -->
-            <div v-if="needsTakeover" class="inbox-takeover">
-              <p id="takeover-reason" class="inbox-takeover-reason">
-                <strong>{{ takeoverReason.title }}</strong
-                >{{ ' ' }}<span>{{ takeoverReason.detail }}</span>
-                <!-- INBOX-HANDOFF-02: without a handoff summary, what the
-                     agent was asking when the seller takes over. -->
-                <AssistantTakeoverContext
-                  v-if="
-                    !pendingHandoff && active.automationState === 'assistant'
-                  "
-                  :conversation-id="active.id"
-                  :revision="active.updatedAt ?? ''"
-                />
-              </p>
-              <button
-                ref="takeoverButton"
-                type="button"
-                class="primary"
-                aria-describedby="takeover-reason"
-                :aria-disabled="busy ? 'true' : undefined"
-                :aria-busy="busy ? 'true' : undefined"
-                @click="takeOver"
-              >
-                Assumir atendimento
-              </button>
-            </div>
             <AudioRecorder
               v-if="!needsTakeover"
               :key="active.id"
@@ -2851,7 +2867,10 @@ onBeforeUnmount(() => {
 
         <ConversationOrderSummary
           :conversation-id="active.id"
-          :order="active.order ?? null"
+          :order="headerOrder"
+          :read-by-id="
+            Boolean(headerOrder && headerOrder.id !== active.order?.id)
+          "
           :open="contextOpen"
           :revision="orderRevision"
         />

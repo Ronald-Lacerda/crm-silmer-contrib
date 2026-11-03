@@ -132,7 +132,7 @@ for (const screen of SCREENS) {
       for (const state of ['handoff', 'agent']) {
         await page.goto(`/inbox/conversation-${state}`);
         const takeOver = page
-          .locator('.inbox-composer')
+          .locator('.conv-actions')
           .getByRole('button', { name: 'Assumir atendimento' });
         await expect(takeOver).toBeVisible();
 

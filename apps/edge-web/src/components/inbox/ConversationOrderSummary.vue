@@ -18,6 +18,8 @@ const props = defineProps({
   conversationId: { type: String, required: true },
   /** The read model's `{id, number, status}`, or null when there is none. */
   order: { type: Object, default: null },
+  /** An explicit ready order linked by a subject may differ from the canonical one. */
+  readById: { type: Boolean, default: false },
   /** Only a visible panel reads the order. */
   open: { type: Boolean, default: false },
   /** Bumped by the Inbox when the order changed (`inbox.order.changed`). */
@@ -82,7 +84,9 @@ async function load() {
   loading.value = true;
   try {
     const response = await request(
-      `/api/v1/conversations/${encodeURIComponent(props.conversationId)}/order`,
+      props.readById
+        ? `/api/v1/orders/${encodeURIComponent(props.order.id)}`
+        : `/api/v1/conversations/${encodeURIComponent(props.conversationId)}/order`,
       { signal: own.signal },
     );
     if (own !== controller) return;
@@ -110,12 +114,13 @@ watch(
     props.conversationId,
     props.order?.id,
     props.order?.status,
+    props.readById,
     props.revision,
     props.open,
   ],
   (next, previous) => {
     // Another conversation never shows the summary of the one before it.
-    if (previous && next[0] !== previous[0]) {
+    if (previous && (next[0] !== previous[0] || next[1] !== previous[1])) {
       detail.value = null;
       error.value = '';
     }

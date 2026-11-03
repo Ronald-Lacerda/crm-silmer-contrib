@@ -101,7 +101,13 @@ const OPEN_HANDOFF_JOIN = `LEFT JOIN LATERAL (
  */
 const CURRENT_ORDER_JOIN = `LEFT JOIN LATERAL (
              SELECT candidate_order.id, candidate_order.number,
-                    candidate_order.status
+                    candidate_order.status, candidate_order.created_at,
+                    (candidate_order.status='pendente'
+                      AND NOT candidate_order.is_test
+                      AND cardinality(candidate_order.missing_fields)=0
+                      AND candidate_order.total_pieces>0
+                      AND candidate_order.final_amount_cents>0
+                      AND candidate_order.payment_condition IS NOT NULL) ready_for_confirmation
              FROM crm.orders candidate_order
              WHERE candidate_order.conversation_id=conversation.id
              ORDER BY (candidate_order.status = 'pendente') DESC,
@@ -109,6 +115,92 @@ const CURRENT_ORDER_JOIN = `LEFT JOIN LATERAL (
                       candidate_order.number_sequence DESC
              LIMIT 1
            ) current_order ON true`;
+
+// The canonical header order remains unchanged. Review chooses one explicit,
+// actionable ready order across this conversation's orders and linked subjects.
+// A link to another cycle never transfers that order's ownership.
+const REVIEW_ORDER_JOIN = `LEFT JOIN LATERAL (
+             SELECT candidate.id, candidate.number, candidate.status, candidate.created_at
+             FROM crm.orders candidate
+             LEFT JOIN crm.conversations order_conversation ON order_conversation.id=candidate.conversation_id
+             WHERE candidate.status='pendente' AND NOT candidate.is_test
+               AND cardinality(candidate.missing_fields)=0 AND candidate.total_pieces>0
+               AND candidate.final_amount_cents>0 AND candidate.payment_condition IS NOT NULL
+               AND (candidate.conversation_id=conversation.id OR EXISTS (
+                 SELECT 1 FROM crm.conversation_subjects linked
+                 WHERE linked.conversation_id=conversation.id AND linked.order_id=candidate.id))
+               AND ((candidate.conversation_id=conversation.id
+                    AND (conversation.assigned_user_id IS NOT NULL OR handoff.status='pending'))
+                 OR (conversation.assigned_user_id IS NOT NULL
+                   AND ((candidate.conversation_id<>conversation.id
+                         AND order_conversation.assigned_user_id=conversation.assigned_user_id)
+                     OR (candidate.conversation_id IS NULL
+                         AND candidate.manual_owner_id=conversation.assigned_user_id))))
+             ORDER BY EXISTS (SELECT 1 FROM crm.conversation_subjects selected
+                        WHERE selected.conversation_id=conversation.id AND selected.order_id=candidate.id
+                          AND selected.is_current) DESC,
+                      candidate.created_at ASC,candidate.number_sequence ASC,candidate.id ASC
+             LIMIT 1
+           ) review_order ON true`;
+
+// INBOX-UX-02: an automatic acknowledgement never resets a person's wait.
+// Only a successfully sent human reply ends the current inbound sequence.
+const WAITING_JOIN = `LEFT JOIN LATERAL (
+             SELECT reply.occurred_at, reply.id
+             FROM crm.messages reply
+             WHERE reply.conversation_id=conversation.id
+               AND reply.direction='outbound' AND reply.author_kind='human'
+               AND COALESCE(reply.delivery_status,reply.status) IN ('sent','delivered','read')
+             ORDER BY reply.occurred_at DESC, reply.id DESC LIMIT 1
+           ) human_reply ON true
+           LEFT JOIN LATERAL (
+             SELECT min(inbound.occurred_at) since
+             FROM crm.messages inbound
+             WHERE inbound.conversation_id=conversation.id AND inbound.direction='inbound'
+               AND (human_reply.id IS NULL
+                 OR (inbound.occurred_at,inbound.id) > (human_reply.occurred_at,human_reply.id))
+           ) unanswered ON true
+           LEFT JOIN LATERAL (
+             SELECT event.occurred_at
+             FROM crm.audit_events event
+             WHERE event.target_type='conversation' AND event.target_id=conversation.id
+               AND event.action='conversation.takeover'
+             ORDER BY event.occurred_at DESC,event.id DESC LIMIT 1
+           ) takeover ON true
+           LEFT JOIN LATERAL (
+             SELECT sent.id,sent.occurred_at
+             FROM crm.messages sent
+             WHERE sent.conversation_id=conversation.id AND sent.direction='outbound'
+               AND COALESCE(sent.delivery_status,sent.status) IN ('sent','delivered','read')
+             ORDER BY sent.occurred_at DESC, sent.id DESC LIMIT 1
+           ) successful_outbound ON true
+           LEFT JOIN LATERAL (
+             SELECT failed.status,failed.delivery_status,failed.occurred_at
+             FROM crm.messages failed
+             WHERE failed.conversation_id=conversation.id AND failed.direction='outbound'
+               AND COALESCE(failed.delivery_status,failed.status) IN ('failed','outcome_unknown')
+               AND (successful_outbound.id IS NULL
+                 OR (failed.occurred_at,failed.id)>(successful_outbound.occurred_at,successful_outbound.id))
+             ORDER BY failed.occurred_at DESC,failed.id DESC LIMIT 1
+           ) last_outbound ON true`;
+const WAITING_SINCE = `CASE WHEN handoff.status='pending' THEN handoff.created_at
+  WHEN conversation.automation_state='human' THEN
+    CASE WHEN handoff.status='accepted'
+              AND (human_reply.id IS NULL OR human_reply.occurred_at<handoff.created_at)
+           THEN handoff.created_at
+         WHEN handoff.id IS NULL AND takeover.occurred_at IS NOT NULL
+              AND (human_reply.id IS NULL OR human_reply.occurred_at<takeover.occurred_at)
+           THEN takeover.occurred_at
+         WHEN human_reply.id IS NOT NULL THEN unanswered.since END END`;
+const DELIVERY_ISSUE = `CASE
+  WHEN COALESCE(last_outbound.delivery_status,last_outbound.status) IN ('failed','outcome_unknown')
+  THEN COALESCE(last_outbound.delivery_status,last_outbound.status) END`;
+const QUEUE_POSITION = `COALESCE(${WAITING_SINCE},
+  CASE WHEN ${DELIVERY_ISSUE} IS NOT NULL THEN last_outbound.occurred_at END,
+  review_order.created_at,current_order.created_at,conversation.opened_at)`;
+const PRIORITY_PROJECTION = `${WAITING_SINCE} waiting_since,
+  ${QUEUE_POSITION} queue_position, ${DELIVERY_ISSUE} delivery_issue_status,
+  last_outbound.occurred_at delivery_issue_at`;
 
 export class PostgresInboxReadRepository {
   /** @param {{database: {query: Function, transaction?: Function}, contactEnvelopeKey: Buffer, messageEnvelopeKey: Buffer}} options */
@@ -161,23 +253,44 @@ export class PostgresInboxReadRepository {
                AND waiting.status='pending')`,
         );
       }
+      if (input.workQueue) {
+        values.push(input.actorId);
+        const actor = `$${values.length}`;
+        predicates.push(
+          "conversation.state NOT IN ('convertida_em_lead','sem_lead','encerrada')",
+          'conversation.archived_at IS NULL',
+          `(conversation.assigned_user_id=${actor}
+            OR (conversation.assigned_user_id IS NULL AND
+              (handoff.status='pending'${input.workQueue === 'attention' ? ` OR ${DELIVERY_ISSUE} IS NOT NULL` : ''})))`,
+        );
+        if (input.workQueue === 'closing') {
+          predicates.push('review_order.id IS NOT NULL');
+        } else {
+          predicates.push(`(handoff.status='pending'
+            OR (conversation.automation_state='human'
+              AND ((${WAITING_SINCE}) IS NOT NULL OR unanswered.since IS NOT NULL))
+            OR ${DELIVERY_ISSUE} IS NOT NULL)`);
+        }
+      }
       const countValues = [...values];
       const countWhere = predicates.join(' AND ');
       // "Aguardando vendedor" puts the longest wait first; every other view
       // keeps the most recent message first.
-      const byWaitingTime = input.pendingHandoff === true;
+      const byWaitingTime =
+        Boolean(input.workQueue) || input.pendingHandoff === true;
+      const position = input.workQueue ? QUEUE_POSITION : 'handoff.created_at';
       const pagePredicates = [...predicates];
       if (input.after) {
         values.push(input.after.updatedAt, input.after.id);
         pagePredicates.push(
           byWaitingTime
-            ? `(handoff.created_at, conversation.id) > ($${values.length - 1}::timestamptz, $${values.length})`
+            ? `(${position}, conversation.id) > ($${values.length - 1}::timestamptz, $${values.length})`
             : `(conversation.last_message_at, conversation.id) < ($${values.length - 1}, $${values.length})`,
         );
       }
       const where = pagePredicates.join(' AND ');
       const orderBy = byWaitingTime
-        ? 'handoff.created_at ASC, conversation.id ASC'
+        ? `${position} ASC, conversation.id ASC`
         : 'conversation.last_message_at DESC, conversation.id DESC';
       values.push(input.limit + 1);
       const [page, count] = await Promise.all([
@@ -194,7 +307,7 @@ export class PostgresInboxReadRepository {
                   contact.version contact_version,
                   site_claim.id site_claim_id, site_claim.version site_claim_version,
                   site_claim.details_envelope site_claim_envelope,
-                  assigned_function.function_name,
+                  assigned_function.function_name, assigned_user.name assigned_user_name,
                   handoff.id handoff_id, handoff.status handoff_status,
                   handoff.version handoff_version,
                   handoff.target_role, handoff.due_at handoff_due_at,
@@ -203,6 +316,10 @@ export class PostgresInboxReadRepository {
                   handoff.preferred_first_name handoff_preferred_first_name,
                   current_order.id order_id, current_order.number order_number,
                   current_order.status order_status,
+                  current_order.ready_for_confirmation order_ready_for_confirmation,
+                  review_order.id review_order_id,review_order.number review_order_number,
+                  review_order.status review_order_status,
+                  ${PRIORITY_PROJECTION},
                   last_message.id last_message_id,
                   last_message.direction last_message_direction,
                   last_message.message_type last_message_type,
@@ -223,8 +340,11 @@ export class PostgresInboxReadRepository {
              ON site_claim.conversation_id=conversation.id
            LEFT JOIN crm.user_functions assigned_function
              ON assigned_function.user_id=conversation.assigned_user_id
+           LEFT JOIN crm.users assigned_user ON assigned_user.id=conversation.assigned_user_id
            ${OPEN_HANDOFF_JOIN}
            ${CURRENT_ORDER_JOIN}
+           ${REVIEW_ORDER_JOIN}
+           ${WAITING_JOIN}
            LEFT JOIN LATERAL (
              SELECT message.id, message.direction, message.message_type,
                     message.content_envelope, message.status,
@@ -245,6 +365,7 @@ export class PostgresInboxReadRepository {
            FROM crm.conversations conversation
            JOIN crm.contact_identities identity
              ON identity.id=conversation.contact_identity_id
+           ${input.workQueue ? `${OPEN_HANDOFF_JOIN} ${CURRENT_ORDER_JOIN} ${REVIEW_ORDER_JOIN} ${WAITING_JOIN}` : ''}
            WHERE ${countWhere}`,
           countValues,
         ),
@@ -278,7 +399,7 @@ export class PostgresInboxReadRepository {
                     contact.version contact_version,
                     site_claim.id site_claim_id, site_claim.version site_claim_version,
                     site_claim.details_envelope site_claim_envelope,
-                    assigned_function.function_name,
+                    assigned_function.function_name, assigned_user.name assigned_user_name,
                     handoff.id handoff_id, handoff.status handoff_status,
                     handoff.version handoff_version,
                     handoff.target_role, handoff.due_at handoff_due_at,
@@ -287,7 +408,11 @@ export class PostgresInboxReadRepository {
                   handoff.preferred_first_name handoff_preferred_first_name,
                     current_order.id order_id,
                     current_order.number order_number,
-                    current_order.status order_status
+                    current_order.status order_status,
+                    current_order.ready_for_confirmation order_ready_for_confirmation,
+                    review_order.id review_order_id,review_order.number review_order_number,
+                    review_order.status review_order_status,
+                    ${PRIORITY_PROJECTION}
              FROM crm.conversations conversation
              JOIN crm.contact_identities identity
                ON identity.id=conversation.contact_identity_id
@@ -296,8 +421,11 @@ export class PostgresInboxReadRepository {
                ON site_claim.conversation_id=conversation.id
              LEFT JOIN crm.user_functions assigned_function
                ON assigned_function.user_id=conversation.assigned_user_id
+             LEFT JOIN crm.users assigned_user ON assigned_user.id=conversation.assigned_user_id
              ${OPEN_HANDOFF_JOIN}
              ${CURRENT_ORDER_JOIN}
+             ${REVIEW_ORDER_JOIN}
+             ${WAITING_JOIN}
              WHERE conversation.id=$1`,
             [conversationId],
           ),
@@ -742,7 +870,11 @@ function mapConversationSummary(row, repository) {
     : null;
   return Object.freeze({
     assignedUser: row.assigned_user_id
-      ? { functionName: row.function_name, id: row.assigned_user_id }
+      ? {
+          functionName: row.function_name,
+          id: row.assigned_user_id,
+          name: row.assigned_user_name ?? null,
+        }
       : null,
     automationEpoch: Number(row.automation_epoch),
     automationState: row.automation_state,
@@ -778,13 +910,37 @@ function mapConversationSummary(row, repository) {
       : null,
     id: row.id,
     lastMessage,
+    deliveryIssue: row.delivery_issue_status
+      ? {
+          status: row.delivery_issue_status,
+          occurredAt: iso(row.delivery_issue_at),
+        }
+      : null,
     openedAt: iso(row.opened_at),
     order: row.order_id
-      ? { id: row.order_id, number: row.order_number, status: row.order_status }
+      ? {
+          id: row.order_id,
+          number: row.order_number,
+          status: row.order_status,
+          readyForConfirmation: row.order_ready_for_confirmation === true,
+        }
       : null,
+    waitingSince: row.waiting_since ? iso(row.waiting_since) : null,
+    reviewOrder: row.review_order_id
+      ? {
+          id: row.review_order_id,
+          number: row.review_order_number,
+          status: row.review_order_status,
+          readyForConfirmation: true,
+        }
+      : null,
+    queuePosition: row.queue_position
+      ? iso(row.queue_position)
+      : iso(row.opened_at),
     requiresAttention:
       row.state === 'requer_atencao' ||
       row.handoff_status === 'pending' ||
+      Boolean(row.delivery_issue_status) ||
       ['failed', 'outcome_unknown'].includes(
         String(row.last_message_delivery_status ?? row.last_message_status),
       ),

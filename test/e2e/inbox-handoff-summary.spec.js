@@ -252,7 +252,8 @@ test('INBOX-HANDOFF-02: names the seller the customer asked for', async ({
   await setup(page, { preferredSeller: 'Ana' });
   await page.goto('/inbox/conversation-1');
   const row = page.locator('[data-conversation-id="conversation-1"]');
-  await expect(row).toContainText('Cliente pediu: Ana');
+  await expect(row).toContainText('Assumir atendimento');
+  await expect(row).not.toContainText('Cliente pediu: Ana');
   await expect(
     page.locator('[data-conversation-id="conversation-2"]'),
   ).not.toContainText('Cliente pediu');
@@ -265,7 +266,7 @@ test('INBOX-HANDOFF-02: names the seller the customer asked for', async ({
     'Cliente pediu: Ana.',
   );
   await expect(
-    page.getByRole('button', { name: 'Assumir atendimento' }),
+    page.getByRole('button', { name: 'Assumir atendimento', exact: true }),
   ).toBeEnabled();
   const axe = await new AxeBuilder({ page })
     .include('.handoff-summary')
@@ -300,7 +301,10 @@ test('INBOX-HANDOFF-02: a direct takeover says what the agent was asking', async
     'O agente estava perguntando: Cor · Ficha 3 de 8',
   );
   await expect(reason).toContainText('4 de 15 mensagens do agente');
-  const takeOver = page.getByRole('button', { name: 'Assumir atendimento' });
+  const takeOver = page.getByRole('button', {
+    name: 'Assumir atendimento',
+    exact: true,
+  });
   await expect(takeOver).toHaveAccessibleDescription(
     /O agente estava perguntando: Cor · Ficha 3 de 8 4 de 15 mensagens do agente/u,
   );

@@ -1,5 +1,45 @@
 # CRM Silmer MVP — Requisitos Rastreáveis
 
+## Inbox orientada ao vendedor — PCX-15 (03/11/2026)
+
+Autorizada pelo proprietário no chat; tarefa INBOX-UX-02. Complementa INBOX-4,
+AGT-03/05 e emenda PCX-03/13/14 de
+[pedidos-mvp](../pedidos-mvp/spec.md). Não cria estados comerciais ou de leitura.
+
+- **PCX-15a:** a entrada padrão SHALL ser Atender, com handoffs sem responsável
+  e ações pendentes do próprio vendedor. Outro vendedor SHALL ficar fora dessa
+  fila, inclusive quando quem consulta é administrador; Todas e os filtros de
+  Situação/Responsável preservam a consulta e as capacidades anteriores.
+- **PCX-15b:** cada card SHALL priorizar identificação, espera alinhada à
+  direita e uma única próxima ação. Falha ou resultado incerto de envio SHALL
+  prevalecer sobre fechamento. Nova é estado da conversa e SHALL NOT representar
+  mensagem não lida. Canal, preview automático e pills técnicas saem do card.
+- **PCX-15c:** Atender e Fechar pedidos SHALL filtrar, contar e ordenar na API
+  antes da paginação, pela maior espera. O cursor SHALL ser vinculado ao ator
+  autenticado e filtros. Handoff usa sua criação; resposta humana bem-sucedida
+  encerra a sequência de inbound aguardando. Novas mensagens e avisos do bot
+  SHALL NOT reiniciar a espera. Sem instante válido, SHALL NOT inventar duração.
+- **PCX-15d:** Fechar pedidos SHALL usar um pedido elegível pendente não teste,
+  a validação persistida sem campos faltantes e dados comerciais válidos. Uma
+  pré-ficha completa SHALL NOT bastar. A ação Revisar pedido apenas navega;
+  confirmação continua humana, autorizada e validada pela API do pedido.
+  Havendo vários pedidos/Assuntos, SHALL expor um alvo explícito em reviewOrder
+  sem esconder o pronto porque o pedido corrente está incompleto. Um pedido
+  ligado a outro ciclo só qualifica se pertencer ao mesmo responsável atual;
+  sem responsável, apenas pedido da própria conversa com handoff pendente.
+- **PCX-15e:** o cabeçalho SHALL concentrar identidade, canal, responsável e
+  Assumir atendimento quando permitido. O motivo fica abaixo dele. Para
+  unsupported, SHALL dizer Agente não continuou sem inferir falha técnica,
+  abuso ou tipo inválido; o resumo original fica acessível por disclosure,
+  inicialmente recolhido nesse caso. Demais resumos preservam avisos comerciais.
+- **PCX-15f:** falhas de envio e arquivos indisponíveis SHALL permanecer junto
+  dos elementos afetados. Consultar fila, resumo ou pedido SHALL NOT reenviar
+  mensagens. Teclado, foco após claim, mobile e temas SHALL manter acessibilidade.
+
+Critérios e evidências sintéticas no
+[runbook](../../../docs/runbooks/inbox-prioridades.md). Testes sintéticos não
+substituem observação de vendedores reais ou homologação do canal.
+
 ## Exceção vigente — ponte Evolution/Baileys
 
 A [ADR 050](../../../docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md)
@@ -309,18 +349,18 @@ tarefa OPS-ERR-T01. Complementa PRV-01 e a observabilidade da issue #11.
    universal; notificações externas e indisponibilidade da VPS continuam nos
    gates independentes da issue #11.
 
-| Grupo              | IDs             | Status                                                                                   |
-| ------------------ | --------------- | ---------------------------------------------------------------------------------------- |
-| Orquestração n8n   | ORC-01 a ORC-09 | WhatsApp implementado; homologação pendente; ORC-09 em CANAL-2                           |
-| Inbox e conversão  | INB-01 a INB-04 | Implementada no contrato n8n v1                                                          |
-| Agente vendedor    | AGT-01 a AGT-10 | Implementado; AGT-09..10 aguardam implantação e publicação do `mvp-simple-20` (ADR 052)  |
-| Pedido             | ORD-01 a ORD-05 | Pedido e impressão v5 implementados; encaminhamento e assinatura física pendentes        |
-| Mensagens e canais | MSG-01 a MSG-04 | WhatsApp: homologação pendente; Instagram em CANAL-2                                     |
-| Financeiro         | FIN-01 a FIN-03 | Confirmados e valor vendido implementados; UAT pendente                                  |
-| Privacidade        | PRV-01 a PRV-03 | Coberta no contrato; homologação pendente                                                |
-| PIX e boas-vindas  | PAY-01 a PAY-05 | Diferidos pela ADR 006; datas manuais não implementam cobrança                           |
-| Painel por papel   | PNL-01 a PNL-04 | PNL-01..03 cobertos em `ux/jornadas` (T130, `069ae76`); PNL-04 adiado pelo PO (D3, T131) |
-| Saúde e erros      | OPS-ERR-01 a OPS-ERR-08 | Central restrita à conta operadora; implementação e gates em OPS-ERR-T01 |
+| Grupo              | IDs                     | Status                                                                                   |
+| ------------------ | ----------------------- | ---------------------------------------------------------------------------------------- |
+| Orquestração n8n   | ORC-01 a ORC-09         | WhatsApp implementado; homologação pendente; ORC-09 em CANAL-2                           |
+| Inbox e conversão  | INB-01 a INB-04         | Implementada no contrato n8n v1                                                          |
+| Agente vendedor    | AGT-01 a AGT-10         | Implementado; AGT-09..10 aguardam implantação e publicação do `mvp-simple-20` (ADR 052)  |
+| Pedido             | ORD-01 a ORD-05         | Pedido e impressão v5 implementados; encaminhamento e assinatura física pendentes        |
+| Mensagens e canais | MSG-01 a MSG-04         | WhatsApp: homologação pendente; Instagram em CANAL-2                                     |
+| Financeiro         | FIN-01 a FIN-03         | Confirmados e valor vendido implementados; UAT pendente                                  |
+| Privacidade        | PRV-01 a PRV-03         | Coberta no contrato; homologação pendente                                                |
+| PIX e boas-vindas  | PAY-01 a PAY-05         | Diferidos pela ADR 006; datas manuais não implementam cobrança                           |
+| Painel por papel   | PNL-01 a PNL-04         | PNL-01..03 cobertos em `ux/jornadas` (T130, `069ae76`); PNL-04 adiado pelo PO (D3, T131) |
+| Saúde e erros      | OPS-ERR-01 a OPS-ERR-08 | Central restrita à conta operadora; implementação e gates em OPS-ERR-T01                 |
 
 **Cobertura:** 45 IDs preservados, incluindo 5 PAY diferidos e o PNL-04 adiado; implementação, homologação e aprovação externa têm estados distintos. Essa cobertura não representa aprovação humana dos gates operacionais. A decomposição em tarefas pertence ao Tech Lead.
 

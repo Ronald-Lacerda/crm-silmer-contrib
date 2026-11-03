@@ -113,6 +113,60 @@ test('listInbox keeps its existing filters and last-message cursor', async () =>
   assert.equal(cursorPayload.updatedAt, '2026-09-08T12:00:00.000Z');
 });
 
+test('INBOX-UX-02: work queues bind pagination to the session actor and queue', async () => {
+  const item = {
+    id: 'conversation-work',
+    queuePosition: '2026-11-01T09:00:00.000Z',
+    waitingSince: '2026-11-01T09:00:00.000Z',
+    updatedAt: '2026-11-03T12:00:00.000Z',
+  };
+  const { lists, service } = inboxService([item]);
+  for (const workQueue of ['attention', 'closing']) {
+    const first = await service.listInbox(
+      { workQueue, limit: 1 },
+      { actorId: 'seller-1' },
+    );
+    assert.ok(first.nextCursor);
+    assert.equal(lists.at(-1).actorId, 'seller-1');
+    assert.equal(lists.at(-1).workQueue, workQueue);
+    await service.listInbox(
+      { workQueue, limit: 1, cursor: first.nextCursor },
+      { actorId: 'seller-1' },
+    );
+    assert.deepEqual(lists.at(-1).after, {
+      id: item.id,
+      updatedAt: item.queuePosition,
+    });
+    for (const other of [
+      { workQueue, actorId: 'seller-2' },
+      {
+        workQueue: workQueue === 'attention' ? 'closing' : 'attention',
+        actorId: 'seller-1',
+      },
+    ]) {
+      await assert.rejects(
+        service.listInbox(
+          { workQueue: other.workQueue, cursor: first.nextCursor },
+          { actorId: other.actorId },
+        ),
+        { code: 'INVALID_CURSOR' },
+      );
+    }
+  }
+  for (const invalid of [
+    { workQueue: 'invented' },
+    { workQueue: 'attention', archived: true },
+    { workQueue: 'closing', actorId: 'client-supplied' },
+  ]) {
+    await assert.rejects(service.listInbox(invalid, { actorId: 'seller-1' }), {
+      statusCode: 400,
+    });
+  }
+  await assert.rejects(service.listInbox({ workQueue: 'attention' }), {
+    statusCode: 400,
+  });
+});
+
 test('live events keep contact and conversation changes as they were', async () => {
   const { queries, service } = liveService([
     {

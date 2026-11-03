@@ -1,5 +1,30 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## INBOX-UX-02 — prioridades do vendedor e alertas (03/11/2026)
+
+PCX-15a–f, PCX-03/04/13/14 e AGT-03/05. Proposta revisada e implementação
+autorizada pelo proprietário após validação sintética no chat. Não altera
+transporte n8n, confirmação comercial, ACL de escrita ou infraestrutura.
+
+- [x] Validar cenários sintéticos de assumir, responder, prontidão oficial,
+      espera, outro vendedor, automação e falhas antes da integração visual.
+- [x] Implementar projeções oficiais, filtros globais/contagens e cursores
+      vinculados ao ator, preservando queries existentes sem workQueue.
+- [x] Cards com identificação/espera/próxima ação; motivo e responsável no
+      chat, registro unsupported expansível e tomada humana no cabeçalho.
+- [x] Gates locais: Node 24.20.0/npm 11.19.0; validate com 1.629 aprovados,
+      oito skips; E2E/axe completo com 434 aprovados, sete skips; auditoria
+      sem high/critical (um low e oito moderate preexistentes), diff check
+      limpo e revisão independente sem bloqueantes. PostgreSQL indisponível
+      localmente; a suíte real foi incluída no gate serial do CI.
+- [x] Entrega atômica preparada em codex/inbox-seller-priorities, preservando
+      alterações locais de outras tarefas. Commit e push seguem o protocolo
+      1:1:1:1; o CI PostgreSQL é gate de integração.
+- [ ] Conferir ambiente implantado e observar vendedores reais. O teste
+      sintético não comprova produtividade real nem corrige a causa do handoff
+      unsupported no workflow. Operação e rollback no
+      [runbook](../../../docs/runbooks/inbox-prioridades.md).
+
 ## OPS-ERR-T01 — Saúde e erros (02/11/2026)
 
 Requisitos OPS-ERR-01–08, PRV-01 e INT-2/3; decisão do proprietário na

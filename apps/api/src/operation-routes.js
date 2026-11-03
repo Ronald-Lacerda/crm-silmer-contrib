@@ -258,10 +258,22 @@ export function registerOperationRoutes(api, operations, contextFor) {
         'pendingHandoff',
         'state',
         'unassignedHumanHandoff',
+        'workQueue',
       ]);
-      await authorizeRead(request, operations, 'conversation.read');
+      const access = await authorizeRead(
+        request,
+        operations,
+        'conversation.read',
+      );
       privateReadHeaders(reply);
-      return reply.code(200).send(await operations.listInbox(input));
+      return reply
+        .code(200)
+        .send(
+          await operations.listInbox(
+            input,
+            input.workQueue ? { actorId: access.actor.id } : undefined,
+          ),
+        );
     }),
   );
 

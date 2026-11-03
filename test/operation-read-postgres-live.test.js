@@ -295,6 +295,7 @@ if (connectionString) {
         id: `order-3-${runId}`,
         number: '03-CRM',
         status: 'confirmado',
+        readyForConfirmation: false,
       });
       assert.equal(waiting.items[1].order, null);
 
@@ -323,6 +324,7 @@ if (connectionString) {
         id: `order-2-${runId}`,
         number: '02-CRM',
         status: 'pendente',
+        readyForConfirmation: false,
       });
       assert.equal(notWaiting.items[0].handoff.reasonCode, 'briefing_complete');
       assert.equal(notWaiting.items[0].handoff.status, 'accepted');
@@ -382,6 +384,7 @@ if (connectionString) {
         id: `order-2-${runId}`,
         number: '02-CRM',
         status: 'pendente',
+        readyForConfirmation: false,
       });
       assert.equal(detail.conversation.handoff.reasonCode, 'briefing_complete');
 
@@ -437,6 +440,432 @@ if (connectionString) {
         await reads.getConversationHandoff({ conversationId: summarized }),
         { handoff: null, preferred_seller: null },
       );
+
+      // INBOX-UX-02: a queue is filtered before count, limit and cursor.
+      // Automatic notices do not erase the customer's wait for a person.
+      /** @param {string} conversationId @param {string} suffix @param {'inbound'|'outbound'} direction @param {'contact'|'human'|'assistant'} authorKind @param {string} occurredAt @param {string} [status] */
+      const addMessage = async (
+        conversationId,
+        suffix,
+        direction,
+        authorKind,
+        occurredAt,
+        status = 'sent',
+      ) => {
+        const id = `priority-${suffix}-${runId}`;
+        await pool.query(
+          `INSERT INTO crm.messages
+             (id,conversation_id,provider,provider_account_id,external_message_id,
+              command_id,direction,author_kind,author_id,message_type,
+              content_envelope,key_version,status,occurred_at,created_at)
+           SELECT $1,id,provider,provider_account_id,$3,$4,$5,$6,$7,'text',$8::jsonb,
+                  1,$9,$10,$10 FROM crm.conversations WHERE id=$2`,
+          [
+            id,
+            conversationId,
+            direction === 'inbound' ? id : null,
+            direction === 'outbound' ? id : null,
+            direction,
+            authorKind,
+            authorKind === 'human' ? sellerId : 'synthetic',
+            JSON.stringify(
+              encryptJson(
+                { text: 'Mensagem sintética de prioridade' },
+                `message:${id}`,
+                MESSAGE_KEY,
+              ),
+            ),
+            direction === 'inbound' ? 'received' : status,
+            occurredAt,
+          ],
+        );
+        await pool.query(
+          'UPDATE crm.conversations SET last_message_at=$2 WHERE id=$1',
+          [conversationId, occurredAt],
+        );
+      };
+      await addMessage(
+        primary,
+        'human-reply',
+        'outbound',
+        'human',
+        '2026-09-08T12:40:00.000Z',
+      );
+      await addMessage(
+        primary,
+        'first-inbound',
+        'inbound',
+        'contact',
+        '2026-09-08T13:00:00.000Z',
+      );
+      await addMessage(
+        primary,
+        'second-inbound',
+        'inbound',
+        'contact',
+        '2026-09-08T13:05:00.000Z',
+      );
+      await addMessage(
+        primary,
+        'automatic-notice',
+        'outbound',
+        'assistant',
+        '2026-09-08T13:07:00.000Z',
+      );
+      const attention = await reads.listInbox(
+        { workQueue: 'attention', limit: 1 },
+        { actorId: sellerId },
+      );
+      assert.equal(
+        attention.totalCount,
+        2,
+        "only the unassigned handoff and this seller's unanswered client",
+      );
+      assert.equal(attention.items[0].id, waitingOld);
+      assert.equal(attention.items[0].waitingSince, '2026-09-08T08:00:00.000Z');
+      const attentionNext = await reads.listInbox(
+        { workQueue: 'attention', limit: 1, cursor: attention.nextCursor },
+        { actorId: sellerId },
+      );
+      assert.equal(attentionNext.items[0].id, primary);
+      assert.equal(
+        attentionNext.items[0].waitingSince,
+        '2026-09-08T13:00:00.000Z',
+      );
+      assert.equal(attentionNext.nextCursor, null);
+      assert.equal(attentionNext.items[0].assignedUser.name, 'Vendedora Inbox');
+      await assert.rejects(
+        reads.listInbox(
+          { workQueue: 'attention', cursor: attention.nextCursor },
+          { actorId: 'another-seller' },
+        ),
+        { code: 'INVALID_CURSOR' },
+      );
+
+      // An empty default array on an old/incomplete record is not enough.
+      assert.equal(
+        (await reads.listInbox({ workQueue: 'closing' }, { actorId: sellerId }))
+          .totalCount,
+        0,
+      );
+      await pool.query(
+        `UPDATE crm.orders SET missing_fields='{}',total_pieces=1,
+        final_amount_cents=1000,payment_condition='pix' WHERE id=$1`,
+        [`order-2-${runId}`],
+      );
+      const closing = await reads.listInbox(
+        { workQueue: 'closing' },
+        { actorId: sellerId },
+      );
+      assert.equal(closing.totalCount, 1);
+      assert.equal(closing.items[0].id, primary);
+      assert.equal(closing.items[0].order.readyForConfirmation, true);
+      await pool.query(
+        "UPDATE crm.orders SET missing_fields=ARRAY['ficha.artwork'] WHERE id=$1",
+        [`order-2-${runId}`],
+      );
+      assert.equal(
+        (await reads.listInbox({ workQueue: 'closing' }, { actorId: sellerId }))
+          .totalCount,
+        0,
+      );
+      await pool.query(
+        "UPDATE crm.orders SET missing_fields='{}' WHERE id=$1",
+        [`order-2-${runId}`],
+      );
+      assert.equal(
+        (
+          await reads.listInbox(
+            { workQueue: 'closing' },
+            { actorId: 'another-seller' },
+          )
+        ).totalCount,
+        0,
+      );
+
+      // An outbound failure remains visible after another client message.
+      await addMessage(
+        primary,
+        'failed-human',
+        'outbound',
+        'human',
+        '2026-09-08T13:10:00.000Z',
+        'outcome_unknown',
+      );
+      await addMessage(
+        primary,
+        'after-failure',
+        'inbound',
+        'contact',
+        '2026-09-08T13:11:00.000Z',
+      );
+      const failed = await reads.getConversation({ conversationId: primary });
+      assert.equal(failed.conversation.deliveryIssue.status, 'outcome_unknown');
+      assert.equal(
+        failed.conversation.waitingSince,
+        '2026-09-08T13:00:00.000Z',
+      );
+      await addMessage(
+        primary,
+        'queued-after-uncertain',
+        'outbound',
+        'human',
+        '2026-09-08T13:12:00.000Z',
+        'queued',
+      );
+      assert.equal(
+        (await reads.getConversation({ conversationId: primary })).conversation
+          .deliveryIssue.status,
+        'outcome_unknown',
+      );
+      await addMessage(
+        primary,
+        'sending-after-uncertain',
+        'outbound',
+        'human',
+        '2026-09-08T13:13:00.000Z',
+        'sending',
+      );
+      assert.equal(
+        (await reads.getConversation({ conversationId: primary })).conversation
+          .deliveryIssue.status,
+        'outcome_unknown',
+      );
+      await addMessage(
+        primary,
+        'resolved-human',
+        'outbound',
+        'human',
+        '2026-09-08T13:15:00.000Z',
+      );
+      const answered = await reads.getConversation({ conversationId: primary });
+      assert.equal(answered.conversation.waitingSince, null);
+      assert.equal(answered.conversation.deliveryIssue, null);
+      assert.equal(
+        (
+          await reads.listInbox(
+            { workQueue: 'attention' },
+            { actorId: sellerId },
+          )
+        ).totalCount,
+        1,
+      );
+      assert.equal(
+        (await reads.listInbox({ workQueue: 'closing' }, { actorId: sellerId }))
+          .totalCount,
+        1,
+      );
+      await pool.query(
+        "UPDATE crm.conversations SET state='encerrada',terminal_at=$2,closure_outcome='concluido',closed_by=$3 WHERE id=$1",
+        [primary, '2026-09-08T13:16:00.000Z', sellerId],
+      );
+      assert.equal(
+        (await reads.listInbox({ workQueue: 'closing' }, { actorId: sellerId }))
+          .totalCount,
+        0,
+      );
+
+      // Claim preserves the handoff clock, not the much older bot message.
+      const claimedCycle = await openConversation(
+        'claimed-anchor',
+        '2026-09-01T08:00:00.000Z',
+      );
+      await addMessage(
+        claimedCycle,
+        'old-bot',
+        'outbound',
+        'assistant',
+        '2026-09-07T08:00:00.000Z',
+      );
+      await insertHandoff(
+        'anchor',
+        claimedCycle,
+        'unsupported',
+        '2026-09-08T09:00:00.000Z',
+        'pending',
+      );
+      const beforeClaim = await reads.getConversation({
+        conversationId: claimedCycle,
+      });
+      assert.equal(
+        beforeClaim.conversation.waitingSince,
+        '2026-09-08T09:00:00.000Z',
+      );
+      await pool.query(
+        "UPDATE crm.handoffs SET status='accepted',assigned_user_id=$2 WHERE conversation_id=$1",
+        [claimedCycle, sellerId],
+      );
+      await pool.query(
+        "UPDATE crm.conversations SET assigned_user_id=$2,automation_state='human',state='em_atendimento' WHERE id=$1",
+        [claimedCycle, sellerId],
+      );
+      assert.equal(
+        (await reads.getConversation({ conversationId: claimedCycle }))
+          .conversation.waitingSince,
+        '2026-09-08T09:00:00.000Z',
+      );
+      await addMessage(
+        claimedCycle,
+        'first-claim-reply',
+        'outbound',
+        'human',
+        '2026-09-08T09:10:00.000Z',
+      );
+      assert.equal(
+        (await reads.getConversation({ conversationId: claimedCycle }))
+          .conversation.waitingSince,
+        null,
+      );
+      await addMessage(
+        claimedCycle,
+        'new-claim-inbound',
+        'inbound',
+        'contact',
+        '2026-09-08T09:15:00.000Z',
+      );
+      assert.equal(
+        (await reads.getConversation({ conversationId: claimedCycle }))
+          .conversation.waitingSince,
+        '2026-09-08T09:15:00.000Z',
+      );
+
+      // Direct takeover has its own audit anchor. Without that evidence no
+      // duration is invented from messages the bot handled days earlier.
+      const directCycle = await openConversation(
+        'direct-anchor',
+        '2026-09-01T08:00:00.000Z',
+      );
+      await addMessage(
+        directCycle,
+        'direct-old-bot',
+        'outbound',
+        'assistant',
+        '2026-09-07T08:00:00.000Z',
+      );
+      await pool.query(
+        "UPDATE crm.conversations SET assigned_user_id=$2,automation_state='human',state='em_atendimento' WHERE id=$1",
+        [directCycle, sellerId],
+      );
+      assert.equal(
+        (await reads.getConversation({ conversationId: directCycle }))
+          .conversation.waitingSince,
+        null,
+      );
+      await pool.query(
+        `INSERT INTO crm.audit_events
+        (id,actor_id,action,target_type,target_id,version,reason,correlation_id,occurred_at)
+        VALUES ($1,$2,'conversation.takeover','conversation',$3,'2','human_takeover',$1,$4)`,
+        [
+          `takeover-${runId}`,
+          sellerId,
+          directCycle,
+          '2026-09-08T10:00:00.000Z',
+        ],
+      );
+      assert.equal(
+        (await reads.getConversation({ conversationId: directCycle }))
+          .conversation.waitingSince,
+        '2026-09-08T10:00:00.000Z',
+      );
+      await addMessage(
+        directCycle,
+        'direct-first-reply',
+        'outbound',
+        'human',
+        '2026-09-08T10:10:00.000Z',
+      );
+      assert.equal(
+        (await reads.getConversation({ conversationId: directCycle }))
+          .conversation.waitingSince,
+        null,
+      );
+
+      // A newer, incomplete canonical order must not hide a ready order
+      // linked from another cycle owned by this same seller.
+      const readySource = await openConversation(
+        'ready-source',
+        '2026-09-08T09:00:00.000Z',
+      );
+      const linkedCycle = await openConversation(
+        'linked-current',
+        '2026-09-08T10:00:00.000Z',
+      );
+      await pool.query(
+        `UPDATE crm.contact_identities current_identity
+        SET current_contact_id=source_identity.current_contact_id
+        FROM crm.conversations source,crm.contact_identities source_identity,
+             crm.conversations current_cycle
+        WHERE source.id=$1 AND source_identity.id=source.contact_identity_id
+          AND current_cycle.id=$2 AND current_identity.id=current_cycle.contact_identity_id`,
+        [readySource, linkedCycle],
+      );
+      await pool.query(
+        "UPDATE crm.conversations SET assigned_user_id=$2,automation_state='human',state='em_atendimento' WHERE id=ANY($1::text[])",
+        [[readySource, linkedCycle], sellerId],
+      );
+      await insertOrder(4, readySource, 'pendente');
+      await insertOrder(5, linkedCycle, 'pendente');
+      await pool.query(
+        `UPDATE crm.orders SET total_pieces=1,final_amount_cents=1000,payment_condition='pix'
+        WHERE id=$1`,
+        [`order-4-${runId}`],
+      );
+      await pool.query(
+        `INSERT INTO crm.conversation_subjects
+        (id,conversation_id,contact_id,order_id,kind,position,is_current,created_by,created_by_kind,created_at,updated_at)
+        SELECT $1,conversation.id,identity.current_contact_id,$3,'pedido',1,false,$4,'human',$5,$5
+        FROM crm.conversations conversation JOIN crm.contact_identities identity ON identity.id=conversation.contact_identity_id
+        WHERE conversation.id=$2`,
+        [
+          `subject-review-${runId}`,
+          linkedCycle,
+          `order-4-${runId}`,
+          sellerId,
+          NOW,
+        ],
+      );
+      const linkedDetail = await reads.getConversation({
+        conversationId: linkedCycle,
+      });
+      assert.equal(linkedDetail.conversation.order.id, `order-5-${runId}`);
+      assert.equal(linkedDetail.conversation.order.readyForConfirmation, false);
+      assert.deepEqual(linkedDetail.conversation.reviewOrder, {
+        id: `order-4-${runId}`,
+        number: '04-CRM',
+        status: 'pendente',
+        readyForConfirmation: true,
+      });
+      const readyQueue = await reads.listInbox(
+        { workQueue: 'closing' },
+        { actorId: sellerId },
+      );
+      assert.equal(readyQueue.totalCount, 2);
+      assert.ok(
+        readyQueue.items.some(
+          (/** @type {any} */ item) =>
+            item.id === linkedCycle &&
+            item.reviewOrder.id === `order-4-${runId}`,
+        ),
+      );
+      const otherSellerId = `other-seller-${runId}`;
+      await pool.query(
+        "INSERT INTO crm.users (id,email,password_hash,name) VALUES ($1,$2,'$argon2id$synthetic','Outro vendedor sintético')",
+        [otherSellerId, `${otherSellerId}@example.test`],
+      );
+      await pool.query(
+        'UPDATE crm.conversations SET assigned_user_id=$2 WHERE id=$1',
+        [readySource, otherSellerId],
+      );
+      assert.equal(
+        (await reads.getConversation({ conversationId: linkedCycle }))
+          .conversation.reviewOrder,
+        null,
+      );
+      assert.equal(
+        (await reads.listInbox({ workQueue: 'closing' }, { actorId: sellerId }))
+          .totalCount,
+        0,
+      );
     } finally {
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
@@ -454,7 +883,7 @@ function identityInput(runId, suffix) {
   return {
     channel: 'instagram',
     correlationId: `correlation-${suffix}-${runId}`,
-    displayHandle: `@${suffix}_${runId.slice(0, 8)}`,
+    displayHandle: `@${suffix.replaceAll('-', '_')}_${runId.slice(0, 8)}`,
     externalIdentityId: `identity-${suffix}-${runId}`,
     identityKind: 'handle',
     occurredAt: NOW.toISOString(),
