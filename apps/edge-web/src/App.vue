@@ -192,19 +192,26 @@ function sectionCurrent(to) {
 }
 const connectionLabel = computed(() => {
   if (isFinance.value) return 'Atualização manual';
+  if (route.path === '/dashboard/agente') {
+    if (connection.value === 'conectado') return 'Conexão ativa';
+    if (connection.value === 'indisponível')
+      return 'Conexão de eventos indisponível';
+    return 'Conectando eventos…';
+  }
   if (connection.value === 'conectado') return 'Atualizado agora';
   if (connection.value === 'reconectando') return 'Reconectando…';
   if (connection.value === 'indisponível')
     return 'Atualização automática pausada';
   return 'Preparando atualização…';
 });
-const connectionDetail = computed(() =>
-  isFinance.value
-    ? 'Use Atualizar para conferir a fila financeira'
-    : connection.value === 'conectado'
-      ? 'Atualização automática ativa'
-      : 'Tentando manter os dados atualizados',
-);
+const connectionDetail = computed(() => {
+  if (isFinance.value) return 'Use Atualizar para conferir a fila financeira';
+  if (route.path === '/dashboard/agente')
+    return 'Os números são consultados periodicamente. Confira abaixo o horário da última consulta';
+  return connection.value === 'conectado'
+    ? 'Atualização automática ativa'
+    : 'Tentando manter os dados atualizados';
+});
 
 // One live connection per session: the topic follows the route, because the
 // server caps concurrent SSE streams and a second connection per user would

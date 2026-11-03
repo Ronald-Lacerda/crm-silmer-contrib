@@ -214,3 +214,31 @@ test('an older API without the fields reads a dash, not zero', () => {
     [],
   );
 });
+
+test('explains event counts and flags missing turns only when activity is known', () => {
+  const summary = performanceSummary({ ...ANSWER, by_workflow_version: [] });
+  assert.equal(summary.telemetryMissing, true);
+  assert.equal(summary.failures[0].label, 'Eventos de falha do workflow');
+  assert.equal(summary.totals[1].detail, 'Respostas registradas no período');
+  assert.equal(
+    summary.totals[2].detail,
+    'Transferências registradas no período',
+  );
+  assert.equal(performanceSummary(ANSWER).telemetryMissing, false);
+  assert.equal(performanceSummary({}).telemetryMissing, false);
+  const unavailable = performanceSummary({
+    ...ANSWER,
+    by_workflow_version: [{ workflow_version: '<b>x</b>', turns: 1 }],
+  });
+  assert.equal(unavailable.versionsUnavailable, true);
+  assert.equal(unavailable.telemetryMissing, false);
+  assert.equal(
+    performanceSummary({
+      conversations_with_assistant: 0,
+      assistant_replies: 0,
+      handoffs: { total: 0 },
+      by_workflow_version: [],
+    }).telemetryMissing,
+    false,
+  );
+});

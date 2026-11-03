@@ -660,6 +660,17 @@ serializado do CI, incluindo essa regressão.
       `assistant.performance.read`) com agregados de 1 a 90 dias e `null` sem
       amostra; `stale_fence` contado pela auditoria. Nenhum texto do cliente,
       nome ou telefone.
+- [x] **AGENTE-OBS-02 — leitura e atualização do desempenho** (AGT-06,
+      AGT-10, AGENTE-OBS-01). Distinguir conexão ativa da última consulta
+      bem-sucedida; atualização manual, por eventos agrupados e a cada 60 s
+      enquanto a página está visível. Preservar resposta/janela/horário em
+      falha e foco nas atualizações de fundo. Explicar os universos de
+      respostas, transferências e eventos de falha; sinalizar atividade sem
+      turnos por versão sem diagnosticar a causa. Investigação inicial e
+      consultas agregadas sem PII no
+      [runbook do desempenho](../../../docs/runbooks/desempenho-agente.md).
+      Publicação ativa e causa dos eventos remotos continuam pendentes de
+      consulta ao ambiente; testes locais não encerram esses gates.
 - [x] **INBOX-HANDOFF-02 — handoff completo** (AGT-03, ORC-07). Encerrar a
       conversa resolve o handoff ativo na mesma transação, com
       `conversation_closed` no histórico. `requested_seller_id` fora dos

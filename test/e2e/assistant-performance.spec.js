@@ -70,6 +70,24 @@ async function setup(page, options = {}) {
   return { ...mock, requests };
 }
 
+/** @param {import('@playwright/test').Page} page */
+async function mockLiveConnection(page) {
+  await page.addInitScript(() => {
+    const testGlobal = /** @type {any} */ (globalThis);
+    class FakeEventSource extends globalThis.EventTarget {
+      constructor() {
+        super();
+        testGlobal.__performanceSource = this;
+        globalThis.queueMicrotask(() =>
+          this.dispatchEvent(new globalThis.Event('open')),
+        );
+      }
+      close() {}
+    }
+    testGlobal.EventSource = FakeEventSource;
+  });
+}
+
 test('the manager opens the agent performance from its card, by keyboard', async ({
   page,
 }) => {
@@ -213,6 +231,9 @@ test('an empty window and a first failure read in plain words', async ({
     'Nenhuma versão registrou turnos no período.',
   );
   await expect(main.getByText('Sem amostras no período')).toHaveCount(3);
+  await expect(
+    main.getByRole('region', { name: 'Medição incompleta neste período' }),
+  ).toHaveCount(0);
   await expect(main).not.toContainText(/NaN|null|undefined/u);
   // Mobile-first (ADR 035): nothing scrolls sideways on a phone.
   const overflow = await page.evaluate(
@@ -232,4 +253,225 @@ test('a seller does not see the agent performance', async ({ page }) => {
     page.getByRole('link', { name: 'Ver desempenho do agente' }),
   ).toHaveCount(0);
   expect(requests).toEqual([]);
+});
+
+test('manual refresh preserves the last successful consultation and keyboard focus on failure', async ({
+  page,
+}) => {
+  let fail = false;
+  const { requests } = await setup(page, {
+    answer: (days, call) => ({
+      status: fail ? 503 : 200,
+      body: fail ? {} : { ...performance(days), assistant_replies: 200 + call },
+    }),
+  });
+  await page.goto('/dashboard/agente');
+  const main = page.locator('#main-content');
+  const consultation = main.locator('time');
+  await expect(consultation).toBeVisible();
+  const previousTime = await consultation.getAttribute('datetime');
+  const refresh = main.getByRole('button', { name: 'Atualizar', exact: true });
+  await expect(refresh).not.toHaveAttribute('aria-disabled', 'true');
+  fail = true;
+  await refresh.focus();
+  await page.keyboard.press('Enter');
+  await expect(main.getByRole('alert')).toBeVisible();
+  await expect(main).toContainText('201');
+  await expect(consultation).toHaveAttribute('datetime', previousTime ?? '');
+  await expect(refresh).toBeFocused();
+  fail = false;
+  await page.keyboard.press('Enter');
+  await expect(main.getByRole('alert')).toHaveCount(0);
+  await expect(main).toContainText('203');
+  await expect(refresh).toBeFocused();
+  expect(requests).toEqual([7, 7, 7]);
+});
+
+test('missing turn measurements are explicit without implying a cause or a failure rate', async ({
+  page,
+}) => {
+  await mockLiveConnection(page);
+  await setup(page, {
+    answer: (days) => ({
+      body: {
+        ...performance(days),
+        by_workflow_version: [],
+        ficha_at_handoff: { avg_ratio: null, samples: 0 },
+      },
+    }),
+  });
+  await page.setViewportSize({ height: 900, width: 1280 });
+  await page.goto('/dashboard/agente');
+  const note = page.getByRole('region', {
+    name: 'Medição incompleta neste período',
+  });
+  await expect(note).toContainText('nenhum turno foi registrado por versão');
+  await expect(note).not.toContainText(/desatualizado|antigo|n8n/u);
+  const failures = page.getByRole('region', { name: 'Falhas' });
+  await expect(failures).toContainText('Eventos de falha do workflow 1');
+  await expect(failures).toContainText(
+    'podem incluir falhas fora das respostas do agente',
+  );
+  await expect(page.locator('.performance-consultation')).toContainText(
+    'horário de São Paulo',
+  );
+  await expect(page.locator('.connection-state')).toContainText(
+    'Conexão ativa',
+  );
+  await page.screenshot({
+    path: 'tmp/assistant-performance-desktop.png',
+    fullPage: true,
+  });
+  await page.setViewportSize({ height: 844, width: 390 });
+  await page.screenshot({
+    path: 'tmp/assistant-performance-mobile.png',
+    fullPage: true,
+  });
+  const overflow = await page.evaluate(
+    () =>
+      globalThis.document.documentElement.scrollWidth >
+      globalThis.document.documentElement.clientWidth,
+  );
+  expect(overflow).toBe(false);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test('automatic recovery restores focus only when the focused retry leaves the page', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await mockLiveConnection(page);
+  await setup(page, {
+    answer: (days, call) => ({
+      status: call === 2 ? 503 : 200,
+      body: call === 2 ? {} : performance(days),
+    }),
+  });
+  await page.goto('/dashboard/agente');
+  const main = page.locator('#main-content');
+  const refresh = main.getByRole('button', { name: 'Atualizar', exact: true });
+  await expect(refresh).not.toHaveAttribute('aria-disabled', 'true');
+  await refresh.click();
+  const retry = main.getByRole('button', { name: 'Tentar novamente' });
+  await expect(retry).toBeVisible();
+  await retry.focus();
+  await page.evaluate(() => {
+    /** @type {any} */ (globalThis).__performanceSource.dispatchEvent(
+      new globalThis.MessageEvent('stream.reset', { data: '{}' }),
+    );
+  });
+  await page.clock.runFor(300);
+  await expect(main.getByRole('alert')).toHaveCount(0);
+  await expect(
+    main.getByRole('heading', { name: 'Desempenho do agente', exact: true }),
+  ).toBeFocused();
+});
+
+test('live events are grouped and periodic reconciliation stops when leaving the page', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await mockLiveConnection(page);
+  const { requests } = await setup(page, {
+    answer: (days, call) => ({
+      body: { ...performance(days), assistant_replies: 200 + call },
+    }),
+  });
+  await page.goto('/dashboard/agente');
+  const main = page.locator('#main-content');
+  await expect(main).toContainText('201');
+  const period = main.getByRole('button', { name: '14 dias' });
+  await period.focus();
+  await page.evaluate(() => {
+    const source = /** @type {any} */ (globalThis).__performanceSource;
+    for (let count = 0; count < 5; count += 1) {
+      source.dispatchEvent(
+        new globalThis.MessageEvent('inbox.conversation.changed', {
+          data: JSON.stringify({ conversationId: 'synthetic-conversation' }),
+        }),
+      );
+    }
+  });
+  await page.clock.runFor(300);
+  await expect(main).toContainText('202');
+  expect(requests).toEqual([7, 7]);
+  await expect(period).toBeFocused();
+  await page.clock.fastForward(60_000);
+  await page.clock.runFor(300);
+  await expect(main).toContainText('203');
+  await expect(period).toBeFocused();
+  expect(requests).toEqual([7, 7, 7]);
+  await page.evaluate(() => {
+    Object.defineProperty(globalThis.document, 'hidden', {
+      configurable: true,
+      value: true,
+    });
+    globalThis.document.dispatchEvent(new globalThis.Event('visibilitychange'));
+  });
+  await page.clock.fastForward(60_000);
+  await page.clock.runFor(300);
+  expect(requests).toEqual([7, 7, 7]);
+  await page.evaluate(() => {
+    Object.defineProperty(globalThis.document, 'hidden', {
+      configurable: true,
+      value: false,
+    });
+    globalThis.document.dispatchEvent(new globalThis.Event('visibilitychange'));
+  });
+  await page.clock.runFor(300);
+  await expect(main).toContainText('204');
+  expect(requests).toEqual([7, 7, 7, 7]);
+  await main.getByRole('link', { name: '← Dashboard' }).click();
+  await expect(page).toHaveURL('/dashboard');
+  await page.clock.fastForward(120_000);
+  expect(requests).toEqual([7, 7, 7, 7]);
+});
+
+test('events during a slow consultation queue one follow-up without cancelling the read', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await mockLiveConnection(page);
+  await setup(page);
+  await page.goto('/dashboard/agente');
+  const main = page.locator('#main-content');
+  const refresh = main.getByRole('button', { name: 'Atualizar', exact: true });
+  await expect(refresh).not.toHaveAttribute('aria-disabled', 'true');
+  let reads = 0;
+  let release = () => {};
+  const pending = new Promise((resolve) => {
+    release = () => resolve(undefined);
+  });
+  await page.route('**/api/v1/inbox/assistant/performance**', async (route) => {
+    reads += 1;
+    const current = reads;
+    if (current === 1) await pending;
+    await route.fulfill({
+      body: JSON.stringify({
+        ...performance(7),
+        assistant_replies: 200 + current,
+      }),
+      contentType: 'application/json',
+    });
+  });
+  await refresh.click();
+  await expect.poll(() => reads).toBe(1);
+  await page.evaluate(() => {
+    const source = /** @type {any} */ (globalThis).__performanceSource;
+    for (let count = 0; count < 5; count += 1) {
+      source.dispatchEvent(
+        new globalThis.MessageEvent('inbox.conversation.changed', {
+          data: JSON.stringify({ conversationId: 'synthetic-conversation' }),
+        }),
+      );
+    }
+  });
+  await page.clock.runFor(300);
+  expect(reads).toBe(1);
+  release();
+  await expect(main).toContainText('201');
+  await page.clock.runFor(300);
+  await expect(main).toContainText('202');
+  expect(reads).toBe(2);
+  await expect(refresh).toBeFocused();
 });

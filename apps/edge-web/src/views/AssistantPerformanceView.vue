@@ -1,5 +1,13 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import {
+  computed,
+  inject,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue';
 import { RouterLink } from 'vue-router';
 import { brand } from '../brand/index.js';
 import { request } from '../lib/api-client.js';
@@ -19,6 +27,7 @@ const title = performanceTitle();
 const assistant = brand.assistant.reference;
 const heading = ref(null);
 const retryButton = ref(null);
+const liveEvent = inject('liveEvent', ref(null));
 const days = ref(DEFAULT_PERFORMANCE_DAYS);
 const loading = ref(true);
 /** @type {import('vue').Ref<Record<string, any>|null>} */
@@ -26,7 +35,22 @@ const answer = ref(null);
 const answeredDays = ref(DEFAULT_PERFORMANCE_DAYS);
 const error = ref('');
 const announcement = ref('');
+const consultedAt = ref('');
 let controller;
+let refreshTimer = 0;
+let reconciliationTimer = 0;
+let refreshQueued = false;
+let disposed = false;
+
+const consultationLabel = computed(() =>
+  consultedAt.value
+    ? new Intl.DateTimeFormat('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'medium',
+        timeZone: 'America/Sao_Paulo',
+      }).format(new Date(consultedAt.value))
+    : '',
+);
 
 const summary = computed(() =>
   answer.value ? performanceSummary(answer.value, answeredDays.value) : null,
@@ -51,6 +75,10 @@ function failureText(cause) {
 
 /** @param {{announce?: boolean}} [options] */
 async function load({ announce = false } = {}) {
+  if (disposed) return;
+  if (refreshTimer) globalThis.clearTimeout(refreshTimer);
+  refreshTimer = 0;
+  refreshQueued = false;
   controller?.abort();
   const own = new AbortController();
   controller = own;
@@ -64,16 +92,58 @@ async function load({ announce = false } = {}) {
     if (own !== controller) return;
     answer.value = response.data ?? {};
     answeredDays.value = requested;
+    consultedAt.value = new Date().toISOString();
+    const restoreFocus =
+      error.value &&
+      retryButton.value &&
+      globalThis.document.activeElement === retryButton.value;
     error.value = '';
     if (announce)
       announcement.value = `${summary.value?.windowLabel ?? 'Período'}: desempenho atualizado.`;
+    if (restoreFocus) {
+      await nextTick();
+      if (!disposed && own === controller) heading.value?.focus();
+    }
   } catch (cause) {
     if (own !== controller || /** @type {any} */ (cause)?.name === 'AbortError')
       return;
     error.value = failureText(cause);
   } finally {
-    if (own === controller) loading.value = false;
+    if (own === controller) {
+      loading.value = false;
+      if (refreshQueued) scheduleLiveRefresh();
+    }
   }
+}
+
+// One read after a burst of inbox events. Events received during a read queue
+// one follow-up instead of aborting a slow request over and over.
+function scheduleLiveRefresh() {
+  if (disposed || globalThis.document.hidden) return;
+  if (loading.value) {
+    refreshQueued = true;
+    return;
+  }
+  if (refreshTimer) return;
+  refreshTimer = globalThis.setTimeout(() => {
+    refreshTimer = 0;
+    if (globalThis.document.hidden) return;
+    void load();
+  }, 250);
+}
+
+function refreshVisiblePage() {
+  if (!globalThis.document.hidden) scheduleLiveRefresh();
+}
+
+watch(liveEvent, (event) => {
+  if (event?.reset || event?.type?.startsWith('inbox.')) scheduleLiveRefresh();
+});
+
+function refresh() {
+  if (loading.value) return;
+  announcement.value = '';
+  void load({ announce: true });
 }
 
 /** @param {number} value */
@@ -97,8 +167,21 @@ async function retry() {
 onMounted(() => {
   heading.value?.focus();
   void load();
+  // Failures without a conversation and the current waiting time may change
+  // without an inbox event. Reconcile them without opening another stream.
+  reconciliationTimer = globalThis.setInterval(scheduleLiveRefresh, 60_000);
+  globalThis.document.addEventListener('visibilitychange', refreshVisiblePage);
 });
-onBeforeUnmount(() => controller?.abort());
+onBeforeUnmount(() => {
+  disposed = true;
+  controller?.abort();
+  if (refreshTimer) globalThis.clearTimeout(refreshTimer);
+  if (reconciliationTimer) globalThis.clearInterval(reconciliationTimer);
+  globalThis.document.removeEventListener(
+    'visibilitychange',
+    refreshVisiblePage,
+  );
+});
 </script>
 
 <template>
@@ -114,7 +197,20 @@ onBeforeUnmount(() => controller?.abort());
           Só números do período; nenhuma conversa aparece aqui.
         </p>
       </div>
+      <button
+        type="button"
+        :aria-disabled="loading ? 'true' : undefined"
+        @click="refresh"
+      >
+        {{ loading ? 'Atualizando…' : 'Atualizar' }}
+      </button>
     </header>
+
+    <p v-if="consultedAt" class="performance-consultation">
+      Última consulta:
+      <time :datetime="consultedAt">{{ consultationLabel }}</time>
+      (horário de São Paulo).
+    </p>
 
     <div class="performance-period">
       <p id="performance-period-label" class="performance-period-label">
@@ -180,6 +276,19 @@ onBeforeUnmount(() => controller?.abort());
         >
       </p>
 
+      <section
+        v-if="summary.telemetryMissing"
+        class="audit-note performance-measurement"
+        aria-labelledby="performance-measurement"
+      >
+        <h2 id="performance-measurement">Medição incompleta neste período</h2>
+        <p>
+          Há atividade registrada, mas nenhum turno foi registrado por versão. O
+          preenchimento da ficha pode ficar sem amostras. Confira a coleta de
+          dados antes de comparar o desempenho.
+        </p>
+      </section>
+
       <section class="dashboard-section" aria-labelledby="performance-totals">
         <h2 id="performance-totals">Resumo</h2>
         <ul class="metric-grid" role="list">
@@ -239,6 +348,11 @@ onBeforeUnmount(() => controller?.abort());
 
       <section class="dashboard-section" aria-labelledby="performance-failures">
         <h2 id="performance-failures">Falhas</h2>
+        <p class="performance-explanation">
+          Contagens registradas no período. Os eventos de falha do workflow
+          podem incluir falhas fora das respostas do agente e não representam
+          clientes afetados nem uma taxa de erro.
+        </p>
         <p v-if="summary.failureTotal === null" class="performance-empty">
           Sem dados de falhas neste servidor.
         </p>
@@ -270,6 +384,9 @@ onBeforeUnmount(() => controller?.abort());
             <span class="performance-list-value">{{ version.detail }}</span>
           </li>
         </ul>
+        <p v-else-if="summary.versionsUnavailable" class="performance-empty">
+          As versões registradas não estão disponíveis para exibição.
+        </p>
         <p v-else class="performance-empty">
           Nenhuma versão registrou turnos no período.
         </p>
@@ -311,6 +428,23 @@ onBeforeUnmount(() => controller?.abort());
 .performance-window {
   margin: 0 0 var(--space-4);
   font-size: var(--text-sm);
+}
+.performance-consultation,
+.performance-explanation {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+.performance-explanation,
+.performance-measurement {
+  max-inline-size: 48rem;
+}
+.performance-measurement h2 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-base);
+}
+.performance-measurement p {
+  margin: 0;
 }
 .performance-body .audit-note {
   margin-block: 0 var(--space-3);

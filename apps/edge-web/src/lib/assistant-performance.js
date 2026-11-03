@@ -158,7 +158,7 @@ function reasonsOf(data, handoffs) {
 const FAILURES = Object.freeze([
   Object.freeze({
     key: 'workflow_failed',
-    label: 'Execuções do workflow com erro',
+    label: 'Eventos de falha do workflow',
   }),
   Object.freeze({ key: 'send_failed', label: 'Envios que falharam' }),
   Object.freeze({ key: 'send_unknown', label: 'Envios sem confirmação' }),
@@ -281,6 +281,8 @@ function timingOf(data) {
  *   failures: PerformanceFailure[],
  *   failureTotal: number|null,
  *   versions: PerformanceVersion[],
+ *   telemetryMissing: boolean,
+ *   versionsUnavailable: boolean,
  * }} PerformanceSummary
  */
 
@@ -299,6 +301,10 @@ export function performanceSummary(answer, requestedDays) {
   const stalled = countOf(data.stalled_now);
   const failures = failuresOf(data);
   const known = failures.filter((failure) => failure.count !== null);
+  const versions = versionsOf(data);
+  const hasActivity = [conversations, replies, handoffs].some(
+    (count) => count !== null && count > 0,
+  );
   return {
     empty: !conversations && !replies && !handoffs,
     failureTotal: known.length
@@ -316,14 +322,14 @@ export function performanceSummary(answer, requestedDays) {
         value: countText(conversations),
       },
       {
-        detail: 'Mensagens enviadas ao cliente',
+        detail: 'Respostas registradas no período',
         key: 'replies',
         label: 'Respostas',
         tone: null,
         value: countText(replies),
       },
       {
-        detail: 'Conversas passadas para uma pessoa',
+        detail: 'Transferências registradas no período',
         key: 'handoffs',
         label: 'Transferências',
         tone: null,
@@ -342,7 +348,15 @@ export function performanceSummary(answer, requestedDays) {
         value: countText(stalled),
       },
     ],
-    versions: versionsOf(data),
+    versions,
+    telemetryMissing:
+      hasActivity &&
+      Array.isArray(data.by_workflow_version) &&
+      data.by_workflow_version.length === 0,
+    versionsUnavailable:
+      Array.isArray(data.by_workflow_version) &&
+      data.by_workflow_version.length > 0 &&
+      versions.length === 0,
     windowLabel: windowLabel(data.window, requestedDays),
   };
 }
