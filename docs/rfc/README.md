@@ -1,5 +1,10 @@
 # Request for Comments
 
+## Decisão de 03/11/2026
+
+- [043 — Abertura assistida de pedidos](043-abertura-assistida-de-pedidos.md),
+  aprovada pelo proprietário e registrada na ADR 056 / OA-T01.
+
 ## Decisão de 02/11/2026
 
 - [042 — Central de saúde e erros](042-central-de-saude-e-erros.md),

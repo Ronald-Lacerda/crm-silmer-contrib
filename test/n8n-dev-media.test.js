@@ -191,11 +191,15 @@ for (const local of [false, true])
     // ADR 026 inbound reading adds nodes; outbound seller transports stay simulated.
     // VND-L02 item 5 adds the burst window, the reread and its check.
     // VND-L03 adds the transcript back to the CRM and the failure handoff.
-    assert.equal(snapshot.nodes.length, 101);
+    assert.equal(snapshot.nodes.length, 121);
     const metaRequests = snapshot.nodes.filter((/** @type {any} */ node) =>
       node.parameters?.url?.includes('graph.facebook.com'),
     );
-    assert.equal(metaRequests.length, 1);
+    assert.equal(metaRequests.length, 2);
     assert.equal(metaRequests[0].name, 'WhatsApp - Consultar mídia (MVP)');
+    assert.equal(
+      metaRequests[1].name,
+      'WhatsApp - Consultar áudio interno (OA)',
+    );
     assert.equal(metaRequests[0].parameters.method, 'GET');
   });

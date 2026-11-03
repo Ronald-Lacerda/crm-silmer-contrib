@@ -1,5 +1,11 @@
 # Architecture Decision Records
 
+## Decisão de 03/11/2026
+
+- [056 — Abertura de pedido com confirmação humana](056-abertura-de-pedido-com-confirmacao-humana.md),
+  RFC 043 / OA-T01: sugestões internas durante bot/humano, criação humana,
+  evidência, decisões e avaliação de omissões, supersedendo a abertura da ADR 014.
+
 ## Decisão de 02/11/2026
 
 - [055 — Central de erros restrita à conta operadora](055-central-de-erros-restrita-a-conta-operadora.md),

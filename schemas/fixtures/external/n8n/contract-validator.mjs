@@ -33,6 +33,7 @@ const eventKeys = Object.freeze([
   'failure',
   'handoff',
   'message',
+  'observation',
   'occurred_at',
   'open_order',
   'order_id',
@@ -230,8 +231,8 @@ export function validateAttachmentMetadata(payload) {
   return true;
 }
 
-/** @param {any} payload @param {any} contract */
-export function validateEvent(payload, contract) {
+/** @param {any} payload @param {any} contract @param {{orderOpeningPolicy?: string}} [options] */
+export function validateEvent(payload, contract, options = {}) {
   object(payload, 'INVALID_EVENT');
   rejectUnknown(payload, eventKeys);
   common(payload);
@@ -241,6 +242,70 @@ export function validateEvent(payload, contract) {
   if (!contract.eventTypes.includes(payload.event_type)) {
     fail('UNSUPPORTED_EVENT_TYPE');
   }
+  if (payload.event_type === 'order.assistance.observed') {
+    rejectUnknown(payload, [
+      'schema_version',
+      'event_id',
+      'event_type',
+      'occurred_at',
+      'conversation_id',
+      'automation_epoch',
+      'source_revision',
+      'observation',
+    ]);
+    nonEmpty(payload.conversation_id, 'INVALID_CONVERSATION');
+    epoch(payload.automation_epoch);
+    positive(payload.source_revision, 'INVALID_SOURCE_REVISION');
+    object(payload.observation, 'INVALID_OBSERVATION');
+    const observation = payload.observation;
+    rejectUnknown(observation, [
+      'signal',
+      'product_summary',
+      'evidence_message_id',
+      'briefing_patch',
+      'subject_id',
+    ]);
+    if (
+      ![
+        'purchase_confirmed',
+        'not_ready',
+        'withdrawn',
+        'unsupported',
+        'uncertain',
+        'analysis_failed',
+      ].includes(observation.signal)
+    )
+      fail('INVALID_OBSERVATION');
+    if (observation.signal === 'purchase_confirmed') {
+      nonEmpty(observation.product_summary, 'INVALID_PURCHASE_EVIDENCE');
+      nonEmpty(observation.evidence_message_id, 'INVALID_PURCHASE_EVIDENCE');
+    }
+    if (
+      observation.product_summary != null &&
+      (typeof observation.product_summary !== 'string' ||
+        observation.product_summary.length > 256)
+    )
+      fail('INVALID_OBSERVATION');
+    if (observation.briefing_patch != null) {
+      object(observation.briefing_patch, 'INVALID_BRIEFING_PATCH');
+      rejectUnknown(
+        observation.briefing_patch,
+        contract.briefingPatchFields.filter(
+          (/** @type {string} */ field) =>
+            !['briefing_status', 'next_required_field'].includes(field),
+        ),
+      );
+      for (const value of Object.values(observation.briefing_patch)) {
+        if (!(
+          (typeof value === 'string' && value.length <= 2000) ||
+          (typeof value === 'number' && Number.isFinite(value))
+        ))
+          fail('INVALID_BRIEFING_PATCH');
+      }
+    }
+    return true;
+  }
+  if (payload.observation !== undefined) fail('INVALID_OBSERVATION_EVENT');
   if (payload.event_type !== 'workflow.failed') {
     nonEmpty(payload.conversation_id, 'INVALID_EVENT');
   }
@@ -329,6 +394,7 @@ export function validateEvent(payload, contract) {
   }
   if (
     payload.target_contract === 'subject-v1' &&
+    options.orderOpeningPolicy !== 'human_confirmation' &&
     payload.briefing_patch !== undefined &&
     payload.subject_id === undefined &&
     payload.open_order !== true

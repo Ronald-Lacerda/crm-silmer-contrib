@@ -737,8 +737,13 @@ test('item 5: the workflow waits, rereads with the same inbound event and goes o
   ]);
   // The persistence (and the WAHA acknowledgement hung on it) comes before the wait.
   assert.deepEqual(targets('CRM - Registrar inbound (MVP)'), [
+    'Acompanhar intenção de compra? (OA)',
     'Rotear conversa registrada (MVP)',
   ]);
+  assert.ok(
+    nodes.get('Acompanhar intenção de compra? (OA)').position[1] >
+      nodes.get('Rotear conversa registrada (MVP)').position[1],
+  );
 });
 
 test('item 5: a site turn superseded during the window only acknowledges receipt', () => {

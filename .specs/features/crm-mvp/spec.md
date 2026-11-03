@@ -140,7 +140,7 @@ cego à Meta. Não há claim, lease ou token de rodada no MVP simples.
 **Critérios de aceite:**
 
 1. **INB-01:** WHEN uma mensagem válida chega THEN o sistema SHALL resolver Contato e Conversa na Caixa de Entrada sem confirmar uma venda automaticamente.
-2. **INB-02:** WHEN o agente recebe dados da ficha que indicam pedido THEN o n8n SHALL solicitar criação ou atualização de um único Pedido pendente por conversa, conforme ADRs 006 e 014.
+2. **INB-02:** WHEN o cliente confirma que quer fechar a compra THEN o agente SHALL sugerir internamente a criação e o vendedor responsável ou administrador SHALL decidir a abertura do pendente. Até essa ação, os dados SHALL permanecer na conversa. Acompanhamento humano, evidência, decisão e métricas seguem [OA-01–12](../order-assistance/spec.md), ADR 056, supersedendo a abertura automática da ADR 014.
 3. **INB-03:** WHEN o atendimento não representa oportunidade THEN o sistema SHALL permitir encerramento auditável da Conversa sem exigir Pedido.
 4. **INB-04:** WHEN criação automática ou manual é repetida THEN o sistema SHALL retornar o pendente existente sem duplicar Contato ou Pedido.
 

@@ -247,7 +247,7 @@ test('failure: the agent and the decision node hand off through the error output
     nodes.get('OpenAI - Transcrever áudio (MVP)').parameters.options.timeout,
     30000,
   );
-  assert.equal(snapshot.settings.executionTimeout, 120);
+  assert.equal(snapshot.settings.executionTimeout, 180);
   const burst = nodes.get('Aguardar mensagens seguidas (MVP)').parameters
     .amount;
   const worst = burst + 30 + 5 + 2 * 30;
@@ -1181,10 +1181,10 @@ test('holidays negative: a working day keeps the plain notice, and a Sunday holi
 
 // 9 — The version and what stays intact.
 
-test('version: mvp-simple-20 on every CRM call, still under the subject-v1 contract', () => {
+test('version: mvp-simple-21 on every CRM call, still under the subject-v1 contract', () => {
   const version = /const WORKFLOW_VERSION = '(mvp-simple-(\d+))';/u.exec(sdk);
   assert.ok(version);
-  assert.equal(version[1], 'mvp-simple-20');
+  assert.equal(version[1], 'mvp-simple-21');
   // requiresSubjectContract (modules/n8n-integration/src/service.js): >= 15.
   assert.ok(Number(version[2]) >= 15);
   const headers = snapshot.nodes
@@ -1197,7 +1197,7 @@ test('version: mvp-simple-20 on every CRM call, still under the subject-v1 contr
         header.name === 'X-Silmer-Workflow-Version',
     );
   assert.ok(headers.length > 10);
-  for (const header of headers) assert.equal(header.value, 'mvp-simple-20');
+  for (const header of headers) assert.equal(header.value, 'mvp-simple-21');
 });
 
 test('intact: the guardrail and the fence stay as published', () => {

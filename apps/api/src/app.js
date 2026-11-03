@@ -24,6 +24,7 @@ import { registerN8nRoutes } from './n8n-routes.js';
 import { registerN8nCommandMediaRoutes } from './n8n-command-media-routes.js';
 import { registerOperationRoutes } from './operation-routes.js';
 import { registerOrderRoutes } from './order-routes.js';
+import { registerOrderAssistanceRoutes } from './order-assistance-routes.js';
 import { registerStoreOrderRoutes } from './store-order-routes.js';
 import { registerSubjectRoutes } from './subject-routes.js';
 import { registerSiteChatRoutes } from './site-chat-routes.js';
@@ -55,6 +56,7 @@ export const WEBHOOK_REQUESTS_PER_SECOND = 20;
  *   handoffs?: any,
  *   operations?: any,
  *   orders?: any,
+ *   orderAssistance?: any,
  *   finance?: any,
  *   shipping?: any,
  *   orderPdfRenderer?: (html: string) => Promise<Buffer>,
@@ -323,6 +325,12 @@ export function createApi(options = {}, runtime = {}) {
       correlationId:
         requests.get(/** @type {any} */ (request))?.correlationId ??
         'finance-request',
+    }));
+  }
+  if (runtime.orderAssistance) {
+    registerOrderAssistanceRoutes(api, runtime.orderAssistance, (request) => ({
+      correlationId: requests.get(request)?.correlationId ?? 'order-assistance',
+      requestId: requests.get(request)?.requestId ?? 'order-assistance',
     }));
   }
   if (runtime.orders) {

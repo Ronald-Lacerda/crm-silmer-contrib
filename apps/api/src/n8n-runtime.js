@@ -31,7 +31,7 @@ class N8nMediaIngressError extends Error {
  * DTO remains at this boundary; repositories receive canonical values.
  *
  * @param {any} database
- * @param {{environment?: Record<string,string|undefined>, mediaVolume?: PrivateMediaVolume, scanner?: {scan(path: string): Promise<any>}, clock?: () => Date, orders?: {ensurePendingFromIntent(input: {conversationId: string, correlationId: string}): Promise<{created: boolean, order: {id: string}}>, projectAgentBriefing(input: {conversationId: string, correlationId: string, briefing: Record<string, unknown>, automationState: string}): Promise<any>}}} [options]
+ * @param {{environment?: Record<string,string|undefined>, orderAssistance?: {observe(input: any): Promise<any>}, mediaVolume?: PrivateMediaVolume, scanner?: {scan(path: string): Promise<any>}, clock?: () => Date, orders?: {ensurePendingFromIntent(input: {conversationId: string, correlationId: string}): Promise<{created: boolean, order: {id: string}}>, projectAgentBriefing(input: {conversationId: string, correlationId: string, briefing: Record<string, unknown>, automationState: string}): Promise<any>}}} [options]
  */
 export function createN8nApiRuntime(database, options = {}) {
   const environment = options.environment ?? process.env;
@@ -59,8 +59,13 @@ export function createN8nApiRuntime(database, options = {}) {
     envelopeKey,
     messageEnvelopeKey,
     orders: options.orders,
+    requireHumanOrderCreation: true,
   });
-  const service = createN8nIntegrationService({ repository, clock });
+  const service = createN8nIntegrationService({
+    repository,
+    clock,
+    allowConversationBriefing: true,
+  });
   const transientMediaRepository = new PostgresTransientMediaRepository({
     database,
   });
@@ -98,7 +103,54 @@ export function createN8nApiRuntime(database, options = {}) {
     commandOutbox,
     mediaVolume,
     receiveInbound: service.receiveInbound,
-    recordEvent: service.recordEvent,
+    async recordEvent(/** @type {any} */ input) {
+      if (input?.event_type === 'order.assistance.observed') {
+        if (!options.orderAssistance) {
+          throw new N8nMediaIngressError(503, 'ORDER_ASSISTANCE_UNAVAILABLE');
+        }
+        const observation = input.observation;
+        const allowed = new Set([
+          'signal',
+          'product_summary',
+          'evidence_message_id',
+          'briefing_patch',
+          'subject_id',
+        ]);
+        if (
+          !observation ||
+          typeof observation !== 'object' ||
+          Array.isArray(observation) ||
+          Object.keys(observation).some((key) => !allowed.has(key)) ||
+          [
+            'briefing_patch',
+            'open_order',
+            'subject_id',
+            'order_id',
+            'command_id',
+            'handoff',
+            'message',
+            'failure',
+            'turn',
+            'transcript',
+            'target_contract',
+            'external_message_id',
+          ].some((key) => input[key] !== undefined)
+        ) {
+          throw new N8nMediaIngressError(400, 'INVALID_OBSERVATION_EVENT');
+        }
+        return options.orderAssistance.observe({
+          conversation_id: input.conversation_id,
+          source_revision: input.source_revision,
+          automation_epoch: input.automation_epoch,
+          ...observation,
+          technical: input.technical,
+        });
+      }
+      if (input?.observation !== undefined) {
+        throw new N8nMediaIngressError(400, 'INVALID_OBSERVATION_EVENT');
+      }
+      return service.recordEvent(input);
+    },
     readSiteMessages: (/** @type {{sessionId: string}} */ input) =>
       repository.readSiteMessages(input),
     readReservedMedia: (/** @type {any} */ input) =>
@@ -113,24 +165,15 @@ export function createN8nApiRuntime(database, options = {}) {
      * @param {any} input
      */
     async recordOrderIntent(input) {
-      if (!options.orders) {
-        throw new N8nMediaIngressError(503, 'ORDERS_RUNTIME_UNAVAILABLE');
-      }
-      const technical = input?.technical;
-      const conversationId = requireIdentifier(
-        input?.conversation_id,
-        'INVALID_CONVERSATION_ID',
-      );
+      // OA-01: legacy clients cannot bypass the human creation command.
+      requireIdentifier(input?.conversation_id, 'INVALID_CONVERSATION_ID');
       const eventId = requireIdentifier(input?.event_id, 'INVALID_EVENT_ID');
-      const { created, order } = await options.orders.ensurePendingFromIntent({
-        conversationId,
-        correlationId: technical?.correlationId,
-      });
       return {
         accepted: true,
-        duplicate: !created,
+        duplicate: false,
         event_id: eventId,
-        order_id: order.id,
+        order_id: null,
+        order: { opened: null, status: 'awaiting_human' },
         processed_at: clock().toISOString(),
       };
     },
@@ -340,7 +383,7 @@ function requireIdentifier(value, code) {
     value.trim() === '' ||
     value !== value.trim() ||
     value.length > 512 ||
-    /[ -]/u.test(value)
+    /[ -\u007f]/u.test(value)
   ) {
     throw new N8nMediaIngressError(400, code);
   }

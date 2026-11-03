@@ -287,8 +287,14 @@ variáveis e implantação: [loja do site](docs/runbooks/loja-do-site.md).
 
 ## 5. Pedido, impressão e métricas
 
-Pedido tem `pendente` e `confirmado` (ADR 006). O primeiro ponto confirmado
-da ficha pode abrir/reutilizar o pendente na Conversa (ADR 014).
+Pedido tem `pendente` e `confirmado` (ADR 006). A ADR 056 supersede a abertura
+pelo primeiro ponto: a API bloqueia criação automática, preserva o briefing
+da conversa e somente comando humano autorizado cria o pendente após intenção
+de fechamento. Observações n8n durante bot/humano não enviam mensagens;
+tabelas aditivas `order_assistance_*` guardam evidência cifrada e decisões.
+Aceite, criação e auditoria usam a mesma transação; epoch/revisão/versões e
+alvo explícito protegem concorrência. Agregados e omissões humanas alimentam
+Desempenho, sem alegar recall completo (OA-01–12).
 O número é reservado na criação do Pedido. O vendedor responsável completa e
 confirma; a confirmação fixa pessoa, horário e snapshot. Reabertura preserva
 o número e a rastreabilidade. Nome do pendente acompanha

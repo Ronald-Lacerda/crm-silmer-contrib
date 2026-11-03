@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
+import { synchronizeOrderAssistanceMedia } from '../patch-order-assistance.mjs';
 
 import { createWahaWorkflow } from './create-waha-workflow.mjs';
 
@@ -443,7 +444,7 @@ export function createWppconnectWorkflow(source, options) {
   send.parameters.jsonBody = '={{ $json.wpp_message }}';
   find('Validar resposta do envio de midia (MVP)').parameters.jsCode =
     `const getId = ${getWppconnectMessageId.toString()};\nconst id=getId($json);return {json:{messages:[{id}]}};`;
-  return workflow;
+  return synchronizeOrderAssistanceMedia(workflow);
 }
 
 if (

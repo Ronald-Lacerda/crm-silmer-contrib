@@ -15,6 +15,7 @@ import FilterSheet from '../components/FilterSheet.vue';
 import AssistantTakeoverContext from '../components/inbox/AssistantTakeoverContext.vue';
 import AudioRecorder from '../components/inbox/AudioRecorder.vue';
 import ConversationHandoffSummary from '../components/inbox/ConversationHandoffSummary.vue';
+import ConversationOrderAssistance from '../components/inbox/ConversationOrderAssistance.vue';
 import ConversationOrderSummary from '../components/inbox/ConversationOrderSummary.vue';
 import ConversationShippingQuote from '../components/inbox/ConversationShippingQuote.vue';
 import MediaMessage from '../components/inbox/MediaMessage.vue';
@@ -150,6 +151,11 @@ const closureOutcome = ref('concluido');
 const acknowledgePending = ref(false);
 const orderLink = ref(null);
 const orderCreating = ref(false);
+const orderCreateTrigger = ref(null);
+const orderConfirmationDialog = ref(null);
+const manualOrderError = ref('');
+const manualOrderErrorNotice = ref(null);
+const manualOrderConfirmation = ref(null);
 /** Bumped when the order changed, so Detalhes › Pedido reads it again. */
 const orderRevision = ref(0);
 const conversationHeading = ref(null);
@@ -951,32 +957,87 @@ async function unarchiveConversation() {
  *
  * @param {boolean} [fromMore] asked from "Mais", which takes focus back on failure
  */
+async function orderSuggestedCreated(order) {
+  if (!order?.id) return;
+  orderRevision.value += 1;
+  notify(`Pedido ${order.number} criado.`);
+}
+
+function revealOrderEvidence(messageId) {
+  const message = Array.from(
+    thread.value?.querySelectorAll('[data-message-id]') ?? [],
+  ).find((element) => element.getAttribute('data-message-id') === messageId);
+  if (!message) return;
+  message.scrollIntoView({ block: 'center', behavior: 'auto' });
+  message.focus({ preventScroll: true });
+}
+
 async function createOrder(fromMore = false) {
   const conversation = active.value;
-  if (!conversation || orderCreating.value || busy.value) return;
+  if (
+    !conversation ||
+    orderCreating.value ||
+    busy.value ||
+    isTerminal.value ||
+    !canOfferOrder.value
+  )
+    return;
+  const dialog = orderConfirmationDialog.value;
+  const trigger = fromMore ? moreToggle.value : orderCreateTrigger.value;
   closeMore();
+  if (
+    !(dialog instanceof HTMLDialogElement) ||
+    !(trigger instanceof HTMLElement)
+  )
+    return;
+  manualOrderError.value = '';
+  manualOrderConfirmation.value = {
+    conversationId: conversation.id,
+    expectedVersion: conversation.version,
+    idempotencyKey: commandKey(),
+    fromMore,
+  };
+  openDialog(dialog, trigger);
+}
+
+async function confirmManualOrder() {
+  const confirmation = manualOrderConfirmation.value;
+  if (
+    !confirmation ||
+    confirmation.conversationId !== active.value?.id ||
+    orderCreating.value ||
+    busy.value
+  )
+    return;
+  const conversationId = confirmation.conversationId;
   orderCreating.value = true;
-  error.value = '';
+  manualOrderError.value = '';
   actionMessage.value = '';
   let created = null;
   try {
     const response = await request(
-      `/api/v1/conversations/${encodeURIComponent(conversation.id)}/orders`,
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/orders`,
       {
-        body: { expectedVersion: conversation.version },
-        idempotencyKey: commandKey(),
+        body: { expectedVersion: confirmation.expectedVersion },
+        idempotencyKey: confirmation.idempotencyKey,
         method: 'POST',
       },
     );
     created = response.data.order ?? null;
   } catch (cause) {
-    error.value = describeError(cause);
+    manualOrderError.value =
+      /** @type {any} */ (cause)?.status === 409
+        ? 'A conversa mudou. Cancele esta confirmação, confira a intenção do cliente e abra a criação novamente.'
+        : describeError(cause);
     if (/** @type {any} */ (cause)?.status === 409) await refreshInbox(true);
+    await nextTick();
+    manualOrderErrorNotice.value?.focus();
   } finally {
     orderCreating.value = false;
   }
   if (created) {
-    if (activeId.value === conversation.id && detail.value) {
+    orderConfirmationDialog.value?.close();
+    if (activeId.value === conversationId && detail.value) {
       // The link appears at once; the refresh below confirms it.
       detail.value.conversation.order = {
         id: created.id,
@@ -988,11 +1049,12 @@ async function createOrder(fromMore = false) {
     orderRevision.value += 1;
     await refreshInbox(true);
   }
+  if (!created || activeId.value !== conversationId) return;
   await nextTick();
   const link = /** @type {any} */ (orderLink.value)?.$el;
   if (created && link instanceof HTMLElement) {
     link.focus();
-  } else if (fromMore) {
+  } else if (confirmation.fromMore) {
     moreToggle.value?.focus();
   } else if (!globalThis.document.activeElement?.closest('.conv-actions')) {
     conversationHeading.value?.focus();
@@ -1303,6 +1365,7 @@ async function selectConversation(id, silent = false) {
   const controller = new AbortController();
   detailController = controller;
   if (activeId.value !== id) {
+    orderConfirmationDialog.value?.close();
     contextDialog.value?.close();
     contactDialog.value?.close();
     contextOpen.value = false;
@@ -2383,6 +2446,7 @@ onBeforeUnmount(() => {
               </button>
               <button
                 v-if="createOrderInHeader"
+                ref="orderCreateTrigger"
                 type="button"
                 :aria-disabled="orderCreating || busy ? 'true' : undefined"
                 :aria-busy="orderCreating ? 'true' : undefined"
@@ -2576,6 +2640,8 @@ onBeforeUnmount(() => {
               v-for="message in detail.messages"
               :key="message.id"
               class="message"
+              :data-message-id="message.id"
+              tabindex="-1"
               :data-from="messageFrom(message)"
               :data-side="message.direction === 'outbound' ? 'out' : 'in'"
             >
@@ -2778,6 +2844,22 @@ onBeforeUnmount(() => {
             </li>
             <li v-if="!detail.messages.length" class="empty-list">
               Sem mensagens persistidas.
+            </li>
+            <li class="inbox-assistance-item">
+              <ConversationOrderAssistance
+                :key="active.id"
+                :conversation-id="active.id"
+                :can-manage="canCreateOrder"
+                :messages="detail?.messages ?? []"
+                :refresh-key="`${active.version}:${liveEvent?.receivedAt ?? ''}:${detail?.messages?.length ?? 0}`"
+                @created="orderSuggestedCreated"
+                @changed="refreshInbox(true)"
+                @evidence="revealOrderEvidence"
+                @review="
+                  contextTab = 'orders';
+                  toggleContext(true);
+                "
+              />
             </li>
           </ol>
 
@@ -3213,6 +3295,52 @@ onBeforeUnmount(() => {
         </section>
       </dialog>
     </div>
+    <dialog
+      ref="orderConfirmationDialog"
+      class="command-dialog"
+      aria-labelledby="order-confirmation-title"
+      aria-describedby="order-confirmation-description"
+      @cancel="orderCreating && $event.preventDefault()"
+      @close="manualOrderConfirmation = null"
+    >
+      <form @submit.prevent="confirmManualOrder">
+        <h2 id="order-confirmation-title">O cliente confirmou a compra?</h2>
+        <p id="order-confirmation-description">
+          Crie o pedido somente quando o cliente já tiver confirmado que quer
+          fechar esta compra. Pedir orçamento ou informações não é uma
+          confirmação. Os dados coletados serão aproveitados no pedido pendente.
+        </p>
+        <p
+          v-if="manualOrderError"
+          ref="manualOrderErrorNotice"
+          role="alert"
+          tabindex="-1"
+        >
+          {{ manualOrderError }}
+        </p>
+        <div class="inline-actions">
+          <button
+            type="button"
+            :disabled="orderCreating"
+            @click="orderConfirmationDialog?.close()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            class="primary"
+            :disabled="orderCreating"
+            :aria-busy="orderCreating ? 'true' : undefined"
+          >
+            {{
+              orderCreating
+                ? 'Criando pedido…'
+                : 'Cliente confirmou, criar pedido'
+            }}
+          </button>
+        </div>
+      </form>
+    </dialog>
     <dialog
       ref="closeConfirmationDialog"
       class="command-dialog"

@@ -23,6 +23,11 @@ export {
 } from './application/channel-event-handler.js';
 export { createInboxService } from './application/inbox-service.js';
 export {
+  createOrderAssistanceService,
+  OrderAssistanceError,
+} from './application/order-assistance.js';
+export { PostgresOrderAssistanceRepository } from './adapters/postgres-order-assistance.js';
+export {
   createSubjectService,
   SubjectError,
 } from './application/subject-service.js';

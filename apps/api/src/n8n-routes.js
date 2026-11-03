@@ -7,6 +7,7 @@ const MAX_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 const N8N_SCHEMA_VERSION = '1.0';
 
 const EVENT_ACTIONS = Object.freeze({
+  'order.assistance.observed': 'integration.n8n.event.create',
   'handoff.requested': 'handoff.create',
   'message.delivered': 'integration.n8n.event.create',
   'message.failed': 'integration.n8n.event.create',
@@ -164,6 +165,7 @@ export function registerN8nRoutes(api, integration, contextFor) {
           'failure',
           'handoff',
           'message',
+          'observation',
           'occurred_at',
           'open_order',
           'order_id',

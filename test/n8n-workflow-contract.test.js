@@ -193,7 +193,7 @@ test('keeps the simplified workflow inactive and free of removed runtime concept
   // VND-L03: the transcript back to the CRM (check, preparation, capability
   // check and call) and
   // the handoff of a failed model or decision.
-  assert.equal(workflow.nodes.length, 95);
+  assert.equal(workflow.nodes.length, 115);
   const serialized = JSON.stringify(workflow);
   assert.doesNotMatch(serialized, /claim_token|claim_id|ai-turns\/claim/u);
   assert.doesNotMatch(serialized, /silmer_failures|windowBufferMemory/u);

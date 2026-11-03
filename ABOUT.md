@@ -2,7 +2,7 @@
 
 O CRM Silmer é um produto web próprio para organizar conversas comerciais, qualificação, vendas e geração de Fichas de Pedido. Ele substitui integralmente o Datacrazy.
 
-O fluxo começa quando uma mensagem válida do cliente dispara automaticamente um workflow no n8n. O n8n é o motor obrigatório da jornada: integra os canais, executa o Vendedor Silmer, coleta dados e cria ou completa pedidos pendentes pelo contrato da API do CRM e transfere para uma pessoa quando necessário. Não existe botão da interface para iniciar essa automação.
+O fluxo começa quando uma mensagem válida do cliente dispara automaticamente um workflow no n8n. O n8n é o motor obrigatório da jornada: integra os canais, executa o Vendedor Silmer, coleta dados, sugere internamente a abertura após intenção de fechamento e transfere para uma pessoa quando necessário. A criação do pedido de atendimento é humana (ADR 056); a análise continua no atendimento humano sem retomar o bot. Não existe botão da interface para iniciar essa automação.
 
 O MVP é organizado em três objetivos que evoluem em paralelo e se conectam no lançamento:
 

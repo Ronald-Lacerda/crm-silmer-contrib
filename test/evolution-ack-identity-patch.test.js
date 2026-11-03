@@ -136,13 +136,13 @@ function sourceWorkflow() {
   return workflow;
 }
 
-test('OPS-INBOX-ACK-05: patches exactly lookup body and converter on the living 113-node export', () => {
+test('OPS-INBOX-ACK-05: patches exactly lookup body and converter on the living export', () => {
   const source = sourceWorkflow();
   const before = structuredClone(source);
   const { workflow, changedNodeNames } = patchEvolutionAckIdentity(source);
   assert.deepEqual(source, before);
   assert.deepEqual(changedNodeNames, [LOOKUP, CONVERT]);
-  assert.equal(workflow.nodes.length, 113);
+  assert.equal(workflow.nodes.length, source.nodes.length);
   const restored = structuredClone(workflow);
   node(restored, LOOKUP).parameters.jsonBody = node(
     source,

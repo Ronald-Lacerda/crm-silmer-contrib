@@ -6,6 +6,64 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /inbox/conversations/{conversationId}/order-assistance:
+    get:
+      operationId: readConversationOrderAssistance
+      summary: Sugestões internas e decisões de abertura de pedido
+      description: OA-01–12 / ADR 056. Leitura autorizada; conteúdo mínimo cifrado no CRM.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      responses:
+        '200':
+          description: Sugestões, decisões humanas em evaluations, analysisHistory, versões e blockedReason
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Conversa não encontrada }
+  /inbox/conversations/{conversationId}/order-assistance/decisions:
+    post:
+      operationId: decideOrderAssistance
+      summary: Criar pedido após confirmação do cliente, adiar, recusar ou marcar omissão
+      description: >-
+        Responsável humano ou administrador. Decisão, criação pendente e
+        auditoria na mesma transação. Nenhum envio ao cliente. Revisões,
+        epoch e alvo são revalidados; retry da chave não duplica pedido.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [decision, reason, expectedConversationVersion, expectedSourceRevision]
+              properties:
+                decision: { enum: [accept, defer, reject, missed] }
+                reason: { enum: [ready, not_ready, withdrawn, unsupported, wrong_product, other] }
+                suggestionId: { type: string }
+                sourceMessageId: { type: string, description: Mensagem cliente exigida para missed }
+                expectedVersion: { type: integer, minimum: 0, description: Versão da sugestão; exigida salvo missed }
+                expectedConversationVersion: { type: integer, minimum: 0 }
+                expectedSourceRevision: { type: integer, minimum: 0 }
+      responses:
+        '200': { description: Decisão persistida e pedido pendente quando aceito }
+        '400': { description: Comando ou evidência inválidos }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /inbox/order-assistance/metrics:
+    get:
+      operationId: readOrderAssistanceMetrics
+      summary: Avaliação administrativa das sugestões e omissões anotadas
+      description: Agregados sem PII; criação manual sem sugestão não equivale a omissão comprovada.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - in: query
+          name: days
+          schema: { type: integer, minimum: 1, maximum: 90, default: 30 }
+      responses:
+        '200': { description: Contagens de análise, falhas, sugestões, decisões, omissões e tempos }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /conversations/{conversationId}/shipping-quotes:
     post:
       operationId: quoteConversationShipping
@@ -2783,9 +2841,21 @@ components:
               message.send.unknown,
               handoff.requested,
               workflow.failed,
+              order.assistance.observed,
             ]
         occurred_at: { type: string, format: date-time }
         conversation_id: { type: [string, 'null'] }
+        observation:
+          type: object
+          additionalProperties: false
+          required: [signal]
+          description: OA-02. Somente order.assistance.observed; não autoriza envio nem criação.
+          properties:
+            signal: { enum: [purchase_confirmed, not_ready, withdrawn, unsupported, uncertain, analysis_failed] }
+            product_summary: { type: [string, 'null'], maxLength: 256 }
+            evidence_message_id: { type: [string, 'null'] }
+            subject_id: { type: [string, 'null'] }
+            briefing_patch: { type: [object, 'null'], description: Mesma allowlist de qualificação; texto até 2000 caracteres, sem preço/pagamento/status }
         automation_epoch: { type: integer, minimum: 0 }
         source_revision: { type: integer, minimum: 1 }
         target_contract:
@@ -2878,12 +2948,9 @@ components:
         open_order:
           type: boolean
           description: >-
-            ADR 014. Só em message.send.requested e handoff.requested. Com
-            true, depois de aplicar o evento o CRM cria ou reutiliza o Pedido
-            pendente da conversa a partir da ficha unida e responde em
-            `order`. No primeiro Pedido, o bootstrap pode omitir subject_id e
-            order_id; depois disso, toda alteração de briefing exige ambos.
-            A autorização é a do próprio evento.
+            ADR 056 supersede ADR 014. Campo legado somente em reserva/handoff.
+            Runtime publicado não cria Pedido: true retorna awaiting_human
+            com opened nulo, sem erro técnico ou reserva de numeração.
     N8nEventResponse:
       type: object
       additionalProperties: true
@@ -2902,10 +2969,15 @@ components:
             command_id: { type: [string, 'null'] }
         order:
           description: >-
-            ADR 014. Presente quando o evento pediu `open_order`. Uma falha
-            ao abrir o Pedido não falha o evento: volta `opened: false` com o
-            código, auditado no CRM.
+            ADR 056. Runtime publicado responde awaiting_human ao contrato
+            legado, sem criação. Formatos históricos são preservados abaixo.
           oneOf:
+            - type: object
+              additionalProperties: false
+              required: [opened, status]
+              properties:
+                opened: { type: 'null' }
+                status: { const: awaiting_human }
             - type: object
               additionalProperties: false
               required: [opened, id, subject_id, created]

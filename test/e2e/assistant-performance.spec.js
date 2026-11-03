@@ -55,6 +55,24 @@ function performance(days) {
  */
 async function setup(page, options = {}) {
   const mock = await mockPainel(page, { manager: options.manager ?? true });
+  await page.route('**/api/v1/inbox/order-assistance/metrics**', (route) =>
+    route.fulfill({
+      json: {
+        days: Number(new URL(route.request().url()).searchParams.get('days')),
+        suggestions: 0,
+        pending: 0,
+        accepted: 0,
+        deferred: 0,
+        rejected: 0,
+        missed: 0,
+        manualWithoutSuggestion: 0,
+        averageDecisionSeconds: null,
+        averageCreationSeconds: null,
+        observations: 0,
+        observationFailures: 0,
+      },
+    }),
+  );
   /** @type {number[]} */
   const requests = [];
   // Registered last, so it answers before the Painel mock.
@@ -281,7 +299,11 @@ test('an empty window and a first failure read in plain words', async ({
   await expect(main).toContainText(
     'Nenhuma versão registrou turnos no período.',
   );
-  await expect(main.getByText('Sem amostras no período')).toHaveCount(3);
+  await expect(
+    main
+      .getByRole('region', { name: 'Ficha e tempos' })
+      .getByText('Sem amostras no período'),
+  ).toHaveCount(3);
   await expect(
     main.getByRole('region', { name: 'Medição incompleta neste período' }),
   ).toHaveCount(0);

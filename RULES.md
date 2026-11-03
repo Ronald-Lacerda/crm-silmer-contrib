@@ -70,7 +70,7 @@ recebimento integral; salvar entrega não o libera (FINQ-17–19).
 2. Cliente é `Contact` com zero ou mais `ContactIdentity`: o cadastro humano pode preceder o canal. A chegada resolve contato e conversa, mas não confirma venda. Identidades só são ligadas por correlação verificável.
 3. Kanban e Negócio estão aposentados (ADR 004); novas capacidades não reutilizam tabelas ou módulos históricos desse domínio.
 4. Pedido possui somente `pendente` e `confirmado` (ADR 006). O preenchimento é progressivo e não linear.
-5. O agente cria ou completa pedido pendente por comandos autorizados da API. Nunca confirma pedido nem altera preço, pagamento ou escolha humana já registrada.
+5. O agente coleta na conversa e sugere internamente a abertura somente quando o cliente confirma que quer fechar. O responsável humano ou administrador cria o pedido pendente (ADR 056); a automação não o cria, inclusive por contratos antigos. O agente nunca confirma pedido nem altera preço, pagamento ou escolha humana já registrada. O acompanhamento durante atendimento humano não retoma o bot nem envia mensagens.
 6. Preço, prazo garantido e regra comercial nunca são inventados pelo agente. Uma pessoa autorizada decide as condições.
 7. Automação limita-se às capacidades de `AUTOMATION_EXECUTOR`, ao `automation_epoch` e aos gates; há desligamento por conversa e global.
 8. Retries e duplicidades não criam contatos, conversas, pedidos ou envios duplicados. Efeitos oficiais são auditáveis.

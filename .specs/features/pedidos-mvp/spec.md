@@ -16,6 +16,12 @@
 
 ## Baseline vigente
 
+**Abertura assistida (03/11/2026):** [ADR 056](../../../docs/adr/056-abertura-de-pedido-com-confirmacao-humana.md)
+e [OA-01–12](../order-assistance/spec.md) supersedem o marco automático de
+PAB-01–03/PCL-01–03 abaixo. Dados ficam na conversa até intenção de fechamento
+e ação humana. As seções antigas são histórico; a API publicada bloqueia
+criação por `open_order`/`order.intent_confirmed`.
+
 Cotação na conversa vinculada ao pedido: os critérios
 [MEVQ-01–08](../melhor-envio/spec.md#cotação-na-conversa-e-no-pedido--t139),
 autorizados em 02/11/2026 pela ADR 054, complementam este contrato em T139.

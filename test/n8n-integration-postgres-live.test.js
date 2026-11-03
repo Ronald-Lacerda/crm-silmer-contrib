@@ -1213,17 +1213,16 @@ if (connectionString) {
         event_id: 'legacy-intent-1',
         technical: technical('legacy-intent-1'),
       });
-      assert.equal(legacyReuse.duplicate, true);
-      assert.equal(legacyReuse.order_id, original.order.id);
+      assert.equal(legacyReuse.order.status, 'awaiting_human');
+      assert.equal(legacyReuse.order_id, null);
       const legacyNew = await runtime.recordOrderIntent({
         conversation_id: quiet.conversation_id,
         event_id: 'legacy-intent-2',
         technical: technical('legacy-intent-2'),
       });
       assert.equal(legacyNew.duplicate, false);
-      assert.deepEqual(await pendingOrders(quiet.conversation_id), [
-        legacyNew.order_id,
-      ]);
+      assert.equal(legacyNew.order_id, null);
+      assert.deepEqual(await pendingOrders(quiet.conversation_id), []);
     } finally {
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');

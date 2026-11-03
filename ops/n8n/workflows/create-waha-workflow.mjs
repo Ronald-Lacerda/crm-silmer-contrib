@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
+import { synchronizeOrderAssistanceMedia } from '../patch-order-assistance.mjs';
 
 const TRIGGER = 'WhatsApp - Receber eventos (MVP)';
 const NORMALIZE = 'Normalizar evento WhatsApp (MVP)';
@@ -606,7 +607,7 @@ export function createWahaWorkflow(source, options) {
     workflow.settings.errorWorkflow = workflow.id;
   delete workflow.pinData;
   workflow.active = false;
-  return workflow;
+  return synchronizeOrderAssistanceMedia(workflow);
 }
 
 if (

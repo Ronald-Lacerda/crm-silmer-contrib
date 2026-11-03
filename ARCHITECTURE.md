@@ -1,5 +1,15 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Abertura assistida de pedidos (03/11/2026)
+
+A [ADR 056](docs/adr/056-abertura-de-pedido-com-confirmacao-humana.md)
+supersede a abertura pelo primeiro dado da ADR 014. O agente coleta na
+conversa; quando o cliente confirma fechamento, sugere internamente ao
+vendedor criar o pendente. A decisão humana é autorizada, versionada,
+idempotente e transacional. Observações no n8n também acompanham atendimento
+humano sem mensagens externas ou retorno ao bot. Sugestões, motivos, omissões
+anotadas e métricas ficam no PostgreSQL existente (OA-01–12 / OA-T01).
+
 ## Saúde e erros — acesso operacional restrito (02/11/2026)
 
 A [ADR 055](docs/adr/055-central-de-erros-restrita-a-conta-operadora.md)
@@ -157,8 +167,8 @@ observa ou assume o atendimento. Instagram é CANAL-2, posterior ao piloto.
 ## Pedido e ficha
 
 Pedido tem `pendente` e `confirmado`, confirmação/reabertura humanas e
-numeração global `NN-CRM`. Pode abrir a partir do primeiro ponto confirmado
-da ficha; o bot preenche progressivamente, e o vendedor revisa/completa.
+numeração global `NN-CRM`. Abre por ação humana após confirmação de fechamento
+do cliente (ADR 056); até lá, o agente preenche o briefing da conversa.
 Um pendente acompanha o Contato; a confirmação congela o snapshot.
 
 A [ADR 032](docs/adr/032-separar-pedido-conversa-e-assunto.md) separa o

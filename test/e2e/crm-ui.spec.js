@@ -2933,6 +2933,14 @@ test('PCX-11: offers "Criar pedido" in the header only to the owner and creates 
   });
   const create = actions.getByRole('button', { name: 'Criar pedido' });
   await create.click();
+  const confirmation = page.getByRole('dialog', {
+    name: 'O cliente confirmou a compra?',
+  });
+  await expect(confirmation).toBeVisible();
+  expect(createdBody).toBeUndefined();
+  await confirmation
+    .getByRole('button', { name: 'Cliente confirmou, criar pedido' })
+    .click();
   const link = page
     .locator('.conv-head')
     .getByRole('link', { name: 'Abrir pedido 11-CRM, pendente' });

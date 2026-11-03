@@ -28,6 +28,7 @@ import { createN8nApiRuntime } from './n8n-runtime.js';
 import { createOperationReadRuntime } from './operation-runtime.js';
 import { createOperationalAuthRuntime } from './operational-auth-runtime.js';
 import { createOrderApiRuntime } from './order-runtime.js';
+import { createOrderAssistanceRuntime } from './order-assistance-runtime.js';
 import { createStoreOrdersForServer } from './store-order-runtime.js';
 import { createSubjectApiRuntime } from './subject-runtime.js';
 import { createWhatsAppWebhookRuntime } from './whatsapp-webhook-runtime.js';
@@ -59,6 +60,7 @@ import { createSafeLogger, SERVICES } from '@crm-silmer/shared';
  *   n8n?: Record<string, any>,
  *   operations?: Record<string, any>,
  *   orders?: ReturnType<typeof createOrderApiRuntime>,
+ *   orderAssistance?: ReturnType<typeof createOrderAssistanceRuntime>,
  *   finance?: ReturnType<typeof createFinanceApiRuntime>,
  *   healthErrors?: ReturnType<typeof createHealthErrorsRuntime>,
  *   shipping?: ReturnType<typeof createShippingApiRuntime>,
@@ -141,10 +143,24 @@ export function createServerApi(runtime = {}) {
       operations,
       phoneDigestsFor: storeOrders?.phoneDigestsFor,
     });
+  const orderAssistance =
+    runtime.orderAssistance ??
+    (runtime.database && orders && operations
+      ? createOrderAssistanceRuntime({
+          database: runtime.database,
+          environment,
+          orders,
+          access: operations,
+        })
+      : undefined);
   const n8n =
     runtime.n8n ??
     (runtime.database && n8nEnabled
-      ? createN8nApiRuntime(runtime.database, { environment, orders })
+      ? createN8nApiRuntime(runtime.database, {
+          environment,
+          orders,
+          orderAssistance,
+        })
       : undefined);
   const handoffSecretNames = ['IDEMPOTENCY_ENVELOPE_KEY'];
   const handoffConfigurationPresent = handoffSecretNames.some((name) =>
@@ -275,6 +291,7 @@ export function createServerApi(runtime = {}) {
       n8n,
       operations,
       orders,
+      orderAssistance,
       readiness,
       storeOrders,
       subjects,

@@ -1,4 +1,5 @@
 <script setup>
+import OrderAssistanceMetrics from '../components/inbox/OrderAssistanceMetrics.vue';
 import {
   computed,
   inject,
@@ -414,6 +415,7 @@ onBeforeUnmount(() => {
         </p>
       </section>
     </div>
+    <OrderAssistanceMetrics :days="days" :refresh-key="consultedAt" />
   </div>
 </template>
 

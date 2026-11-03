@@ -1,5 +1,13 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## OA-T01 — Abertura assistida de pedidos (03/11/2026)
+
+Implementação autorizada pelo proprietário: [OA-01–12](../order-assistance/spec.md),
+[entrega e gates](../order-assistance/tasks.md), RFC 043 / ADR 056.
+Substitui abertura automática por confirmação humana, com observação durante
+atendimento humano e avaliação de sugestões e omissões. Publicação mantém
+GitHub → EasyPanel; [runbook](../../../docs/runbooks/order-assistance.md).
+
 ## INBOX-UX-03 — conversa compacta e mídia na Inbox (03/11/2026)
 
 INBOX-4, PCX-10/12/13/15, CP-07..10, IMG-12/13 e MED-01..03/09..13/16/19/25.

@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
+import { synchronizeOrderAssistanceMedia } from '../patch-order-assistance.mjs';
 
 import { createWppconnectWorkflow } from './create-wppconnect-workflow.mjs';
 
@@ -651,7 +652,7 @@ export function createEvolutionWorkflow(source, options) {
   delete workflow.activeVersionId;
   delete workflow.activeVersion;
   workflow.active = false;
-  return workflow;
+  return synchronizeOrderAssistanceMedia(workflow);
 }
 
 if (

@@ -42,7 +42,8 @@
     "message.failed",
     "handoff.requested",
     "workflow.failed",
-    "message.transcribed"
+    "message.transcribed",
+    "order.assistance.observed"
   ],
   "handoffReasons": [
     "customer_requested_human",

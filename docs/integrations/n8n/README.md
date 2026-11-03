@@ -1,5 +1,33 @@
 # Integração CRM Silmer ↔ n8n — MVP simples
 
+## Abertura assistida — ADR 056 (03/11/2026)
+
+A [ADR 056](../../adr/056-abertura-de-pedido-com-confirmacao-humana.md)
+supersede a criação automática descrita nas seções históricas abaixo.
+O inbound anuncia `order_opening_policy: human_confirmation` e
+`order_assistance.enabled`. O workflow conserva a coleta na conversa e
+envia `open_order: false`; a API também neutraliza `open_order: true` e o
+evento legado `order.intent_confirmed`, respondendo `awaiting_human` como
+resultado de negócio, sem `ORDER_OPEN_FAILED` falso.
+
+O evento `order.assistance.observed`, autenticado por
+`integration.n8n.event.create`, leva `automation_epoch`, `source_revision`
+e `observation: {signal, product_summary?, evidence_message_id?, briefing_patch?, subject_id?}`.
+`signal` é `purchase_confirmed`, `not_ready`, `withdrawn`, `unsupported`,
+`uncertain` ou `analysis_failed`; campos desconhecidos são recusados. Não
+autoriza envio nem abre pedido. O observador usa histórico cliente/vendedor
+também em modo humano e só propõe internamente. Evidência deve apontar mensagem
+do cliente da conversa; revisões obsoletas são descartadas. Falhas do modelo
+são mensuradas sem bloquear a resposta ou mudar o atendimento.
+
+A Inbox lê `GET /api/v1/inbox/conversations/:conversationId/order-assistance`
+e decide em `POST .../order-assistance/decisions`, com sessão, CSRF,
+Idempotency-Key e versões/revisão. Aceitar cria pendente transacionalmente;
+adiar/recusar registra motivo, e `missed` registra omissão humana. O painel
+admin lê `GET /api/v1/inbox/order-assistance/metrics?days=30`, sem PII.
+Aceite detalhado em [OA-01–12](../../../.specs/features/order-assistance/spec.md)
+e publicação/rollback no [runbook](../../runbooks/order-assistance.md).
+
 > **Decisão vigente:** [RFC 002](../../rfc/002-simplificar-integracao-n8n-para-o-mvp.md)
 > e [ADR 003](../../adr/003-adotar-integracao-n8n-mvp-simples.md). RFC 001 e
 > ADR 002 são histórico da alternativa mais robusta. O Pedido criado pelo

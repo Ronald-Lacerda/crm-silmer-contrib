@@ -60,8 +60,11 @@ acessa seu banco diretamente nem mantém fonte paralela de dados comerciais.
 Cliente é `Contact` + `ContactIdentity`. Mensagens resolvem contato e conversa;
 a simples chegada não confirma venda. O agente consulta contexto autorizado,
 coleta dados progressivamente e projeta respostas inequívocas no briefing e
-no pedido pendente. Uma resposta com dados da ficha pode criar esse rascunho
-(ADR 014); replay reutiliza o pendente.
+no pedido pendente. Até o cliente confirmar que quer fechar, os dados ficam
+na conversa. O agente sugere internamente a criação e o vendedor responsável
+ou administrador autoriza o pendente, aproveitando a pré-ficha (ADR 056).
+O acompanhamento continua no atendimento humano, sem retomar o bot;
+sugestões, decisões e omissões anotadas permitem avaliar o agente.
 
 Preço, prazo garantido, condição e confirmação de pedido dependem de pessoa.
 O bot nunca inventa, negocia ou altera essas decisões. OpenAI é o provedor

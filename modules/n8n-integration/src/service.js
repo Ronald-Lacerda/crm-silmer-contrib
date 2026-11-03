@@ -76,12 +76,14 @@ const EVENTS_THAT_OPEN_ORDERS = new Set([
  *   },
  *   clock?: () => Date,
  *   idFactory?: (kind: string) => string,
+ *   allowConversationBriefing?: boolean,
  * }} options
  */
 export function createN8nIntegrationService({
   repository,
   clock = () => new Date(),
   idFactory = (kind) => `${kind}-${randomUUID()}`,
+  allowConversationBriefing = false,
 }) {
   for (const [candidate, method] of [
     [repository?.receiveInbound, 'receiveInbound'],
@@ -270,6 +272,7 @@ export function createN8nIntegrationService({
           ? null
           : identifier(input?.conversation_id, 'conversation_id', 512);
       const normalized = Object.freeze({
+        allowConversationBriefing,
         automationEpoch:
           input?.automation_epoch === undefined
             ? null
@@ -315,7 +318,8 @@ export function createN8nIntegrationService({
 
 /** @param {any} input */
 function validateEventShape(input) {
-  const requiresSubjectTarget = input.subjectContractRequired;
+  const requiresSubjectTarget =
+    input.subjectContractRequired && !input.allowConversationBriefing;
   if (
     requiresSubjectTarget &&
     input.briefingPatch &&

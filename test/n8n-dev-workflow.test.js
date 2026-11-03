@@ -44,7 +44,7 @@ test('keeps the canonical MVP path while replacing only WhatsApp transport', asy
   // Canonical chains exclude all three public site nodes, plus nine DEV nodes.
   // VND-L02 item 5 adds the burst window, the reread and its check.
   // VND-L03 adds the transcript back to the CRM and the failure handoff.
-  assert.equal(nodes.length, 101);
+  assert.equal(nodes.length, 121);
   assert.equal(names.has('Site - Receber mensagem do chat (MVP)'), false);
   assert.equal(names.has('Site - Montar evento do chat (MVP)'), false);
   assert.equal(names.has('Site - Direcionar para WhatsApp (MVP)'), false);
@@ -278,8 +278,9 @@ test('T14/MED-21: DEV replaces only media Meta effects after real download/hash 
   const metaRequests = nodes.filter((node) =>
     node.parameters?.url?.includes('graph.facebook.com'),
   );
-  assert.equal(metaRequests.length, 1);
+  assert.equal(metaRequests.length, 2);
   assert.equal(metaRequests[0].name, 'WhatsApp - Consultar mídia (MVP)');
+  assert.equal(metaRequests[1].name, 'WhatsApp - Consultar áudio interno (OA)');
   assert.equal(metaRequests[0].parameters.method, 'GET');
   assert.equal(
     nodes.some((node) => node.credentials?.whatsAppApi),

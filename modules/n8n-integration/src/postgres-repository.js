@@ -87,6 +87,7 @@ export class PostgresN8nIntegrationRepository {
    *     projectAgentBriefing(input: {conversationId: string, correlationId: string, briefing: Record<string, unknown>, automationState: string, orderId?: string|null, subjectId?: string|null, automationEpoch?: number|null, sourceRevision?: number|null, eventId?: string|null, eventType?: string|null, expectedSubjectVersion?: number|null, expectedOrderVersion?: number|null, recovery?: boolean}): Promise<any>,
    *   } | null,
    *   automationMessageCap?: number,
+   *   requireHumanOrderCreation?: boolean,
    * }} options
    */
   constructor({
@@ -97,6 +98,7 @@ export class PostgresN8nIntegrationRepository {
     messageEnvelopeKey = envelopeKey,
     orders = null,
     automationMessageCap = AUTOMATION_MESSAGE_CAP,
+    requireHumanOrderCreation = false,
   }) {
     if (
       !database ||
@@ -121,6 +123,7 @@ export class PostgresN8nIntegrationRepository {
     this.contactLookupKey = Buffer.from(contactLookupKey);
     this.messageEnvelopeKey = Buffer.from(messageEnvelopeKey);
     this.orders = orders;
+    this.requireHumanOrderCreation = requireHumanOrderCreation;
     if (!Number.isInteger(automationMessageCap) || automationMessageCap < 2) {
       throw new TypeError(
         'automationMessageCap must be an integer of at least 2',
@@ -878,6 +881,10 @@ export class PostgresN8nIntegrationRepository {
           )
         ).rows[0];
         if (
+          (eventInput.allowConversationBriefing &&
+            eventInput.briefingPatch &&
+            (Number(target.subject_count) > 1 ||
+              Number(target.pending_count) > 0)) ||
           (eventInput.subjectContractRequired &&
             eventInput.openOrder === true &&
             (target.pending_count > 0 || target.subject_count > 0)) ||
@@ -1180,7 +1187,9 @@ export class PostgresN8nIntegrationRepository {
     // a lost response must still learn whether the order exists.
     const order =
       input.openOrder === true
-        ? await this.#openOrder(input, runtime, answeredTurn)
+        ? this.requireHumanOrderCreation
+          ? { opened: null, status: 'awaiting_human' }
+          : await this.#openOrder(input, runtime, answeredTurn)
         : null;
     // An order created just now was built from the briefing this event
     // merged; only an order that already existed needs the projection.
@@ -1663,6 +1672,12 @@ export class PostgresN8nIntegrationRepository {
     return {
       accepted: true,
       automation_epoch: Number(conversation.automation_epoch),
+      ...(this.requireHumanOrderCreation
+        ? {
+            order_opening_policy: 'human_confirmation',
+            order_assistance: { enabled: true },
+          }
+        : {}),
       briefing: this.#readBriefing(conversation),
       briefing_version: Number(conversation.briefing_version),
       contact_id: conversation.current_contact_id,
@@ -2062,7 +2077,7 @@ export class PostgresN8nIntegrationRepository {
   async #recentMessages(client, conversationId) {
     const rows = (
       await client.query(
-        `SELECT id, external_message_id, direction, author_kind, message_type,
+        `SELECT id, external_message_id, direction, author_kind, message_type, status,
                 content_envelope, occurred_at, transcript_status,
                 transcript_envelope,
                 ARRAY(SELECT link.subject_id
@@ -2094,7 +2109,9 @@ export class PostgresN8nIntegrationRepository {
         : null;
       return {
         attachment_id: content.attachmentId ?? null,
+        id: row.id,
         external_id: row.external_message_id,
+        status: row.status,
         occurred_at: iso(row.occurred_at),
         sender_type:
           row.direction === 'inbound'
