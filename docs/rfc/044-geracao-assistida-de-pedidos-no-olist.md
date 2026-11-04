@@ -667,9 +667,11 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
 
 ### Fase 1 Contrato e prova de capacidades
 
-- [ ] **OLIST-T01** Consolidar ADR 057/fontes canônicas, revisar requisitos e
+- [x] **OLIST-T01** Consolidar ADR 057/fontes canônicas, revisar requisitos e
       alocar responsáveis. OLIST-01–50. Dono Tech Lead. Depende PLAN-02.
-      Evidência: decisões rastreáveis, revisão de contrato e gaps técnicos abertos.
+      Evidência: [revisão T01](../integrations/olist/contract-review.md), matriz dos
+      50 requisitos, donos por tarefa e gaps F1-G01–08. Concluída documentalmente
+      em 04/11/2026; T02/F1 continuam abertos.
 - [ ] **OLIST-T02** Provar API/conta: cliente, produto pai/variações/tamanhos,
       referências/SKU, cadastro fiscal, permissões, gatilhos e precisão por linha.
       OLIST-03–17, 20, 26, 35–41. Dono Integrações. Leitura/fixtures em paralelo
@@ -958,16 +960,16 @@ total calculado e schema expand. Reconciliar a janela antes de retomar.
 Checklists de tarefas são fonte de status. Registrar evidências abaixo sem
 duplicar checkboxes. Decisão aceita não marca implementação como concluída.
 
-| Entrega/gate             | Responsável designado | Evidência/resultado                                | Commit/PR            | Deploy/aceite          |
-| ------------------------ | --------------------- | -------------------------------------------------- | -------------------- | ---------------------- |
-| OLIST-PLAN-01            | Tech Lead             | Proposta original; substituída nos pontos revistos | c33b5d34             | Documental             |
-| OLIST-PLAN-02            | Tech Lead             | ADR 057, OLIST-01–50, T01–T26 e emendas canônicas  | Registrar no handoff | Documental             |
-| F1 / T01–T02             | A designar            | A preencher                                        | A preencher          | Contrato/prova API     |
-| F2 / T03–T05/T19         | A designar            | A preencher                                        | A preencher          | Dados/checkbox/conexão |
-| F3 / T06–T10/T20–T24/T26 | A designar            | A preencher                                        | A preencher          | CRM/cadastros/venda    |
-| F4 / T11–T13/T25         | A designar            | A preencher                                        | A preencher          | UI/ficha v7            |
-| F5 / T14–T15             | A designar            | A preencher                                        | A preencher          | QA/operação            |
-| F6 / T16–T18             | A designar            | A preencher                                        | A preencher          | Piloto/ampliação       |
+| Entrega/gate             | Responsável designado  | Evidência/resultado                                                    | Commit/PR                   | Deploy/aceite              |
+| ------------------------ | ---------------------- | ---------------------------------------------------------------------- | --------------------------- | -------------------------- |
+| OLIST-PLAN-01            | Tech Lead              | Proposta original; substituída nos pontos revistos                     | c33b5d34                    | Documental                 |
+| OLIST-PLAN-02            | Tech Lead              | ADR 057, OLIST-01–50, T01–T26 e emendas canônicas                      | Registrar no handoff        | Documental                 |
+| F1 / T01–T02             | Tech Lead; Integrações | [T01 revisada](../integrations/olist/contract-review.md); T02 pendente | Ver histórico OLIST-T01/T02 | F1 aberto; sem escrita ERP |
+| F2 / T03–T05/T19         | A designar             | A preencher                                                            | A preencher                 | Dados/checkbox/conexão     |
+| F3 / T06–T10/T20–T24/T26 | A designar             | A preencher                                                            | A preencher                 | CRM/cadastros/venda        |
+| F4 / T11–T13/T25         | A designar             | A preencher                                                            | A preencher                 | UI/ficha v7                |
+| F5 / T14–T15             | A designar             | A preencher                                                            | A preencher                 | QA/operação                |
+| F6 / T16–T18             | A designar             | A preencher                                                            | A preencher                 | Piloto/ampliação           |
 
 ### Definition of Ready
 
@@ -999,6 +1001,6 @@ Deploy/amostra/piloto/aceite:
 Riscos, bloqueios e próximo item desbloqueado:
 ```
 
-Próximos itens: T01/T02, depois fundação/checkbox/IDs e subtotal. Não liberar
+Próximos itens: concluir T02/gate F1, depois fundação/checkbox/IDs e subtotal. Não liberar
 geração real antes de cadastro automático seguro, precisão por linha, filtros
 de cancelamento e identidade individual do piloto estarem validados.

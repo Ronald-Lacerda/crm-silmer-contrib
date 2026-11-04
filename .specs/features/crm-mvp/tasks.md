@@ -165,6 +165,15 @@ oito moderate preexistentes). Revisão independente sem findings P1/P2.
 Operação: rascunhos são temporários e saem com a instância da Inbox. Não há
 API, migration ou configuração nova. Rollback é reverter a entrega de frontend;
 mensagens aceitas pela API não devem ser reenviadas para testar apresentação.
+## OLIST-T01 — Revisão do contrato da Fase 1 (04/11/2026)
+
+- [x] Conferir ADR 057 e emendas canônicas, mapear OLIST-01–50, alocar donos
+      por papel/tarefa e registrar gaps técnicos com gates e responsáveis.
+
+[Evidência T01](../../../docs/integrations/olist/contract-review.md).
+Tech Lead: Codex nesta execução. T02 e gate F1 continuam abertos; não há
+runtime, habilitação real ou inclusão ERP nesta entrega.
+
 ## OLIST-PLAN-02 — Decisões Olist subtotal cancelamento e rótulos
 
 - [x] Registrar decisões do proprietário na ADR 057 e reconciliar RFC 044,
