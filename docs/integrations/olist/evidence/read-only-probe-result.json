@@ -1,0 +1,22 @@
+{
+  "task": "OLIST-T02",
+  "executedAt": "2026-11-04T21:54:58.735421+00:00",
+  "command": "fnm exec --using 24.20.0 -- node --test docs/integrations/olist/read-only-probe.test.mjs",
+  "node": "24.20.0",
+  "testsRun": 17,
+  "passed": 17,
+  "failed": 0,
+  "externalNetworkCalls": 0,
+  "authenticatedApiV3Calls": 0,
+  "newOlistApps": 0,
+  "businessRecordWrites": 0,
+  "method": "Unit tests plus real loopback HTTP/RSA envelope/callback integration with all remote responses simulated.",
+  "callback": "http://127.0.0.1:8765/olist/callback",
+  "maximumLiveGetProposed": 8,
+  "f1GatePassed": false,
+  "sha256": {
+    "read-only-probe.mjs": "3add17de8c3ff3797bf3fb412832dce2a6f60baa01ee1c000935b77c1efa8431",
+    "read-only-probe.test.mjs": "f837e21672760b72917752a574b6f71d4271b3a85278b172566fd0d7388f1468",
+    "evidence/read-only-queries-schema.json": "bcd0a7a7db3e2e9fb924e7fbb4868b735bfd0110636c07592286a06350899310"
+  }
+}

@@ -7,11 +7,13 @@ reproduzível; fixtures sintéticas e 11 testes offline aprovados. PO autorizou
 consultas na conta operacional e preparo do caso controlado para aprovação
 antes de qualquer criação. Novo login permitiu completar 36 observações UI:
 automações fiscais/estoque, expedição, reserva e webhooks. Gestão de Aplicativos
-é gratuita e não instalada; aprovação da extensão pendente. API v3, cadastro
-fiscal válido, precisão e efeitos reais pendentes. Gate F1 aberto.
+instalada gratuitamente após aprovação; formulário de app inspecionado sem
+salvar. [Proposta de acesso somente leitura](../../../docs/integrations/olist/read-only-access.md)
+e coletor local preparados com 17 testes offline. App/conexão v3 aguardam
+aprovação; cadastro fiscal, precisão e efeitos reais pendentes. Gate F1 aberto.
 [Evidência](../../../docs/integrations/olist/capabilities.md) e
 [caso controlado](../../../docs/integrations/olist/controlled-case.md).
-Zero chamadas autenticadas v3, inclusões ou credenciais criadas; T02 aberta.
+Zero chamadas autenticadas v3, cadastros/vendas ou credenciais criadas; T02 aberta.
 
 ## COB-DEL-01 — Cobranças InfinitePay (05/11/2026)
 

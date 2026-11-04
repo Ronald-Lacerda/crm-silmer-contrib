@@ -2,9 +2,9 @@
   "task": "OLIST-T02",
   "observedOn": "2026-11-04",
   "environment": "current-operational-account",
-  "authorization": "Read-only UI inspection and preparation of a controlled case; all creations require prior user approval.",
+  "authorization": "User approved only installing the free Gestão de Aplicativos extension and inspecting the API form; no app, credential or business-record creation approved.",
   "method": "Chrome authenticated UI, visible selected values; not API-v3 requests.",
-  "erpMutations": 0,
+  "erpMutations": 1,
   "createdCredentials": 0,
   "authenticatedApiV3Calls": 0,
   "settingsSaved": 0,
@@ -197,11 +197,11 @@
       "screen": "Loja de extensões > minhas extensões / catálogo",
       "field": "Gestão de Aplicativos",
       "observedValue": {
-        "installed": false,
-        "available": true,
-        "displayedPrice": "GRÁTIS"
+        "installed": true,
+        "displayedPrice": "GRÁTIS",
+        "confirmedStatus": "INSTALADO"
       },
-      "implication": "Instalação exige aprovação; não cria credencial por si só, mas habilita gestão de acesso v3."
+      "implication": "Installed with explicit user approval; app and credential creation still require separate approval."
     },
     {
       "id": "legacy-token-extension",
@@ -275,14 +275,56 @@
       "field": "Na importação de produtos, ao atualizar um produto, atualizar o Código (SKU)",
       "observedValue": false,
       "implication": "Tela trata de importação; não prova publicação automática ausente. Não publicar/vincular catálogo do teste."
+    },
+    {
+      "id": "api-screen",
+      "screen": "Aplicativos API",
+      "field": "Configurações > geral > Aplicativos",
+      "observedValue": "Available",
+      "implication": "Menu appeared after installation."
+    },
+    {
+      "id": "api-app-list",
+      "screen": "Aplicativos API",
+      "field": "Existing applications",
+      "observedValue": 0,
+      "implication": "No existing API-v3 app to reuse was shown."
+    },
+    {
+      "id": "api-keys-generation",
+      "screen": "Aplicativos API",
+      "field": "Chaves de acesso",
+      "observedValue": "Generated after permissions and Save",
+      "implication": "New form opened without filling or saving; no keys generated."
+    },
+    {
+      "id": "api-permission-columns",
+      "screen": "Aplicativos API",
+      "field": "Permission columns",
+      "observedValue": ["Leitura", "Incluir e editar", "Excluir"],
+      "implication": "Only read access will be proposed; all writes remain unchecked."
     }
   ],
   "pending": [
-    "Approval to install free Gestão de Aplicativos; inspect app configuration and prepare read-only access without creating credentials yet",
-    "Authenticated API-v3 account identity, permissions and rate limits; endpoint-level trigger behavior",
-    "Valid buyer identity and exact product variations; no match for teste in current UI searches",
-    "Fiscal/central IDs, product-publication links and final private payload before approval of any ERP write"
+    "Approval of a private read-only app and temporary loopback connection; no credentials generated yet",
+    "Provider acceptance of loopback redirect URI and authenticated API-v3 account match/permissions/quotas",
+    "Valid buyer identity and exact product variations; no result for teste in previous searches",
+    "Fiscal/central IDs and final private payload before approval of any business-record write"
   ],
   "session": "Restored by user; read-only UI inspection resumed successfully.",
-  "f1GatePassed": false
+  "f1GatePassed": false,
+  "extensionInstallations": 1,
+  "businessRecordWrites": 0,
+  "events": [
+    {
+      "action": "install-extension",
+      "extension": "Gestão de Aplicativos",
+      "previousInstalled": false,
+      "currentInstalled": true,
+      "displayedPrice": "GRÁTIS",
+      "confirmedStatus": "INSTALADO",
+      "userApproval": "prossiga, following the specific extension-only approval request",
+      "observedAt": "2026-11-04T21:54:09.670862+00:00"
+    }
+  ]
 }

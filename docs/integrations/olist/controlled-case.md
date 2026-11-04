@@ -45,37 +45,40 @@ selecionados; não são inferência da documentação pública ou teste de efeit
 
 Após novo login feito pelo PO, a inspeção prosseguiu e confirmou:
 
-| Consulta adicional                     | Resultado observado                                    | Consequência                                                                    |
-| -------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| Gestão de Aplicativos                  | Não instalada; catálogo mostra GRÁTIS e botão instalar | Acesso v3 depende dessa etapa; não instalada nesta execução                     |
-| Token API                              | Consta INSTALADO                                       | Não foi aberto/copiado segredo; não substitui prova de acesso v3                |
-| Reserva de estoque                     | Não instalada; disponível GRÁTIS                       | Nenhuma instalação; comportamento de efeitos externos ainda sujeito à prova     |
-| Webhooks                               | Não instalada; catálogo exige UPGRADE                  | Não contratar upgrade; isso não prova ausência de toda integração externa       |
-| Painel de Automações: saída de estoque | Desabilitada                                           | Confirma parâmetro manual observado                                             |
-| Painel de Automações: emitir NF-e      | Desabilitada                                           | Sem geração automática nesse painel; comandos fiscais continuam fora do teste   |
-| Painel de Automações: expedição        | Habilitada ao salvar nota fiscal                       | Não gerar/salvar nota; nenhum comando de expedição/etiqueta                     |
-| Busca de comprador por teste           | Nenhum registro encontrado                             | Limitado aos filtros atuais; não selecionar comprador real arbitrário           |
-| Busca de produto ativo por teste       | Nenhum resultado                                       | Ainda faltam duas variações exatas para congelar o caso                         |
-| TikTok: fluxo de produtos              | Importação não atualiza SKU; imagens como anexos       | Não trata de garantia de ausência de publicação; não publicar/vincular produtos |
+| Consulta adicional                     | Resultado observado                                         | Consequência                                                                    |
+| -------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Gestão de Aplicativos                  | Instalada GRÁTIS após aprovação do PO; confirmado INSTALADO | Aplicativos disponível; nenhum aplicativo/credencial criado                     |
+| Token API                              | Consta INSTALADO                                            | Não foi aberto/copiado segredo; não substitui prova de acesso v3                |
+| Reserva de estoque                     | Não instalada; disponível GRÁTIS                            | Nenhuma instalação; comportamento de efeitos externos ainda sujeito à prova     |
+| Webhooks                               | Não instalada; catálogo exige UPGRADE                       | Não contratar upgrade; isso não prova ausência de toda integração externa       |
+| Painel de Automações: saída de estoque | Desabilitada                                                | Confirma parâmetro manual observado                                             |
+| Painel de Automações: emitir NF-e      | Desabilitada                                                | Sem geração automática nesse painel; comandos fiscais continuam fora do teste   |
+| Painel de Automações: expedição        | Habilitada ao salvar nota fiscal                            | Não gerar/salvar nota; nenhum comando de expedição/etiqueta                     |
+| Busca de comprador por teste           | Nenhum registro encontrado                                  | Limitado aos filtros atuais; não selecionar comprador real arbitrário           |
+| Busca de produto ativo por teste       | Nenhum resultado                                            | Ainda faltam duas variações exatas para congelar o caso                         |
+| TikTok: fluxo de produtos              | Importação não atualiza SKU; imagens como anexos            | Não trata de garantia de ausência de publicação; não publicar/vincular produtos |
 
 A busca de configurações por gatilho não encontrou item; o painel consolidado
 foi localizado pela navegação de Vendas. O resultado negativo da busca não foi
 usado como prova de ausência de gatilhos. São 36 observações sanitizadas no
 JSON; nenhum parâmetro foi salvo e nenhuma chamada autenticada v3 foi feita.
 
-## Próxima aprovação concreta — somente extensão gratuita
+## Extensão instalada e próxima aprovação
 
-A tela Loja de extensões, busca Gestão de Aplicativos, exibe **GRÁTIS** e
-**instalar**. A proposta é instalar somente essa extensão na conta atual para
-habilitar a tela de Aplicativos e poder inspecionar seus campos e permissões.
-Se surgir cobrança, upgrade ou condição diferente, interromper antes de aceitar.
+O PO aprovou a instalação gratuita com prossiga após a solicitação específica.
+A extensão Gestão de Aplicativos foi instalada, com GRÁTIS e depois INSTALADO
+confirmados na tela. Não houve cobrança/upgrade, mudança de gatilho ou criação
+de cadastro/venda. A tela Aplicativos está acessível e a lista estava vazia.
+O formulário novo foi inspecionado, sem preencher ou salvar: chaves só são
+geradas após definir permissões e salvar.
 
-Essa aprovação não inclui criar aplicativo/credencial, conceder permissões,
-gerar token, salvar callback, alterar gatilhos, criar comprador/produto/venda,
-emitir documento ou enviar dados. Após abrir a gestão, preparar o acesso v3
-somente leitura com campos/escopos concretos e nova revisão antes de salvar.
-A captura de aprovação foi salva localmente em `var/olist-phase1/gestao-aplicativos.jpg`
-no checkout principal, fora do Git. O usuário ainda não aprovou a instalação.
+Próxima proposta: [aplicativo privado somente leitura e coletor temporário](read-only-access.md),
+com nome, callback local, sete módulos de leitura e oito GET fixos definidos.
+O coletor foi preparado e testado offline, sem conectar à conta real. Essa
+criação/conexão ainda não foi aprovada. Não há novo app ou credencial remoto.
+A captura da instalação está localmente em
+`var/olist-phase1/gestao-aplicativos-instalada.jpg` no checkout principal,
+fora do Git. A captura anterior documenta a tela antes de instalar.
 
 ## Caso proposto para revisão — não liberado para execução
 
@@ -108,11 +111,11 @@ Não alterar configuração global da operação para viabilizar a prova.
 
 ## Pendências para tornar a aprovação executável
 
-1. Instalar Gestão de Aplicativos apenas após aprovação da extensão gratuita;
-   consultar a tela para preparar aplicativo/escopos/callback concretos. Depois,
-   solicitar aprovação de acesso persistente somente leitura antes de criá-lo.
-   Conferir conta, permissões, quotas e gatilhos pela API; a UI não substitui
-   prova autenticada do contrato v3.
+1. Aprovar a [proposta exata de acesso somente leitura](read-only-access.md)
+   antes de criar aplicativo ou credenciais. A extensão já foi instalada com
+   autorização. Conferir conta, permissões e quotas pela API; a UI não
+   substitui prova autenticada do contrato v3. Endpoint de Gatilhos não foi
+   localizado no snapshot público; não inventar rota/escopo.
 2. Conferir comprador/variações e vendedor/natureza/depósito/pagamento no alvo,
    mantendo IDs/documentos fora do Git. Confirmar que o PO pode autorizar o
    uso dessas identidades; não selecionar por nome parecido.

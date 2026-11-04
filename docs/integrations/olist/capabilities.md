@@ -8,8 +8,9 @@ coordenado pelo Tech Lead (Codex nesta execução). Consulta em 04/11/2026.
 **Situação: prova documental/offline entregue; T02 e gate F1 abertos.**
 O PO autorizou consultas na conta operacional atual e a preparação de caso
 controlado, com aprovação anterior a qualquer criação. Inspeção autenticada
-pela UI já realizada; zero chamadas autenticadas à API v3, inclusões, criação
-de credenciais ou alterações de parâmetros. Gatilhos e pendências no
+pela UI já realizada; zero chamadas autenticadas à API v3, cadastros/vendas, criação
+de credenciais ou alterações de parâmetros comerciais. Somente a extensão
+gratuita Gestão de Aplicativos foi instalada com aprovação posterior do PO. Gatilhos e pendências no
 [caso controlado](controlled-case.md). T02/F1 continuam abertos.
 
 ## Schema e reprodução
@@ -224,9 +225,9 @@ solicitar aprovação. Nenhum orçamento da matriz original autoriza execução.
 - T02: captura/schema, fixtures e 11 testes offline concluídos; inspeção UI
   da conta operacional e caso mínimo proposto em documento próprio. API v3,
   gatilhos restantes, fiscal, precisão/linhas e efeitos reais pendentes. F1 aberto.
-- Sessão restabelecida pelo PO; 36 observações UI registradas, incluindo painel
-  de automações, reserva e webhooks não instalados e Gestão de Aplicativos
-  gratuita ainda não instalada. Próxima aprovação: somente essa extensão;
-  acesso v3 e venda continuam pendentes. Não publicar senha/token/IDs reais.
+- Extensão Gestão de Aplicativos instalada gratuitamente após aprovação do PO;
+  tela inspecionada sem aplicativo/credencial criado. [Acesso de leitura proposto](read-only-access.md)
+  e coletor local preparado, com 17 testes offline; conexão real pendente de
+  aprovação. Nenhum cadastro/venda criado; não publicar senha/token/IDs reais.
 - Sem migração, runtime, deploy, habilitação de operadora ou piloto. Próximo
   desbloqueio: prova real T02; T03 depende do gate F1.

@@ -1,0 +1,487 @@
+{
+  "sourceUrl": "https://erp.olist.com/public-api/v3/swagger/swagger-mintlify.json",
+  "sourceSha256": "7afecea50e94f0e331f8678bcd4b7017e90ed0f8b9a032d6110d36bf77c510ec",
+  "apiVersion": "3.1",
+  "capturedAt": "2026-11-04T21:52:57.954675+00:00",
+  "method": "GET",
+  "operations": {
+    "/info": {
+      "operationId": "ObterInfoContaAction",
+      "parameters": []
+    },
+    "/contatos": {
+      "operationId": "ListarContatosAction",
+      "parameters": [
+        {
+          "name": "nome",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "codigo",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "situacao",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "enum": [
+              "B",
+              "A",
+              "I",
+              "E"
+            ]
+          }
+        },
+        {
+          "name": "idVendedor",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "name": "cpfCnpj",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "celular",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "email",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "dataCriacao",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "example": "2023-01-01 10:00:00"
+          }
+        },
+        {
+          "name": "dataAtualizacao",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "example": "2023-01-01 10:00:00"
+          }
+        },
+        {
+          "name": "orderBy",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100
+          }
+        },
+        {
+          "name": "offset",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0
+          }
+        }
+      ]
+    },
+    "/produtos": {
+      "operationId": "ListarProdutosAction",
+      "parameters": [
+        {
+          "name": "nome",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "codigo",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "gtin",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "name": "situacao",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "enum": [
+              "A",
+              "I",
+              "E"
+            ]
+          }
+        },
+        {
+          "name": "dataCriacao",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "example": "2023-01-01 10:00:00"
+          }
+        },
+        {
+          "name": "dataAlteracao",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string",
+            "example": "2023-01-01 10:00:00"
+          }
+        },
+        {
+          "name": "idListaPreco",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100
+          }
+        },
+        {
+          "name": "offset",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0
+          }
+        }
+      ]
+    },
+    "/pedidos": {
+      "operationId": "ListarPedidosAction",
+      "parameters": [
+        {
+          "name": "numero",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "name": "nomeCliente",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "codigoCliente",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "cpfCnpj",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "dataInicial",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "dataFinal",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "dataAtualizacao",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "situacao",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "enum": [
+              8,
+              0,
+              3,
+              4,
+              1,
+              7,
+              5,
+              6,
+              10,
+              2,
+              9
+            ]
+          }
+        },
+        {
+          "name": "numeroPedidoEcommerce",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "idVendedor",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer"
+          }
+        },
+        {
+          "name": "marcadores",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "name": "origemPedido",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          }
+        },
+        {
+          "name": "orderBy",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100
+          }
+        },
+        {
+          "name": "offset",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0
+          }
+        }
+      ]
+    },
+    "/vendedores": {
+      "operationId": "ListarVendedoresAction",
+      "parameters": [
+        {
+          "name": "nome",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "codigo",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100
+          }
+        },
+        {
+          "name": "offset",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0
+          }
+        }
+      ]
+    },
+    "/depositos": {
+      "operationId": "ListarDepositosAction",
+      "parameters": []
+    },
+    "/formas-pagamento": {
+      "operationId": "ListarFormasPagamentoAction",
+      "parameters": [
+        {
+          "name": "nome",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "situacao",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "enum": [
+              1,
+              2
+            ]
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100
+          }
+        },
+        {
+          "name": "offset",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0
+          }
+        }
+      ]
+    },
+    "/formas-recebimento": {
+      "operationId": "ListarFormasRecebimentoAction",
+      "parameters": [
+        {
+          "name": "nome",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "situacao",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "enum": [
+              1,
+              2
+            ]
+          }
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 100
+          }
+        },
+        {
+          "name": "offset",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "default": 0
+          }
+        }
+      ]
+    }
+  }
+}

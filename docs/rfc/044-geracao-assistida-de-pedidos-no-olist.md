@@ -680,9 +680,10 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       oficial 3.1/hash, fixtures e 11 testes offline. PO autorizou consultas na
       conta operacional e [preparo do caso controlado](../integrations/olist/controlled-case.md)
       antes de aprovar qualquer criação. 36 observações UI com gatilhos,
-      automações e reserva; Gestão de Aplicativos gratuita aguarda aprovação
-      de instalação. API v3, fiscal, precisão/linhas e efeitos reais pendentes. T02/F1 abertos;
-      zero chamadas autenticadas v3, inclusões ou credenciais criadas.
+      automações e reserva; Gestão de Aplicativos instalada gratuitamente com
+      aprovação. [Proposta de leitura/loopback](../integrations/olist/read-only-access.md)
+      e coletor local com 17 testes offline, sem app/credencial/conexão real. API v3, fiscal, precisão/linhas e efeitos reais pendentes. T02/F1 abertos;
+      zero chamadas autenticadas v3, cadastros/vendas ou credenciais criadas.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado
 fiscal inventado ou suposição de idempotência remota. Plano para ausência de
