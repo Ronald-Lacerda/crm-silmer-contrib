@@ -3,8 +3,11 @@ import test from 'node:test';
 import { createN8nApiRuntime } from '../apps/api/src/n8n-runtime.js';
 import { createApi } from '../apps/api/src/app.js';
 import { createN8nIntegrationService } from '../modules/n8n-integration/src/service.js';
+import { createAutomationAuthRuntime } from '../apps/api/src/automation-auth-runtime.js';
+import { createOrderAssistanceService } from '../modules/inbox-channels/src/application/order-assistance.js';
 
-function integration() {
+/** @param {{observe(input:any):Promise<any>}} [orderAssistance] */
+function integration(orderAssistance) {
   const key = Buffer.alloc(32, 71).toString('base64');
   const observations = /** @type {any[]} */ ([]);
   let writes = 0;
@@ -32,7 +35,7 @@ function integration() {
           writes++;
         },
       }),
-      orderAssistance: {
+      orderAssistance: orderAssistance ?? {
         async observe(input) {
           observations.push(input);
           return { accepted: true };
@@ -42,6 +45,87 @@ function integration() {
   );
   return { runtime, observations, writes: () => writes };
 }
+
+test('OA-T02: authenticated principal reaches observation persistence through the production route and runtime', async (t) => {
+  const calls = /** @type {any[]} */ ([]);
+  const service = createOrderAssistanceService({
+    async observe(/** @type {any} */ input) {
+      calls.push(input);
+      return { accepted: true, suggested: false };
+    },
+  });
+  const h = integration(service);
+  const environment = {
+    CRM_AUTOMATION_CLIENT_ID: 'synthetic-observer',
+    CRM_AUTOMATION_CLIENT_SECRET:
+      'synthetic-observer-secret-at-least-32-characters',
+  };
+  const api = createApi(
+    {},
+    {
+      n8n: h.runtime,
+      automationAuth: createAutomationAuthRuntime({
+        environment,
+        auditPort: { append: async () => {} },
+      }),
+    },
+  );
+  t.after(() => api.close());
+  const headers = {
+    authorization:
+      'Basic ' +
+      Buffer.from(
+        environment.CRM_AUTOMATION_CLIENT_ID +
+          ':' +
+          environment.CRM_AUTOMATION_CLIENT_SECRET,
+      ).toString('base64'),
+    'idempotency-key': 'synthetic-observation',
+    'x-correlation-id': '10000000-0000-4000-8000-000000000001',
+    'x-silmer-execution-id': 'synthetic-observer-execution',
+    'x-silmer-workflow-key': 'silmer-whatsapp',
+    'x-silmer-workflow-version': 'mvp-simple-21',
+  };
+  const payload = {
+    schema_version: '1.0',
+    event_id: 'synthetic-observation',
+    event_type: 'order.assistance.observed',
+    occurred_at: '2026-11-03T12:00:00.000Z',
+    conversation_id: 'synthetic-conversation',
+    source_revision: 4,
+    automation_epoch: 2,
+    observation: { signal: 'not_ready', briefing_patch: {} },
+  };
+  const response = await api.inject({
+    method: 'POST',
+    url: '/api/v1/integrations/n8n/events',
+    headers,
+    payload,
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json(), { accepted: true, suggested: false });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].conversationId, payload.conversation_id);
+  assert.equal(calls[0].sourceRevision, payload.source_revision);
+  assert.equal(calls[0].automationEpoch, payload.automation_epoch);
+  assert.equal(calls[0].correlationId, headers['x-correlation-id']);
+  assert.equal(calls[0].signal, 'not_ready');
+  const denied = await api.inject({
+    method: 'POST',
+    url: '/api/v1/integrations/n8n/events',
+    headers: { ...headers, authorization: 'Basic d3Jvbmc6d3Jvbmc=' },
+    payload,
+  });
+  assert.equal(denied.statusCode, 401);
+  const forged = await api.inject({
+    method: 'POST',
+    url: '/api/v1/integrations/n8n/events',
+    headers,
+    payload: { ...payload, technical: { actor: 'AUTOMATION_EXECUTOR' } },
+  });
+  assert.equal(forged.statusCode, 400);
+  assert.equal(calls.length, 1);
+  assert.equal(h.writes(), 0);
+});
 
 test('OA-01: subject-v1 keeps the initial briefing without requesting order creation', async () => {
   /** @type {any} */

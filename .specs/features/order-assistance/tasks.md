@@ -21,3 +21,12 @@ por cenários sintéticos.
 Os gates de teste e publicação são fechados pelas evidências do PR e do handoff
 operacional. A aplicação da migração e a publicação do workflow não são
 inferidas da presença do código neste commit.
+
+## OA-T02 — Principal autenticado no registro de observações
+
+Requisitos: OA-02/OA-10. Corrigir a rejeição do principal técnico real em
+objeto, preservando o identificador exigido e a compatibilidade legada.
+Adicionar regressão com autenticação Basic, rota e runtime reais até o serviço,
+incluindo credencial inválida e tentativas de forjar o ator. Confirmar CI,
+publicação da API e uma observação persistida sem criar pedido ou enviar
+mensagem externa. Evidências de teste e implantação são registradas no PR.

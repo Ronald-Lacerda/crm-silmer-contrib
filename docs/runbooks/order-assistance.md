@@ -35,6 +35,13 @@ correto; não escolher o último pedido automaticamente.
 
 No painel Desempenho, distinguir análises recebidas, falhas e sugestões. Zero
 sugestões sem análises não comprova que o agente avaliou todas as conversas.
+Se o observador chega ao nó de registro e não há análises, verificar o status
+da API antes de recarregar o workflow. A autenticação real entrega
+`technical.actor` como objeto com `id = AUTOMATION_EXECUTOR`; o serviço aceita
+esse principal e a representação legada em string. O teste OA-T02 atravessa
+Basic real, rota, runtime n8n e serviço para impedir regressão de `403`.
+Conferir metadados de nós e códigos de resposta sem persistir payloads nem
+habilitar retenção de execuções com dados de clientes.
 Pedidos manuais sem sugestão são candidatos a revisão, não falsos negativos
 comprovados. “Já deveria ter sugerido” é rotulagem humana. Janela e limites
 permanecem explícitos; conteúdo da conversa não entra em agregados/logs.

@@ -60,7 +60,9 @@ export function createOrderAssistanceService(repository) {
       if (sourceRevision < 1)
         throw new OrderAssistanceError(400, 'INVALID_VERSION');
       const automationEpoch = assistanceVersion(input.automation_epoch);
-      if (input.technical?.actor !== 'AUTOMATION_EXECUTOR')
+      const actor = input.technical?.actor;
+      const actorId = typeof actor === 'string' ? actor : actor?.id;
+      if (actorId !== 'AUTOMATION_EXECUTOR')
         throw new OrderAssistanceError(403, 'FORBIDDEN');
       const evidenceMessageId =
         input.evidence_message_id === null ||
