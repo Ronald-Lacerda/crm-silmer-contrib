@@ -1,0 +1,46 @@
+{
+  "task": "OLIST-T02",
+  "case": "C01",
+  "capturedAt": "2026-11-04T23:18:59.994384+00:00",
+  "status": "offline-core-only",
+  "nodeVersion": "24.20.0",
+  "command": "fnm exec --using 24.20.0 -- node --test docs/integrations/olist/controlled-sale.test.mjs",
+  "tests": {
+    "total": 19,
+    "passed": 19,
+    "failed": 0
+  },
+  "sourceSha256": {
+    "controlled-sale.mjs": "0acdeb9d67987a420cc3f62a5e4ec8b544a94a89b6f1f37793b074f63596805b",
+    "controlled-sale.test.mjs": "aada08af0ae65022195e44a1ad73404b0a44f31cf8abe2db27d39a1361e13039"
+  },
+  "network": "All provider responses mocked; no external connection",
+  "realBusinessWrites": 0,
+  "realAccessExpansion": false,
+  "oauthTransportIntegrated": false,
+  "successPath": {
+    "getCount": 11,
+    "maximumPostCount": 1,
+    "fixedReference": "CRM-F1-20261104-C01",
+    "expectedProductsAndOrderTotalCents": 300,
+    "uiLineProofStillRequired": true
+  },
+  "guards": [
+    "matching review digest before network; actual human authorization required separately",
+    "exact account, buyer, SKU, parent and size; complete lookup page",
+    "exclusive fsynced local reservation before POST",
+    "no POST retry after unknown outcome or concurrent invocation",
+    "journal returned ID before readback",
+    "equal total with mismatched line units is divergent",
+    "no correction, cancel, delete, fiscal, stock, charge or shipping commands",
+    "sanitized errors and route IDs; bounded body, timeout, no redirect"
+  ],
+  "limits": [
+    "No real order, permission, provider rejection, monetary precision, fiscal sufficiency or idempotency proven",
+    "Digest is local integrity checking, not an authorization record",
+    "Local reservation assumes canonical private directory and retained marker; not a production cross-account reservation",
+    "Runtime OAuth transport and private identity binding are still pending",
+    "Full phase-1 gate remains open"
+  ],
+  "f1GatePassed": false
+}

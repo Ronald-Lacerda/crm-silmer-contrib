@@ -144,6 +144,50 @@ autorizar NF. Expedição está ativa ao salvar NF. Isso não é garantia absolu
 de ausência de toda integração externa. Se surgir efeito não previsto, parar,
 sem alterar parâmetros globais nem cancelar como limpeza.
 
+## Núcleo de execução preparado — somente validação offline
+
+[controlled-sale.mjs](controlled-sale.mjs) prepara exclusivamente C01 e não
+executa nada ao importar. Não tem CLI, servidor ou fluxo OAuth próprio; não foi
+conectado à conta. A sessão autorizada de leitura permanece encerrada. O
+transporte temporário para usar esse núcleo ainda precisa ser integrado e
+verificado antes de qualquer prova real de escrita.
+
+O núcleo constrói o payload fixo, liga identidades/data/seleções a um SHA-256
+de revisão e exige esse digest antes da rede. **Digest coincidente não comprova
+aprovação humana**; o operador precisa obter a aprovação explícita real antes
+de fornecer uma sessão com acesso de escrita.
+
+São nove GET de preflight: conta; lista/detalhe do comprador; pai;
+lista/detalhe de cada SKU; ausência da referência. Exige página completa e
+identidade exata; presença de campos fiscais não equivale a validação de
+cadastro tributário. Nenhum dado ausente é preenchido. Depois, no máximo um
+POST pedido e dois GET de retorno por ID/referência: onze GET no sucesso,
+dentro do teto de 30. Não existe caminho de PUT/PATCH/DELETE, cancelamento,
+estoque, financeiro ou criação de cliente/produto nesse núcleo.
+
+Antes do POST, cria com exclusividade e sincroniza uma reserva no diretório
+privado canônico var/olist-phase1/controlled do checkout principal. O mesmo
+diretório deve ser usado em toda execução/reconciliação; trocar diretório ou
+apagar reserva não é reinicialização permitida. A reserva não demonstra
+idempotência remota nem substitui a reserva de produção prevista em T03.
+Guarda somente referência/hash e, quando disponível, ID do pedido; sem
+documentos, token, credenciais ou corpos de resposta. IDs ficam fora do Git.
+O teste usa diretórios temporários e apenas dados sintéticos.
+
+Resposta incerta mantém reserva e impede novo POST; resposta com ID registra-o
+antes do readback. ID recuperado com divergência exige reconciliação humana,
+sem corrigir preço/status e sem limpeza automática. A saída pública mascara
+IDs nas rotas e não expõe dados privados. Mesmo com API coincidente, devolve
+uiLineProofRequired verdadeiro e f1GatePassed falso: falta comprovar cada
+subtotal na UI e os demais casos de T02.
+
+[19 testes sintéticos](controlled-sale.test.mjs), Node 24.20.0, passaram.
+Incluem perda de resposta, sucesso sem ID, respostas inválidas/limitadas,
+concorrência, quota/expiração, identidade/página incompleta, surpresa fiscal/
+pagamento e unidades trocadas com total igual. Não há rede externa nem dados
+fiscais reais nessa suíte.
+[Resultado e hashes](evidence/controlled-sale-offline-result.json).
+
 ## Provas adicionais necessárias para fechar F1
 
 C01 prova apenas a venda exata com cadastros existentes. Não encerra T02.

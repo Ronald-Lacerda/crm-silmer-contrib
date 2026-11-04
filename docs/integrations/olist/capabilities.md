@@ -234,6 +234,10 @@ solicitar aprovação. Nenhum orçamento da matriz original autoriza execução.
 - Cadastro fiscal aceito, criação automática de cliente/pai/variações,
   referências em roundtrip, escala/arredondamento por linha, rejeições e
   recuperação continuam pendentes. Nenhum cadastro/venda criado; F1 aberto.
+- Núcleo isolado C01 preparado, sem CLI/OAuth/rede real, com 19 testes
+  sintéticos de reserva, limites, concorrência e comparação de retorno.
+  [Evidência offline](evidence/controlled-sale-offline-result.json).
+  Não certifica criação, precisão fiscal/monetária ou recuperação no provedor.
 - Nenhuma migração, runtime, deploy, habilitação de operadora ou piloto.
   T03 depende da prova real T02 e do gate F1; aprovação de leitura não libera
   ampliação de permissões ou escrita controlada.
