@@ -43,10 +43,39 @@ selecionados; não são inferência da documentação pública ou teste de efeit
 | Rastreamento dos dois canais    | Enviar ao mudar para enviado desabilitado                                                                      | Manter situação em aberto e não criar expedição/etiqueta                                    |
 | Envio de documentos de venda    | Formato configurado para link, com modelo de mensagem                                                          | Modelo de mensagem não prova envio automático nem ausência dele; não compartilhar documento |
 
-A sessão expirou ao abrir Loja de extensões. Tela de login deixada para o PO.
-Ainda não foi possível conferir Gestão de Aplicativos/API v3, gatilhos gerais,
-webhooks, reserva de estoque ou publicação automática de produtos. Não concluir
-que essas funções estão desabilitadas porque as telas anteriores são manuais.
+Após novo login feito pelo PO, a inspeção prosseguiu e confirmou:
+
+| Consulta adicional                     | Resultado observado                                    | Consequência                                                                    |
+| -------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Gestão de Aplicativos                  | Não instalada; catálogo mostra GRÁTIS e botão instalar | Acesso v3 depende dessa etapa; não instalada nesta execução                     |
+| Token API                              | Consta INSTALADO                                       | Não foi aberto/copiado segredo; não substitui prova de acesso v3                |
+| Reserva de estoque                     | Não instalada; disponível GRÁTIS                       | Nenhuma instalação; comportamento de efeitos externos ainda sujeito à prova     |
+| Webhooks                               | Não instalada; catálogo exige UPGRADE                  | Não contratar upgrade; isso não prova ausência de toda integração externa       |
+| Painel de Automações: saída de estoque | Desabilitada                                           | Confirma parâmetro manual observado                                             |
+| Painel de Automações: emitir NF-e      | Desabilitada                                           | Sem geração automática nesse painel; comandos fiscais continuam fora do teste   |
+| Painel de Automações: expedição        | Habilitada ao salvar nota fiscal                       | Não gerar/salvar nota; nenhum comando de expedição/etiqueta                     |
+| Busca de comprador por teste           | Nenhum registro encontrado                             | Limitado aos filtros atuais; não selecionar comprador real arbitrário           |
+| Busca de produto ativo por teste       | Nenhum resultado                                       | Ainda faltam duas variações exatas para congelar o caso                         |
+| TikTok: fluxo de produtos              | Importação não atualiza SKU; imagens como anexos       | Não trata de garantia de ausência de publicação; não publicar/vincular produtos |
+
+A busca de configurações por gatilho não encontrou item; o painel consolidado
+foi localizado pela navegação de Vendas. O resultado negativo da busca não foi
+usado como prova de ausência de gatilhos. São 36 observações sanitizadas no
+JSON; nenhum parâmetro foi salvo e nenhuma chamada autenticada v3 foi feita.
+
+## Próxima aprovação concreta — somente extensão gratuita
+
+A tela Loja de extensões, busca Gestão de Aplicativos, exibe **GRÁTIS** e
+**instalar**. A proposta é instalar somente essa extensão na conta atual para
+habilitar a tela de Aplicativos e poder inspecionar seus campos e permissões.
+Se surgir cobrança, upgrade ou condição diferente, interromper antes de aceitar.
+
+Essa aprovação não inclui criar aplicativo/credencial, conceder permissões,
+gerar token, salvar callback, alterar gatilhos, criar comprador/produto/venda,
+emitir documento ou enviar dados. Após abrir a gestão, preparar o acesso v3
+somente leitura com campos/escopos concretos e nova revisão antes de salvar.
+A captura de aprovação foi salva localmente em `var/olist-phase1/gestao-aplicativos.jpg`
+no checkout principal, fora do Git. O usuário ainda não aprovou a instalação.
 
 ## Caso proposto para revisão — não liberado para execução
 
@@ -79,10 +108,11 @@ Não alterar configuração global da operação para viabilizar a prova.
 
 ## Pendências para tornar a aprovação executável
 
-1. Restabelecer sessão e terminar consultas de Aplicativos/escopos/gatilhos,
-   fiscal, reserva e publicação. Se não houver acesso v3 existente, preparar
-   pedido de aprovação separado para aplicativo/escopos/callback concretos;
-   não criar acesso persistente sob autorização de consulta.
+1. Instalar Gestão de Aplicativos apenas após aprovação da extensão gratuita;
+   consultar a tela para preparar aplicativo/escopos/callback concretos. Depois,
+   solicitar aprovação de acesso persistente somente leitura antes de criá-lo.
+   Conferir conta, permissões, quotas e gatilhos pela API; a UI não substitui
+   prova autenticada do contrato v3.
 2. Conferir comprador/variações e vendedor/natureza/depósito/pagamento no alvo,
    mantendo IDs/documentos fora do Git. Confirmar que o PO pode autorizar o
    uso dessas identidades; não selecionar por nome parecido.
@@ -91,6 +121,21 @@ Não alterar configuração global da operação para viabilizar a prova.
 4. Apresentar o payload final em visão privada, com valor/contagem/IDs
    selecionados, plano de leitura/retencão e efeitos concretos; só então pedir
    aprovação do POST único. Aprovação de consulta não autoriza essa criação.
+
+## Comprador fictício e CPF gerado
+
+O PO sugeriu criar um fictício e usar gerador de CPF se não houvesse cadastro
+para reutilizar. Nenhum CPF foi gerado ou enviado e nenhum comprador foi criado.
+Número com dígitos verificadores válidos não comprova identidade e pode coincidir
+com titular real; na conta operacional, a proposta permanece pendente de dados
+apropriados para teste e de aprovação do caso completo.
+
+Para a prova fiscal, preferir comprador existente autorizado/da própria empresa
+com cadastro válido ou identidade de testes aceita pelo Olist. Um cadastro
+meramente técnico sem documento, se aceito pelo ERP e aprovado para teste,
+não comprovará OLIST-35 nem substituirá a exigência de cadastro completo da
+integração. Não atualizar o contrato de produção para aceitar dado inventado
+com base em um experimento. Nenhum dado pessoal/fiscal é incluído neste arquivo.
 
 ## Cobertura restante de T02
 

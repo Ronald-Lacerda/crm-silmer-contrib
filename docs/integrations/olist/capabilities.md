@@ -224,8 +224,9 @@ solicitar aprovação. Nenhum orçamento da matriz original autoriza execução.
 - T02: captura/schema, fixtures e 11 testes offline concluídos; inspeção UI
   da conta operacional e caso mínimo proposto em documento próprio. API v3,
   gatilhos restantes, fiscal, precisão/linhas e efeitos reais pendentes. F1 aberto.
-- Sessão expirou durante a inspeção da loja de extensões; novo login solicitado
-  para terminar as consultas. Não solicitar senha/token pelo chat ou publicar
-  IDs reais. Caso controlado depende de conclusão das consultas e aprovação.
+- Sessão restabelecida pelo PO; 36 observações UI registradas, incluindo painel
+  de automações, reserva e webhooks não instalados e Gestão de Aplicativos
+  gratuita ainda não instalada. Próxima aprovação: somente essa extensão;
+  acesso v3 e venda continuam pendentes. Não publicar senha/token/IDs reais.
 - Sem migração, runtime, deploy, habilitação de operadora ou piloto. Próximo
   desbloqueio: prova real T02; T03 depende do gate F1.

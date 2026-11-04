@@ -191,14 +191,98 @@
       "field": "Enviar rastreamento ao alterar a situação no ERP para enviado",
       "observedValue": false,
       "implication": "Não avançar situação para enviado."
+    },
+    {
+      "id": "api-app-management",
+      "screen": "Loja de extensões > minhas extensões / catálogo",
+      "field": "Gestão de Aplicativos",
+      "observedValue": {
+        "installed": false,
+        "available": true,
+        "displayedPrice": "GRÁTIS"
+      },
+      "implication": "Instalação exige aprovação; não cria credencial por si só, mas habilita gestão de acesso v3."
+    },
+    {
+      "id": "legacy-token-extension",
+      "screen": "Loja de extensões > minhas extensões",
+      "field": "Token API",
+      "observedValue": "INSTALADO",
+      "implication": "Não ler/expor token existente nem presumir que substitui Gestão de Aplicativos v3."
+    },
+    {
+      "id": "stock-reservation-extension",
+      "screen": "Loja de extensões > catálogo, busca reserva",
+      "field": "Reserva de estoque",
+      "observedValue": {
+        "installed": false,
+        "available": true,
+        "displayedPrice": "GRÁTIS"
+      },
+      "implication": "Nenhuma instalação; não alegar garantia sobre reservas/efeitos externos ainda não observados por API."
+    },
+    {
+      "id": "webhook-extension",
+      "screen": "Loja de extensões > catálogo",
+      "field": "Webhooks",
+      "observedValue": {
+        "installed": false,
+        "requiresUpgrade": true
+      },
+      "implication": "Nenhum upgrade; ausência da extensão não prova ausência de toda integração externa."
+    },
+    {
+      "id": "automation-stock",
+      "screen": "Vendas > Painel de Automações",
+      "field": "Lançar saída de estoque",
+      "observedValue": false,
+      "implication": "Confirmado no painel consolidado; não alterar automações."
+    },
+    {
+      "id": "automation-nfe",
+      "screen": "Vendas > Painel de Automações",
+      "field": "Emitir Nota Fiscal Eletrônica (NFe)",
+      "observedValue": false,
+      "implication": "Não executar geração/autorização fiscal manual ou via API."
+    },
+    {
+      "id": "automation-dispatch",
+      "screen": "Vendas > Painel de Automações",
+      "field": "Enviar para expedição",
+      "observedValue": {
+        "enabled": true,
+        "trigger": "Ao salvar a nota fiscal"
+      },
+      "implication": "Não salvar nota fiscal; manter expedição/etiqueta fora do teste."
+    },
+    {
+      "id": "test-contact-search",
+      "screen": "Cadastros > Clientes e Fornecedores",
+      "field": "Busca por teste",
+      "observedValue": "Nenhum registro encontrado",
+      "implication": "Resultado limitado à busca/filtros atuais; não inventar documento fiscal para contornar pendência."
+    },
+    {
+      "id": "test-product-search",
+      "screen": "Cadastros > Produtos, filtro produtos ativos",
+      "field": "Busca por teste",
+      "observedValue": "Sua pesquisa não retornou resultados",
+      "implication": "Não comprova inexistência de todo produto de teste; escolher variações exatas ou preparar criação para aprovação."
+    },
+    {
+      "id": "tiktok-product-import",
+      "screen": "Integrações > TikTok Shop > Produtos > Fluxo de Produtos",
+      "field": "Na importação de produtos, ao atualizar um produto, atualizar o Código (SKU)",
+      "observedValue": false,
+      "implication": "Tela trata de importação; não prova publicação automática ausente. Não publicar/vincular catálogo do teste."
     }
   ],
   "pending": [
-    "API-v3 application/extension availability and current permissions",
-    "General event triggers/webhooks and fiscal automation",
-    "Reservation of stock and product auto-publication",
-    "Real buyer/product identities and central IDs of the controlled case"
+    "Approval to install free Gestão de Aplicativos; inspect app configuration and prepare read-only access without creating credentials yet",
+    "Authenticated API-v3 account identity, permissions and rate limits; endpoint-level trigger behavior",
+    "Valid buyer identity and exact product variations; no match for teste in current UI searches",
+    "Fiscal/central IDs, product-publication links and final private payload before approval of any ERP write"
   ],
-  "session": "Expired while opening Loja de extensões; user re-login requested.",
+  "session": "Restored by user; read-only UI inspection resumed successfully.",
   "f1GatePassed": false
 }

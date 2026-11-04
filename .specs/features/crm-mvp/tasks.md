@@ -5,9 +5,10 @@
 Status parcial: schema oficial 3.1/OpenAPI 3.0.0 com hashes e captura
 reproduzível; fixtures sintéticas e 11 testes offline aprovados. PO autorizou
 consultas na conta operacional e preparo do caso controlado para aprovação
-antes de qualquer criação. Gatilhos observados na UI registrados; sessão
-expirou antes da consulta de Aplicativos/gatilhos gerais/reserva. API v3,
-fiscal, precisão e efeitos reais pendentes. Gate F1 aberto.
+antes de qualquer criação. Novo login permitiu completar 36 observações UI:
+automações fiscais/estoque, expedição, reserva e webhooks. Gestão de Aplicativos
+é gratuita e não instalada; aprovação da extensão pendente. API v3, cadastro
+fiscal válido, precisão e efeitos reais pendentes. Gate F1 aberto.
 [Evidência](../../../docs/integrations/olist/capabilities.md) e
 [caso controlado](../../../docs/integrations/olist/controlled-case.md).
 Zero chamadas autenticadas v3, inclusões ou credenciais criadas; T02 aberta.
