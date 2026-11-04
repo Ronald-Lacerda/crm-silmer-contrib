@@ -3,6 +3,46 @@
 Rastreabilidade: INBOX-DELIVERY-01, OPS-INBOX-ACK-01, MSG-02/03, ORC-08,
 INBOX-3 e INT-2. O contrato de reserva e idempotência permanece vigente.
 
+## Resposta humana após confirmar pedido — 04/11/2026
+
+OPS-INBOX-SEND-07 / MSG-02/03, ORC-08 e INT-2. Duas respostas humanas do
+período da tarde falharam no nó `CRM - Reservar envio humano (MVP)`, antes do
+transporte. As consultas individuais encontraram comandos e mensagens
+`outcome_unknown`, `N8N_COMMAND_REMOTE_UNAVAILABLE`, sem ID externo ou evento
+n8n associado. A conversa estava humana e aberta, com Assunto ligado a pedido
+confirmado e nenhum pedido pendente. Não exportar conteúdo, destino ou IDs de
+clientes para a evidência versionada.
+
+O guard legado compara o pedido do Assunto atual ao pedido pendente antes de
+reservar respostas do agente. Ele também alcançava comandos humanos, recusando
+o envio depois da confirmação comercial com `SUBJECT_TARGET_REQUIRED`.
+O erro do webhook era registrado como indisponibilidade remota; o enum também
+cobre HTTP 408, 425, 429 e 5xx, sem comprovar queda de todo o n8n.
+
+A API agora identifica o comando persistido antes desse guard. Somente a
+reserva humana segue para seu fence próprio: autor e conversa correspondentes,
+estado humano aberto, epoch e revisão atuais, mensagem queued, comando
+processing e conteúdo igual ao envelope. Nenhum campo enviado pelo workflow
+concede a exceção. Briefing continua proibido; replay não autoriza novo efeito.
+O guard do agente e o tratamento de falha tardia do preflight de destinatário
+permanecem intactos. Não há migration ou mudança de workflow.
+
+Antes da recuperação autorizada, conferir novamente cada original, sua falha
+anterior ao transporte e ausência de reserva/ID externo. Reconciliar como
+`failed`, sem retry, pelo core `reconcileN8nCommandOutcome`, registrando operador,
+motivo e correlação na auditoria. Concluir a pendência de fila conhecida como
+falha e sua reconciliação na mesma operação, sem apagar nem reescrever
+tentativas. Enviar o conteúdo autorizado como nova operação humana pela API/UI,
+com outra chave idempotente. Nunca marcar o original como enviado nem resetar
+mensagem/comando/job para simular uma primeira tentativa.
+
+Gates: regressão PostgreSQL sintética para pedido confirmado, reserva automática
+recusada, briefing, epoch/conteúdo/autoria inválidos, autorização única e replay;
+validate, E2E/axe, audit e revisão independente. Publicar a API somente após o CI
+com banco. Conferir release, health e cada confirmação do novo envio; `sent`
+não equivale a `delivered` ou `read`. Rollback: republicar a imagem anterior da
+API, preservando histórico e sem repetir mensagens já enviadas.
+
 ## Destinatário não reconhecido — 04/11/2026
 
 OPS-INBOX-SEND-06 / MSG-02/03, ORC-08 e PRV-01. Às 08h20 de Brasília,

@@ -1,5 +1,21 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## OPS-INBOX-SEND-07 — Resposta humana após confirmar pedido (04/11/2026)
+
+MSG-02/03, ORC-08, INBOX-3 e INT-2. A reserva de resposta humana usa o comando
+persistido e seu fence, independentemente de haver pedido pendente. O guard de
+Assunto/Pedido permanece para respostas automáticas. Autoria, conteúdo, epoch,
+revisão, estado e reserva de uso único continuam obrigatórios.
+
+- [x] Isolar o guard comercial da reserva humana autenticada.
+- [x] Cobrir pedido confirmado, autoria/conteúdo/epoch inválidos, briefing,
+      reserva automática e replay com regressão PostgreSQL sintética.
+- [ ] Executar CI com PostgreSQL, gates completos e publicar a API corrigida.
+- [ ] Reconciliar individualmente as duas falhas anteriores à reserva e enviar
+      somente as duas mensagens autorizadas por novas operações humanas.
+
+[Diagnóstico e recuperação](../../../docs/runbooks/inbox-delivery-feedback.md#resposta-humana-após-confirmar-pedido--04112026).
+
 ## UX-FUNC-01 — Componentes com função explícita (04/11/2026)
 
 [Contrato](spec.md#ux-func-01--componentes-com-função-explícita-04112026),

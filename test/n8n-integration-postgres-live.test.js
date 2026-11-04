@@ -3,6 +3,10 @@ import test from 'node:test';
 
 import { Pool } from 'pg';
 import { contactPhoneHash } from '../modules/contacts/src/index.js';
+import {
+  encryptJson,
+  fingerprint,
+} from '../modules/n8n-integration/src/crypto.js';
 
 import { createN8nApiRuntime } from '../apps/api/src/n8n-runtime.js';
 import {
@@ -42,6 +46,213 @@ function assertTestDatabase(url) {
 }
 
 if (connectionString) {
+  test('OPS-INBOX-SEND-07: a fenced human reply survives a confirmed order without relaxing agent targets', async () => {
+    assertTestDatabase(connectionString);
+    const pool = new Pool({ connectionString, max: 4 });
+    const database = {
+      query: pool.query.bind(pool),
+      transaction: (/** @type {(client: any) => Promise<any>} */ work) =>
+        withTransaction(pool, work),
+    };
+    const envelopeKey = Buffer.alloc(32, 86);
+    let sequence = 0;
+    const service = createN8nIntegrationService({
+      clock: () => NOW,
+      idFactory: (kind) => `${kind}-human-confirmed-${++sequence}`,
+      repository: new PostgresN8nIntegrationRepository({
+        database,
+        envelopeKey,
+      }),
+    });
+    /** @param {string} id */
+    const technical = (id) => ({
+      actor: 'AUTOMATION_EXECUTOR',
+      correlationId: `correlation-${id}`,
+      credentialVersion: 'current',
+      executionId: 'human-confirmed-execution',
+      idempotencyKey: id,
+      requestId: `request-${id}`,
+      workflowKey: 'whatsapp-mvp',
+      workflowVersion: 'evolution-human-test-1',
+    });
+    try {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await migrate(pool, { migrations: await loadMigrations() });
+      const context = await service.receiveInbound({
+        channel: 'whatsapp',
+        contact: { wa_id: '5527900000086' },
+        event_id: 'wamid.human-confirmed-inbound',
+        message: {
+          external_id: 'wamid.human-confirmed-inbound',
+          text: 'Mensagem sintética',
+          type: 'text',
+        },
+        metadata: { phone_number_id: 'phone-human-confirmed' },
+        occurred_at: NOW.toISOString(),
+        schema_version: '1.0',
+        technical: technical('human-confirmed-inbound'),
+      });
+      await pool.query(
+        `UPDATE crm.conversations SET automation_state='human',
+           state='em_atendimento' WHERE id=$1`,
+        [context.conversation_id],
+      );
+      await pool.query(
+        `INSERT INTO crm.orders
+           (id,number_sequence,number,conversation_id,contact_id,status,
+            fab_code,ficha_envelope,final_amount_cents,payment_condition,
+            order_date,confirmed_at,confirmed_by,created_by_kind,created_by,
+            created_at,updated_at)
+         VALUES ('order-human-confirmed',1,'01-CRM',$1,$2,'confirmado',
+           'FAB-TEST',$3::jsonb,10000,'pix','2026-09-08',$4,'seller-test',
+           'user','seller-test',$4,$4)`,
+        [
+          context.conversation_id,
+          context.contact_id,
+          JSON.stringify(encryptJson({}, 'order-human-confirmed', envelopeKey)),
+          NOW,
+        ],
+      );
+      await pool.query(
+        `INSERT INTO crm.conversation_subjects
+           (id,conversation_id,contact_id,order_id,kind,position,is_current,
+            selected_source,selected_by,selected_at,created_by,created_by_kind,
+            created_at,updated_at)
+         VALUES ('subject-human-confirmed',$1,$2,'order-human-confirmed',
+           'pedido',1,true,'human','seller-test',$3,'seller-test','human',$3,$3)`,
+        [context.conversation_id, context.contact_id, NOW],
+      );
+      const commandId = 'command-human-confirmed';
+      const payload = {
+        schema_version: '1.0',
+        command_id: commandId,
+        action: 'send_message',
+        conversation_id: context.conversation_id,
+        automation_epoch: context.automation_epoch,
+        source_revision: context.source_revision,
+        message: { type: 'text', text: 'Resposta humana sintética' },
+      };
+      await pool.query(
+        `INSERT INTO crm.messages
+           (id,conversation_id,provider,provider_account_id,command_id,
+            direction,author_kind,author_id,message_type,content_envelope,
+            key_version,status,occurred_at,created_at)
+         SELECT 'message-human-confirmed',id,provider,provider_account_id,$2,
+           'outbound','human','seller-test','text',$3::jsonb,1,'queued',$4,$4
+         FROM crm.conversations WHERE id=$1`,
+        [
+          context.conversation_id,
+          commandId,
+          JSON.stringify(
+            encryptJson(
+              payload.message,
+              'message:message-human-confirmed',
+              envelopeKey,
+            ),
+          ),
+          NOW,
+        ],
+      );
+      await pool.query(
+        `INSERT INTO crm.n8n_commands
+           (command_id,conversation_id,message_id,action,actor_id,actor_kind,
+            automation_epoch,fingerprint,payload_envelope,status,locked_by,
+            locked_until,created_at,updated_at)
+         VALUES ($1,$2,'message-human-confirmed','send_message','seller-test',
+           'human',$3,$4,$5::jsonb,'processing','attempt-human-confirmed',$6,$7,$7)`,
+        [
+          commandId,
+          context.conversation_id,
+          context.automation_epoch,
+          fingerprint(payload),
+          JSON.stringify(
+            encryptJson(payload, `n8n-command:${commandId}`, envelopeKey),
+          ),
+          new Date(NOW.getTime() + 60_000),
+          NOW,
+        ],
+      );
+      /** @param {string} id @param {Record<string, unknown>} [extra] */
+      const reserve = (id, extra = {}) => ({
+        ...payload,
+        event_id: id,
+        event_type: 'message.send.requested',
+        occurred_at: NOW.toISOString(),
+        technical: technical(id),
+        ...extra,
+      });
+      await assert.rejects(
+        service.recordEvent(
+          reserve('agent-ambiguous', { command_id: 'agent-command' }),
+        ),
+        { code: 'SUBJECT_TARGET_REQUIRED' },
+      );
+      await assert.rejects(
+        service.recordEvent(
+          reserve('human-briefing', { briefing_patch: { quantity: 25 } }),
+        ),
+        { code: 'SUBJECT_TARGET_CONFLICT' },
+      );
+      await assert.rejects(
+        service.recordEvent(
+          reserve('human-stale', {
+            automation_epoch: context.automation_epoch + 1,
+          }),
+        ),
+        /fence is stale/u,
+      );
+      await assert.rejects(
+        service.recordEvent(
+          reserve('human-altered', {
+            message: { type: 'text', text: 'Conteúdo alterado' },
+          }),
+        ),
+        { code: 'COMMAND_PAYLOAD_MISMATCH' },
+      );
+      await pool.query(
+        `UPDATE crm.messages SET author_id='another-seller'
+         WHERE id='message-human-confirmed'`,
+      );
+      await assert.rejects(
+        service.recordEvent(reserve('human-forged')),
+        /fence is stale/u,
+      );
+      await pool.query(
+        `UPDATE crm.messages SET author_id='seller-test'
+         WHERE id='message-human-confirmed'`,
+      );
+      const event = reserve('human-authorized');
+      assert.equal((await service.recordEvent(event)).send_authorized, true);
+      assert.equal((await service.recordEvent(event)).send_authorized, false);
+      await assert.rejects(
+        service.recordEvent(reserve('human-second-reservation')),
+        /fence is stale/u,
+      );
+      const persisted = (
+        await pool.query(
+          `SELECT message.status,conversation.claimed_revision,
+             conversation.briefing_version,
+             (SELECT count(*)::integer FROM crm.n8n_events
+              WHERE message_id=message.id AND event_type='message.send.requested') AS reservations
+           FROM crm.messages message JOIN crm.conversations conversation
+             ON conversation.id=message.conversation_id
+           WHERE message.id='message-human-confirmed'`,
+        )
+      ).rows[0];
+      assert.deepEqual(persisted, {
+        status: 'sending',
+        claimed_revision: '0',
+        briefing_version: '0',
+        reservations: 1,
+      });
+    } finally {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await pool.end();
+    }
+  });
+
   test('OA-T03/PCX-05: fresh inbound restores an archived human conversation, while replay and failed inserts preserve its archive', async () => {
     assertTestDatabase(connectionString);
     const pool = new Pool({ connectionString, max: 4 });

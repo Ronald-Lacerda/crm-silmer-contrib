@@ -848,14 +848,21 @@ export class PostgresN8nIntegrationRepository {
       const explicitTarget = eventInput.subjectId
         ? await this.#validateExplicitTarget(client, conversation, eventInput)
         : null;
+      const panelCommand =
+        eventInput.eventType === 'message.send.requested'
+          ? await selectPanelCommand(client, eventInput.commandId)
+          : null;
       // CP-14/CP-18: the legacy workflow only knows the conversation's one
       // pending order. A selected different subject makes that target unsafe.
       // Stop before reserving a reply, merging briefing or opening an order.
       // A handoff without a patch or order request remains a safe escape.
+      // OPS-INBOX-SEND-07: human replies are bound to their persisted command,
+      // not the agent's pending-order target. #reserveSend still validates its
+      // author, payload and current fence before authorizing any effect.
       if (
         conversation &&
         !explicitTarget &&
-        (eventInput.eventType === 'message.send.requested' ||
+        ((eventInput.eventType === 'message.send.requested' && !panelCommand) ||
           (eventInput.eventType === 'handoff.requested' &&
             (eventInput.briefingPatch || eventInput.openOrder === true)))
       ) {
@@ -910,6 +917,7 @@ export class PostgresN8nIntegrationRepository {
           conversation,
           processedAt,
           explicitTarget,
+          panelCommand,
         );
         messageId = reservation.messageId;
         // The snapshot was read FOR UPDATE before the fence moved
@@ -2205,7 +2213,7 @@ export class PostgresN8nIntegrationRepository {
     return message.id;
   }
 
-  /** @param {Queryable} client @param {any} input @param {any} runtime @param {any} conversation @param {string} now */
+  /** @param {Queryable} client @param {any} input @param {any} runtime @param {any} conversation @param {string} now @param {any} [subject] @param {any} [panelCommand] */
   async #reserveSend(
     client,
     input,
@@ -2213,11 +2221,11 @@ export class PostgresN8nIntegrationRepository {
     conversation,
     now,
     subject = null,
+    panelCommand = null,
   ) {
     if (!conversation || !input.commandId || !input.message) {
       throw new N8nConflictError('Send reservation is incomplete');
     }
-    const panelCommand = await selectPanelCommand(client, input.commandId);
     if (panelCommand) {
       if (input.briefingPatch) {
         throw new N8nConflictError(
