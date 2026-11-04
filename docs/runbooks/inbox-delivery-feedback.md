@@ -43,6 +43,45 @@ com banco. Conferir release, health e cada confirmação do novo envio; `sent`
 não equivale a `delivered` ou `read`. Rollback: republicar a imagem anterior da
 API, preservando histórico e sem repetir mensagens já enviadas.
 
+### Verificação operacional — OPS-INBOX-SEND-07V
+
+A [PR 287](https://github.com/romulosutil/crm-silmer/pull/287) foi integrada por
+rebase no commit `bb3472177046cd2d330787beb0d2e8032babbf0b`. O
+[CI 715](https://github.com/romulosutil/crm-silmer/actions/runs/41885684976)
+aprovou qualidade, PostgreSQL real sintético, E2E/axe e as duas imagens com
+scanner. O gate local passou com 1.707 testes e dez skips; o E2E teve 493
+aprovados, sete skips e um timeout de áudio preexistente que passou isolado com
+um worker. Auditoria local sem high/critical, sem mudança de dependências.
+
+A implantação da API terminou às 18:41:44 UTC (15:41 de Brasília), com imagem
+`sha256:3e2c3f2f1f7f588d87130bd1b8b7c40db9efd58e9ab0af77350d865b27d36c09`.
+O container novo ficou saudável e o anterior saiu da rotação; live e readiness
+retornaram HTTP 200. As tentativas anteriores de deploy interrompidas foram
+conferidas antes da nova solicitação; não se presumiu sucesso pelo POST do
+painel. Worker e edge mantiveram a versão compatível anterior, sem necessidade
+de mudança para esse patch da API.
+
+O plano privado de recuperação validou exatamente dois registros, nenhum
+evento/reserva, tentativa de entrega ou ID externo. A aplicação usou o core de
+reconciliação em uma única transação: mensagens/comandos `failed`, retry
+desabilitado, jobs `dead_letter`, reconciliações resolvidas e uma auditoria por
+comando. A consulta posterior confirmou esses estados e preservação do
+histórico; nenhum envio foi executado pelo procedimento de reconciliação.
+
+As duas novas operações humanas apareceram na conversa às 15:43 e 15:44. Às
+15:46 houve resposta natural do cliente à pergunta recuperada. A atribuição
+original foi restaurada pela ação auditada de transferência da interface após
+o envio administrativo. Não houve replay dos comandos antigos ou retorno ao
+agente.
+
+As duas conversas adicionais fornecidas para diagnóstico tinham três
+tentativas da manhã com `message.send.requested`, `message.send.unknown` e
+`EVOLUTION_SEND_OUTCOME_UNKNOWN`. Elas pertencem à falha de transporte
+documentada abaixo, não ao bloqueio anterior à reserva; seus resultados foram
+preservados. O export privado atual do principal confirmou 140 nós, versão
+ativa igual à publicada e preflight de destinatário presente. Nenhum workflow
+foi alterado ou reexecutado nesta recuperação.
+
 ## Destinatário não reconhecido — 04/11/2026
 
 OPS-INBOX-SEND-06 / MSG-02/03, ORC-08 e PRV-01. Às 08h20 de Brasília,

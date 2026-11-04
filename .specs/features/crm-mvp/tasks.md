@@ -10,11 +10,18 @@ revisão, estado e reserva de uso único continuam obrigatórios.
 - [x] Isolar o guard comercial da reserva humana autenticada.
 - [x] Cobrir pedido confirmado, autoria/conteúdo/epoch inválidos, briefing,
       reserva automática e replay com regressão PostgreSQL sintética.
-- [ ] Executar CI com PostgreSQL, gates completos e publicar a API corrigida.
-- [ ] Reconciliar individualmente as duas falhas anteriores à reserva e enviar
+- [x] Executar CI com PostgreSQL, gates completos e publicar a API corrigida.
+- [x] Reconciliar individualmente as duas falhas anteriores à reserva e enviar
       somente as duas mensagens autorizadas por novas operações humanas.
 
 [Diagnóstico e recuperação](../../../docs/runbooks/inbox-delivery-feedback.md#resposta-humana-após-confirmar-pedido--04112026).
+
+### OPS-INBOX-SEND-07V — Evidência operacional
+
+- [x] Registrar CI, imagem da API, health/readiness, reconciliação auditada,
+      duas novas mensagens observadas e resposta natural do cliente, preservando
+      a responsável original. As três tentativas das duas conversas adicionais
+      têm reserva e incerteza no transporte; não integram essa recuperação.
 
 ## UX-FUNC-01 — Componentes com função explícita (04/11/2026)
 
