@@ -5,13 +5,14 @@ coordenado pelo Tech Lead (Codex nesta execução). Consulta em 04/11/2026.
 [Revisão T01](contract-review.md) · [RFC 044](../../rfc/044-geracao-assistida-de-pedidos-no-olist.md)
 · [ADR 057](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md).
 
-**Situação: prova documental/offline entregue; T02 e gate F1 abertos.**
-O PO autorizou consultas na conta operacional atual e a preparação de caso
-controlado, com aprovação anterior a qualquer criação. Inspeção autenticada
-pela UI já realizada; zero chamadas autenticadas à API v3, cadastros/vendas, criação
-de credenciais ou alterações de parâmetros comerciais. Somente a extensão
-gratuita Gestão de Aplicativos foi instalada com aprovação posterior do PO. Gatilhos e pendências no
-[caso controlado](controlled-case.md). T02/F1 continuam abertos.
+**Situação: contrato/offline e primeira prova autenticada de leitura entregues;
+T02 e gate F1 abertos.** O PO aprovou o aplicativo privado somente leitura e
+a conexão temporária. Os oito GET retornaram 200 e a conta coincidiu; callback
+local aceito e limite de leitura observado de 30/minuto. Nenhum cadastro/venda
+foi criado e nenhum parâmetro comercial foi alterado.
+[Evidência real](evidence/read-only-live-result.json) ·
+[Configuração e encerramento do coletor](read-only-access.md) ·
+[Gatilhos e caso controlado](controlled-case.md).
 
 ## Schema e reprodução
 
@@ -67,7 +68,7 @@ python docs/integrations/olist/capture_schema.py
 ## Matriz de capacidades
 
 “Documentado” significa propriedade/operação no schema ou texto oficial;
-“aberto” exige observação na conta. Nenhum item abaixo é certificado live.
+“aberto” exige observação na conta. As leituras têm evidência real limitada; inclusões e dinheiro permanecem abertos.
 
 | Capacidade                    | Evidência pública e observação offline                                                                                                                                                                                              | Situação / prova restante                                                                                                    |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -80,9 +81,9 @@ python docs/integrations/olist/capture_schema.py
 | Venda e referência            | [Criar pedido](https://api-docs.erp.olist.com/api-reference/pedidos/criar-pedido): itens com produto.id, quantidade e valorUnitario; ecommerce.numeroPedidoEcommerce; retorno id/numeroPedido                                       | Provar referência sem ecommerce.id, ou ID central requerido; nunca reutilizar numeroOrdemCompra                              |
 | Reconciliação da venda        | [Listar pedidos](https://api-docs.erp.olist.com/api-reference/pedidos/listar-pedidos): filtro numeroPedidoEcommerce e limit/offset; detalhe por ID                                                                                  | Provar roundtrip/filtro/limites e duplicatas; não há promessa de unicidade ou idempotência na prova                          |
 | Dinheiro por linha            | Item request/response usa number/float sem multipleOf/escala. Resposta tem produto/quantidade/valorUnitario/infoAdicional; totais só no pedido                                                                                      | Escala, arredondamento, subtotal independente e agregação de produto repetido abertos; total igual não basta                 |
-| Conta e OAuth                 | [Autenticação](https://api-docs.erp.olist.com/documentacao/comecando/autenticacao) documenta código/refresh; `/info` permite conferir empresa. Prazo documental 4h/1d não substitui expires retornado                               | Confirmar identidade protegida, reconexão, permissões/PKCE e rotação; sem persistir token nesta prova                        |
+| Conta e OAuth                 | [Autenticação](https://api-docs.erp.olist.com/documentacao/comecando/autenticacao) documenta código/refresh; `/info` permite conferir empresa. Prazo documental 4h/1d não substitui expires retornado                               | Conta confirmada e código OAuth/loopback funcionaram; reconexão, PKCE, refresh e rotação não provados                        |
 | Permissões                    | [Aplicativo](https://api-docs.erp.olist.com/documentacao/comecando/criando-um-aplicativo): mínimo por módulo e permissões do usuário ERP; mudança pode exigir nova autorização                                                      | Testar leituras/criações de Contatos/Produtos/Pedidos/Info; sem escopos fiscais/estoque/baixa/exclusão                       |
-| Quotas                        | [Limites](https://api-docs.erp.olist.com/documentacao/comecando/limites-de-consulta): leitura/escrita por conta compartilhadas, headers X-RateLimit-*                                                                               | Valores efetivos e concorrência por conta abertos; números de exemplo não são quota da Silmer                                |
+| Quotas                        | [Limites](https://api-docs.erp.olist.com/documentacao/comecando/limites-de-consulta): leitura/escrita por conta compartilhadas, headers X-RateLimit-*                                                                               | Leitura: header 30/minuto observado nos oito GET. Escrita e concorrência por conta abertas                                   |
 | Gatilhos/efeitos              | [Gestão de aplicativos](https://ajuda.olist.com/hubs-e-plataformas-via-api/aplicativos-api-v3-configuracoes-e-utilizacao) lista API de Gatilhos e permissões por módulo                                                             | Inspecionar configuração efetiva e conferir ausência de nota, estoque, contas, cobrança e mensagens automáticas              |
 | Link de venda                 | Resposta de criação tem id/numeroPedido, sem link de impressão garantido nesse recorte                                                                                                                                              | Mostrar número; não gerar doc.view, URL compartilhável ou adivinhar hash                                                     |
 
@@ -170,9 +171,10 @@ isola validade de notas, sem comprovar isolamento de cadastros/pedidos/contas.
 
 A preferência inicial por conta dedicada foi revista pelo PO em 04/11/2026:
 **usar a conta operacional atual para consultas e preparar o caso controlado
-para aprovação antes de qualquer criação**. Não foi autorizada criação real,
-credencial/aplicativo ou alteração de parâmetros nesta etapa. A conta de testes
-não foi criada. O plano abaixo é a matriz original; o escopo atual menor,
+para aprovação antes de qualquer criação**. Posteriormente aprovou explicitamente criar e
+conectar o aplicativo somente leitura. Essa configuração foi executada; nenhuma
+criação de cadastro/venda ou alteração de parâmetros comerciais foi autorizada.
+A conta de testes não foi criada. O plano abaixo é a matriz original; o escopo atual menor,
 gatilhos observados e pendências estão no [caso controlado](controlled-case.md).
 
 Preparação mínima do alvo, sem segredo/documento real no repositório:
@@ -213,7 +215,7 @@ Matriz inicial de chamadas a concretizar após o alvo:
 | Rejeições/limites              | Somente os payloads negativos revisados/autorizados para o alvo | Rejeição esperada pode criar efeito se schema aceitar; sem execução automática                    |
 
 Esse orçamento é teto de planejamento, não autorização de execução. Revalidar
-quota e ambiente por caso; nenhum script desta entrega executa POST/autenticação.
+quota e ambiente por caso; o coletor somente leitura permite exclusivamente o POST OAuth e os oito GET fixos.
 Se faltar campo central/fiscal, parar antes da inclusão e informar pendência.
 Na conta operacional, a referência de teste não suprime efeitos ou métricas.
 Apresentar o caso final com identidades validadas e efeitos/custos antes de
@@ -223,11 +225,15 @@ solicitar aprovação. Nenhum orçamento da matriz original autoriza execução.
 
 - T01: concluída e publicada no commit `bb453651`.
 - T02: captura/schema, fixtures e 11 testes offline concluídos; inspeção UI
-  da conta operacional e caso mínimo proposto em documento próprio. API v3,
-  gatilhos restantes, fiscal, precisão/linhas e efeitos reais pendentes. F1 aberto.
-- Extensão Gestão de Aplicativos instalada gratuitamente após aprovação do PO;
-  tela inspecionada sem aplicativo/credencial criado. [Acesso de leitura proposto](read-only-access.md)
-  e coletor local preparado, com 17 testes offline; conexão real pendente de
-  aprovação. Nenhum cadastro/venda criado; não publicar senha/token/IDs reais.
-- Sem migração, runtime, deploy, habilitação de operadora ou piloto. Próximo
-  desbloqueio: prova real T02; T03 depende do gate F1.
+  e oito GET reais de leitura concluídos. Aplicativo de leitura criado com
+  aprovação específica, OAuth/loopback aceito, conta confirmada e quota de
+  leitura observada de 30/minuto. Coletor parado, tokens não persistidos.
+- Leituras com busca teste: zero contatos/produtos; zero pedidos da referência.
+  Isso não prova unicidade/filtro exato nem inexistência global. Sete vendedores,
+  um depósito e dez itens em cada primeira página de pagamento/recebimento.
+- Cadastro fiscal aceito, criação automática de cliente/pai/variações,
+  referências em roundtrip, escala/arredondamento por linha, rejeições e
+  recuperação continuam pendentes. Nenhum cadastro/venda criado; F1 aberto.
+- Nenhuma migração, runtime, deploy, habilitação de operadora ou piloto.
+  T03 depende da prova real T02 e do gate F1; aprovação de leitura não libera
+  ampliação de permissões ou escrita controlada.

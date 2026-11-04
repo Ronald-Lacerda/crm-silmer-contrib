@@ -7,20 +7,33 @@ Dono: Tech Lead/Integrações (Codex nesta execução). 04/11/2026.
 
 ## Entrega e autorização
 
-O PO aprovou instalar somente a extensão gratuita Gestão de Aplicativos.
-Instalação concluída e confirmada por INSTALADO. Aplicativos está disponível
-em Configurações > geral; a lista estava vazia. O formulário novo foi apenas
-aberto para inspeção, sem preenchimento ou salvamento. Informa explicitamente
-que as chaves são geradas depois de definir permissões e salvar.
+O PO aprovou instalar a extensão gratuita Gestão de Aplicativos e, depois,
+autorizou explicitamente: **“Autorizo criar e conectar esse aplicativo de
+leitura”**. O aplicativo foi salvo com os sete módulos e somente Leitura,
+conectado pelo OAuth oficial e executou os oito GET definidos abaixo. Todos
+retornaram HTTP 200, após /info confirmar a conta esperada em memória.
 
-A próxima aprovação proposta é **criar um aplicativo privado somente leitura
-e conectá-lo a um coletor local temporário, executando até oito consultas**.
-Isso concede acesso novo aos dados dos módulos abaixo. Nenhuma credencial,
-permissão ou consulta autenticada v3 foi criada/executada nesta entrega.
+[Evidência sanitizada real](evidence/read-only-live-result.json), capturada em
+04/11/2026 às 22:52:36 UTC. O callback HTTP de loopback foi aceito. Os headers
+informaram limite de leitura de **30/minuto**, com saldo de 29 a 22 durante
+a sequência; isso não certifica quota de escrita nem concorrência da conta.
+As duas listas de pagamento retornaram dez itens da primeira página, não uma
+contagem total da conta.
 
-## Proposta concreta para aprovação
+O coletor foi encerrado após a prova. Tokens não foram persistidos; o envelope
+cifrado de entrada foi consumido/apagado e as chaves ficaram somente em memória
+durante a execução. O aplicativo e suas credenciais continuam cadastrados no
+ERP, **somente leitura**; não foram revogados, rotacionados ou ampliados.
+O Client Secret foi ocultado novamente na interface. Capturas sem segredo
+ficam em var/olist-phase1/ no checkout principal, fora do Git.
 
-| Campo                  | Valor proposto                                                                                                                           |
+Nenhum cliente, produto, variação ou pedido foi criado. A autorização cobre
+somente esse acesso de leitura, sem ampliar permissões ou liberar o caso
+controlado de escrita. T02 e o gate F1 permanecem abertos.
+
+## Configuração aprovada e executada
+
+| Campo                  | Valor aprovado                                                                                                                           |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | Nome                   | CRM Silmer - prova F1 - somente leitura                                                                                                  |
 | Conta                  | A conta operacional atual, conferida pelo documento da empresa em memória antes de consultar outros módulos                              |
@@ -33,7 +46,7 @@ permissão ou consulta autenticada v3 foi criada/executada nesta entrega.
 | Resultado público      | Status HTTP, contagem de itens, limites de uso e conta coincidente; sem CPF/CNPJ, nomes, IDs, payload ou token                           |
 | Escritas ERP           | Nenhuma; incluir/editar/excluir desmarcados em todos os módulos                                                                          |
 
-Permissões propostas na tela real, que separa Leitura de Incluir e editar/Excluir:
+Permissões conferidas na tela real, que separa Leitura de Incluir e editar/Excluir:
 
 | Módulo               | Leitura | Incluir/editar | Excluir      | Necessidade                                                                       |
 | -------------------- | ------- | -------------- | ------------ | --------------------------------------------------------------------------------- |
@@ -47,8 +60,8 @@ Permissões propostas na tela real, que separa Leitura de Incluir e editar/Exclu
 
 Todos os demais módulos ficam desmarcados, incluindo Notas Fiscais, Estoque,
 Expedição, Contas Receber/Pagar, Caixa, Extrato bancário, Usuários e Anúncios.
-Não usar Marcar todos. Gatilhos tem leitura na UI, mas o snapshot público
-OpenAPI 3.1 consultado não forneceu rota/operationId correspondente; não
+Não usar Marcar todos. Gatilhos tem leitura na UI, mas o snapshot público da API 3.1
+(OpenAPI 3.0.0) consultado não forneceu rota/operationId correspondente; não
 inventar URL nem pedir escopo sem método comprovado. A evidência dos gatilhos
 permanece na inspeção autenticada da UI até esclarecer o contrato dessa rota.
 
@@ -56,7 +69,7 @@ Esta aprovação não abrange comprador fictício/CPF gerado, novo produto,
 variação ou pedido, alteração de parâmetros, envio de mensagens, fiscal,
 estoque, cobrança, publicação, upgrade ou contratação.
 
-## Coletor preparado, ainda sem conexão real
+## Coletor e consultas executadas
 
 [read-only-probe.mjs](read-only-probe.mjs) usa somente módulos nativos Node,
 sem nova dependência, serviço de produção ou mudança no runtime do CRM.
@@ -88,12 +101,11 @@ no-referrer e CSP restritiva. HTTP externo não segue redirects, tem timeout
 de 15s e limites de corpo. Erro, quota baixa ou expiração interrompem a prova,
 sem retry; rotas de criação ERP são recusadas antes da rede.
 
-O uso de callback HTTP de loopback pelo provedor ainda precisa ser comprovado
-na configuração/conexão real. Se o Olist rejeitar esse redirecionamento,
-interromper; não publicar callback em host externo nem alterar produção por
-conta própria. Não alegar prova de PKCE, refresh, escrita ou idempotência.
+O provedor aceitou o callback HTTP de loopback nesta execução. Não foi
+necessário publicar callback externo ou alterar produção. Esta prova não
+comprova PKCE, refresh, escrita ou idempotência.
 
-## Operação após aprovação, não executada com dados reais
+## Procedimento utilizado e repetição futura
 
 1. Iniciar o coletor com Node 24.20.0, em diretório privado ignorado pelo Git:
 
@@ -137,7 +149,9 @@ em [evidência offline do coletor](evidence/read-only-probe-result.json).
 fnm exec --using 24.20.0 -- node --test docs/integrations/olist/read-only-probe.test.mjs
 ```
 
-Checks do coletor/documentos não certificam operação real ou completude de F1.
-Não houve mudança em API/worker/UI/migrações do CRM; este utilitário de prova
-fica isolado em docs/integrations/olist. Gates completos da aplicação/deploy
-continuam com suas tarefas. Próximo passo requer aprovação concreta acima.
+Os 17 testes simulados certificam o coletor; a evidência real acima certifica
+somente as oito leituras e a conexão descrita. Não certificam escrita ou
+completude de F1. Não houve mudança em API/worker/UI/migrações do CRM; este
+utilitário fica isolado em docs/integrations/olist. A próxima etapa exige caso
+controlado revisável e autorização específica antes de ampliar acesso/criar
+registros. Não repetir automaticamente as consultas por este documento.

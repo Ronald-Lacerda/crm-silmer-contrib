@@ -11,12 +11,14 @@ Dono: Tech Lead/Integrações (Codex nesta execução).
 O PO confirmou que a conta aberta no Chrome é operacional e decidiu usá-la
 para consultas, conferência de gatilhos e preparação de caso controlado.
 Qualquer criação depende de aprovação posterior. A preferência anterior por
-conta dedicada não é mais a condição de ambiente. Não há autorização nesta
-etapa para criar aplicativo/credencial, cliente, produto, variação ou pedido,
-alterar parâmetros, contratar serviço, emitir documento ou enviar mensagem.
+conta dedicada não é mais a condição de ambiente. Posteriormente o PO aprovou explicitamente criar e conectar o aplicativo
+privado somente leitura. Essa aprovação foi executada; não abrange cliente,
+produto, variação, pedido, ampliação de acesso, parâmetros comerciais, serviço
+pago, documento ou mensagem.
 
-Inspeção autenticada pela interface, sem chamar a API v3, salvar parâmetros
-ou alterar registros ERP. Os valores abaixo foram lidos dos controles
+A inspeção inicial abaixo foi feita pela interface, sem chamar a API v3,
+salvar parâmetros ou alterar registros ERP. Depois, o aplicativo autorizado
+executou os oito GET da seção seguinte. Os valores abaixo foram lidos dos controles
 selecionados; não são inferência da documentação pública ou teste de efeito.
 
 ## Gatilhos observados
@@ -45,114 +47,137 @@ selecionados; não são inferência da documentação pública ou teste de efeit
 
 Após novo login feito pelo PO, a inspeção prosseguiu e confirmou:
 
-| Consulta adicional                     | Resultado observado                                         | Consequência                                                                    |
-| -------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Gestão de Aplicativos                  | Instalada GRÁTIS após aprovação do PO; confirmado INSTALADO | Aplicativos disponível; nenhum aplicativo/credencial criado                     |
-| Token API                              | Consta INSTALADO                                            | Não foi aberto/copiado segredo; não substitui prova de acesso v3                |
-| Reserva de estoque                     | Não instalada; disponível GRÁTIS                            | Nenhuma instalação; comportamento de efeitos externos ainda sujeito à prova     |
-| Webhooks                               | Não instalada; catálogo exige UPGRADE                       | Não contratar upgrade; isso não prova ausência de toda integração externa       |
-| Painel de Automações: saída de estoque | Desabilitada                                                | Confirma parâmetro manual observado                                             |
-| Painel de Automações: emitir NF-e      | Desabilitada                                                | Sem geração automática nesse painel; comandos fiscais continuam fora do teste   |
-| Painel de Automações: expedição        | Habilitada ao salvar nota fiscal                            | Não gerar/salvar nota; nenhum comando de expedição/etiqueta                     |
-| Busca de comprador por teste           | Nenhum registro encontrado                                  | Limitado aos filtros atuais; não selecionar comprador real arbitrário           |
-| Busca de produto ativo por teste       | Nenhum resultado                                            | Ainda faltam duas variações exatas para congelar o caso                         |
-| TikTok: fluxo de produtos              | Importação não atualiza SKU; imagens como anexos            | Não trata de garantia de ausência de publicação; não publicar/vincular produtos |
+| Consulta adicional                     | Resultado observado                                         | Consequência                                                                               |
+| -------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Gestão de Aplicativos                  | Instalada GRÁTIS após aprovação do PO; confirmado INSTALADO | Aplicativos disponível; aplicativo somente leitura criado depois, com aprovação específica |
+| Token API                              | Consta INSTALADO                                            | Não foi aberto/copiado segredo; não substitui prova de acesso v3                           |
+| Reserva de estoque                     | Não instalada; disponível GRÁTIS                            | Nenhuma instalação; comportamento de efeitos externos ainda sujeito à prova                |
+| Webhooks                               | Não instalada; catálogo exige UPGRADE                       | Não contratar upgrade; isso não prova ausência de toda integração externa                  |
+| Painel de Automações: saída de estoque | Desabilitada                                                | Confirma parâmetro manual observado                                                        |
+| Painel de Automações: emitir NF-e      | Desabilitada                                                | Sem geração automática nesse painel; comandos fiscais continuam fora do teste              |
+| Painel de Automações: expedição        | Habilitada ao salvar nota fiscal                            | Não gerar/salvar nota; nenhum comando de expedição/etiqueta                                |
+| Busca de comprador por teste           | Nenhum registro encontrado                                  | Limitado aos filtros atuais; não selecionar comprador real arbitrário                      |
+| Busca de produto ativo por teste       | Nenhum resultado                                            | Ainda faltam duas variações exatas para congelar o caso                                    |
+| TikTok: fluxo de produtos              | Importação não atualiza SKU; imagens como anexos            | Não trata de garantia de ausência de publicação; não publicar/vincular produtos            |
 
 A busca de configurações por gatilho não encontrou item; o painel consolidado
 foi localizado pela navegação de Vendas. O resultado negativo da busca não foi
 usado como prova de ausência de gatilhos. São 36 observações sanitizadas no
-JSON; nenhum parâmetro foi salvo e nenhuma chamada autenticada v3 foi feita.
+JSON inicial; nenhum parâmetro comercial foi salvo. Oito GET autenticados
+v3 foram executados depois, conforme evidência real abaixo.
 
-## Extensão instalada e próxima aprovação
+## Acesso somente leitura executado
 
-O PO aprovou a instalação gratuita com prossiga após a solicitação específica.
-A extensão Gestão de Aplicativos foi instalada, com GRÁTIS e depois INSTALADO
-confirmados na tela. Não houve cobrança/upgrade, mudança de gatilho ou criação
-de cadastro/venda. A tela Aplicativos está acessível e a lista estava vazia.
-O formulário novo foi inspecionado, sem preencher ou salvar: chaves só são
-geradas após definir permissões e salvar.
+A extensão Gestão de Aplicativos foi instalada gratuitamente após aprovação.
+O PO depois autorizou explicitamente criar e conectar o aplicativo privado
+**CRM Silmer - prova F1 - somente leitura**, com callback local e sete módulos
+somente Leitura. Nenhum Incluir/editar/Excluir foi habilitado.
 
-Próxima proposta: [aplicativo privado somente leitura e coletor temporário](read-only-access.md),
-com nome, callback local, sete módulos de leitura e oito GET fixos definidos.
-O coletor foi preparado e testado offline, sem conectar à conta real. Essa
-criação/conexão ainda não foi aprovada. Não há novo app ou credencial remoto.
-A captura da instalação está localmente em
-`var/olist-phase1/gestao-aplicativos-instalada.jpg` no checkout principal,
-fora do Git. A captura anterior documenta a tela antes de instalar.
+[Oito GET reais](evidence/read-only-live-result.json) retornaram 200:
+conta confirmada por /info; zero contatos/produtos com teste; zero pedidos da
+referência proposta; sete vendedores; um depósito; dez itens na primeira página
+de cada forma de pagamento/recebimento. A quota de leitura observada foi de
+30/minuto. Contagens de página não são totais; zero não prova unicidade nem
+autoriza repetir POST incerto. O OAuth aceitou o callback HTTP de loopback.
 
-## Caso proposto para revisão — não liberado para execução
+O coletor foi encerrado, sem persistir tokens. O aplicativo permanece cadastrado
+somente leitura; o segredo foi ocultado novamente na UI. Capturas locais sem
+segredo em var/olist-phase1/, fora do Git.
+[Configuração e limites da prova](read-only-access.md).
 
-Começar pela menor prova, usando **um comprador válido já existente** e
-**duas variações já existentes**, escolhidos em conferência privada com o PO.
-Não usar cliente real arbitrário, documento fictício ou o caso privado já
-lançado como destino de uma nova venda. Essa etapa prova venda; não comprova
-criação automática de cliente/produto/variação exigida para fechar F1.
+## Seleção do caso pela interface
 
-| Campo / limite       | Proposta                                                                                                                                          |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Referência exclusiva | `CRM-F1-20261104-C01`, após consulta que confirme ausência e prova de filtro; zero após incerteza não autoriza repetir                            |
-| Comprador            | Existente, válido, autorizado pelo PO para o teste; ID/documento ficam somente na evidência privada                                               |
-| Produtos             | Duas variações existentes validadas, com grade e identidade distintas; sem editar preço/cadastro/estoque de catálogo                              |
-| Linhas               | M: 1 unidade, subtotal R$ 1,00; G: 1 unidade, subtotal R$ 2,00; total de produtos R$ 3,00                                                         |
-| Dinheiro             | Preço da venda somente, unitários R$ 1,00/R$ 2,00; sem frete/desconto/outras despesas inventados; provar tributos e total final antes de executar |
-| Situação             | Em aberto, sem aprovar/enviar/faturar; confirmar código aceito no contrato e parâmetros do alvo                                                   |
-| Origem/referência    | Referência em numeroPedidoEcommerce; nenhum ID Shopee/TikTok ou ordem de compra reaproveitada; suporte sem ecommerce.id ainda pendente            |
-| Escritas propostas   | No máximo 1 POST pedido nesta etapa; zero cliente/produto/variação/credencial/configuração                                                        |
-| Leituras propostas   | Até 30 GET v3 por execução autorizada, limit até 100, páginas limitadas; respeitar quota real compartilhada                                       |
-| Operações excluídas  | Fiscal, estoque/balanço, contas/baixa/estorno, cobrança, expedição, publicação, mensagens, atualização de cadastro e exclusão/cancelamento        |
-| Resultado incerto    | Interromper; consultar por ID/referência e preservar evidência, sem retry criador                                                                 |
-| Retenção             | Registro real permanecerá no ERP; classificação/filtro e prazo de retenção a combinar, sem prometer exclusão de métricas                          |
+O PO escolheu usar a própria Silmer. A busca por fantasia encontrou um cadastro
+SILMER com CNPJ estruturalmente válido, IE e endereço preenchidos na UI. Seu
+documento **difere** da empresa configurada na conta; a confirmação do PO sobre
+qual pessoa jurídica usar permanece pendente. A busca por nome não substitui
+a identidade fiscal: a seleção final exige GET por documento/ID, em canal
+privado, sem atualizar o cadastro existente.
 
-O valor baixo reduz a contaminação monetária, mas não torna a venda fictícia:
-pode aparecer em relatórios, consumir numeração, gerar histórico e disparar
-qualquer automação ainda não inspecionada. Se não houver isolamento verificável
-dos gatilhos, a criação permanece bloqueada, mesmo após aprovação desse valor.
-Não alterar configuração global da operação para viabilizar a prova.
+Uma tentativa de busca pelo documento foi mascarada na leitura protegida do
+navegador e foi descartada como evidência de ausência. A busca subsequente pelo
+nome exibiu o cadastro acima. Não alegar que o comprador está ausente.
 
-## Pendências para tornar a aprovação executável
+Foi localizado um pai de camisa PV com oito variações, grade Tamanho,
+incluindo M/G/GG com SKUs distintos. A UI mostra unidade, origem e NCM; os
+valores ficam na conferência privada. M/G são candidatas para a primeira venda,
+sem editar preço, cadastro ou saldo. Essa leitura não prova ainda o vínculo,
+filtro de SKU ou fiscal aceito pela API.
 
-1. Aprovar a [proposta exata de acesso somente leitura](read-only-access.md)
-   antes de criar aplicativo ou credenciais. A extensão já foi instalada com
-   autorização. Conferir conta, permissões e quotas pela API; a UI não
-   substitui prova autenticada do contrato v3. Endpoint de Gatilhos não foi
-   localizado no snapshot público; não inventar rota/escopo.
-2. Conferir comprador/variações e vendedor/natureza/depósito/pagamento no alvo,
-   mantendo IDs/documentos fora do Git. Confirmar que o PO pode autorizar o
-   uso dessas identidades; não selecionar por nome parecido.
-3. Confirmar referência independente do marketplace, composição tributária,
-   ausência de efeito financeiro/estoque/notificação e impacto em relatórios.
-4. Apresentar o payload final em visão privada, com valor/contagem/IDs
-   selecionados, plano de leitura/retencão e efeitos concretos; só então pedir
-   aprovação do POST único. Aprovação de consulta não autoriza essa criação.
+## Caso C01 preparado — ainda sem autorização de escrita
 
-## Comprador fictício e CPF gerado
+Usar o comprador SILMER após confirmação da pessoa jurídica pelo PO e as
+variações M/G do pai de camisa PV conferido. IDs, documentos e SKUs reais ficam
+somente na evidência privada. Não criar cliente/produto para viabilizar C01.
 
-O PO sugeriu criar um fictício e usar gerador de CPF se não houvesse cadastro
-para reutilizar. Nenhum CPF foi gerado ou enviado e nenhum comprador foi criado.
-Número com dígitos verificadores válidos não comprova identidade e pode coincidir
-com titular real; na conta operacional, a proposta permanece pendente de dados
-apropriados para teste e de aprovação do caso completo.
+| Campo / limite         | Proposta concreta                                                                                                                                                                   |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Referência             | CRM-F1-20261104-C01; consultar novamente antes da escrita; não tratar a referência como chave única                                                                                 |
+| Comprador              | Cadastro existente confirmado pelo PO e conferido por documento/ID; nunca por nome sozinho                                                                                          |
+| Linhas                 | M: quantidade 1, valorUnitario 1,00; G: quantidade 1, valorUnitario 2,00; subtotais 1,00 e 2,00; total 3,00                                                                         |
+| Situação               | situacao 0, Aberta, conforme enum oficial; nenhuma transição posterior                                                                                                              |
+| Data                   | Dia de São Paulo congelado na execução aprovada; não inventar data de entrega                                                                                                       |
+| Referência API         | ecommerce.numeroPedidoEcommerce; omitir ecommerce.id, sem vincular marketplace; aceitação ainda a provar                                                                            |
+| Campos omitidos        | Pagamento/parcelas/pagamentosIntegrados, vendedor, depósito e naturezaOperacao, que não são required no schema; se a conta exigir, parar e revisar o campo central, sem inventar ID |
+| Valores omitidos       | Frete, desconto e outras despesas, sem ajustes para compensar diferença; conferir tributos calculados                                                                               |
+| Limite                 | Até 1 POST /pedidos e até 30 GET delimitados por conta/documento/IDs/códigos/referência; sem retry automático                                                                       |
+| Permissão necessária   | Ampliar somente Pedidos para Incluir e editar, que a UI agrupa; Excluir e demais escritas continuam desmarcados. O executor deve recusar PUT/PATCH/DELETE e POST fora do caso       |
+| Efeitos reais          | Consome número sequencial, cria histórico, pode aparecer em relatórios e receber marcador de primeira venda; registro permanece no ERP                                              |
+| Operações fora do caso | Nota fiscal, estoque/balanço, contas/baixa/estorno, cobrança, expedição, publicação, mensagens, atualização de cadastros e cancelamento/exclusão                                    |
+| Falha ou divergência   | Parar; preservar IDs/resposta privada; consultar para reconciliar; zero resultados não libera segundo POST                                                                          |
 
-Para a prova fiscal, preferir comprador existente autorizado/da própria empresa
-com cadastro válido ou identidade de testes aceita pelo Olist. Um cadastro
-meramente técnico sem documento, se aceito pelo ERP e aprovado para teste,
-não comprovará OLIST-35 nem substituirá a exigência de cadastro completo da
-integração. Não atualizar o contrato de produção para aceitar dado inventado
-com base em um experimento. Nenhum dado pessoal/fiscal é incluído neste arquivo.
+A autorização de leitura não libera C01 nem a ampliação de Pedidos. A próxima
+aprovação precisa abranger expressamente a permissão agrupada e esse POST único,
+depois de confirmar o comprador. O aplicativo deve receber nome que reflita a
+permissão ampliada; não manter somente leitura no nome após conceder escrita.
 
-## Cobertura restante de T02
+Antes de executar, conferir conta/identidades/ausência da referência por API,
+quota atual e correspondência do payload com a aprovação. Se houver cobrança,
+scope extra, identidade divergente ou campo central obrigatório sem fonte,
+interromper. A inclusão deve ser feita uma vez e seguida de detalhe por ID e
+conferência de cada subtotal na UI, pois o schema de resposta não expõe um
+subtotal independente por item. Total global igual não basta.
 
-Depois da prova mínima, criar propostas específicas, cada uma com dados válidos,
-efeitos/limites explícitos e autorização antes de qualquer escrita:
+Os gatilhos inspecionados não apontam nota/estoque/financeiro ao salvar pedido:
+estoque manual, emissão automática de NFe desativada e contas a receber ao
+autorizar NF. Expedição está ativa ao salvar NF. Isso não é garantia absoluta
+de ausência de toda integração externa. Se surgir efeito não previsto, parar,
+sem alterar parâmetros globais nem cancelar como limpeza.
 
-- Comprador ausente: entidade de teste validamente identificada e escolhida
-  pelo PO; não reaproveitar CPF/CNPJ alheio nem fabricar documento na conta real.
-- Pai com M/G iniciais e variação GG posterior: SKU próprio, fiscal/unidade
-  aprovados, sem estoque, catálogo/canal existente preservado; prova de lote
-  e recuperação não destrutiva por pai/filho.
-- Precisão: quantidade não divisível, escala/empate e produto repetido, com
-  orçamento de pedidos separado; sem alterar subtotal/quantidade para passar.
+## Provas adicionais necessárias para fechar F1
 
-Mock, leitura de dados existentes ou a primeira venda exata não concluem
-cadastros automáticos, arredondamento, rejeições ou recuperação real. T02 e
-gate F1 continuam abertos; T03 não foi liberada por esta inspeção.
+C01 prova apenas a venda exata com cadastros existentes. Não encerra T02.
+As próximas propostas devem ser preparadas e aprovadas antes das respectivas
+inclusões; o orçamento abaixo é planejamento, sem autorização:
+
+| Caso                  | Dados e limite planejado                                                                                                                                                                        | Evidência exigida                                                                                                                                        |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cliente novo          | Até 1 POST contato, com identidade válida ausente escolhida pelo PO; considerar a empresa configurada na conta, distinta do contato SILMER, se aprovada e ausente por documento                 | Obrigatórios fiscais/endereço, situacao B sem acesso ao sistema, ID e busca exata; se já existir, reutilizar e não criar duplicata para provar o caminho |
+| Pai e filhos iniciais | Até 1 POST produto tipo V, grade Tamanho e M/G iniciais; prefixo CRM-F1-20261104-A, SKUs próprios; fiscal/unidade de modelo comercial aprovado, sem saldo/estoque inicial ou vínculo com canais | IDs do pai e de cada filho, vínculo/grade/SKU por readback; não assumir atomicidade                                                                      |
+| Filho adicional       | Até 1 POST variação GG no pai novo, SKU próprio; parar e reconciliar qualquer incerteza                                                                                                         | Identidade/grade/vínculo; nenhum retry criador                                                                                                           |
+| Terços                | Até 1 pedido: M 3 x 0,3333 e G 3 x 0,6667; expectativa diagnóstica 1,00 e 2,00 por linha                                                                                                        | Escala armazenada, cada subtotal e total, sem ajuste artificial                                                                                          |
+| Empate e identidade   | Até 1 pedido diagnóstico: M novo 1 x 0,005; mesmo M novo 1 x 0,015; M existente 1 x 0,025; G novo 1 x 0,035; expectativa half-up hipotética 0,01/0,02/0,03/0,04                                 | Determinar regra real de empate; preservar quatro linhas, produto repetido e mesmo tamanho em grupos distintos                                           |
+| Escala pequena        | Até 1 pedido: M 1000 x 0,000010 e G 1 x 0,01; expectativa diagnóstica 0,01/0,01                                                                                                                 | Escala aceita/rejeitada e subtotais; quantidade pode contaminar relatórios apesar de valor baixo                                                         |
+
+As sondas de empate/escala são experimentos do contrato, não representam
+payload de produção derivado de uma prévia CRM. A hipótese half-up não é
+atribuída ao ERP antes da leitura real. Aceitação de seis casas comprova somente
+a escala testada, não um máximo universal. Cada rejeição será registrada sem
+repetir automaticamente a inclusão ou alterar valores para passar.
+
+O conjunto C01 mais três sondas tem expectativa monetária hipotética de R$ 6,12
+e teto de planejamento R$ 10,00. Esse teto não autoriza execução nem garante o
+resultado antes de provar arredondamento. Todos os registros permaneceriam na
+conta operacional e as quantidades poderiam aparecer em relatórios.
+
+## CPF gerado e limites da prova fiscal
+
+O PO sugeriu comprador fictício com CPF gerado e depois escolheu a própria
+Silmer. Nenhum CPF foi gerado ou enviado. O gate F1 exige ausência de dado fiscal
+inventado: dígitos verificadores válidos não comprovam identidade e podem
+coincidir com titular real. Usar fontes válidas aprovadas pelo PO, sem mudar o
+contrato de produção para contornar o teste.
+
+Leituras existentes, mocks e C01 não substituem criação automática de
+cliente/produto/variação, rejeições, precisão e recuperação. T02 e gate F1
+continuam abertos; T03 não está liberada.

@@ -2,12 +2,11 @@
   "task": "OLIST-T02",
   "observedOn": "2026-11-04",
   "environment": "current-operational-account",
-  "authorization": "User approved only installing the free Gestão de Aplicativos extension and inspecting the API form; no app, credential or business-record creation approved.",
-  "method": "Chrome authenticated UI, visible selected values; not API-v3 requests.",
-  "erpMutations": 1,
-  "createdCredentials": 0,
-  "authenticatedApiV3Calls": 0,
-  "settingsSaved": 0,
+  "authorization": "User explicitly approved creating and connecting the named private read-only app for eight fixed GETs; business-record creation and access expansion remain unapproved.",
+  "method": "Authenticated Chrome UI plus eight fixed API-v3 GETs through the temporary loopback OAuth probe.",
+  "erpMutations": 2,
+  "createdCredentials": 1,
+  "authenticatedApiV3Calls": 8,
   "privacy": "No company identifiers, user identifiers, client records, secrets, private URLs or raw screenshots in this artifact.",
   "observations": [
     {
@@ -306,10 +305,10 @@
     }
   ],
   "pending": [
-    "Approval of a private read-only app and temporary loopback connection; no credentials generated yet",
-    "Provider acceptance of loopback redirect URI and authenticated API-v3 account match/permissions/quotas",
-    "Valid buyer identity and exact product variations; no result for teste in previous searches",
-    "Fiscal/central IDs and final private payload before approval of any business-record write"
+    "Confirm the exact authorized buyer: SILMER contact found by trade name has a different CNPJ from the account company; never conflate the two.",
+    "Confirm selected product variations and central/default fields by API before any proposed POST.",
+    "Prepare final controlled payload/effects and obtain specific business-write and permission-expansion approval.",
+    "Prove customer/product/variation creation, monetary precision per line, rejections and recovery; F1 remains open."
   ],
   "session": "Restored by user; read-only UI inspection resumed successfully.",
   "f1GatePassed": false,
@@ -325,6 +324,46 @@
       "confirmedStatus": "INSTALADO",
       "userApproval": "prossiga, following the specific extension-only approval request",
       "observedAt": "2026-11-04T21:54:09.670862+00:00"
+    },
+    {
+      "action": "create-and-connect-read-only-app",
+      "observedAt": "2026-11-04T22:52:36.039Z",
+      "userApproval": "Autorizo criar e conectar esse aplicativo de leitura",
+      "applicationName": "CRM Silmer - prova F1 - somente leitura",
+      "scope": "Seven read-only modules, all include/edit/delete disabled",
+      "authenticatedGetCount": 8,
+      "allGetStatuses": 200,
+      "accountMatched": true,
+      "businessRecordWrites": 0,
+      "loopbackAccepted": true,
+      "collectorStopped": true,
+      "remoteApplicationStillRegistered": true
+    },
+    {
+      "action": "prepare-existing-buyer-and-variation-case",
+      "method": "authenticated UI only",
+      "buyerChoice": "User selected using Silmer; exact legal entity confirmation pending because the matching trade-name contact differs from account-company CNPJ.",
+      "buyerCandidate": {
+        "foundByTradeName": true,
+        "companyDocumentSameAsAccount": false,
+        "documentCheckDigitsValid": true,
+        "fiscalAddressLabelsPopulated": true
+      },
+      "discardedObservation": "Masked document search is not evidence of absence.",
+      "productCandidate": {
+        "parentWithVariations": true,
+        "variationCount": 8,
+        "gradeKey": "Tamanho",
+        "candidateSizes": ["M", "G"],
+        "distinctSkusObserved": true,
+        "fiscalAndUnitFieldsPopulated": true,
+        "apiIdentityNotYetVerified": true
+      },
+      "businessRecordWrites": 0
     }
-  ]
+  ],
+  "applicationConfigurationsSaved": 1,
+  "commercialSettingsSaved": 0,
+  "liveApiEvidence": "read-only-live-result.json",
+  "observationsScope": "The observations array preserves the initial UI inspection before app creation. Later state changes are recorded in events and read-only-live-result.json."
 }

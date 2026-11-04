@@ -1,0 +1,113 @@
+{
+  "task": "OLIST-T02",
+  "capturedAt": "2026-11-04T22:52:36.039Z",
+  "authorization": "Explicit user approval for private read-only application and eight fixed GETs",
+  "accountMatched": true,
+  "queries": [
+    {
+      "path": "/info",
+      "status": 200,
+      "count": null,
+      "rateLimit": 30,
+      "remaining": 29,
+      "resetSeconds": 42
+    },
+    {
+      "path": "/contatos",
+      "status": 200,
+      "count": 0,
+      "rateLimit": 30,
+      "remaining": 28,
+      "resetSeconds": 40
+    },
+    {
+      "path": "/produtos",
+      "status": 200,
+      "count": 0,
+      "rateLimit": 30,
+      "remaining": 27,
+      "resetSeconds": 39
+    },
+    {
+      "path": "/pedidos",
+      "status": 200,
+      "count": 0,
+      "rateLimit": 30,
+      "remaining": 26,
+      "resetSeconds": 39
+    },
+    {
+      "path": "/vendedores",
+      "status": 200,
+      "count": 7,
+      "rateLimit": 30,
+      "remaining": 25,
+      "resetSeconds": 39
+    },
+    {
+      "path": "/depositos",
+      "status": 200,
+      "count": 1,
+      "rateLimit": 30,
+      "remaining": 24,
+      "resetSeconds": 39
+    },
+    {
+      "path": "/formas-pagamento",
+      "status": 200,
+      "count": 10,
+      "rateLimit": 30,
+      "remaining": 23,
+      "resetSeconds": 38
+    },
+    {
+      "path": "/formas-recebimento",
+      "status": 200,
+      "count": 10,
+      "rateLimit": 30,
+      "remaining": 22,
+      "resetSeconds": 38
+    }
+  ],
+  "erpWrites": 0,
+  "environment": "current-operational-account",
+  "application": {
+    "name": "CRM Silmer - prova F1 - somente leitura",
+    "created": true,
+    "callback": "http://127.0.0.1:8765/olist/callback",
+    "readModules": [
+      "Contatos",
+      "Produtos",
+      "Pedidos",
+      "Informações da Conta",
+      "Forma de Pagamento",
+      "Forma de Recebimento",
+      "Depósitos"
+    ],
+    "includeEdit": false,
+    "delete": false
+  },
+  "oauth": {
+    "authorizationCodeFlowCompleted": true,
+    "loopbackRedirectAccepted": true,
+    "tokenExchangePosts": 1,
+    "refreshTested": false,
+    "tokensPersisted": false,
+    "collectorStopped": true,
+    "remoteApplicationStillRegistered": true
+  },
+  "limits": {
+    "readHeaderObserved": 30,
+    "unit": "requests per minute",
+    "writeQuotaProven": false,
+    "sharedAccountQuotaConcurrencyProven": false
+  },
+  "interpretation": [
+    "Counts are only the returned page; payment lists were capped at ten, not account totals.",
+    "No matching teste contact/product was returned; this is not proof that all test records are absent.",
+    "Reference search returned zero; it does not prove filter precision, uniqueness or safe recreation after an uncertain POST.",
+    "Successful scoped reads do not prove forbidden-write rejection; no mutation request was sent.",
+    "No business creation, fiscal, stock, financial, messaging or shipping action was performed."
+  ],
+  "privacy": "No raw response, company document, names, record IDs, tokens, credentials or OAuth code/state."
+}

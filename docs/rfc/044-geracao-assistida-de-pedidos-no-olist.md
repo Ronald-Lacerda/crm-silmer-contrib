@@ -679,11 +679,16 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       Evidência parcial: [matriz T02](../integrations/olist/capabilities.md), schema
       oficial 3.1/hash, fixtures e 11 testes offline. PO autorizou consultas na
       conta operacional e [preparo do caso controlado](../integrations/olist/controlled-case.md)
-      antes de aprovar qualquer criação. 36 observações UI com gatilhos,
-      automações e reserva; Gestão de Aplicativos instalada gratuitamente com
-      aprovação. [Proposta de leitura/loopback](../integrations/olist/read-only-access.md)
-      e coletor local com 17 testes offline, sem app/credencial/conexão real. API v3, fiscal, precisão/linhas e efeitos reais pendentes. T02/F1 abertos;
-      zero chamadas autenticadas v3, cadastros/vendas ou credenciais criadas.
+      antes de aprovar qualquer criação. Gatilhos, automações e reserva
+      inspecionados na UI; Gestão de Aplicativos instalada gratuitamente.
+      Posteriormente o PO aprovou explicitamente criar e conectar o
+      [aplicativo somente leitura](../integrations/olist/read-only-access.md).
+      [Oito GET reais](../integrations/olist/evidence/read-only-live-result.json)
+      retornaram 200; conta confirmada, callback local aceito, limite de leitura
+      observado 30/minuto. Coletor encerrado, sem tokens persistidos; aplicativo
+      permanece somente leitura. Zero cadastros/vendas criados. Fiscal, criação
+      automática, precisão/linhas, rejeições e recuperação real pendentes;
+      T02/F1 continuam abertos. Coletor com 17 testes offline.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado
 fiscal inventado ou suposição de idempotência remota. Plano para ausência de
