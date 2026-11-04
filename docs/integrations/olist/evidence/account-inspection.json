@@ -1,0 +1,204 @@
+{
+  "task": "OLIST-T02",
+  "observedOn": "2026-11-04",
+  "environment": "current-operational-account",
+  "authorization": "Read-only UI inspection and preparation of a controlled case; all creations require prior user approval.",
+  "method": "Chrome authenticated UI, visible selected values; not API-v3 requests.",
+  "erpMutations": 0,
+  "createdCredentials": 0,
+  "authenticatedApiV3Calls": 0,
+  "settingsSaved": 0,
+  "privacy": "No company identifiers, user identifiers, client records, secrets, private URLs or raw screenshots in this artifact.",
+  "observations": [
+    {
+      "id": "finance-receivable-trigger",
+      "screen": "Finanças > Configurações gerais",
+      "field": "Lançamento de contas a receber",
+      "observedValue": "Automático ao autorizar a nota fiscal",
+      "implication": "Salvar pedido não é o gatilho observado; não gerar/autorizar NF no teste."
+    },
+    {
+      "id": "finance-payable-trigger",
+      "screen": "Finanças > Configurações gerais",
+      "field": "Lançamento de contas a pagar",
+      "observedValue": "Manual",
+      "implication": "Não executar comando financeiro."
+    },
+    {
+      "id": "finance-reversal",
+      "screen": "Finanças > Configurações gerais",
+      "field": "Estorno de contas",
+      "observedValue": "Automático ao cancelar pedido",
+      "implication": "Não cancelar como limpeza ou rollback."
+    },
+    {
+      "id": "stock-out",
+      "screen": "Suprimentos > Configurações de estoque",
+      "field": "Lançamento de estoque para saídas",
+      "observedValue": "Manual",
+      "implication": "Não chamar lançamento de estoque."
+    },
+    {
+      "id": "stock-in",
+      "screen": "Suprimentos > Configurações de estoque",
+      "field": "Lançamento de estoque para entradas",
+      "observedValue": "Manual",
+      "implication": "Não informar saldo/balanço em inclusão de produto."
+    },
+    {
+      "id": "stock-auto-addon",
+      "screen": "Suprimentos > Configurações de estoque",
+      "field": "Contratar automaticamente extensão de limite de sincronização de estoque adicional",
+      "observedValue": true,
+      "implication": "Evitar toda sincronização; custo potencial da configuração atual, sem alterar configuração."
+    },
+    {
+      "id": "stock-order-reversal",
+      "screen": "Suprimentos > Configurações de estoque",
+      "field": "Estornar estoque automaticamente ao cancelar o pedido",
+      "observedValue": false,
+      "implication": "Não cancelar como limpeza."
+    },
+    {
+      "id": "stock-alert",
+      "screen": "Suprimentos > Configurações de estoque",
+      "field": "Enviar e-mail sobre produtos abaixo do estoque mínimo",
+      "observedValue": false,
+      "implication": "Não garante ausência de outras notificações."
+    },
+    {
+      "id": "receivable-email",
+      "screen": "Finanças > Configurações do contas a receber",
+      "field": "Avisar cliente por e-mail sobre contas a receber em aberto",
+      "observedValue": "Não avisar",
+      "implication": "Não criar contas a receber."
+    },
+    {
+      "id": "automatic-bank-slip",
+      "screen": "Finanças > Configurações do contas a receber",
+      "field": "Emissão automática de boletos",
+      "observedValue": "Manual",
+      "implication": "Não emitir boleto/Pix/cobrança."
+    },
+    {
+      "id": "api-stock-sync",
+      "screen": "Geral > Configurações de API",
+      "field": "Sincronizar estoque de anúncios automaticamente ao gerar balanço via API",
+      "observedValue": true,
+      "implication": "Não chamar balanço/estoque pela API."
+    },
+    {
+      "id": "tax-calculate",
+      "screen": "Vendas > Configurações dos pedidos de venda",
+      "field": "Calcular impostos nas vendas",
+      "observedValue": true,
+      "implication": "Provar totais finais; não confundir cálculo com emissão/autorização fiscal."
+    },
+    {
+      "id": "first-sale-marker",
+      "screen": "Vendas > Configurações dos pedidos de venda",
+      "field": "Inserir automaticamente o marcador \"1ª venda\"",
+      "observedValue": true,
+      "implication": "Novo comprador pode receber marcador; evidenciar efeito local do ERP."
+    },
+    {
+      "id": "seller-api",
+      "screen": "Vendas > Configurações dos pedidos de venda",
+      "field": "Campo vendedor no cadastro de vendas via API",
+      "observedValue": "Não aceita se vendedor não existe",
+      "implication": "Usar vendedor ERP validado; não criar vendedor automaticamente."
+    },
+    {
+      "id": "approve-on-payment",
+      "screen": "Vendas > Configurações dos pedidos de venda",
+      "field": "Mudar status do pedido de \"em aberto\" para \"aprovado\" após a identificação do pagamento",
+      "observedValue": false,
+      "implication": "Não fornecer pagamentos integrados nem efetuar pagamento."
+    },
+    {
+      "id": "order-numbering",
+      "screen": "Vendas > Configurações dos pedidos de venda",
+      "field": "Numeração dos pedidos de venda",
+      "observedValue": "Sequencial",
+      "implication": "Criação consumirá um número real; não tentar reutilizar ou apagar."
+    },
+    {
+      "id": "shopee-order-sync",
+      "screen": "Integrações > Shopee > Pedidos > Fluxo de Pedidos",
+      "field": "Sincronização automática de pedidos",
+      "observedValue": true,
+      "implication": "Teste não deve referenciar canal/ID remoto de marketplace."
+    },
+    {
+      "id": "shopee-stock",
+      "screen": "Integrações > Shopee > Produtos > Regras de Estoque",
+      "field": "Atualizar estoque na loja virtual a partir do ERP",
+      "observedValue": "Não atualizar",
+      "implication": "Não é garantia para outros canais."
+    },
+    {
+      "id": "shopee-stock-trigger",
+      "screen": "Integrações > Shopee > Produtos > Regras de Estoque",
+      "field": "Lançamento de estoque para saídas",
+      "observedValue": "Usar configuração padrão da conta",
+      "implication": "Padrão observado Manual."
+    },
+    {
+      "id": "shopee-tax",
+      "screen": "Integrações > Shopee > Pedidos > Dados Fiscais",
+      "field": "Envio de dados da NFe",
+      "observedValue": "Automático ao autorizar nota fiscal",
+      "implication": "Não emitir/autorizar NF; envio fiscal não é gatilho de criação de NF."
+    },
+    {
+      "id": "shopee-tracking",
+      "screen": "Integrações > Shopee > Pedidos > Fluxo de Pedidos",
+      "field": "Enviar rastreamento ao alterar a situação no ERP para enviado",
+      "observedValue": false,
+      "implication": "Não avançar situação para enviado."
+    },
+    {
+      "id": "tiktok-order-sync",
+      "screen": "Integrações > TikTok Shop > Pedidos > Fluxo de Pedidos",
+      "field": "Sincronização automática de pedidos",
+      "observedValue": true,
+      "implication": "Teste não deve referenciar canal/ID remoto de marketplace."
+    },
+    {
+      "id": "tiktok-stock",
+      "screen": "Integrações > TikTok Shop > Produtos > Regras de Estoque",
+      "field": "Atualizar estoque na loja virtual a partir do ERP",
+      "observedValue": "Enviar saldo físico",
+      "implication": "Proibida sincronização do produto de teste com canal."
+    },
+    {
+      "id": "tiktok-stock-trigger",
+      "screen": "Integrações > TikTok Shop > Produtos > Regras de Estoque",
+      "field": "Lançamento de estoque para saídas",
+      "observedValue": "Usar configuração padrão da conta",
+      "implication": "Padrão observado Manual."
+    },
+    {
+      "id": "tiktok-tax",
+      "screen": "Integrações > TikTok Shop > Pedidos > Dados Fiscais",
+      "field": "Envio de dados da NFe",
+      "observedValue": "Automático ao autorizar nota fiscal",
+      "implication": "Não emitir/autorizar NF."
+    },
+    {
+      "id": "tiktok-tracking",
+      "screen": "Integrações > TikTok Shop > Pedidos > Fluxo de Pedidos",
+      "field": "Enviar rastreamento ao alterar a situação no ERP para enviado",
+      "observedValue": false,
+      "implication": "Não avançar situação para enviado."
+    }
+  ],
+  "pending": [
+    "API-v3 application/extension availability and current permissions",
+    "General event triggers/webhooks and fiscal automation",
+    "Reservation of stock and product auto-publication",
+    "Real buyer/product identities and central IDs of the controlled case"
+  ],
+  "session": "Expired while opening Loja de extensões; user re-login requested.",
+  "f1GatePassed": false
+}

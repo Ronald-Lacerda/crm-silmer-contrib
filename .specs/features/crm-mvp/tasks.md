@@ -3,11 +3,14 @@
 ## OLIST-T02 — Prova de capacidades em andamento (04/11/2026)
 
 Status parcial: schema oficial 3.1/OpenAPI 3.0.0 com hashes e captura
-reproduzível; fixtures sintéticas e 11 testes offline aprovados. Conta de testes
-dedicada preferida pelo PO, ainda não disponibilizada/confirmada. Fiscal,
-precisão por linha, permissões e gatilhos reais pendentes. Gate F1 aberto.
-[Evidência e plano](../../../docs/integrations/olist/capabilities.md).
-Zero chamadas autenticadas ou inclusões ERP; não marca T02 concluída.
+reproduzível; fixtures sintéticas e 11 testes offline aprovados. PO autorizou
+consultas na conta operacional e preparo do caso controlado para aprovação
+antes de qualquer criação. Gatilhos observados na UI registrados; sessão
+expirou antes da consulta de Aplicativos/gatilhos gerais/reserva. API v3,
+fiscal, precisão e efeitos reais pendentes. Gate F1 aberto.
+[Evidência](../../../docs/integrations/olist/capabilities.md) e
+[caso controlado](../../../docs/integrations/olist/controlled-case.md).
+Zero chamadas autenticadas v3, inclusões ou credenciais criadas; T02 aberta.
 
 ## COB-DEL-01 — Cobranças InfinitePay (05/11/2026)
 

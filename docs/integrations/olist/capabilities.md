@@ -6,10 +6,11 @@ coordenado pelo Tech Lead (Codex nesta execução). Consulta em 04/11/2026.
 · [ADR 057](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md).
 
 **Situação: prova documental/offline entregue; T02 e gate F1 abertos.**
-Zero chamadas autenticadas ou inclusões em conta ERP. O PO prefere conta de
-testes dedicada, se disponível. Não foi identificada conta dedicada nem
-credencial disponibilizada para esta execução. Criação real fica pendente
-do ambiente/caso definidos, conforme T02.
+O PO autorizou consultas na conta operacional atual e a preparação de caso
+controlado, com aprovação anterior a qualquer criação. Inspeção autenticada
+pela UI já realizada; zero chamadas autenticadas à API v3, inclusões, criação
+de credenciais ou alterações de parâmetros. Gatilhos e pendências no
+[caso controlado](controlled-case.md). T02/F1 continuam abertos.
 
 ## Schema e reprodução
 
@@ -166,14 +167,18 @@ sobre [staging de e-commerce](https://ajuda.olist.com/desenvolvedores-e-api/api-
 trata de outro produto/API. [Homologação fiscal](https://ajuda.olist.com/primeiros-passos-para-emitir-notas-fiscais/ambientes-da-nota-fiscal)
 isola validade de notas, sem comprovar isolamento de cadastros/pedidos/contas.
 
-O PO escolheu **conta de testes dedicada, se disponível**. Não foi autorizado
-usar a conta operacional como fallback, contratar plano ou abrir nova conta.
+A preferência inicial por conta dedicada foi revista pelo PO em 04/11/2026:
+**usar a conta operacional atual para consultas e preparar o caso controlado
+para aprovação antes de qualquer criação**. Não foi autorizada criação real,
+credencial/aplicativo ou alteração de parâmetros nesta etapa. A conta de testes
+não foi criada. O plano abaixo é a matriz original; o escopo atual menor,
+gatilhos observados e pendências estão no [caso controlado](controlled-case.md).
 
 Preparação mínima do alvo, sem segredo/documento real no repositório:
 
-1. PO/Operação identifica conta ERP dedicada de testes, ou confirma com Olist
-   sua disponibilização e acesso à API v3/Gestão de Aplicativos. Se houver
-   custo, restrição contratual ou ausência dessa conta, retornar ao PO.
+1. Conferir identidade da conta operacional autorizada, acesso existente à
+   API v3/Gestão de Aplicativos e gatilhos sem salvar configurações. Consulta
+   não autoriza criar credencial, contratar serviço ou executar POST de prova.
 2. Guardar identidade esperada da empresa/conta e credenciais em canal privado;
    registrar publicamente apenas referência opaca da evidência. Preparar
    aplicativo privado, callback e permissões mínimas; autenticação real depende
@@ -209,17 +214,18 @@ Matriz inicial de chamadas a concretizar após o alvo:
 Esse orçamento é teto de planejamento, não autorização de execução. Revalidar
 quota e ambiente por caso; nenhum script desta entrega executa POST/autenticação.
 Se faltar campo central/fiscal, parar antes da inclusão e informar pendência.
-Se não houver conta dedicada, entregar ao PO a alternativa de conta separada
-viável ou de um caso controlado na conta atual, com efeitos e custos explícitos;
-nenhuma dessas alternativas está aprovada por esta preferência condicional.
+Na conta operacional, a referência de teste não suprime efeitos ou métricas.
+Apresentar o caso final com identidades validadas e efeitos/custos antes de
+solicitar aprovação. Nenhum orçamento da matriz original autoriza execução.
 
 ## Handoff e próximo passo
 
 - T01: concluída e publicada no commit `bb453651`.
-- T02: captura do schema, fixtures e 11 testes offline concluídos; conta,
-  permissões, fiscal, precisão/linhas e efeitos reais pendentes. F1 aberto.
-- Limitação que precisa de atuação do PO: disponibilizar/confirmar a conta
-  dedicada com API v3; se indisponível, decidir o ambiente alternativo antes
-  de qualquer inclusão. Não solicitar segredos pelo chat nem publicar IDs reais.
+- T02: captura/schema, fixtures e 11 testes offline concluídos; inspeção UI
+  da conta operacional e caso mínimo proposto em documento próprio. API v3,
+  gatilhos restantes, fiscal, precisão/linhas e efeitos reais pendentes. F1 aberto.
+- Sessão expirou durante a inspeção da loja de extensões; novo login solicitado
+  para terminar as consultas. Não solicitar senha/token pelo chat ou publicar
+  IDs reais. Caso controlado depende de conclusão das consultas e aprovação.
 - Sem migração, runtime, deploy, habilitação de operadora ou piloto. Próximo
   desbloqueio: prova real T02; T03 depende do gate F1.

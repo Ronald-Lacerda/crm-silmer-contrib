@@ -78,3 +78,11 @@ cobertura dos 50 IDs; links locais e Markdown alterado; `git diff --check`.
 Sem alteração de runtime, migração, conta, cadastro, impressão ou infraestrutura.
 T02 registra separadamente schema/hash, fixtures, resultados e plano de prova
 na [matriz de capacidades](capabilities.md).
+
+## Atualização de ambiente após a revisão
+
+Em 04/11/2026 o PO escolheu a conta operacional atual para consultas e preparo
+de caso controlado, com aprovação antes de qualquer criação. Essa orientação
+atualiza F1-G05: conta dedicada não é mais o bloqueio; acesso v3, gatilhos e
+payload/efeitos conferidos continuam necessários. [Inspeção e caso](controlled-case.md).
+Demais decisões/ADRs e gates permanecem; esta atualização não aprova POSTs.
