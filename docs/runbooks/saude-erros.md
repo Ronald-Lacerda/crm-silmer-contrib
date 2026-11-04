@@ -144,6 +144,13 @@ O painel não oferece esse reenvio.
 
 ## Implantação e rollback
 
+O gate PostgreSQL de OPS-ERR-T01/OPS-ERR-05 consulta `view=history` após a
+disputa entre Novo e Resolvido: qualquer transição pode vencer, e a visão
+Ativas exclui o grupo resolvido da API. A regressão também verifica que o
+grupo resolvido sai de Ativas e permanece no Histórico com a mesma versão,
+independentemente do vencedor. Isso evita a falha intermitente identificada
+no CI pós-merge de 04/11/2026, sem mudar a triagem ou a aplicação.
+
 1. Validar a migration `0051_operational_incidents.expand.sql` no banco
    dedicado de testes, com dados sintéticos e os testes de ACL/triagem.
 2. Aplicar migrations expand no ambiente alvo com o procedimento existente:

@@ -128,8 +128,11 @@ test(
         statusCode: 503,
         requestId: randomUUID(),
       });
-      const read = () =>
-        api.inject({ url: '/api/v1/admin/health-errors', headers: admin });
+      const read = (view = 'active') =>
+        api.inject({
+          url: `/api/v1/admin/health-errors?view=${view}`,
+          headers: admin,
+        });
       let response = await read();
       assert.equal(response.statusCode, 200, response.body);
       const initial = response
@@ -192,12 +195,32 @@ test(
         patch('resolved', investigated.json().version, 'race-b'),
       ]);
       assert.deepEqual(races.map((item) => item.statusCode).sort(), [200, 409]);
-      response = await read();
+      // Either command may win; a resolved incident is absent from active.
+      response = await read('history');
+      assert.equal(response.statusCode, 200, response.body);
       let item = response
         .json()
         .items.find((/** @type {any} */ value) => value.id === initial.id);
+      assert.ok(item);
       const resolved = await patch('resolved', item.version, 'resolve-final');
       assert.equal(resolved.statusCode, 200, resolved.body);
+      // Cover the resolved winner deterministically, even when race-a wins.
+      response = await read();
+      assert.equal(response.statusCode, 200, response.body);
+      assert.equal(
+        response
+          .json()
+          .items.some((/** @type {any} */ value) => value.id === initial.id),
+        false,
+      );
+      response = await read('history');
+      assert.equal(response.statusCode, 200, response.body);
+      item = response
+        .json()
+        .items.find((/** @type {any} */ value) => value.id === initial.id);
+      assert.ok(item);
+      assert.equal(item.status, 'resolved');
+      assert.equal(item.version, resolved.json().version);
       observedAt = new Date(Date.now() + 1000);
       await runtime.recordApiFailure({ statusCode: 500 });
       item = (await read())
