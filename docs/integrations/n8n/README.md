@@ -1035,6 +1035,15 @@ Destino de atendimento corrigido pelo proprietário: WhatsApp do CRM
 usado como fallback das entradas genéricas. Conservar contatos explicitamente
 nomeados e o fluxo de pós-pagamento da loja na fronteira correspondente.
 
+## VND-L04 — Revisão de 03/11/2026
+
+[Revisão dos atendimentos e limites da amostra](revisao-2026-11-03.md):
+35 conversas exibidas, 16 comerciais com atividade no dia. `mvp-simple-22`
+prepara correções de perguntas e avisos sob as regras existentes; publicação
+no n8n permanece separada. Decisões comerciais propostas e a ausência de
+turnos por versão no painel estão registradas no relatório. Nunca importar
+o snapshot Meta sobre o principal Evolution; aplicar delta ao export vivo.
+
 ## VND-L01 — Aprendizados da Inbox real (28/10/2026)
 
 A [ADR 049](../../adr/049-aprendizados-do-vendedor-na-inbox-real.md) ajusta o

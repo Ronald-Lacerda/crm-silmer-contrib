@@ -30,6 +30,8 @@ const IMAGE_ACK = 'Recebi sua imagem, já deixei aqui para o vendedor ver.';
 const ART_QUESTION = 'Você já tem a arte (ou logo) pronta?';
 const FABRIC_QUESTION =
   'Qual tecido você prefere: algodão, poliéster ou dry fit, ou outro?';
+const IMAGE_ART_QUESTION =
+  'Essa imagem já é a arte pronta para aplicar na peça?';
 // Thursday 29/10/2026, 10:00 in São Paulo (UTC-3).
 const THURSDAY_MORNING = '2026-10-29T13:00:00.000Z';
 
@@ -128,6 +130,215 @@ function shirtWithout(...without) {
 }
 
 // Item 1 — the first price question is deferred, the second hands off.
+
+test('VND-L04: greeting asks only missing facts and preserves the current patch', () => {
+  for (const briefing of [{ product_type: 'camisetas' }, {}]) {
+    const result = decide(context('Quero camisas brancas', { briefing }), {
+      briefing_patch: { product_type: 'camisetas', colors: 'branca' },
+      reply_text: 'Qual é o seu nome e o que você quer personalizar?',
+      asked_field: 'customer_name',
+    });
+    assert.equal(result.handoff_required, false);
+    assert.match(
+      result.reply_text,
+      /Sou a assistente virtual da Silmer\. Qual é o seu nome\?$/u,
+    );
+    assert.doesNotMatch(result.reply_text, /o que você quer personalizar/u);
+    assert.equal(result.briefing_patch.colors, 'branca');
+  }
+  const unknown = decide(context('Oi'), {
+    asked_field: 'customer_name',
+    reply_text: 'Qual é o seu nome e o que você quer personalizar?',
+  });
+  assert.match(
+    unknown.reply_text,
+    /Qual é o seu nome e o que você quer personalizar/u,
+  );
+});
+
+test('VND-L04: greeting retains capability acknowledgement and returning welcome', () => {
+  const result = decide(
+    context('Vocês fazem camisetas?', {
+      briefing: { product_type: 'camisetas' },
+      contact_context: { previous_cycles: 1, previous_orders_count: 1 },
+    }),
+    { asked_field: 'customer_name' },
+  );
+  assert.match(result.reply_text, /Que bom falar com você de novo/u);
+  assert.match(result.reply_text, /Vou anotar para o vendedor confirmar isso/u);
+  assert.match(result.reply_text, /Qual é o seu nome\?$/u);
+});
+
+test('VND-L04: unresolved image gets a contextual question without inferring art', () => {
+  for (const field of ['product_model', 'artwork_status']) {
+    const result = decide(
+      context(
+        '',
+        {
+          briefing: { ...shirtWithout(field), next_required_field: field },
+          recent_messages: [
+            {
+              sender_type: 'ai',
+              text:
+                field === 'artwork_status'
+                  ? ART_QUESTION
+                  : 'Qual modelo você quer?',
+            },
+          ],
+        },
+        {
+          message_type: 'image',
+          media_kind: 'image',
+          media_source: 'whatsapp',
+        },
+        { media_kind: 'image', media_unreadable: true },
+      ),
+      {
+        answer_status: 'unclear',
+        briefing_patch:
+          field === 'artwork_status'
+            ? { artwork_status: 'cliente envia a arte' }
+            : {},
+      },
+    );
+    assert.equal(result.handoff_required, false);
+    assert.match(result.reply_text, /^Recebi sua imagem/u);
+    assert.ok(
+      result.reply_text.includes(
+        field === 'artwork_status'
+          ? IMAGE_ART_QUESTION
+          : 'Qual é o modelo da peça na imagem?',
+      ),
+    );
+    assert.equal(result.briefing_patch[field], undefined);
+    assert.equal(result.briefing_patch.next_required_field, field);
+    assert.doesNotMatch(result.briefing_patch.briefing_status, /failed/u);
+  }
+});
+
+test('VND-L04: art image confirmation accepts yes but a reference stays unconfirmed', () => {
+  for (const text of ['Sim', 'É só uma referência']) {
+    const result = decide(
+      context(text, {
+        briefing: {
+          ...shirtWithout('artwork_status'),
+          next_required_field: 'artwork_status',
+        },
+        recent_messages: [
+          { sender_type: 'ai', text: IMAGE_ACK + ' ' + IMAGE_ART_QUESTION },
+        ],
+      }),
+      { answer_status: 'answered' },
+    );
+    if (text === 'Sim')
+      assert.equal(
+        result.briefing_patch.artwork_status,
+        'cliente envia a arte',
+      );
+    else
+      assert.notEqual(
+        result.briefing_patch.artwork_status,
+        'cliente envia a arte',
+      );
+  }
+});
+
+test('VND-L04: a second image does not repeat the previous contextual question', () => {
+  for (const field of ['artwork_status', 'product_model']) {
+    const previous =
+      IMAGE_ACK +
+      ' ' +
+      (field === 'artwork_status'
+        ? IMAGE_ART_QUESTION
+        : 'Qual é o modelo da peça na imagem? Pode dizer com suas palavras.');
+    const result = decide(
+      context(
+        '',
+        {
+          briefing: { ...shirtWithout(field), next_required_field: field },
+          recent_messages: [{ sender_type: 'ai', text: previous }],
+        },
+        {
+          message_type: 'image',
+          media_kind: 'image',
+          media_source: 'whatsapp',
+        },
+        { media_kind: 'image' },
+      ),
+      { answer_status: 'unclear' },
+    );
+    assert.equal(result.handoff_required, false);
+    assert.notEqual(result.reply_text, previous);
+    assert.equal(result.briefing_patch[field], undefined);
+    assert.equal(result.briefing_patch.next_required_field, field);
+  }
+});
+
+test('VND-L04: image and first price question retain deferral and the same pending field', () => {
+  const result = decide(
+    context(
+      'Quanto fica?',
+      {
+        briefing: {
+          ...shirtWithout('artwork_status'),
+          next_required_field: 'artwork_status',
+        },
+      },
+      { message_type: 'image', media_kind: 'image', media_source: 'whatsapp' },
+      { media_kind: 'image' },
+    ),
+    { asks_price: true },
+  );
+  assert.equal(result.handoff_required, false);
+  assert.match(result.reply_text, /^Recebi sua imagem/u);
+  assert.ok(result.reply_text.includes(PRICE_DEFERRAL));
+  assert.match(result.reply_text, /essa imagem já é a arte pronta/u);
+  assert.equal(result.briefing_patch.artwork_status, undefined);
+});
+
+test('VND-L04: no praise for wanting a product, including a comma before the question', () => {
+  for (const praise of [
+    'Que bom que você quer personalizar camisetas!',
+    'Que legal que você quer camisetas,',
+  ]) {
+    const result = decide(
+      context('Camisetas', { briefing: shirtWithout('colors') }),
+      {
+        reply_text: praise + ' Qual a cor da peça?',
+        asked_field: 'colors',
+      },
+    );
+    assert.equal(result.reply_text, 'Qual a cor da peça?');
+  }
+});
+
+test('VND-L04: urgent and complaint handoffs do not promise immediate service', () => {
+  for (const reason of ['urgency', 'complaint']) {
+    const result = decide(
+      context(
+        'Preciso de ajuda',
+        {},
+        { occurred_at: '2026-11-03T23:00:00.000Z' },
+      ),
+      {
+        handoff_required: true,
+        handoff_reason: reason,
+      },
+    );
+    assert.equal(result.handoff_required, true);
+    assert.equal(result.handoff_reason, reason);
+    assert.match(result.reply_text, /aqui mesmo/u);
+    assert.match(result.reply_text, /amanhã às 9h/u);
+    assert.doesNotMatch(result.reply_text, /agora|imediatamente/u);
+  }
+  const deadline = decide(
+    context('Preciso amanhã', {
+      briefing: { ...shirtWithout(), needed_by: 'amanhã' },
+    }),
+  );
+  assert.equal(deadline.trigger, 'deadline_urgency');
+  assert.doesNotMatch(deadline.reply_text, /agora|imediatamente/u);
+});
 
 test('item 1: the first price question asks the next point instead of handing off', () => {
   const result = decide(

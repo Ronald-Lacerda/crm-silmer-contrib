@@ -24,6 +24,27 @@ em claro/escuro, desktop, celular e 320 px. Detalhes no runbook.
 
 Operação e rollback em [inbox-compacta](../../../docs/runbooks/inbox-compacta.md).
 
+## VND-L04 — Revisão dos atendimentos de 03/11/2026
+
+AGT-01–06/10, ORC-03/05/07 e INB-02; correções nas ADRs 024/049/051/052/056.
+[Amostra, achados e propostas comerciais](../../../docs/integrations/n8n/revisao-2026-11-03.md).
+
+- [x] Revisar as 35 conversas exibidas; identificar 16 comerciais com atividade
+      no dia, sem guardar transcrições, nomes ou identificadores de clientes.
+- [x] Preparar `mvp-simple-22`: saudação só com dados faltantes, pergunta
+      contextual de imagem, filtro de elogios e handoff sem promessa imediata.
+- [x] Cobrir regressões sintéticas e preservar preço, prazo, mínimo, epoch,
+      reservas, origem da arte e abertura humana; gerar snapshots DEV/local.
+- [x] Gate local e revisão QA sem achados pendentes: 103 testes focados,
+      `npm run validate` (1.689 aprovados, 10 ignorados), E2E/axe
+      (461 aprovados, 7 ignorados) e auditoria sem altas/críticas.
+- Commit/push e PR da preparação registrados no handoff desta entrega.
+- [ ] Publicação como delta sobre o workflow Evolution vivo, com backup,
+      comparação e observação real; investigar ausência de turnos por versão.
+
+Triagem comercial, mínimo, urgência antecipada e coleta por item são propostas
+para decisão, não alterações de regra aprovadas por esta revisão.
+
 ## OA-T01 — Abertura assistida de pedidos (03/11/2026)
 
 Implementação autorizada pelo proprietário: [OA-01–12](../order-assistance/spec.md),

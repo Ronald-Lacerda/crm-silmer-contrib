@@ -11,9 +11,9 @@ import {
 } from '@n8n/workflow-sdk';
 
 const WORKFLOW_KEY = 'k7tI6T4RhQPyJkn9';
-// OA-T01: mvp-simple-21 (>= 15, so the CRM requires the subject-v1 contract;
+// VND-L04: mvp-simple-22 (>= 15, so the CRM requires the subject-v1 contract;
 // modules/n8n-integration/src/service.js requiresSubjectContract).
-const WORKFLOW_VERSION = 'mvp-simple-21';
+const WORKFLOW_VERSION = 'mvp-simple-22';
 
 // The agent's model (ADR 021). The turn telemetry (AGENTE-OBS-01) reports it.
 const MODEL_ID = 'gpt-5.6-luna';
@@ -631,7 +631,7 @@ const questionTopics = (text) => String(text ?? '').normalize('NFC').split(/(?<=
   .map((part) => part.length > 90 ? part.slice(0, 87).trimEnd() + '...' : part)
   .slice(0, 5);
 // Item 9: praise of the customer's choice ("ótima escolha", "combinam bem", "vai ficar linda").
-const PRAISE = /\b(otim[ao]s?|excelentes?|boas?|belas?|lind[ao]s?|perfeit[ao]s?|maravilhos[ao]s?)\s+(escolhas?|ideias?|opc(ao|oes)|combinac(ao|oes))\b|\bcombina(m)?\s+(muito\s+|super\s+|bem\s+)?(bem|demais)\b|\b(vai|vao|fica|ficam|ficara|ficarao)\s+(ficar\s+)?(muito\s+|super\s+|bem\s+)?(bonit|lind|show|top|incrive|maravilhos|elegant|estilos)\w*|\bque (lind|bonit|maravilhos)\w*|\b(adorei|amei|gostei)(\s+muito)?\s+(a|da|dessa|desta|essa|esta)\s+(escolha|ideia|combinacao|cor)\b/;
+const PRAISE = /\bque (?:bom|legal) que voc[eê] (?:quer|queira|vai)\b|\b(otim[ao]s?|excelentes?|boas?|belas?|lind[ao]s?|perfeit[ao]s?|maravilhos[ao]s?)\s+(escolhas?|ideias?|opc(ao|oes)|combinac(ao|oes))\b|\bcombina(m)?\s+(muito\s+|super\s+|bem\s+)?(bem|demais)\b|\b(vai|vao|fica|ficam|ficara|ficarao)\s+(ficar\s+)?(muito\s+|super\s+|bem\s+)?(bonit|lind|show|top|incrive|maravilhos|elegant|estilos)\w*|\bque (lind|bonit|maravilhos)\w*|\b(adorei|amei|gostei)(\s+muito)?\s+(a|da|dessa|desta|essa|esta)\s+(escolha|ideia|combinacao|cor)\b/;
 const withoutPraise = (text) => {
   const sentences = String(text ?? '').match(/[^.!?]+[.!?]*/g) ?? [];
   return sentences.map((sentence) => {
@@ -2318,7 +2318,10 @@ const artworkPending = pendingBefore === 'artwork_status' && isEmptyField(previo
 const lastAiText = [...(context.recent_messages ?? [])].reverse().find((message) => message.sender_type === 'ai')?.text ?? '';
 const bareYes = /^(sim|s|tenho|temos|ja|ja sim|ja tenho|ja temos|claro|pronta|pronto|uhum|aham|isso|ok|tenho sim|temos sim|sim tenho|sim temos|sim ja|sim sim)[\\s.!,]*$/.test(currentText);
 const yesWithoutArtQuestion = bareYes && !(artworkPending && /\\b(arte|logo)\\b/.test(fold(lastAiText)));
-if (yesWithoutArtQuestion) {
+// VND-L04: an image with no explicit art answer cannot turn a model guess into
+// an official artwork origin. Keep the existing deferred value when supplied.
+const imageWithoutArtAnswer = imageTurn && !artworkAnswer(currentText);
+if (yesWithoutArtQuestion || imageWithoutArtAnswer) {
   if (patch.artwork_status !== DEFERRED) delete patch.artwork_status;
 } else if (!isEmptyField(patch.artwork_status) && patch.artwork_status !== DEFERRED) {
   // The customer's words decide over the model's phrasing ("não tenho" is never "Silmer cria a arte").
@@ -2615,9 +2618,9 @@ const notices = {
   seller_requested: 'Claro! Vou avisar a nossa equipe que você quer falar com ' + requestedSeller + ', e o seu atendimento continua aqui mesmo.',
   unknown_person_repeated: 'Entendi! Um dos nossos vendedores vai continuar o seu atendimento aqui mesmo.',
   external_context: 'Claro! Vou chamar um dos nossos vendedores para te ajudar com isso, e o atendimento continua aqui mesmo.',
-  complaint: 'Sinto muito por isso. Um dos nossos vendedores vai cuidar do seu atendimento agora, aqui mesmo.',
-  urgency: 'Entendi a urgência! Um dos nossos vendedores vai continuar o seu atendimento agora, aqui mesmo.',
-  deadline_urgency: 'Entendi a urgência! Um dos nossos vendedores vai continuar o seu atendimento agora, aqui mesmo.',
+  complaint: 'Sinto muito por isso. Vou encaminhar sua solicitação para um dos nossos vendedores continuar o atendimento aqui mesmo.',
+  urgency: 'Entendi a urgência! Vou encaminhar sua solicitação para um dos nossos vendedores continuar o atendimento aqui mesmo.',
+  deadline_urgency: 'Entendi a urgência! Vou encaminhar sua solicitação para um dos nossos vendedores continuar o atendimento aqui mesmo.',
   partnership: PARTNERSHIP_NOTICE,
   unsupported: 'Um dos nossos vendedores vai continuar o seu atendimento aqui mesmo.',
   foreign_language: 'Um dos nossos vendedores vai continuar o seu atendimento aqui mesmo. / One of our sales team will continue helping you right here.',
@@ -2714,13 +2717,32 @@ if (!handoffRequired && asksCapability(currentText) && !acknowledgesQuestion(fol
 // VND-L02: the replies the workflow writes. The next question is the one of the rhythm (or the date
 // confirmation); the greeting introduces the assistant when the name was never asked.
 const greeting = nextField === 'customer_name' && nameAsks === 0;
-const nextQuestion = dateConfirmation ?? (nextField === 'customer_name'
+let nextQuestion = dateConfirmation ?? (nextField === 'customer_name'
   ? (isEmptyField(briefing.product_type)
     ? 'Qual é o seu nome e o que você quer personalizar: camisetas ou outras roupas, bonés ou outro produto?'
     : 'Qual é o seu nome?')
   : questionFor(nextField, kinds));
+// VND-L04 / AGT-01..02: an image that leaves the same point unresolved needs a
+// contextual question, not the identical menu. A yes/no art question keeps a
+// later bare "sim" unambiguous; receiving an image alone never establishes origin.
+if (imageTurn && !dateConfirmation && nextField === pendingBefore) {
+  if (nextField === 'product_model') nextQuestion = 'Qual é o modelo da peça na imagem? Pode dizer com suas palavras.';
+  if (nextField === 'artwork_status') nextQuestion = 'Essa imagem já é a arte pronta para aplicar na peça?';
+  if (lastAgentText && nextQuestion && lastAgentText.includes(nextQuestion)) {
+    if (nextField === 'product_model') nextQuestion = 'Pode descrever com suas palavras o modelo da peça que aparece na imagem?';
+    if (nextField === 'artwork_status') nextQuestion = 'Você confirma que essa imagem é a arte final pronta para aplicar?';
+  }
+}
 // Item 2: an explicit request that the Silmer creates the art is noted for the seller to confirm.
 const confirmsLater = asksCapability(currentText) || artCreationAsked;
+// ADR 024 asks name and product only while missing. The model's generic greeting
+// must not ask the product again after it was provided in the first message.
+if (!handoffRequired && greeting && !isEmptyField(briefing.product_type) && !deterministicReply && !dateConfirmation) {
+  replyText = [confirmsLater ? CAPABILITY_ACK : '', context.returning_customer === true
+    ? 'Que bom falar com você de novo, sou a assistente virtual da Silmer.'
+    : 'Sou a assistente virtual da Silmer.',
+    nextQuestion].filter(Boolean).join(' ');
+}
 if (!handoffRequired && deterministicReply && nextQuestion) {
   replyText = [
     // VND-CTX-01: a returning customer is welcomed back, with nothing about the earlier orders.

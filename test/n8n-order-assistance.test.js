@@ -3,7 +3,10 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
 
-import { patchOrderAssistance } from '../ops/n8n/patch-order-assistance.mjs';
+import {
+  orderAssistanceCodeHash,
+  patchOrderAssistance,
+} from '../ops/n8n/patch-order-assistance.mjs';
 import { createOrderAssistanceService } from '../modules/inbox-channels/src/application/order-assistance.js';
 
 const canonical = JSON.parse(
@@ -489,10 +492,39 @@ function operationalLegacy() {
   return source;
 }
 
+// This synthetic legacy is derived from the current canonical conversation
+// rules, not the immutable production version reviewed for OA-T01. Review its
+// hashes before each mutation below; do not widen the production defaults.
+const reviewedSyntheticLegacy = operationalLegacy();
+// The OA installer is an immutable mvp-simple-21 release tool. Its synthetic
+// target must keep that header version even when conversation rules evolve.
+const oaPatchCanonical = structuredClone(canonical);
+for (const item of oaPatchCanonical.nodes) {
+  for (const header of item.parameters?.headerParameters?.parameters ?? []) {
+    if (header.name === 'X-Silmer-Workflow-Version')
+      header.value = 'mvp-simple-21';
+  }
+}
+const reviewedSyntheticHashes = Object.fromEntries(
+  [CONTEXT, DECISION].map((name) => [
+    name,
+    orderAssistanceCodeHash(
+      reviewedSyntheticLegacy.nodes.find(
+        (/** @type {any} */ item) => item.name === name,
+      ).parameters.jsCode,
+    ),
+  ]),
+);
+/** @param {any} source */
+const patchSyntheticOperational = (source) =>
+  patchOrderAssistance(source, oaPatchCanonical, {
+    reviewedCodeHashes: reviewedSyntheticHashes,
+  });
+
 test('production patch preserves operational IDs, transport, credentials and all unrelated connections', () => {
   const source = operationalLegacy();
   const before = structuredClone(source);
-  const result = patchOrderAssistance(source, canonical);
+  const result = patchSyntheticOperational(source);
   assert.deepEqual(source, before);
   assert.equal(result.workflow.active, true);
   assert.equal(result.workflow.settings.executionTimeout, 180);
@@ -527,7 +559,7 @@ test('production patch preserves operational IDs, transport, credentials and all
   );
   assert.match(observerCrm.parameters.url, /\/events/u);
   assert.deepEqual(
-    patchOrderAssistance(result.workflow, canonical).workflow,
+    patchOrderAssistance(result.workflow, oaPatchCanonical).workflow,
     result.workflow,
   );
 });
@@ -537,19 +569,13 @@ test('production patch refuses Code drift, a different workflow or a partial obs
   drift.nodes.find(
     (/** @type {any} */ item) => item.name === CONTEXT,
   ).parameters.jsCode += '\n// unreviewed change';
-  assert.throws(() => patchOrderAssistance(drift, canonical), /CODE_DRIFT/u);
+  assert.throws(() => patchSyntheticOperational(drift), /CODE_DRIFT/u);
   const other = operationalLegacy();
   other.id = 'another-workflow';
-  assert.throws(
-    () => patchOrderAssistance(other, canonical),
-    /WORKFLOW_INVALID/u,
-  );
+  assert.throws(() => patchSyntheticOperational(other), /WORKFLOW_INVALID/u);
   const partial = operationalLegacy();
   partial.nodes.push(structuredClone(nodes.get(INTERNAL_CONTEXT)));
-  assert.throws(
-    () => patchOrderAssistance(partial, canonical),
-    /PARTIAL_BRANCH/u,
-  );
+  assert.throws(() => patchSyntheticOperational(partial), /PARTIAL_BRANCH/u);
 });
 
 test('production audio observer clones the active Evolution media adapter and its credentials', () => {
@@ -585,7 +611,7 @@ test('production audio observer clones the active Evolution media adapter and it
     openAiApi: { id: 'synthetic-transcriber-reference' },
   };
   transcription.parameters.options.timeout = 60000;
-  const result = patchOrderAssistance(source, canonical).workflow;
+  const result = patchSyntheticOperational(source).workflow;
   const observerLookup = result.nodes.find(
     (/** @type {any} */ item) =>
       item.name === 'WhatsApp - Consultar áudio interno (OA)',
