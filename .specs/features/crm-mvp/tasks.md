@@ -1130,3 +1130,14 @@ sem anexos e recursos do scanner indisponíveis para a API; o worker os possui.
 Implementação e gates em [operational-health](../operational-health/tasks.md).
 OPSH-01–05, OPS-ERR-03/04/08, ADR060, RFC045 e issue11.
 Coleta permanece manual; expurgo diário14dias autorizado pelo proprietário.
+## OLIST-PLAN-01 — Preparação da integração Olist (04/11/2026)
+
+- [x] Preparar especificação completa com requisitos OLIST-01–32, seis fases,
+      tarefas OLIST-T01–T18, testes negativos, recuperação e checklists na
+      [RFC 044](../../../docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md).
+- [ ] Resolver D1–D8 e registrar ADR/fontes canônicas antes do código dependente.
+- [ ] Implementar e validar OLIST-T01–T15 conforme gates da RFC.
+- [ ] Autorizar/executar piloto e decidir ampliação em OLIST-T16–T18.
+
+Esta entrega é documental. Decisões técnicas/comerciais permanecem propostas;
+conexão da conta, criação de vendas e ativação em produção continuam pendentes.

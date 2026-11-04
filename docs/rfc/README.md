@@ -24,6 +24,11 @@
 - [047 — Enviar cobrança pela conversa](047-enviar-cobranca-pela-conversa.md),
   aberta em 05/11/2026 após revisão da jornada: gerar e enviar o link de Pix/cartão
   na conversa certa, por comando humano, sem copiar/colar; novo protótipo em avaliação.
+
+- [044 — Geração assistida de pedidos de venda no Olist](044-geracao-assistida-de-pedidos-no-olist.md),
+  especificação de 04/11/2026 com OLIST-01–32, seis fases e tarefas
+  OLIST-T01–T18. D1–D8 estão propostas; implementação e ativação não concluídas.
+
 - [038 — Frete e etiqueta pelo Melhor Envio](038-frete-e-etiqueta-pelo-melhor-envio.md),
   aberta em 29/10/2026. Tem retirada na loja ou Melhor Envio, etiqueta
   pronta ao embalar e menu próprio. As decisões D1–D9 estão em aberto.
