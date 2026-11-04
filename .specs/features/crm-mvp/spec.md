@@ -95,6 +95,21 @@ padrão de PCX-15a; as filas pessoais e capacidades permanecem existentes.
   contagem oficial, sem depender só de cor. Todas lidera o grupo; contagens
   ficam alinhadas e o estado do botão Filtros indica abertura/filtro aplicado.
   Toque, foco visível, temas e leitura até 320 px permanecem utilizáveis.
+## Olist e melhorias comerciais aprovadas em 04/11/2026
+
+[ADR 057](../../../docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
+e [RFC 044](../../../docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md)
+são a emenda OLIST-01–50. OLIST-PLAN-02 prepara T01–T26; implementação pendente.
+
+Os critérios OLIST prevalecem sobre posse obrigatória na geração ERP,
+cadastro remoto apenas existente, total digitado e ausência de cancelamento:
+checkbox por usuário, qualquer Pedido completo, criação/vínculo de cliente/
+produto/tamanhos, subtotal por linha e total backend, cancelamento CRM terminal
+pré-exportação para métricas/filas. Não conceder edição geral pelo checkbox.
+
+Aplicação é o campo 4 por item/grupo; Previsão de entrega é o novo rótulo.
+Ficha v7 preserva histórico. Loja/legados, Financeiro e perfil restrito seguem
+adapters/escopos explícitos, sem inventar preço/dado fiscal ou apagar história.
 
 ## Inbox orientada ao vendedor — PCX-15 (03/11/2026)
 

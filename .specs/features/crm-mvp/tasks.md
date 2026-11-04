@@ -165,6 +165,20 @@ oito moderate preexistentes). Revisão independente sem findings P1/P2.
 Operação: rascunhos são temporários e saem com a instância da Inbox. Não há
 API, migration ou configuração nova. Rollback é reverter a entrega de frontend;
 mensagens aceitas pela API não devem ser reenviadas para testar apresentação.
+## OLIST-PLAN-02 — Decisões Olist subtotal cancelamento e rótulos
+
+- [x] Registrar decisões do proprietário na ADR 057 e reconciliar RFC 044,
+      RULES, PRD/specs, arquitetura/TDD e índices sem implementar runtime.
+- [x] Planejar OLIST-01–50, seis fases e OLIST-T01–T26, com subtotais por tamanho,
+      checkbox por usuário, cadastros/variações e cancelamento CRM pré-exportação.
+- [ ] Provar contrato T02, precisão por linha e dados fiscais/comerciais reais.
+- [ ] Implementar checkbox/IDs/subtotal/legado/loja/cancelamento/cadastros/venda.
+- [ ] Implementar rótulos e ficha v7 preservando versões anteriores; aprovar amostra.
+- [ ] Validar e liberar piloto individual por ID privado; não habilitar conta no código.
+
+[RFC 044](../../../docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md) /
+[ADR 057](../../../docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md).
+Esta entrega registra produto e prepara execução, sem alterar usuários ou ERP.
 
 ## SIL-36 — Git reconciliado com a referência publicada (05/11/2026)
 
@@ -1135,9 +1149,10 @@ Coleta permanece manual; expurgo diário14dias autorizado pelo proprietário.
 - [x] Preparar especificação completa com requisitos OLIST-01–32, seis fases,
       tarefas OLIST-T01–T18, testes negativos, recuperação e checklists na
       [RFC 044](../../../docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md).
-- [ ] Resolver D1–D8 e registrar ADR/fontes canônicas antes do código dependente.
-- [ ] Implementar e validar OLIST-T01–T15 conforme gates da RFC.
+- [x] Revisar decisões de produto na ADR 057/RFC 044 revisão 2 (OLIST-PLAN-02).
+- [ ] Provar contratos técnicos de cadastros/precisão e preencher parâmetros reais.
+- [ ] Implementar e validar OLIST-T01–T15 e T19–T26 conforme gates da RFC revisada.
 - [ ] Autorizar/executar piloto e decidir ampliação em OLIST-T16–T18.
 
-Esta entrega é documental. Decisões técnicas/comerciais permanecem propostas;
-conexão da conta, criação de vendas e ativação em produção continuam pendentes.
+A proposta original foi revisada pela OLIST-PLAN-02/ADR 057. Produto decidido;
+contratos técnicos, implementação, conexão real e ativação continuam pendentes.

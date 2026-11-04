@@ -1,5 +1,21 @@
 # Financeiro — Fila e detalhe
 
+## Emenda Olist e cancelamento de 04/11/2026
+
+[ADR 057](../../../docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
+/ [RFC 044](../../../docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md),
+OLIST-02/19/33/45–47 / OLIST-PLAN-02: contrato para implementar.
+
+Habilitado Olist é capacidade ortogonal também ao perfil Financeiro: concede
+somente projeção/operação Olist de Pedido completo, sem herdar Vendedor, Inbox,
+edição geral ou administração. Sem checkbox, o perfil restrito atual continua.
+
+Cancelamento local pré-exportação exclui Pedido da fila financeira ativa e
+dos totais operacionais, preservando histórico, check e pagamento consultáveis
+no escopo financeiro. Não estorna, apaga obrigação ou marca Nota criada.
+Vínculo/envio Olist não declara quitação nem conclusão financeira. Novo total
+calculado por subtotal preserva a regra de nova quitação em mudança comercial.
+
 **Decisão de produto:** aprovada pelo PO em 21/10/2026 nesta conversa.
 **Estado:** implementação autorizada em 22/10/2026; migrations, API, painel e
 gestão de perfis entregues nesta fatia. Homologação e conta real são FINQ-T06.

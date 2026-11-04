@@ -7,6 +7,12 @@
   tempos de atendimento, retomada em 72h, lead perdido com motivo e presença.
 - [044 — Performance comercial, checkpoint e central de ações](044-performance-comercial-e-central-de-acoes.md),
   protótipo refinado aprovado e recorte registrado na ADR 059 / ACT-T01.
+## Decisão de 04/11/2026
+
+- [044 — Geração assistida de pedidos de venda no Olist](044-geracao-assistida-de-pedidos-no-olist.md),
+  revisão 2 decidida na ADR 057 / OLIST-PLAN-02. OLIST-01–50, seis fases,
+  T01–T26: habilitação, cadastros, subtotais, cancelamento CRM e rótulos.
+  Validações técnicas, implementação e piloto continuam pendentes.
 
 ## Decisão de 03/11/2026
 
@@ -24,10 +30,6 @@
 - [047 — Enviar cobrança pela conversa](047-enviar-cobranca-pela-conversa.md),
   aberta em 05/11/2026 após revisão da jornada: gerar e enviar o link de Pix/cartão
   na conversa certa, por comando humano, sem copiar/colar; novo protótipo em avaliação.
-
-- [044 — Geração assistida de pedidos de venda no Olist](044-geracao-assistida-de-pedidos-no-olist.md),
-  especificação de 04/11/2026 com OLIST-01–32, seis fases e tarefas
-  OLIST-T01–T18. D1–D8 estão propostas; implementação e ativação não concluídas.
 
 - [038 — Frete e etiqueta pelo Melhor Envio](038-frete-e-etiqueta-pelo-melhor-envio.md),
   aberta em 29/10/2026. Tem retirada na loja ou Melhor Envio, etiqueta

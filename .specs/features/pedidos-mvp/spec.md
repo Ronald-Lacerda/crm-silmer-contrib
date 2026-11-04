@@ -1,5 +1,28 @@
 # Pedidos MVP — Especificação
 
+## Emenda Olist valores cancelamento e rótulos de 04/11/2026
+
+[ADR 057](../../../docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
+e [RFC 044](../../../docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md),
+OLIST-01–50 / OLIST-PLAN-02, aprovam contrato ainda não implementado.
+
+- OLIST-09/10/40–44 supersedem PFI-11 e parte de PFI-19/PIT-06 sobre valor
+  digitado só no fechamento: grupo CRM contém linhas estáveis de tamanho,
+  quantidade/subtotal; total final é a soma backend, não campo livre. Quantidade
+  alterada exige revisão humana. Legados preservados, sem dividir total antigo.
+- OLIST-01/02/33–39 permitem Olist por checkbox em qualquer Pedido completo,
+  com busca/criação de cliente/produto/variações. Não alteram posse da edição
+  comercial normal nem autorizam PII/cadastro inventado para a loja.
+- OLIST-19/21/45–47 incluem cancelamento local terminal pré-exportação,
+  higiene/métricas/filas com história preservada; supersedem exclusão genérica
+  de cancelamento do escopo. Exportado não reabre para editar/cancelar no ERP.
+- OLIST-49/50 substituem rótulos Técnica → Aplicação por item e Entrega
+  prometida → Previsão de entrega, preservando chaves, sem summary.aplicacao.
+  Nova v7, sem reescrever v2–v6 ou acrescentar preços à ficha implicitamente.
+
+Seções antigas abaixo são histórico nos pontos supersedidos. Ficha v7 e
+implementação só são declaradas entregues após seus gates, não por esta emenda.
+
 **Status:** implementação integrada; UAT e aprovação física de produção pendentes
 **Atualizado em:** 05/10/2026 — PR 142
 **Data:** 12/09/2026

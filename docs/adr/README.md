@@ -12,6 +12,13 @@
   RFC 049 / COB-DEL-01: 0%, X% e 100%, sinal/saldo, Pix/cartão e quitação
   verificada de pedidos existentes, após aprovação do protótipo.
 
+## Decisão de 04/11/2026
+
+- [057 — Olist por habilitação e subtotal por tamanho](057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md),
+  RFC 044 / OLIST-PLAN-02: checkbox por usuário, qualquer Pedido completo,
+  criação de cadastros/variações, subtotal por tamanho, cancelamento CRM
+  pré-exportação, rótulos Aplicação/Previsão de entrega e piloto individual.
+
 ## Decisão de 03/11/2026
 
 - [056 — Abertura de pedido com confirmação humana](056-abertura-de-pedido-com-confirmacao-humana.md),

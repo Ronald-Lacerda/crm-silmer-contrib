@@ -1,5 +1,23 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Olist por habilitação e subtotal por tamanho em 04/11/2026
+
+[ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 044](docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md), OLIST-PLAN-02. Desenho
+aprovado para implementar, sem runtime ou ativação entregues nesta revisão.
+
+API oficial no monólito/worker/PostgreSQL existentes. Checkbox ortogonal ao
+perfil/posse autoriza projeção e geração Olist de qualquer Pedido completo,
+sem conferir Inbox/edição geral. Parâmetros por conta centralizados; piloto
+individual por ID privado. Cada cliente/produto/variação/venda tem reserva e
+reconciliação próprias, compartilhadas por identidade entre Pedidos.
+
+Grupo/item CRM tem linhas de tamanho com IDs estáveis e subtotais; backend
+calcula total e adapter deriva unitário ERP sem alterar subtotal. Compatibilidade
+de legado/loja é explícita. Cancelamento local terminal pré-exportação filtra
+universos ativos preservando história; exportado não reabre para editar nem
+cancela ERP. Rótulos Aplicação/Previsão de entrega exigem ficha v7, sem mudar
+v2–v6. N8n e Financeiro mantêm fronteiras próprias, com emendas da nova capacidade.
+
 ## Cobranças do pedido — InfinitePay (05/11/2026)
 
 A [ADR 058](docs/adr/058-cobrancas-do-pedido-com-infinitepay.md), após aprovação

@@ -1,5 +1,33 @@
 # TDD — CRM Silmer MVP
 
+## Olist subtotal e cancelamento contrato para implementação
+
+[ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 044](docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md), OLIST-01–50,
+OLIST-PLAN-02 e T01–T26. Não representa código ou schema já publicados.
+
+- Identidade/acesso: checkbox default false gerido por Admin, autorização
+  ortogonal antes das negações por perfil e sem posse. Projeção Olist mínima
+  para qualquer Pedido; revogação verificada antes de toda inclusão remota.
+- Pedido: IDs estáveis de grupo/linha, subtotal em centavos, revisão após
+  quantidade, soma backend, enriquecimento de legado sem alterar snapshot/total.
+  Loja usa adapter/complemento próprio sem modificar pagamento/checkout.
+- Integração: recursos compartilhados por conta/documento e identidade de
+  produto/variação, com HMAC/envelopes, reserva/fencing e outbox transacional.
+  Resolver/criar cliente, pai, tamanhos e venda; persistir cada resultado antes
+  de avançar. Timeout de cadastro bloqueia dependentes, sem POST novo ou delete.
+- Dinheiro ERP: representação derivada e precisão provada por linha. Comparar
+  subtotais remotos/total, bloquear só exportação inexata; não atualizar catálogo
+  encontrado, inventar desconto ou compensar diferenças entre tamanhos.
+- Cancelamento: proposta de marcador terminal separado dos dois status,
+  motivo/versão/auditoria e exclusão das métricas/filas ativas antes de paginar;
+  preservar histórico/pagamento/check. Só pré-exportação, serializado com worker.
+- UI/ficha: Aplicação por grupo e Previsão de entrega preservam chaves. Nova
+  ficha v7/selector/snapshot/amostra; templates v2–v6 intactos. Sem preço novo
+  na impressão. Configuração ERP central versionada, piloto por ID privado.
+
+Contrato/precisão fiscal e detalhes DDL são gates T02/T03/T23; flags e variáveis
+ainda serão definidas. Sem novo serviço/store/infra; publicação GitHub → EasyPanel.
+
 ## Cobranças InfinitePay — COB-DEL-01 (05/11/2026)
 
 [ADR 058](docs/adr/058-cobrancas-do-pedido-com-infinitepay.md) /

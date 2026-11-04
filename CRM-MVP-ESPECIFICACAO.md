@@ -1,5 +1,23 @@
 # CRM Silmer — Especificação de Produto do MVP
 
+## Evolução aprovada Olist e subtotal por tamanho em 04/11/2026
+
+[ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 044](docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md), requisitos OLIST-01–50,
+tarefa documental OLIST-PLAN-02 e execução OLIST-T01–T26. Contrato aprovado,
+implementação/piloto pendentes; prevalece sobre descrições históricas incompatíveis.
+
+Cada usuário tem Habilitado Olist. Humano ativo habilitado pode gerar em
+qualquer Pedido completo, sem posse/perfil implícito e sem liberar edição
+geral. Buscar/criar comprador, produto e variações/tamanhos com vínculos seguros.
+Item CRM continua grupo; linha de tamanho recebe quantidade/subtotal, total
+calculado. Desconto de fábrica é expresso pelo subtotal, não por preço unitário
+obrigatório. Legados não recebem valores inventados e loja preserva gateway.
+
+Cancelamento CRM é higiene/métricas antes da exportação, terminal/auditado,
+sem excluir dados ou cancelar/estornar ERP. Não editar após envio. Aplicação
+e Previsão de entrega são os novos rótulos, inclusive na ficha v7 versionada.
+Configuração comercial central e piloto individual em identidade privada.
+
 ## Evolução aprovada — cobranças InfinitePay (05/11/2026)
 
 [ADR 058](docs/adr/058-cobrancas-do-pedido-com-infinitepay.md), após aprovação

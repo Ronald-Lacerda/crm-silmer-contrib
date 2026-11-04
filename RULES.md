@@ -1,5 +1,33 @@
 # Regras do CRM Silmer
 
+## Evolução aprovada para implementação Olist e valores por tamanho
+
+Decisão de 04/11/2026 na [ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 044](docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md),
+OLIST-01–50 e OLIST-PLAN-02. Estes pontos supersedem os trechos antigos
+incompatíveis para o novo contrato; o código ainda não foi alterado.
+
+- Checkbox Habilitado Olist é ortogonal ao perfil e dono: usuário humano ativo
+  habilitado opera Olist em qualquer Pedido com ficha/cadastro completos.
+  Admin não herda envio; habilitação não concede Inbox, edição geral ou conexão.
+- Buscar e criar cliente comprador, produto pai e variações/tamanhos ausentes,
+  com dados válidos, reservas por identidade, vínculos e reconciliação por etapa.
+  Não criar conta de funcionário nem sobrescrever cadastro remoto encontrado.
+- Item CRM é grupo; linha de tamanho contém quantidade e subtotal informado.
+  Total soma subtotais no backend, sem valor final independente digitado.
+  Unitário ERP é derivado, preservando cada subtotal; inexatidão bloqueia só
+  exportação, sem inventar resíduo/desconto ou preço legado.
+- Cancelamento local terminal pré-exportação serve higiene/métricas/filas;
+  não apaga história/pagamento/check nem estorna dinheiro. Enviado/vinculado/
+  incerto não admite essa ação ou reabertura de edição; não há cancelamento ERP.
+  Cancelamento conserva ACL comercial própria e não deriva do checkbox.
+- Previsão de entrega substitui Entrega prometida e Aplicação substitui Técnica
+  por item; chaves e templates históricos preservados, nova ficha v7 com gates.
+- Loja mantém travas/gateway; adapter de completude não inventa dado faltante.
+  Parâmetros ERP centralizados e piloto individual por ID privado, sem PII em diff.
+
+As regras abaixo descrevem baseline anterior onde houver divergência expressa.
+Nada neste registro habilita conta, muda produção ou substitui os gates da RFC.
+
 ## Cobranças InfinitePay — extensão aprovada (05/11/2026)
 
 A [ADR 058](docs/adr/058-cobrancas-do-pedido-com-infinitepay.md) autoriza
