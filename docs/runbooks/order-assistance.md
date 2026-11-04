@@ -42,6 +42,11 @@ esse principal e a representação legada em string. O teste OA-T02 atravessa
 Basic real, rota, runtime n8n e serviço para impedir regressão de `403`.
 Conferir metadados de nós e códigos de resposta sem persistir payloads nem
 habilitar retenção de execuções com dados de clientes.
+Se a análise existe, mas a mensagem não aparece na lista, conferir o ciclo
+aberto e `archived_at`. Uma entrada nova via n8n remove o arquivamento no
+mesmo commit da mensagem; replay não desfaz arquivamento posterior. Conversas
+afetadas antes dessa correção precisam de desarquivamento humano autorizado
+ou de nova mensagem; não alterar estado diretamente no banco para repará-las.
 Pedidos manuais sem sugestão são candidatos a revisão, não falsos negativos
 comprovados. “Já deveria ter sugerido” é rotulagem humana. Janela e limites
 permanecem explícitos; conteúdo da conversa não entra em agregados/logs.

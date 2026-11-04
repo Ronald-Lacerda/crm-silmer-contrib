@@ -30,3 +30,13 @@ Adicionar regressão com autenticação Basic, rota e runtime reais até o servi
 incluindo credencial inválida e tentativas de forjar o ator. Confirmar CI,
 publicação da API e uma observação persistida sem criar pedido ou enviar
 mensagem externa. Evidências de teste e implantação são registradas no PR.
+
+## OA-T03 — Nova entrada devolve a conversa arquivada à Inbox
+
+Requisitos: PCX-05/ORC-07. O recebimento n8n deve manter a paridade com o
+recebimento canônico da Inbox: nova mensagem retira o arquivamento na mesma
+transação, preservando atendimento humano, responsável e epoch. Replay não
+desfaz um arquivamento posterior; falha ao persistir a mensagem reverte toda
+a transação. Verificar visibilidade na projeção da Inbox, concorrência e
+ausência de criação de pedidos. A conversa já afetada exige desarquivamento
+humano autorizado ou uma nova entrada após a correção; não executar backfill.

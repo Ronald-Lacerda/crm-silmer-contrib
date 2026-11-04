@@ -363,6 +363,7 @@ export class PostgresN8nIntegrationRepository {
              SET inbound_revision = inbound_revision + 1,
                  last_inbound_event_id = $2,
                  last_message_at = GREATEST(last_message_at, $3),
+                 archived_at = NULL,
                  version = version + 1
              WHERE id = $1
              RETURNING *`,

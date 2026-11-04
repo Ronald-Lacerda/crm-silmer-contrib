@@ -42,6 +42,144 @@ function assertTestDatabase(url) {
 }
 
 if (connectionString) {
+  test('OA-T03/PCX-05: fresh inbound restores an archived human conversation, while replay and failed inserts preserve its archive', async () => {
+    assertTestDatabase(connectionString);
+    const pool = new Pool({ connectionString, max: 4 });
+    const database = {
+      query: pool.query.bind(pool),
+      transaction: (/** @type {(client:any)=>Promise<any>} */ work) =>
+        withTransaction(pool, work),
+    };
+    const envelopeKey = Buffer.alloc(32, 71);
+    const contactEnvelopeKey = Buffer.alloc(32, 72);
+    const messageEnvelopeKey = Buffer.alloc(32, 74);
+    let sequence = 0;
+    const service = createN8nIntegrationService({
+      clock: () => NOW,
+      idFactory: (kind) => `archive-${kind}-${++sequence}`,
+      repository: new PostgresN8nIntegrationRepository({
+        database,
+        envelopeKey,
+        contactEnvelopeKey,
+        messageEnvelopeKey,
+        requireHumanOrderCreation: true,
+      }),
+    });
+    /** @param {number} turn */
+    const inbound = (turn) => ({
+      channel: 'whatsapp',
+      contact: { name: 'Synthetic archive test', wa_id: '5527900000444' },
+      event_id: `archive-inbound-${turn}`,
+      message: {
+        external_id: `archive-inbound-${turn}`,
+        text: 'Synthetic incoming message',
+        type: 'text',
+      },
+      metadata: { phone_number_id: 'synthetic-archive-account' },
+      occurred_at: NOW.toISOString(),
+      schema_version: '1.0',
+      technical: {
+        actor: 'AUTOMATION_EXECUTOR',
+        correlationId: `archive-correlation-${turn}`,
+        credentialVersion: 'current',
+        executionId: `archive-execution-${turn}`,
+        idempotencyKey: `archive-inbound-${turn}`,
+        requestId: `archive-request-${turn}`,
+        workflowKey: 'whatsapp-mvp',
+        workflowVersion: 'mvp-simple-21',
+      },
+    });
+    try {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await migrate(pool, { migrations: await loadMigrations() });
+      await pool.query(
+        `INSERT INTO crm.users (id,email,password_hash,name) VALUES ('archive-seller','archive-seller@example.test','$argon2id$synthetic','Synthetic seller')`,
+      );
+      const first = await service.receiveInbound(inbound(1));
+      await pool.query(
+        `UPDATE crm.conversations SET archived_at=$2,automation_state='human',state='em_atendimento',assigned_user_id='archive-seller',automation_epoch=5,version=version+1 WHERE id=$1`,
+        [first.conversation_id, NOW],
+      );
+      const [fresh, replay] = await allValues([
+        service.receiveInbound(inbound(2)),
+        service.receiveInbound(inbound(2)),
+      ]);
+      assert.deepEqual([fresh.duplicate, replay.duplicate].sort(), [
+        false,
+        true,
+      ]);
+      assert.equal(fresh.conversation_id, first.conversation_id);
+      const state = async () =>
+        (
+          await pool.query(
+            `SELECT archived_at,automation_state,state,assigned_user_id,automation_epoch,inbound_revision,version FROM crm.conversations WHERE id=$1`,
+            [first.conversation_id],
+          )
+        ).rows[0];
+      const restored = await state();
+      assert.equal(restored.archived_at, null);
+      assert.equal(restored.automation_state, 'human');
+      assert.equal(restored.state, 'em_atendimento');
+      assert.equal(restored.assigned_user_id, 'archive-seller');
+      assert.equal(Number(restored.automation_epoch), 5);
+      assert.equal(Number(restored.inbound_revision), 2);
+      const inbox = new PostgresInboxReadRepository({
+        database,
+        contactEnvelopeKey,
+        messageEnvelopeKey,
+      });
+      assert.ok(
+        (await inbox.list({ archived: false, limit: 50 })).items.some(
+          (/** @type {any} */ row) => row.id === first.conversation_id,
+        ),
+      );
+      assert.equal(
+        (await inbox.list({ archived: true, limit: 50 })).items.length,
+        0,
+      );
+
+      // A seller may archive again after this message. Old receipts must not undo it.
+      await pool.query(
+        'UPDATE crm.conversations SET archived_at=$2,version=version+1 WHERE id=$1',
+        [first.conversation_id, NOW],
+      );
+      const archived = await state();
+      assert.equal((await service.receiveInbound(inbound(2))).duplicate, true);
+      assert.deepEqual(await state(), archived);
+
+      // Another delivery key reaches the UPDATE but fails the message identity constraint.
+      // The complete transaction, including restoring visibility, must roll back.
+      const duplicateIdentity = inbound(2);
+      duplicateIdentity.technical = {
+        ...duplicateIdentity.technical,
+        idempotencyKey: 'archive-different-delivery-key',
+      };
+      await assert.rejects(service.receiveInbound(duplicateIdentity));
+      assert.deepEqual(await state(), archived);
+      assert.ok(
+        (await inbox.list({ archived: true, limit: 50 })).items.some(
+          (/** @type {any} */ row) => row.id === first.conversation_id,
+        ),
+      );
+      const counts = (
+        await pool.query(
+          `SELECT (SELECT count(*)::integer FROM crm.messages) AS messages,(SELECT count(*)::integer FROM crm.n8n_events WHERE event_type='message.inbound') AS receipts,(SELECT count(*)::integer FROM crm.domain_events WHERE event_type='conversation.message_received') AS events,(SELECT count(*)::integer FROM crm.orders) AS orders`,
+        )
+      ).rows[0];
+      assert.deepEqual(counts, {
+        messages: 2,
+        receipts: 2,
+        events: 2,
+        orders: 0,
+      });
+    } finally {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await pool.end();
+    }
+  });
+
   test('PostgreSQL folds revision fencing, briefing and delivery into the MVP model', async () => {
     assertTestDatabase(connectionString);
     const pool = new Pool({ connectionString, max: 12 });
