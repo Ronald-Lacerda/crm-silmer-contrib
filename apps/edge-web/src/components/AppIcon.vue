@@ -75,6 +75,8 @@ const ICONS = Object.freeze({
   ],
   search: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z', 'm21 21-4.3-4.3'],
   check: ['M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0', 'm9 12 2 2 4-4'],
+  info: ['M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0', 'M12 11v6', 'M12 7v.01'],
+  alert: ['m12 3 10 18H2z', 'M12 9v4', 'M12 17v.01'],
   maximize: ['M8 3H3v5', 'M16 3h5v5', 'M21 16v5h-5', 'M3 16v5h5'],
   minimize: ['M8 3v5H3', 'M16 3v5h5', 'M21 16h-5v5', 'M3 16h5v5'],
   filters: [

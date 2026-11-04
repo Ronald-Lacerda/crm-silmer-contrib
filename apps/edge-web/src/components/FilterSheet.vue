@@ -2,6 +2,7 @@
 import { nextTick, ref, useId } from 'vue';
 import { openDialog } from '../lib/ui.js';
 import AppIcon from './AppIcon.vue';
+import AppHint from './AppHint.vue';
 
 /**
  * RFC 024 (PLI-09, PCX-12): the less frequent filters of a list, behind one
@@ -17,6 +18,7 @@ import AppIcon from './AppIcon.vue';
 defineProps({
   /** The sheet's heading, which also names the dialog. */
   title: { type: String, required: true },
+  description: { type: String, default: '' },
   /** The single primary action: apply the draft and close. */
   applyLabel: { type: String, default: 'Ver resultados' },
   /** Resets the draft; the sheet stays open to show what changed. */
@@ -75,11 +77,16 @@ defineExpose({ close, open });
           <AppIcon name="close" /><span class="sr-only">Fechar</span>
         </button>
       </div>
+      <AppHint v-if="description" class="filter-sheet-description">{{
+        description
+      }}</AppHint>
       <div class="filter-sheet-body">
         <slot />
       </div>
       <div class="filter-sheet-actions">
-        <button type="button" @click="emit('clear')">{{ clearLabel }}</button>
+        <button type="button" class="quiet" @click="emit('clear')">
+          {{ clearLabel }}
+        </button>
         <button type="button" class="primary" @click="apply">
           {{ applyLabel }}
         </button>
@@ -119,7 +126,13 @@ defineExpose({ close, open });
   border: 1px solid var(--color-border);
   border-block-end: 0;
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-  box-shadow: var(--shadow-overlay);
+  box-shadow: var(--elevation-floating);
+}
+.filter-sheet-description {
+  padding-block: var(--space-1) var(--space-3);
+}
+.filter-sheet-panel:has(> .filter-sheet-description) {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
 .filter-sheet-head {

@@ -101,23 +101,9 @@
   color: var(--color-text-muted);
   font-size: var(--text-sm);
 }
-
-.inbox-filter-chip {
-  gap: var(--space-1);
-  min-block-size: var(--control-height-sm);
-  padding: 0 var(--space-2) 0 var(--space-3);
-  color: var(--color-text);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  background: var(--color-selected);
-  border-color: var(--color-focus);
-  border-radius: var(--radius-pill);
-}
-
-.inbox-filter-chip .app-icon {
-  inline-size: 1rem;
-  block-size: 1rem;
-  color: var(--color-text-muted);
+.inbox-search .inbox-search-hint {
+  grid-column: 1 / -1;
+  margin-block-start: var(--space-2);
 }
 
 .inbox-active-filter .quiet {
@@ -161,7 +147,7 @@
   color: var(--color-text);
   font-weight: 600;
   background: var(--color-surface);
-  box-shadow: var(--shadow-raised);
+  box-shadow: var(--elevation-panel);
 }
 
 .inbox-tab-count {
@@ -305,7 +291,8 @@
   background: transparent;
   border: 0;
   border-radius: 0;
-  box-shadow: inset 0 -1px 0 var(--color-border-subtle);
+  border-block-end: 1px solid var(--color-border-subtle);
+  box-shadow: none;
 }
 
 .inbox-list .conversation-row:hover:not(:disabled) {
@@ -376,7 +363,7 @@
 }
 
 .conv-next-action[data-tone='ready'] {
-  color: var(--color-link);
+  color: var(--color-ready-text);
   font-weight: 600;
 }
 
@@ -1352,7 +1339,6 @@
   .conv-order-link,
   .inbox-tabs .inbox-tab,
   .inbox-filters-button,
-  .inbox-filter-chip,
   .inbox-active-filter .quiet,
   .inbox-list .empty-list button,
   .inbox-live-notice button,
@@ -1648,6 +1634,19 @@
   min-block-size: var(--target-min);
   padding-inline: var(--space-2);
 }
+.inbox-composer .media-composer__tools button,
+.inbox-composer .conversation-shipping-action > button,
+.conv-more > button {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: var(--elevation-panel);
+}
+.inbox-composer .media-composer__tools button:hover:not(:disabled),
+.inbox-composer .conversation-shipping-action > button:hover:not(:disabled),
+.conv-more > button:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+  border-color: transparent;
+}
 .inbox-composer .media-composer__tools .app-icon,
 .inbox-composer .media-composer__actions .app-icon,
 .inbox-composer .conversation-shipping-action .app-icon {
@@ -1659,10 +1658,11 @@
   gap: var(--space-2);
   min-block-size: var(--control-height-sm);
   padding: 0 var(--space-2);
-  color: var(--color-link);
+  color: var(--color-selection-text);
   font-size: var(--text-xs);
-  background: transparent;
-  border: 0;
+  background: var(--color-selected);
+  border: 1px solid var(--color-selection-border);
+  border-radius: var(--radius-sm);
   box-shadow: none;
 }
 .composer-order-context .app-icon {

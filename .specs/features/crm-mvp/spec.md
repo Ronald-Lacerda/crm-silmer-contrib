@@ -1,5 +1,30 @@
 # CRM Silmer MVP — Requisitos Rastreáveis
 
+## UX-FUNC-01 — Componentes com função explícita (04/11/2026)
+
+Implementação autorizada pelo proprietário no chat. Complementa PCX-13/14/15,
+MSG-02/03, PLI-09/10 e a fundação das ADRs 035/036; não altera ACL ou estados
+comerciais.
+
+- O rascunho textual SHALL pertencer à Conversa em memória da Inbox. Trocar
+  de cliente não transporta texto; voltar recupera o rascunho. Sair da Inbox
+  ou recarregar descarta os rascunhos, sem persistir conteúdo em storage do navegador.
+- Sucesso de envio SHALL limpar somente o texto submetido da conversa alvo;
+  falha preserva o texto. Resposta atrasada não altera rascunho, foco ou feedback
+  de outra conversa nem apaga uma edição mais recente.
+- Filtros de Pedidos SHALL explicitar a visualização exclusiva de PLI-09,
+  conservar aplicação consciente, Escape e retorno do foco; o filtro aplicado
+  pode ser removido por chip nomeado, preservando busca e links do Painel.
+- Vazio por filtro ou busca SHALL distinguir a causa e oferecer a recuperação
+  correspondente. Buscar fora da visão de entrega informa a mudança de escopo;
+  o limite de até 100 conversas carregadas fica visível na busca da Inbox.
+- Ação primária, continuidade, utilidade e navegação SHALL ter ênfases distintas;
+  seleção, edição, prontidão, atenção e erro não dependem apenas de cor.
+- Sombra SHALL indicar sobreposição funcional; controles em repouso ficam planos.
+  Temas, alvos de toque, teclado, foco e orçamentos da ADR 036 permanecem.
+
+Entrega e evidências: [tarefa](tasks.md), [design](../../../design.md).
+
 ## Inbox orientada ao vendedor — PCX-15 (03/11/2026)
 
 Autorizada pelo proprietário no chat; tarefa INBOX-UX-02. Complementa INBOX-4,

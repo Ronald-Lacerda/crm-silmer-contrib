@@ -1,5 +1,28 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## UX-FUNC-01 — Componentes com função explícita (04/11/2026)
+
+[Contrato](spec.md#ux-func-01--componentes-com-função-explícita-04112026),
+PCX-13/14/15, MSG-02/03 e PLI-09/10, sob ADRs 035/036. Autorização no chat.
+
+- [x] Isolar rascunhos textuais e respostas assíncronas por conversa, sem storage.
+- [x] Explicitar escolha única de filtros, remover por chip e recuperar vazios.
+- [x] Diferenciar ações, seleção, status, hints e elevação nos componentes existentes.
+- [x] Executar gates completos, E2E/axe, revisão visual claro/escuro e QA adversarial.
+- [x] Preparar entrega atômica em `codex/componentes-funcionais`, com commit/push
+      da fatia e preservação de alterações locais de outras tarefas.
+
+Evidências locais: Node 24.20.0/npm 11.19.0; `npm run validate` com 1.690
+aprovados, dez ignorados e build; E2E completo com 469 aprovados/sete ignorados;
+após ajustes finais de apresentação e breakpoint, 59 regressões aprovadas.
+Pedidos, filtros e Inbox em claro/escuro a 390/768/1440 px: 18 verificações axe
+sem violações e sem overflow da página. Auditoria sem high/critical (um low e
+oito moderate preexistentes). Revisão independente sem findings P1/P2.
+
+Operação: rascunhos são temporários e saem com a instância da Inbox. Não há
+API, migration ou configuração nova. Rollback é reverter a entrega de frontend;
+mensagens aceitas pela API não devem ser reenviadas para testar apresentação.
+
 ## AGENTE-OBS-03 — Turnos por versão no workflow vivo (04/11/2026)
 
 AGT-06/10 e ORC-03/05, sob a ADR 052.

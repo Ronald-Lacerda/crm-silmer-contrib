@@ -2,6 +2,7 @@
 import { computed, inject } from 'vue';
 import { nextOrderStep, orderSteps } from '../../lib/order-format.js';
 import OrderIcon from './OrderIcon.vue';
+import AppHint from '../AppHint.vue';
 
 /*
  * PFI-15 (RFC 024): the real progress to generate the order, at the top of
@@ -90,9 +91,9 @@ function goToNext() {
           >
             {{ step.action }}
           </button>
-          <p v-if="sectionOpen" id="order-progress-reason" class="op-hint">
+          <AppHint v-if="sectionOpen" id="order-progress-reason" tone="warning">
             Salve ou cancele a edição aberta.
-          </p>
+          </AppHint>
         </div>
       </li>
     </ol>

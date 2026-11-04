@@ -516,6 +516,25 @@ test('stacks the orders as cards on a phone, with no sideways scroll', async ({
 });
 
 // RFC 024 (PLI-09, PLI-10): three chips and a "Filtros" sheet.
+test('UX-FUNC-01: order actions remain fully visible at the 768px shell boundary', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 768, height: 900 });
+  await mockOrders(page);
+  await page.goto('/pedidos');
+  const row = page.locator('.order-table tbody tr').first();
+  await expect(row).toHaveCSS('display', 'grid');
+  for (const action of await page
+    .locator('.order-cell-actions a, .order-cell-actions button')
+    .all()) {
+    const box = await action.boundingBox();
+    if (!box) throw new Error('A ação do pedido precisa estar visível.');
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(768);
+  }
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
 test('PLI-09/PLI-10: the "Filtros" sheet works by keyboard and names the filter it applies', async ({
   page,
 }) => {
@@ -542,6 +561,11 @@ test('PLI-09/PLI-10: the "Filtros" sheet works by keyboard and names the filter 
   await page.keyboard.press('Enter');
   const sheet = page.getByRole('dialog', { name: 'Filtros' });
   await expect(sheet).toBeVisible();
+  await expect(
+    sheet.getByText(
+      'Escolha uma visualização por vez. Uma opção substitui a anterior.',
+    ),
+  ).toBeVisible();
   await expect(sheet.locator('legend')).toHaveText([
     'Situação',
     'Responsável',
@@ -592,9 +616,10 @@ test('PLI-09/PLI-10: the "Filtros" sheet works by keyboard and names the filter 
   // PLI-10: no chip says it, so the list names it, with a way out.
   await expect(all).toHaveAttribute('aria-pressed', 'false');
   const active = page.locator('.orders-active-filter');
-  await expect(active).toHaveText(
-    /^\s*Filtro: Entrega atrasada\s*Limpar filtro\s*$/u,
-  );
+  await expect(active).toHaveText(/^\s*Filtro:\s*Entrega atrasada\s*$/u);
+  await expect(
+    active.getByRole('button', { name: /^Limpar filtro /u }),
+  ).toBeVisible();
   await expect(page.locator('.filter-summary')).toHaveText('1 pedido');
 
   // "Limpar filtros" resets the draft; a click outside discards it.
@@ -608,9 +633,7 @@ test('PLI-09/PLI-10: the "Filtros" sheet works by keyboard and names the filter 
   await expect(filters).toBeFocused();
   await expect(active).toContainText('Entrega atrasada');
 
-  await page
-    .getByRole('button', { name: 'Limpar filtro', exact: true })
-    .focus();
+  await page.getByRole('button', { name: /^Limpar filtro /u }).focus();
   await page.keyboard.press('Enter');
   await expect(active).toHaveCount(0);
   await expect(filters).toBeFocused();
@@ -640,9 +663,7 @@ test('PLI-10: a Painel filter in the address is named, combines with the search 
   await expect(active).toContainText('Loja do site');
 
   // Clearing drops the filter from the address and keeps the search.
-  await page
-    .getByRole('button', { name: 'Limpar filtro', exact: true })
-    .click();
+  await page.getByRole('button', { name: /^Limpar filtro /u }).click();
   await expect(page).toHaveURL('/pedidos');
   await expect(active).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Filtros' })).toBeFocused();
@@ -661,6 +682,104 @@ test('PLI-10: a Painel filter in the address is named, combines with the search 
   await expect.poll(() => calls.at(-1)?.get('q') ?? null).toBe('05-CRM');
   expect(calls.at(-1)?.get('delivery')).toBeNull();
   await expect(active).toHaveCount(0);
+  await expect(
+    page.getByText(
+      'A busca está em todos os pedidos. A visualização por entrega foi removida.',
+    ),
+  ).toBeVisible();
+});
+
+test('UX-FUNC-01: an empty filter has a way back without creating an order', async ({
+  page,
+}) => {
+  await mockOrders(page, { orders: [confirmedOrder] });
+  await page.goto('/pedidos?status=pendente');
+  const empty = page.getByRole('heading', {
+    name: 'Nenhum pedido com esse filtro',
+  });
+  await expect(empty).toBeVisible();
+  await empty
+    .locator('..')
+    .getByRole('button', { name: 'Limpar filtro' })
+    .click();
+  await expect(page).toHaveURL('/pedidos');
+  await expect(
+    page.getByRole('region', { name: 'Pedidos confirmados' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Filtros', exact: true }),
+  ).toBeFocused();
+});
+
+test('UX-FUNC-01: clearing an empty search keeps the chosen view and returns focus', async ({
+  page,
+}) => {
+  await mockOrders(page);
+  await page.route('**/api/v1/orders?**', async (route) => {
+    if (!new URL(route.request().url()).searchParams.get('q'))
+      return route.fallback();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [],
+        counts: { confirmado: 0, pendente: 0 },
+        nextCursor: null,
+      }),
+    });
+  });
+  await page.goto('/pedidos?status=pendente');
+  const search = page.getByRole('searchbox', {
+    name: 'Buscar número, cliente ou telefone',
+  });
+  await search.fill('Cliente inexistente');
+  await expect(
+    page.getByRole('heading', { name: 'Nenhum pedido encontrado' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Limpar busca', exact: true }).click();
+  await expect(search).toHaveValue('');
+  await expect(search).toBeFocused();
+  await expect(page.locator('.orders-active-filter')).toContainText(
+    'Pendentes',
+  );
+  await expect(
+    page.getByRole('region', { name: 'Pedidos pendentes' }),
+  ).toBeVisible();
+});
+
+test('UX-FUNC-01: an empty search does not declare the production queue empty', async ({
+  page,
+}) => {
+  await mockOrders(page);
+  await page.route('**/api/v1/orders?**', async (route) => {
+    if (!new URL(route.request().url()).searchParams.get('q'))
+      return route.fallback();
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        items: [],
+        counts: { confirmado: 0, pendente: 0 },
+        nextCursor: null,
+      }),
+    });
+  });
+  await page.goto('/pedidos');
+  const production = page.getByRole('button', {
+    name: 'Prontos para produção',
+    exact: true,
+  });
+  await production.click();
+  await page.getByRole('searchbox').fill('Cliente inexistente');
+  await expect(
+    page.getByRole('heading', { name: 'Nenhum pedido encontrado' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Nenhum pedido na fila de produção' }),
+  ).toHaveCount(0);
+  await page.getByRole('button', { name: 'Limpar busca', exact: true }).click();
+  await expect(production).toHaveAttribute('aria-pressed', 'true');
+  await expect(
+    page.getByRole('region', { name: 'Fila de produção' }),
+  ).toBeVisible();
 });
 
 test('PLI-09: on a phone the first order sits whole above the bottom bar, and "Filtros" is a bottom sheet', async ({

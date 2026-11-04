@@ -48,11 +48,12 @@
 }
 
 /* "Filtros" closes the row; it reads as in use while a sheet filter is. */
-.chip.orders-filters-button {
+.orders-filters-button {
   margin-inline-start: auto;
+  min-block-size: var(--control-height);
 }
 
-.chip.orders-filters-button[data-active='true'] {
+.orders-filters-button[data-active='true'] {
   color: var(--color-text);
   font-weight: 600;
   background: var(--color-selected);
@@ -81,6 +82,21 @@
   min-block-size: var(--control-height-sm);
   padding-inline: var(--space-3);
 }
+.orders-search-notice {
+  margin-block-end: var(--space-3);
+}
+
+/* Row navigation stays below the task action and never looks elevated. */
+.order-cell-actions .button-link {
+  color: var(--color-link);
+  background: transparent;
+  border-color: transparent;
+  font-weight: var(--weight-medium);
+}
+.order-cell-actions .button-link:hover {
+  background: var(--color-selected);
+  border-color: transparent;
+}
 
 @media (width >= 48rem) {
   .filter-bar.orders-filter-bar {
@@ -94,7 +110,7 @@
     max-inline-size: 24rem;
   }
 
-  .chip.orders-filters-button {
+  .orders-filters-button {
     margin-inline-start: 0;
   }
 }
@@ -155,7 +171,7 @@
  * tables are stacked cards by default — number and status, customer, then
  * delivery, pieces and amount, the situation and the actions — with no
  * sideways scroll and the page scrolling instead of a nested region. From
- * 48rem they are tables again. The table keeps its semantics throughout.
+ * 769px they are tables again, matching the shell. Semantics are preserved.
  */
 .table-wrap.order-list {
   max-block-size: none;
@@ -250,7 +266,7 @@
   min-block-size: var(--target-min);
 }
 
-@media (width >= 48rem) {
+@media (min-width: 769px) {
   .table-wrap.order-list {
     max-block-size: min(36rem, 65dvh);
     overflow: auto;
@@ -327,6 +343,16 @@
 
   .order-table .order-cell-actions .row-actions > * {
     flex: none;
+  }
+}
+
+@media (max-width: 768px) {
+  /* A deadline is a fact, not a compact status chip squeezed into a column. */
+  .order-table .order-due[data-tone] {
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    font-weight: var(--weight-medium);
   }
 }
 

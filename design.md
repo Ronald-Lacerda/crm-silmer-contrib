@@ -104,7 +104,7 @@ O produto é whitelabel e a Silmer é o piloto. `tokens.css` tem três camadas:
 | `--color-surface-active` | tinta 8% | branco 14% | pressionado |
 | `--color-text` | tinta | branco 94% | texto principal (≥ 16:1) |
 | `--color-text-muted` | tinta 64% | branco 68% | texto secundário (≥ 5.5:1) |
-| `--color-border` / `-strong` / `-subtle` | tinta 14% / 30% / 8% | branco 16% / 30% / 10% | limites; `strong` em campos (3:1) |
+| `--color-border` / `-strong` / `-subtle` | tinta 14% / 45% / 8% | branco 16% / 45% / 10% | limites; `strong` em campos (3:1) |
 | `--color-accent` | primária | primária | faixa, ícone ativo, assinatura |
 | `--color-accent-solid` | primária forte | primária forte | botão primário (texto branco) |
 | `--color-link` / `--color-focus` | secundária | secundária clara | links, anel e halo de foco |
@@ -209,8 +209,8 @@ desenhada primeiro para 390×844.
   foco. As telas reservam a barra no fim da rolagem e acima de rodapés fixos.
   Campos usam 16 px para o iOS não dar zoom.
 
-- Sidebar de `248px` no canvas, sem borda; item ativo é um cartão branco com
-  sombra curta e ícone na cor da marca. Recolhe para rail de `72px` entre 769 e
+- Sidebar de `248px` no canvas, sem borda; item ativo usa superfície branca,
+  peso semibold e ícone na cor da marca, sem sombra. Recolhe para rail de `72px` entre 769 e
   1199 px, com o monograma da marca. A Inbox começa com menu compacto quando
   não há preferência; `Expandir menu` / `Recolher menu` preserva a escolha
   no navegador para todas as telas desktop/tablet. No celular permanece a barra inferior.
@@ -629,3 +629,34 @@ alvos de pelo menos 40 px, com 44 px no compositor e no toque.
 ---
 
 Este documento define a direção visual. Etapas do Kanban, permissões, campos obrigatórios da Ficha e vocabulário financeiro estão resolvidos nos documentos canônicos e prontos para especificação e implementação pelo Tech Lead.
+
+## 17. Ênfase por função — UX-FUNC-01 (04/11/2026)
+
+Complementa a fundação da ADR 035 e os padrões da ADR 036, preservando marca,
+temas, layout e a única ação primária por região.
+
+- **Compromisso:** `primary`, preenchimento de marca e peso 600. É a ação
+  principal de enviar, gerar ou assumir. **Continuidade:** `soft`, fundo suave,
+  texto de ação e peso 600, para abrir filtros ou recuperar uma lista.
+- **Alternativa:** botão padrão com borda, peso 500 e sem sombra. **Utilidade:**
+  `quiet` ou botão de ícone, fundo transparente e alvo preservado. **Navegação:**
+  link; abrir um pedido na linha não compete visualmente com executar sua ação.
+  Risco usa a semântica destrutiva existente, sem tornar toda ação vermelha.
+- **Chip seleciona ou remove:** a seleção é neutra/roxa e nomeada;
+  `FilterChip` remove o critério com nome acessível e fechamento explícito.
+  **Badge informa:** raio pequeno, peso 500 e texto de status; não imita botão.
+- **Hint explica:** `AppHint` neutro para contexto, informação para limites e
+  mudança de escopo, atenção para impedimento recuperável, erro para falha e
+  sucesso para prontidão. O texto dá significado; ícone e cor o reforçam.
+  Apenas resultados assíncronos relevantes recebem região de anúncio.
+- **Cores têm papel:** seleção não é prontidão. Edição em andamento usa
+  informação; pronto usa sucesso, atenção e erro permanecem operacionais.
+  Labels usam peso 500; valores e títulos usam 600/700 conforme a hierarquia.
+- **Elevação tem função:** botões e links em repouso ficam planos;
+  menus, painéis sobrepostos e folhas usam `--elevation-floating`.
+- **Filtros:** PLI-09 continua sendo uma visualização exclusiva. A folha
+  explicita a troca; não apresenta combinação que a API não suporta. Vazio de
+  filtro oferece limpar filtro; vazio de busca oferece limpar busca e retorna
+  foco ao campo. A busca em visão de entrega avisa que muda para todos.
+- **Compositor:** cada conversa mantém seu próprio rascunho temporário; o
+  término de um envio não muda o contexto que o vendedor está operando.

@@ -36,7 +36,7 @@
 .op-conditions legend {
   color: var(--color-text-muted);
   font-size: var(--text-xs);
-  font-weight: 600;
+  font-weight: var(--weight-medium);
   line-height: 1.45;
 }
 
@@ -525,8 +525,8 @@
 }
 
 .op-editing-tag {
-  color: var(--color-link);
-  background: var(--color-surface-active);
+  color: var(--color-editing-text);
+  background: var(--color-editing-surface);
 }
 
 .op-quiet-tag {
@@ -544,6 +544,7 @@ button.op-edit {
   background: transparent;
   border-color: transparent;
   border-radius: var(--radius-md);
+  box-shadow: var(--elevation-panel);
 }
 
 button.op-edit:hover:not(:disabled, [aria-disabled='true']) {
@@ -1020,6 +1021,7 @@ button.op-save {
   background: var(--color-text);
   border-color: var(--color-text);
   border-radius: var(--radius-md);
+  font-weight: var(--weight-semibold);
 }
 
 button.op-save:hover:not(:disabled) {
@@ -1564,7 +1566,8 @@ button.op-icon-button {
   min-block-size: 36px;
   block-size: 36px;
   padding: 0;
-  background: var(--color-surface);
+  background: transparent;
+  border-color: transparent;
   border-radius: var(--radius-md);
 }
 
@@ -2105,11 +2108,12 @@ button.op-generate {
   color: var(--status-warning-text);
   font-size: var(--text-sm);
   line-height: 1.45;
-  text-align: center;
+  text-align: start;
+  justify-content: center;
 }
 
 .op-readiness[data-ready] {
-  color: var(--color-text-muted);
+  color: var(--color-ready-text);
 }
 
 .op-deal {

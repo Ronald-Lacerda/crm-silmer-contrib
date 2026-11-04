@@ -19,6 +19,8 @@ import {
 import { useRoute, useRouter } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
 import FilterSheet from '../components/FilterSheet.vue';
+import FilterChip from '../components/FilterChip.vue';
+import AppHint from '../components/AppHint.vue';
 import { commandKey, request } from '../lib/api-client.js';
 import { dateTimeBR, formatPhoneNumber } from '../lib/format.js';
 import { openDialog } from '../lib/ui.js';
@@ -156,8 +158,10 @@ clearedFromRoute = null;
 const query = ref(carried?.query ?? '');
 const filterSheet = ref(null);
 const filtersButton = ref(null);
+const orderSearch = ref(null);
 // The sheet edits a draft; "Ver resultados" applies it, Esc discards it.
 const draftFilter = ref('');
+const searchNotice = ref('');
 const items = ref([]);
 const counts = ref({ confirmado: 0, pendente: 0 });
 const nextCursor = ref(null);
@@ -755,6 +759,7 @@ async function generatePdf(order) {
 /** @param {string} value */
 function selectFilter(value) {
   if (filter.value === value) return;
+  searchNotice.value = '';
   filter.value = value;
   void load();
 }
@@ -769,6 +774,12 @@ function openFilters(event) {
 
 function applySheetFilter() {
   selectFilter(draftFilter.value);
+}
+
+async function clearSearch() {
+  query.value = '';
+  await nextTick();
+  orderSearch.value?.focus();
 }
 
 /**
@@ -802,7 +813,12 @@ function scheduleLiveRefresh() {
 watch(query, () => {
   // A delivery view is a short list in promised order; a search reads every
   // order again.
-  if (deliveryFilter.value && query.value.trim()) filter.value = '';
+  if (deliveryFilter.value && query.value.trim()) {
+    filter.value = '';
+    searchNotice.value =
+      'A busca está em todos os pedidos. A visualização por entrega foi removida.';
+  }
+  if (!query.value.trim()) searchNotice.value = '';
   if (searchTimer) globalThis.clearTimeout(searchTimer);
   searchTimer = globalThis.setTimeout(() => {
     searchTimer = 0;
@@ -1100,6 +1116,7 @@ onBeforeUnmount(() => {
           <AppIcon class="orders-search-icon" name="search" />
           <input
             id="order-search"
+            ref="orderSearch"
             v-model="query"
             type="search"
             placeholder="Número, cliente ou telefone"
@@ -1124,7 +1141,7 @@ onBeforeUnmount(() => {
         <button
           ref="filtersButton"
           type="button"
-          class="chip orders-filters-button"
+          class="soft orders-filters-button"
           aria-haspopup="dialog"
           :data-active="sheetFilterLabel ? 'true' : undefined"
           @click="openFilters"
@@ -1135,21 +1152,33 @@ onBeforeUnmount(() => {
     </div>
     <div class="orders-result-line">
       <p v-if="sheetFilterLabel" class="orders-active-filter">
-        <span
-          >Filtro: <strong>{{ sheetFilterLabel }}</strong></span
-        >
-        <button type="button" class="quiet" @click="clearFilter">
-          Limpar filtro
-        </button>
+        <span class="sr-only">Filtro: </span>
+        <FilterChip
+          :label="sheetFilterLabel"
+          :remove-label="`Limpar filtro ${sheetFilterLabel}`"
+          @remove="clearFilter"
+        />
       </p>
       <p class="filter-summary" role="status">
         {{ loading ? '' : resultLabel }}
       </p>
     </div>
+    <AppHint
+      v-if="searchNotice"
+      tone="info"
+      role="status"
+      class="orders-search-notice"
+      >{{ searchNotice }}</AppHint
+    >
+    <AppHint v-else-if="deliveryFilter" tone="info" class="orders-search-notice"
+      >Buscar por nome, número ou telefone muda a visualização para todos os
+      pedidos.</AppHint
+    >
 
     <FilterSheet
       ref="filterSheet"
       title="Filtros"
+      description="Escolha uma visualização por vez. Uma opção substitui a anterior."
       @apply="applySheetFilter"
       @clear="draftFilter = ''"
     >
@@ -1199,7 +1228,7 @@ onBeforeUnmount(() => {
       <button type="button" @click="retryInitialLoad">Tentar novamente</button>
     </section>
     <section
-      v-else-if="isEmpty && isProductionQueue"
+      v-else-if="isEmpty && isProductionQueue && !query.trim()"
       class="surface empty-list"
       aria-live="polite"
     >
@@ -1208,10 +1237,29 @@ onBeforeUnmount(() => {
         Pedidos confirmados aparecem aqui, pela entrega mais próxima, até serem
         marcados como entregues.
       </p>
+      <button type="button" class="soft" @click="clearFilter">
+        Limpar filtro
+      </button>
     </section>
     <section v-else-if="isEmpty" class="surface empty-list" aria-live="polite">
-      <h2>Nenhum pedido por aqui</h2>
-      <p>Revise o filtro ou a busca informada.</p>
+      <template v-if="query.trim()">
+        <h2>Nenhum pedido encontrado</h2>
+        <p>A busca não encontrou pedidos nesta visualização.</p>
+        <button type="button" class="soft" @click="clearSearch">
+          Limpar busca
+        </button>
+      </template>
+      <template v-else-if="filter">
+        <h2>Nenhum pedido com esse filtro</h2>
+        <p>Escolha outra visualização ou volte para todos os pedidos.</p>
+        <button type="button" class="soft" @click="clearFilter">
+          Limpar filtro
+        </button>
+      </template>
+      <template v-else>
+        <h2>Nenhum pedido por aqui</h2>
+        <p>Crie um pedido quando o cliente confirmar que quer fechar.</p>
+      </template>
     </section>
     <template v-else>
       <!-- Pesquisa UX 2026-10-15, achado 3: what still needs a person comes

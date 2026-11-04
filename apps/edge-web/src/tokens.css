@@ -46,6 +46,28 @@
     --text-3xl: 2rem;
     --leading-tight: 1.25;
     --leading-normal: 1.5;
+    --weight-regular: 400;
+    --weight-medium: 500;
+    --weight-semibold: 600;
+    --weight-bold: 700;
+
+    /* Roles separate selection, a local action and operational state. */
+    --color-action-soft: var(--color-selected);
+    --color-action-soft-text: var(--color-link);
+    --color-action-soft-hover: var(--color-selection-hover);
+    --color-selection-text: var(--color-text);
+    --color-selection-border: var(--color-focus);
+    --color-selection-hover: color-mix(
+      in srgb,
+      var(--color-focus) 16%,
+      var(--color-surface)
+    );
+    --color-editing-text: var(--status-info-text);
+    --color-editing-surface: var(--status-info-surface);
+    --color-ready-text: var(--status-success-text);
+    --color-ready-surface: var(--status-success-surface);
+    --elevation-panel: none;
+    --elevation-floating: var(--shadow-overlay);
 
     --space-1: 0.25rem;
     --space-2: 0.5rem;
@@ -105,7 +127,7 @@
     --color-text: var(--brand-ink);
     --color-text-muted: color-mix(in srgb, var(--brand-ink) 64%, #ffffff);
     --color-border: color-mix(in srgb, var(--brand-ink) 14%, #ffffff);
-    --color-border-strong: color-mix(in srgb, var(--brand-ink) 30%, #ffffff);
+    --color-border-strong: color-mix(in srgb, var(--brand-ink) 45%, #ffffff);
     --color-border-subtle: color-mix(in srgb, var(--brand-ink) 8%, #ffffff);
     --color-accent: var(--brand-primary);
     --color-accent-hover: color-mix(in srgb, var(--brand-primary) 88%, #000000);
@@ -190,7 +212,7 @@
     --color-text: color-mix(in srgb, #ffffff 94%, var(--brand-ink));
     --color-text-muted: color-mix(in srgb, #ffffff 68%, var(--brand-ink));
     --color-border: color-mix(in srgb, #ffffff 16%, var(--brand-ink));
-    --color-border-strong: color-mix(in srgb, #ffffff 30%, var(--brand-ink));
+    --color-border-strong: color-mix(in srgb, #ffffff 45%, var(--brand-ink));
     --color-border-subtle: color-mix(in srgb, #ffffff 10%, var(--brand-ink));
     --color-accent: var(--brand-primary);
     --color-accent-hover: color-mix(in srgb, var(--brand-primary) 88%, #ffffff);

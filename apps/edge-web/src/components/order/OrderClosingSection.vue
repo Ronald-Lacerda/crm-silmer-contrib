@@ -19,6 +19,7 @@ import {
   storeConfirmationLabel,
 } from '../../lib/order-format.js';
 import OrderIcon from './OrderIcon.vue';
+import AppHint from '../AppHint.vue';
 
 // PCL-05: what each blocker outside the items means to the seller when the
 // server refuses it; the item points are named one by one (PIT-06).
@@ -452,16 +453,21 @@ async function reopen() {
         >
           <OrderIcon name="ficha" />Gerar pedido
         </button>
-        <p
+        <AppHint
           id="closing-readiness"
           role="status"
           class="op-readiness"
+          :tone="
+            pendingLabels.length === 0 && !sectionOpenElsewhere
+              ? 'success'
+              : 'warning'
+          "
           :data-ready="
             (pendingLabels.length === 0 && !sectionOpenElsewhere) || undefined
           "
         >
           {{ readiness }}
-        </p>
+        </AppHint>
       </div>
 
       <template v-else>
@@ -526,7 +532,12 @@ async function reopen() {
         </p>
 
         <div v-if="!isPending && canCommand" class="op-reopen">
-          <button type="button" :disabled="busy" @click="requestReopen">
+          <button
+            type="button"
+            class="quiet"
+            :disabled="busy"
+            @click="requestReopen"
+          >
             {{ busy ? 'Reabrindo…' : 'Reabrir pedido' }}
           </button>
           <p class="op-hint">

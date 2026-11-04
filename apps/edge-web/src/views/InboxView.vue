@@ -11,6 +11,8 @@ import {
 import { useRoute, useRouter } from 'vue-router';
 import { brand } from '../brand/index.js';
 import AppIcon from '../components/AppIcon.vue';
+import AppHint from '../components/AppHint.vue';
+import FilterChip from '../components/FilterChip.vue';
 import AnchoredPopover from '../components/AnchoredPopover.vue';
 import AssistantTakeoverContext from '../components/inbox/AssistantTakeoverContext.vue';
 import AudioRecorder from '../components/inbox/AudioRecorder.vue';
@@ -242,7 +244,19 @@ const subjectManyOpen = ref({});
 const subjectAnswers = ref({});
 /** @type {import('vue').Ref<Record<string, string>>} */
 const subjectAnswerErrors = ref({});
-const reply = ref('');
+// UX-FUNC-01 / PCX-13: drafts belong to a conversation, never to whichever
+// customer happens to be on screen next. They live only in this Inbox instance
+// and leave with it (no browser storage of customer message content).
+/** @type {import('vue').Ref<Map<string, string>>} */
+const replyDrafts = ref(new Map());
+const reply = computed({
+  get: () => replyDrafts.value.get(activeId.value) ?? '',
+  set(value) {
+    if (!activeId.value) return;
+    if (value) replyDrafts.value.set(activeId.value, value);
+    else replyDrafts.value.delete(activeId.value);
+  },
+});
 
 /** T139: the seller reviews and sends; existing draft text is preserved. */
 async function addShippingDraft(text) {
@@ -1148,10 +1162,13 @@ function messageRoleLabel(message) {
 
 /** @param {{authorKind?: unknown, direction?: unknown}} message */
 function messageInitials(message) {
-  const from = messageFrom(message);
-  if (from === 'cliente') return '🙂';
-  if (from === 'humano') return '🧑‍💼';
-  return '✦';
+  return String(messageAuthorLabel(message))
+    .trim()
+    .split(/\s+/u)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join('')
+    .toLocaleUpperCase('pt-BR');
 }
 
 /** Hide transport labels while retaining genuine captions on media. @param {Record<string, any>} message */
@@ -1364,6 +1381,8 @@ async function selectConversation(id, silent = false) {
   const controller = new AbortController();
   detailController = controller;
   if (activeId.value !== id) {
+    error.value = '';
+    actionMessage.value = '';
     orderConfirmationDialog.value?.close();
     contextDialog.value?.close();
     contactDialog.value?.close();
@@ -1766,23 +1785,24 @@ function subjectLabel(subject) {
 /** @param {string} path @param {Record<string, unknown>} body @param {string} successMessage */
 async function runCommand(path, body, successMessage) {
   if (!active.value || busy.value || mediaSending.value) return;
+  const conversationId = active.value.id;
   busy.value = true;
   error.value = '';
   actionMessage.value = '';
   try {
     await request(
-      `/api/v1/conversations/${encodeURIComponent(active.value.id)}/${path}`,
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/${path}`,
       {
         body,
         idempotencyKey: commandKey(),
         method: 'POST',
       },
     );
-    actionMessage.value = successMessage;
+    if (activeId.value === conversationId) actionMessage.value = successMessage;
     await loadInbox(true);
     return true;
   } catch (cause) {
-    error.value = describeError(cause);
+    if (activeId.value === conversationId) error.value = describeError(cause);
     if (/** @type {any} */ (cause)?.status === 409) await loadInbox(true);
     return false;
   } finally {
@@ -1808,9 +1828,13 @@ async function changeAutomation(path, successMessage) {
 }
 
 async function sendReply() {
-  const text = reply.value.trim();
-  if (!text || !active.value) return;
-  await runCommand(
+  if (!canReply.value || !active.value || busy.value || mediaSending.value)
+    return;
+  const conversationId = active.value.id;
+  const draft = reply.value;
+  const text = draft.trim();
+  if (!text) return;
+  const sent = await runCommand(
     'messages',
     {
       content: { text },
@@ -1820,8 +1844,12 @@ async function sendReply() {
     },
     'Mensagem aceita para envio.',
   );
-  if (!error.value) {
-    reply.value = '';
+  if (sent) {
+    // A reply to A may finish while B is open. Clear only A's submitted draft,
+    // and never erase a newer edit or move the keyboard out of B's context.
+    if (replyDrafts.value.get(conversationId) === draft)
+      replyDrafts.value.delete(conversationId);
+    if (activeId.value !== conversationId) return;
     await nextTick();
     replyInput.value?.focus();
   }
@@ -2209,6 +2237,7 @@ onBeforeUnmount(() => {
           liveConnection === 'indisponível' || liveConnection === 'reconectando'
         "
         type="button"
+        class="quiet"
         aria-label="Atualizar conversas"
         :disabled="loading"
         @click="refreshInbox()"
@@ -2252,7 +2281,7 @@ onBeforeUnmount(() => {
           <button
             ref="filtersButton"
             type="button"
-            class="inbox-filters-button"
+            class="soft inbox-filters-button"
             aria-haspopup="dialog"
             aria-label="Filtros"
             :aria-expanded="filtersOpen"
@@ -2267,10 +2296,10 @@ onBeforeUnmount(() => {
               ></span
             >
           </button>
-          <p id="inbox-search-help" class="sr-only">
-            Busca em até 100 conversas carregadas: contato, telefone ou última
-            mensagem.
-          </p>
+          <AppHint id="inbox-search-help" class="inbox-search-hint"
+            >Busca nas até 100 conversas carregadas, pela última mensagem ou
+            contato.</AppHint
+          >
         </div>
         <div class="inbox-toolbar">
           <!-- PCX-14 (RFC 024): search, three shortcuts and "Filtros". -->
@@ -2305,17 +2334,13 @@ onBeforeUnmount(() => {
             aria-labelledby="inbox-active-filter-label"
           >
             <span id="inbox-active-filter-label">Filtro:</span>
-            <button
+            <FilterChip
               v-for="filter in activeFilters"
               :key="filter.key"
-              type="button"
-              class="inbox-filter-chip"
-              :aria-label="`Remover filtro ${filter.label}`"
-              @click="removeFilter(filter.key)"
-            >
-              {{ filter.label }}
-              <AppIcon name="close" />
-            </button>
+              :label="filter.label"
+              :remove-label="`Remover filtro ${filter.label}`"
+              @remove="removeFilter(filter.key)"
+            />
             <button
               v-if="activeFilters.length > 1"
               type="button"
