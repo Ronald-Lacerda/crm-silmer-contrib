@@ -1021,6 +1021,14 @@ incertos para reconciliação. A rota direta não é reativada automaticamente.
 As próximas telas e a ordem de entrega estão em
 [`docs/roadmap/PROXIMAS-FASES.md`](../../roadmap/PROXIMAS-FASES.md).
 
+## AGENTE-OBS-03 — Coleta operacional de turnos (04/11/2026)
+
+O export vivo ainda não continha a telemetria VND-L03 nos nós da jornada.
+O [runbook de turnos por versão](../../runbooks/agente-turnos-versao.md)
+registra a causa, o overlay mínimo e sua verificação. O gerador Evolution
+passa a preservar a versão da fonte. Esta correção não equivale à implantação
+integral da VND-L03 nem das melhorias de conversa da PR #280.
+
 ## CHAN-WA-01 — Atualização de 27/10/2026
 
 A [ADR 044](../../adr/044-atendimento-comercial-concentrado-no-whatsapp.md)

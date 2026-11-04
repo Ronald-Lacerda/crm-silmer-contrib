@@ -1,5 +1,26 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## AGENTE-OBS-03 — Turnos por versão no workflow vivo (04/11/2026)
+
+AGT-06/10 e ORC-03/05, sob a ADR 052.
+[Causa, procedimento e rollback](../../../docs/runbooks/agente-turnos-versao.md).
+
+- [x] Conferir API, persistência e agrupamento; export vivo confirma ausência
+      da telemetria nos seis nós anteriores à VND-L03.
+- [x] Preparar overlay mínimo com hashes revisados; preservar programas,
+      transporte, reservas, abertura humana, conexões, credenciais e retenção.
+- [x] Corrigir gerador Evolution para preservar versão da jornada e rejeitar
+      fonte sem versão inequívoca; manter override explícito.
+- [x] Gates locais/QA: validate com 1.706 testes aprovados/10 ignorados e
+      build; E2E com 460 aprovados/7 ignorados e um timeout de áudio que
+      passou isoladamente; 29 regressões específicas e revisão final aprovadas.
+- [x] Publicar revisão `dff49439-56db-43d2-ae2e-1bebe8a0214e`; conferir
+      export exato do candidato e registro no painel: 1 turno/1 transferência
+      da versão sintética `qa-agente-obs-03-turns-1`, sem aviso ou envio externo.
+- Próximos atendimentos reais medem `evolution-baileys-1-turns-1`;
+  canário comprova coleta, não evolução comercial. Sem backfill.
+- Commit/push e evidências operacionais registrados no handoff da entrega.
+
 ## INBOX-UX-04 — refinamento aprovado da Caixa (04/11/2026)
 
 PCX-16a–h, PCX-14/15 e OA-03–10/12. Implementação autorizada após a revisão

@@ -9,6 +9,7 @@ const VALIDATE = 'Evolution - Validar origem (MVP)';
 const LOOKUP = 'Evolution - Consultar identidade (MVP)';
 const CONVERT = 'Evolution - Montar evento WhatsApp (MVP)';
 const NORMALIZE = 'Normalizar evento WhatsApp (MVP)';
+const INBOUND = 'CRM - Registrar inbound (MVP)';
 const HUMAN_RESERVE = 'Preparar reserva de envio humano (MVP)';
 const MEDIA_UPLOAD = 'Evolution - Preparar bytes humanos (MVP)';
 const MEDIA_PREPARE = 'Preparar mensagem Evolution de midia (MVP)';
@@ -16,6 +17,33 @@ const MEDIA_SEND = 'Evolution - Enviar midia humana (MVP)';
 
 export const EVOLUTION_IDENTITY_LOOKUP_BODY =
   "={{ ({ where: { key: $json.event?.kind === 'ack' ? { id: $json.id, fromMe: true } : { id: $json.id, remoteJid: $json.chat } }, offset: 2, page: 1 }) }}";
+
+/** The transport adapter must retain the source journey's measurable version.
+ * AGENTE-OBS-03: one inbound node and one literal version are authoritative;
+ * never replace an unknown or ambiguous release with a transport label.
+ * @param {any} source @returns {string}
+ */
+function sourceWorkflowVersion(source) {
+  const inbound = source?.nodes?.filter(
+    (/** @type {any} */ node) => node.name === INBOUND,
+  );
+  if (!inbound?.length) throw new Error('EVOLUTION_WORKFLOW_VERSION_REQUIRED');
+  if (inbound.length !== 1)
+    throw new Error('EVOLUTION_WORKFLOW_VERSION_AMBIGUOUS');
+  const versions = (
+    inbound[0].parameters?.headerParameters?.parameters ?? []
+  ).filter(
+    (/** @type {any} */ header) =>
+      String(header.name).toLowerCase() === 'x-silmer-workflow-version',
+  );
+  if (!versions.length) throw new Error('EVOLUTION_WORKFLOW_VERSION_REQUIRED');
+  if (versions.length !== 1)
+    throw new Error('EVOLUTION_WORKFLOW_VERSION_AMBIGUOUS');
+  const version = versions[0].value;
+  if (typeof version !== 'string' || !/^[A-Za-z0-9._-]{1,128}$/.test(version))
+    throw new Error('EVOLUTION_WORKFLOW_VERSION_INVALID');
+  return version;
+}
 
 /** EVOL-01 / ORC-01..08 / INB-01 / MSG-01..04.
  * Contract: Evolution API tag 2.3.7, channel.service.ts sendDataWebhook,
@@ -473,7 +501,7 @@ export function createEvolutionWorkflow(source, options) {
     webhookCredentialName:
       options?.webhookCredentialName ?? 'Silmer Evolution para n8n',
     webhookPath: options?.webhookPath ?? 'silmer/evolution-events',
-    workflowVersion: options?.workflowVersion ?? 'evolution-baileys-1',
+    workflowVersion: options?.workflowVersion ?? sourceWorkflowVersion(source),
   });
   config.baseUrl = config.baseUrl.replace(/\/$/, '');
   const rename = (/** @type {string} */ name) =>

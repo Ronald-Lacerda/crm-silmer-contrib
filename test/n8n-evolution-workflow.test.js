@@ -163,12 +163,7 @@ test('EVOL-01: source Meta immutable; candidate inactive and contains only Evolu
       original.name.includes('Reservar envio') ||
       original.name === 'Atendente virtual Silmer (MVP)'
     ) {
-      const expected = structuredClone(original);
-      for (const header of expected.parameters?.headerParameters?.parameters ??
-        [])
-        if (header.name === 'X-Silmer-Workflow-Version')
-          header.value = 'evolution-baileys-1';
-      assert.deepEqual(changed, expected, name);
+      assert.deepEqual(changed, original, name);
     }
   }
   const explicit = createEvolutionWorkflow(source, {
@@ -177,6 +172,116 @@ test('EVOL-01: source Meta immutable; candidate inactive and contains only Evolu
   });
   assert.equal(explicit.id, 'synthetic-evolution');
   assert.equal(explicit.settings.errorWorkflow, 'synthetic-evolution');
+});
+
+test('AGENTE-OBS-03: Evolution retains the journey version and its turn telemetry nodes', () => {
+  const inbound = source.nodes.find(
+    (/** @type {any} */ node) => node.name === 'CRM - Registrar inbound (MVP)',
+  );
+  const version = inbound.parameters.headerParameters.parameters.find(
+    (/** @type {any} */ header) => header.name === 'X-Silmer-Workflow-Version',
+  ).value;
+  const headers = workflow.nodes
+    .flatMap(
+      (/** @type {any} */ node) =>
+        node.parameters?.headerParameters?.parameters ?? [],
+    )
+    .filter(
+      (/** @type {any} */ header) =>
+        header.name === 'X-Silmer-Workflow-Version',
+    );
+  assert.ok(headers.length > 10);
+  for (const header of headers) assert.equal(header.value, version);
+  for (const name of [
+    'Preparar inbound CRM (MVP)',
+    'Montar contexto da IA (MVP)',
+    'Normalizar decisão da IA (MVP)',
+    'Preparar reserva de envio da IA (MVP)',
+    'Preparar handoff da IA (MVP)',
+    'Preparar handoff de conteúdo (MVP)',
+    'Preparar handoff de falha da IA (MVP)',
+  ]) {
+    const original = source.nodes.find(
+      (/** @type {any} */ node) => node.name === name,
+    );
+    assert.deepEqual(nodes.get(name), original, name);
+  }
+  assert.match(
+    nodes.get('Preparar inbound CRM (MVP)').parameters.jsCode,
+    /received_at: new Date\(\)\.toISOString\(\)/u,
+  );
+  assert.match(
+    nodes.get('Montar contexto da IA (MVP)').parameters.jsCode,
+    /crm_evolution: announcesEvolution\(inbound\)/u,
+  );
+  assert.match(
+    nodes.get('Preparar reserva de envio da IA (MVP)').parameters.jsCode,
+    /turnTelemetry\(d\)/u,
+  );
+});
+
+test('AGENTE-OBS-03: an explicit version overrides the source, including a missing source version', () => {
+  const legacy = structuredClone(source);
+  const inbound = legacy.nodes.find(
+    (/** @type {any} */ node) => node.name === 'CRM - Registrar inbound (MVP)',
+  );
+  inbound.parameters.headerParameters.parameters =
+    inbound.parameters.headerParameters.parameters.filter(
+      (/** @type {any} */ header) =>
+        header.name !== 'X-Silmer-Workflow-Version',
+    );
+  const overridden = createEvolutionWorkflow(legacy, {
+    ...config,
+    workflowVersion: 'synthetic-journey-23',
+  });
+  const versions = overridden.nodes
+    .flatMap(
+      (/** @type {any} */ node) =>
+        node.parameters?.headerParameters?.parameters ?? [],
+    )
+    .filter(
+      (/** @type {any} */ header) =>
+        header.name === 'X-Silmer-Workflow-Version',
+    );
+  assert.ok(versions.length > 10);
+  for (const header of versions)
+    assert.equal(header.value, 'synthetic-journey-23');
+});
+
+test('AGENTE-OBS-03: a missing, ambiguous or nonliteral source version fails closed', () => {
+  for (const shape of [
+    'missing',
+    'duplicate_header',
+    'duplicate_node',
+    'blank',
+    'expression',
+  ]) {
+    const invalid = structuredClone(source);
+    const inbound = invalid.nodes.find(
+      (/** @type {any} */ node) =>
+        node.name === 'CRM - Registrar inbound (MVP)',
+    );
+    const headers = inbound.parameters.headerParameters.parameters;
+    const version = headers.find(
+      (/** @type {any} */ header) =>
+        header.name === 'X-Silmer-Workflow-Version',
+    );
+    let error = /EVOLUTION_WORKFLOW_VERSION_INVALID/u;
+    if (shape === 'missing') {
+      headers.splice(headers.indexOf(version), 1);
+      error = /EVOLUTION_WORKFLOW_VERSION_REQUIRED/u;
+    } else if (shape === 'duplicate_header') {
+      headers.push({
+        name: 'x-silmer-workflow-version',
+        value: 'different-release',
+      });
+      error = /EVOLUTION_WORKFLOW_VERSION_AMBIGUOUS/u;
+    } else if (shape === 'duplicate_node') {
+      invalid.nodes.push(structuredClone(inbound));
+      error = /EVOLUTION_WORKFLOW_VERSION_AMBIGUOUS/u;
+    } else version.value = shape === 'blank' ? '' : '={{ $json.release }}';
+    assert.throws(() => createEvolutionWorkflow(invalid, config), error, shape);
+  }
 });
 
 test('ORC-08: webhook authenticates via credential; ACK follows durable CRM acceptance', () => {
@@ -936,11 +1041,7 @@ test('IMG-01/03/04: complete Evolution image branch preserves bytes, digest and 
       node.name.startsWith(prefix) &&
       !['Consultar URL', 'Baixar'].some((name) => node.name === prefix + name),
   )) {
-    const expected = structuredClone(node);
-    for (const header of expected.parameters.headerParameters?.parameters ?? [])
-      if (header.name === 'X-Silmer-Workflow-Version')
-        header.value = 'evolution-baileys-1';
-    assert.deepEqual(byName.get(node.name), expected);
+    assert.deepEqual(byName.get(node.name), node);
   }
   for (const [name, connection] of Object.entries(patched.connections))
     if (name.startsWith(prefix))
@@ -1086,7 +1187,27 @@ test('EVOL-01: latest WAHA graph is restored narrowly using Meta transport basel
         for (const edge of edges)
           assert.equal(names.has(edge.node), true, edge.node);
   }
-  const raw = JSON.stringify(result);
+  // A preserved historical release label may name its previous transport;
+  // only the routing/adapter graph must be free of that provider.
+  const transportGraph = structuredClone(result);
+  const sourceVersion = current.nodes
+    .find(
+      (/** @type {any} */ node) =>
+        node.name === 'CRM - Registrar inbound (MVP)',
+    )
+    .parameters.headerParameters.parameters.find(
+      (/** @type {any} */ header) =>
+        header.name === 'X-Silmer-Workflow-Version',
+    ).value;
+  for (const item of transportGraph.nodes) {
+    for (const header of item.parameters?.headerParameters?.parameters ?? []) {
+      if (header.name === 'X-Silmer-Workflow-Version') {
+        assert.equal(header.value, sourceVersion);
+        header.value = 'preserved-release';
+      }
+    }
+  }
+  const raw = JSON.stringify(transportGraph);
   for (const forbidden of [
     'WAHA',
     'waha',
