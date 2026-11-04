@@ -23,8 +23,16 @@ function assistantReply(id, deliveryStatus, code) {
   };
 }
 
-/** @param {import('@playwright/test').Page} page */
-async function setup(page) {
+/** @param {import('@playwright/test').Page} page
+ * @param {ReturnType<typeof assistantReply>[]} [messages]
+ */
+async function setup(
+  page,
+  messages = [
+    assistantReply('reply-failed', 'failed', 'SEND_FAILED'),
+    assistantReply('reply-unknown', 'outcome_unknown', 'SEND_OUTCOME_UNKNOWN'),
+  ],
+) {
   const conversation = {
     id: 'conversation-1',
     version: 3,
@@ -47,10 +55,6 @@ async function setup(page) {
     },
     requiresAttention: true,
   };
-  const messages = [
-    assistantReply('reply-failed', 'failed', 'SEND_FAILED'),
-    assistantReply('reply-unknown', 'outcome_unknown', 'SEND_OUTCOME_UNKNOWN'),
-  ];
   /** @type {string[]} */
   const writes = [];
   page.on('request', (request) => {
@@ -131,6 +135,75 @@ test('the agent reply that failed shows its code and what it means', async ({
     'O serviço de mensagens não confirmou se a mensagem chegou ao cliente.',
   );
   // Reading the details never sends anything again.
+  expect(writes).toEqual([]);
+  const axe = await new AxeBuilder({ page })
+    .include('.message-delivery-notice')
+    .analyze();
+  expect(axe.violations).toEqual([]);
+});
+
+test('known recipient failures explain the next step and keep uncertain sends uncertain', async ({
+  page,
+}) => {
+  const { writes } = await setup(page, [
+    {
+      ...assistantReply(
+        'recipient-missing',
+        'failed',
+        'EVOLUTION_RECIPIENT_NOT_FOUND',
+      ),
+      authorKind: 'human',
+      authorId: 'seller-1',
+    },
+    {
+      ...assistantReply(
+        'recipient-unavailable',
+        'failed',
+        'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE',
+      ),
+      authorKind: 'human',
+      authorId: 'seller-1',
+    },
+    {
+      ...assistantReply(
+        'recipient-unknown',
+        'outcome_unknown',
+        'EVOLUTION_RECIPIENT_NOT_FOUND',
+      ),
+      authorKind: 'human',
+      authorId: 'seller-1',
+    },
+  ]);
+  await page.goto('/inbox/conversation-1');
+  const items = page
+    .getByRole('list', { name: 'Histórico da conversa' })
+    .getByRole('listitem');
+  const missing = items.nth(0);
+  await expect(missing).toContainText('WhatsApp não reconheceu este número');
+  await expect(missing).toContainText(
+    'A mensagem não foi enviada. Confira o telefone do cliente antes de enviar outra mensagem.',
+  );
+  await missing
+    .getByText('Detalhes para suporte', { exact: true })
+    .press('Enter');
+  await expect(
+    missing.getByText('EVOLUTION_RECIPIENT_NOT_FOUND', { exact: true }),
+  ).toBeVisible();
+  const unavailable = items.nth(1);
+  await expect(unavailable).toContainText(
+    'Não foi possível verificar o número no WhatsApp',
+  );
+  await expect(unavailable).toContainText(
+    'A mensagem não foi enviada porque a verificação do número não pôde ser concluída.',
+  );
+  const uncertain = items.nth(2);
+  await expect(uncertain).toContainText(
+    'Ainda não conseguimos confirmar o envio',
+  );
+  await expect(uncertain).toContainText(
+    'Verifique o envio antes de repetir a mensagem para evitar duplicidade.',
+  );
+  await expect(uncertain).not.toContainText('A mensagem não foi enviada.');
   expect(writes).toEqual([]);
   const axe = await new AxeBuilder({ page })
     .include('.message-delivery-notice')

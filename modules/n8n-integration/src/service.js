@@ -360,6 +360,8 @@ function validateEventShape(input) {
         'MEDIA_UPLOAD_FAILED',
         'MEDIA_PREFLIGHT_REJECTED',
         'MEDIA_PREFLIGHT_UNAVAILABLE',
+        'EVOLUTION_RECIPIENT_NOT_FOUND',
+        'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE',
       ].includes(input.failure.code)
     )
       throw new N8nValidationError('Invalid before-message-send failure');

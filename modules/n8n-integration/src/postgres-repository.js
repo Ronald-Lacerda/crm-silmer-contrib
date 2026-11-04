@@ -1101,18 +1101,33 @@ export class PostgresN8nIntegrationRepository {
             client,
             eventInput.commandId,
           );
-          await assertReservedExecution(client, command, eventInput);
+          const lateRecipientCheck = await assertReservedExecution(
+            client,
+            command,
+            eventInput,
+            true,
+          );
           if (command.conversation_id !== eventInput.conversationId)
             throw new N8nConflictError('Failure target mismatch');
           const message = await client.query(
-            `UPDATE crm.messages SET status='failed',delivery_status='failed',delivery_status_at=$2 WHERE id=$1 AND status='sending' AND external_message_id IS NULL RETURNING id`,
-            [command.message_id, processedAt],
+            `UPDATE crm.messages SET status='failed',delivery_status='failed',delivery_status_at=$2,delivery_failure_code=$3 WHERE id=$1 AND status=$4 AND external_message_id IS NULL RETURNING id`,
+            [
+              command.message_id,
+              processedAt,
+              eventInput.failure.code,
+              lateRecipientCheck ? 'outcome_unknown' : 'sending',
+            ],
           );
           if (!message.rows[0])
             throw new N8nConflictError('Send already concluded');
           const completed = await client.query(
-            `UPDATE crm.n8n_commands SET status='failed',retryable=false,retry_safe=false,last_error_code=$3,locked_by=NULL,locked_until=NULL,completed_at=$2,updated_at=$2 WHERE command_id=$1 AND status='processing' AND external_message_id IS NULL RETURNING command_id`,
-            [eventInput.commandId, processedAt, eventInput.failure.code],
+            `UPDATE crm.n8n_commands SET status='failed',retryable=false,retry_safe=false,last_error_code=$3,locked_by=NULL,locked_until=NULL,completed_at=$2,updated_at=$2 WHERE command_id=$1 AND status=$4 AND external_message_id IS NULL RETURNING command_id`,
+            [
+              eventInput.commandId,
+              processedAt,
+              eventInput.failure.code,
+              lateRecipientCheck ? 'outcome_unknown' : 'processing',
+            ],
           );
           if (!completed.rows[0])
             throw new N8nConflictError('Command already concluded');
@@ -2498,19 +2513,55 @@ async function resolveEventConversation(client, input) {
   return rows[0].conversation_id;
 }
 
-/** Original reservation is authoritative; a replay cannot stamp another identity. @param {Queryable} client @param {any} command @param {any} input */
-async function assertReservedExecution(client, command, input) {
+/** Original reservation is authoritative; a replay cannot stamp another identity.
+ * Only an authenticated recipient-check failure can resolve a worker timeout
+ * before transport. Media reads and every other failure retain the active fence.
+ * @param {Queryable} client @param {any} command @param {any} input
+ * @param {boolean} [allowLateRecipientCheck] @returns {Promise<boolean>}
+ */
+async function assertReservedExecution(
+  client,
+  command,
+  input,
+  allowLateRecipientCheck = false,
+) {
+  const lateRecipientCheck =
+    allowLateRecipientCheck &&
+    input.eventType === 'workflow.failed' &&
+    input.failure?.phase === 'before_message_send' &&
+    [
+      'EVOLUTION_RECIPIENT_NOT_FOUND',
+      'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE',
+    ].includes(input.failure.code) &&
+    command?.status === 'outcome_unknown' &&
+    command.message_status === 'outcome_unknown' &&
+    command.message_delivery_status === 'outcome_unknown' &&
+    [
+      'N8N_COMMAND_TIMEOUT',
+      'N8N_COMMAND_NETWORK_ERROR',
+      'N8N_COMMAND_REMOTE_UNAVAILABLE',
+      'N8N_COMMAND_ACK_INVALID',
+      'N8N_COMMAND_ACK_MISMATCH',
+      'N8N_COMMAND_DELIVERY_FAILED',
+      'COMMAND_LEASE_EXPIRED',
+      'WORKER_LEASE_EXPIRED',
+    ].includes(command.last_error_code) &&
+    input.automationEpoch !== null &&
+    input.automationEpoch !== undefined &&
+    input.sourceRevision !== null &&
+    input.sourceRevision !== undefined &&
+    Number(command.automation_epoch) === input.automationEpoch;
   if (
     !command ||
-    command.status !== 'processing' ||
-    command.message_status !== 'sending' ||
+    (!lateRecipientCheck && command.status !== 'processing') ||
+    (!lateRecipientCheck && command.message_status !== 'sending') ||
     command.message_external_id ||
     command.external_message_id ||
     command.action !== 'send_message' ||
     command.actor_kind !== 'human' ||
     command.message_author_kind !== 'human' ||
     command.message_author_id !== command.actor_id ||
-    command.message_delivery_status ||
+    (!lateRecipientCheck && command.message_delivery_status) ||
     command.message_execution_id !== input.technical.executionId
   )
     throw new N8nConflictError('Reservation is not active');
@@ -2533,6 +2584,22 @@ async function assertReservedExecution(client, command, input) {
       Number(receipts[0].source_revision) !== input.sourceRevision)
   )
     throw new N8nConflictError('Reservation execution mismatch');
+  if (lateRecipientCheck) {
+    const transportUnknown = await client.query(
+      `SELECT 1 FROM crm.n8n_events
+       WHERE message_id=$1 AND conversation_id=$2
+         AND event_type='message.send.unknown' AND execution_id=$3
+       LIMIT 1`,
+      [
+        command.message_id,
+        command.conversation_id,
+        input.technical.executionId,
+      ],
+    );
+    if (transportUnknown.rows.length)
+      throw new N8nConflictError('Transport outcome is unknown');
+  }
+  return lateRecipientCheck;
 }
 
 /** @param {Queryable} client @param {string} commandId */

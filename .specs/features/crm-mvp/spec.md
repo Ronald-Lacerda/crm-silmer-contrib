@@ -241,6 +241,20 @@ O domínio comum preserva fronteiras neutras de canal, mas o contrato desta
 entrega aceita somente WhatsApp. Instagram é uma fase posterior e não bloqueia
 a validação do primeiro MVP operacional.
 
+**OPS-INBOX-SEND-06 (MSG-02/03, ORC-08):** depois da reserva humana de uso
+único e antes do transporte WhatsApp, a consulta autenticada do destinatário
+deve retornar exatamente um registro, para o número solicitado, com `exists`
+booleano. `false` conclui falha visível `EVOLUTION_RECIPIENT_NOT_FOUND`;
+consulta indisponível, ambígua ou malformada conclui
+`EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE`, sem chamar envio e sem retry.
+O telefone e o hash do comando não mudam. A interface orienta conferir o
+telefone sem afirmar inexistência permanente da conta. Resultado incerto
+posterior ao transporte conserva reconciliação obrigatória, sem reenvio cego.
+Uma conclusão tardia anterior ao envio exige a mesma reserva autenticada,
+sem ID externo ou evento de resultado incerto do transporte; a fila só conclui
+falha com comando, mensagem e recibos correspondentes. Históricos não são
+reclassificados por uma consulta atual do destinatário.
+
 **Teste independente:** repetir webhooks com mídia, induzir falha e perda da
 cópia temporária, concluir o reprocessamento possível e comprovar que não há
 duplicidade nem alegação falsa de recuperação e que a indisponibilidade do

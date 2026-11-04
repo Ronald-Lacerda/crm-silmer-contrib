@@ -388,6 +388,57 @@ test('rejects a non-technical actor and malformed contract with typed HTTP error
   );
 });
 
+test('OPS-INBOX-SEND-06: recipient checks accept only bounded before-send failure contracts', async () => {
+  const { calls, service } = harness();
+  const input = {
+    schema_version: '1.0',
+    event_id: 'recipient-check-1',
+    event_type: 'workflow.failed',
+    command_id: 'command-1',
+    conversation_id: 'conversation-1',
+    occurred_at: NOW.toISOString(),
+    technical: TECHNICAL,
+    failure: {
+      phase: 'before_message_send',
+      code: 'EVOLUTION_RECIPIENT_NOT_FOUND',
+    },
+  };
+  for (const code of [
+    'EVOLUTION_RECIPIENT_NOT_FOUND',
+    'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE',
+  ]) {
+    await service.recordEvent({
+      ...input,
+      failure: { ...input.failure, code },
+    });
+    assert.deepEqual(calls.at(-1)?.input.failure, {
+      phase: 'before_message_send',
+      code,
+    });
+  }
+  for (const invalid of [
+    { command_id: null },
+    { conversation_id: null },
+    { failure: { ...input.failure, phase: 'after_message_send' } },
+    { failure: { ...input.failure, code: 'EVOLUTION_RECIPIENT_OTHER' } },
+    { failure: { ...input.failure, code: 'invalid code' } },
+    { failure: { ...input.failure, number: 'NEVER_COPY' } },
+    { failure: { ...input.failure, payload: { text: 'NEVER_COPY' } } },
+  ]) {
+    await assert.rejects(service.recordEvent({ ...input, ...invalid }), {
+      statusCode: 400,
+    });
+  }
+  await assert.rejects(
+    service.recordEvent({
+      ...input,
+      technical: { ...TECHNICAL, actor: 'seller-1' },
+    }),
+    { statusCode: 403 },
+  );
+  assert.equal(calls.length, 2);
+});
+
 test('carries open_order only on the reservation and the handoff (ADR 014)', async () => {
   const { calls, service } = harness();
   /** @param {string} id @param {string} eventType @param {Record<string, unknown>} extra */

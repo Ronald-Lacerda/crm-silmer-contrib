@@ -16,6 +16,7 @@ import { PostgresChatMediaUploadRepository } from '../modules/integration-reliab
 import { PostgresJobQueue } from '../modules/integration-reliability/src/postgres-job-queue.js';
 import { PostgresN8nCommandOutbox } from '../modules/n8n-integration/src/postgres-command-outbox.js';
 import { encryptJson } from '../modules/n8n-integration/src/crypto.js';
+import { PostgresN8nCommandStore } from '../modules/n8n-integration/src/postgres-command-store.js';
 
 const connectionString = process.env.TEST_DATABASE_URL;
 const KEY = Buffer.alloc(32, 8);
@@ -911,8 +912,8 @@ if (connectionString) {
     );
     assert.equal((await snapshot()).used, '100');
   });
-  async function sendForReconciliation() {
-    const fixture = await mediaPanelCommand();
+  async function sendForReconciliation(type = 'image') {
+    const fixture = await mediaPanelCommand(type);
     const queue = new PostgresJobQueue({ database });
     const [job] = await queue.claim({
       queue: 'external_effects',
@@ -931,12 +932,9 @@ if (connectionString) {
       await queue.markEffectStarted({ ...attempt, provider: 'n8n' }),
       true,
     );
+    const reservation = fixture.event('reconcile-reserve');
     assert.equal(
-      (
-        await fixture.integration.recordEvent(
-          fixture.event('reconcile-reserve'),
-        )
-      ).send_authorized,
+      (await fixture.integration.recordEvent(reservation)).send_authorized,
       true,
     );
     const timeout = () =>
@@ -976,7 +974,222 @@ if (connectionString) {
     });
     const poll = (workerId = 'synthetic-reconciler') =>
       queue.claim({ queue: 'external_effects', workerId });
-    return { ...fixture, job, timeout, confirm, state, evidence, poll };
+    return {
+      ...fixture,
+      job,
+      timeout,
+      confirm,
+      state,
+      evidence,
+      poll,
+      reservation,
+    };
+  }
+  async function timeoutRecipientCheck() {
+    const f = await sendForReconciliation('text');
+    const store = new PostgresN8nCommandStore({ database, envelopeKey: KEY });
+    assert.equal(
+      await store.markOutcomeUnknown(f.row.command_id, {
+        attemptId: 'synthetic-delivery',
+        errorCode: 'N8N_COMMAND_TIMEOUT',
+      }),
+      true,
+    );
+    assert.equal(await f.timeout(), true);
+    return f;
+  }
+  for (const code of [
+    'EVOLUTION_RECIPIENT_NOT_FOUND',
+    'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE',
+  ]) {
+    test(`OPS-INBOX-SEND-06: late ${code} resolves a worker timeout without sending or rewriting its attempt`, async () => {
+      const f = await timeoutRecipientCheck();
+      const failure = f.event('late-recipient-abort', {
+        event_type: 'workflow.failed',
+        failure: { phase: 'before_message_send', code },
+      });
+      delete failure.message;
+      const before = await f.evidence();
+      for (const key of ['executionId', 'workflowKey', 'workflowVersion']) {
+        await assert.rejects(
+          f.integration.recordEvent({
+            ...failure,
+            technical: { ...failure.technical, [key]: 'other' },
+          }),
+          { statusCode: 409 },
+        );
+      }
+      for (const mismatch of [
+        { conversation_id: 'bind-other-conversation' },
+        { automation_epoch: failure.automation_epoch + 1 },
+        { source_revision: failure.source_revision + 1 },
+      ]) {
+        await assert.rejects(
+          f.integration.recordEvent({ ...failure, ...mismatch }),
+          { statusCode: 409 },
+        );
+      }
+      for (const key of ['automation_epoch', 'source_revision']) {
+        const missing = { ...failure };
+        delete missing[key];
+        await assert.rejects(f.integration.recordEvent(missing), {
+          statusCode: 409,
+        });
+      }
+      assert.deepEqual(await f.evidence(), before);
+      await f.integration.recordEvent(failure);
+      const evidence = await f.evidence();
+      assert.deepEqual(evidence.attempts, before.attempts);
+      assert.deepEqual(
+        await Promise.all([
+          f.poll('late-reconciler-a'),
+          f.poll('late-reconciler-b'),
+        ]),
+        [[], []],
+      );
+      const state = await f.state();
+      assert.equal(state.job.status, 'dead_letter');
+      assert.equal(state.job.last_error_code, code);
+      assert.equal(state.job.attempt_count, 1);
+      assert.equal(state.reconciliation.status, 'resolved');
+      assert.deepEqual(await f.evidence(), evidence);
+      assert.equal((await f.integration.recordEvent(failure)).duplicate, true);
+      assert.equal(
+        (await f.integration.recordEvent(f.reservation)).send_authorized,
+        false,
+      );
+      await assert.rejects(
+        f.integration.recordEvent(f.event('another-reservation')),
+        {
+          statusCode: 409,
+        },
+      );
+      assert.deepEqual(await f.poll(), []);
+    });
+  }
+  test('OPS-INBOX-SEND-06: recipient failure cannot resolve a recorded uncertain transport', async () => {
+    const f = await sendForReconciliation('text');
+    const unknown = f.event('transport-unknown', {
+      event_type: 'message.send.unknown',
+    });
+    delete unknown.message;
+    await f.integration.recordEvent(unknown);
+    // Even a later worker timeout code cannot erase the transport receipt.
+    await pool.query(
+      "UPDATE crm.n8n_commands SET last_error_code='N8N_COMMAND_TIMEOUT' WHERE command_id=$1",
+      [f.row.command_id],
+    );
+    const failure = f.event('late-recipient-abort', {
+      event_type: 'workflow.failed',
+      failure: {
+        phase: 'before_message_send',
+        code: 'EVOLUTION_RECIPIENT_NOT_FOUND',
+      },
+    });
+    delete failure.message;
+    const before = await f.evidence();
+    await assert.rejects(f.integration.recordEvent(failure), {
+      statusCode: 409,
+    });
+    assert.deepEqual(await f.evidence(), before);
+  });
+  for (const missingProof of [
+    'failure-receipt',
+    'failure-outcome',
+    'failure-execution',
+    'reservation-version',
+    'message-id',
+    'command-id',
+    'retry-enabled',
+  ]) {
+    test(`OPS-INBOX-SEND-06: ${missingProof} does not settle an uncertain recipient job`, async () => {
+      const f = await timeoutRecipientCheck();
+      const failure = f.event('late-recipient-abort', {
+        event_type: 'workflow.failed',
+        failure: {
+          phase: 'before_message_send',
+          code: 'EVOLUTION_RECIPIENT_NOT_FOUND',
+        },
+      });
+      delete failure.message;
+      if (
+        [
+          'failure-receipt',
+          'failure-outcome',
+          'failure-execution',
+          'reservation-version',
+        ].includes(missingProof)
+      ) {
+        // Seed an inconsistent projection, never rewrite immutable history.
+        // A failed projection alone must not count as authenticated proof.
+        const code = 'EVOLUTION_RECIPIENT_NOT_FOUND';
+        await pool.query(
+          "UPDATE crm.messages SET status='failed',delivery_status='failed',delivery_status_at=now(),delivery_failure_code=$2 WHERE id=$1",
+          [f.sent.id, code],
+        );
+        await pool.query(
+          "UPDATE crm.n8n_commands SET status='failed',last_error_code=$2,retryable=false,retry_safe=false,locked_by=NULL,locked_until=NULL,completed_at=now(),updated_at=now() WHERE command_id=$1",
+          [f.row.command_id, code],
+        );
+        if (missingProof !== 'failure-receipt') {
+          const seeded = await pool.query(
+            `INSERT INTO crm.n8n_events
+               (id,idempotency_scope,idempotency_key,external_event_id,event_type,
+                fingerprint,conversation_id,message_id,run_id,correlation_id,
+                outcome,occurred_at,processed_at,workflow_key,workflow_version,
+                execution_id,automation_epoch,source_revision)
+             SELECT $1,idempotency_scope,$2,$2,'workflow.failed',repeat('c',64),
+                    conversation_id,message_id,run_id,correlation_id,$3::jsonb,
+                    occurred_at,processed_at,workflow_key,$4,$5,
+                    automation_epoch,source_revision
+             FROM crm.n8n_events
+             WHERE message_id=$6 AND event_type='message.send.requested'`,
+            [
+              randomUUID(),
+              `synthetic-${missingProof}`,
+              JSON.stringify(
+                missingProof === 'failure-outcome'
+                  ? {}
+                  : { failureCode: code, deliveryStatus: 'failed' },
+              ),
+              missingProof === 'reservation-version'
+                ? 'other-version'
+                : f.reservation.technical.workflowVersion,
+              missingProof === 'failure-execution'
+                ? 'other-execution'
+                : f.reservation.technical.executionId,
+              f.sent.id,
+            ],
+          );
+          assert.equal(seeded.rowCount, 1);
+        }
+      } else {
+        await f.integration.recordEvent(failure);
+      }
+      if (missingProof === 'message-id') {
+        await pool.query(
+          "UPDATE crm.messages SET external_message_id='synthetic-unrelated-id' WHERE id=$1",
+          [f.sent.id],
+        );
+      } else if (missingProof === 'command-id') {
+        await pool.query(
+          "UPDATE crm.n8n_commands SET external_message_id='synthetic-unrelated-id' WHERE command_id=$1",
+          [f.row.command_id],
+        );
+      } else if (missingProof === 'retry-enabled') {
+        await pool.query(
+          'UPDATE crm.n8n_commands SET retryable=true,retry_safe=true WHERE command_id=$1',
+          [f.row.command_id],
+        );
+      }
+      const before = await f.state();
+      const evidence = await f.evidence();
+      assert.deepEqual(await f.poll(), []);
+      assert.deepEqual(await f.state(), before);
+      assert.deepEqual(await f.evidence(), evidence);
+      assert.equal(before.job.status, 'outcome_unknown');
+      assert.equal(before.reconciliation.status, 'open');
+    });
   }
   for (const callbackOrder of ['before-timeout', 'after-timeout'])
     test(`OPS-INBOX-ACK-02: ${callbackOrder} confirmation settles the job without another send`, async () => {
@@ -1364,6 +1577,123 @@ if (connectionString) {
     assert.equal((await f.integration.recordEvent(failure)).duplicate, true);
     assert.deepEqual(await effects(), after);
   });
+  for (const code of [
+    'EVOLUTION_RECIPIENT_NOT_FOUND',
+    'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE',
+  ]) {
+    test(`OPS-INBOX-SEND-06: ${code} settles a reserved text once without retry`, async () => {
+      const f = await mediaPanelCommand('text');
+      const reservation = f.event('recipient-reserve');
+      const failure = f.event('recipient-abort', {
+        event_type: 'workflow.failed',
+        failure: { phase: 'before_message_send', code },
+      });
+      delete failure.message;
+      // A failure cannot manufacture its original execution's reservation.
+      await assert.rejects(f.integration.recordEvent(failure), {
+        statusCode: 409,
+      });
+      await f.integration.recordEvent(reservation);
+      const before = await effects();
+      for (const key of ['executionId', 'workflowKey', 'workflowVersion']) {
+        await assert.rejects(
+          f.integration.recordEvent({
+            ...failure,
+            technical: { ...failure.technical, [key]: 'other' },
+          }),
+          { statusCode: 409 },
+        );
+      }
+      for (const mismatch of [
+        { conversation_id: 'bind-other-conversation' },
+        { automation_epoch: failure.automation_epoch + 1 },
+        { source_revision: failure.source_revision + 1 },
+        { technical: { ...failure.technical, actor: 'bind-other' } },
+      ]) {
+        await assert.rejects(
+          f.integration.recordEvent({ ...failure, ...mismatch }),
+          { statusCode: mismatch.technical ? 403 : 409 },
+        );
+      }
+      assert.deepEqual(await effects(), before);
+      await f.integration.recordEvent(failure);
+      assert.deepEqual(
+        (
+          await pool.query(
+            'SELECT status,retryable,retry_safe,last_error_code,external_message_id,locked_by,locked_until FROM crm.n8n_commands WHERE command_id=$1',
+            [f.row.command_id],
+          )
+        ).rows[0],
+        {
+          status: 'failed',
+          retryable: false,
+          retry_safe: false,
+          last_error_code: code,
+          external_message_id: null,
+          locked_by: null,
+          locked_until: null,
+        },
+      );
+      assert.deepEqual(
+        (
+          await pool.query(
+            'SELECT status,delivery_status,delivery_failure_code,external_message_id FROM crm.messages WHERE id=$1',
+            [f.sent.id],
+          )
+        ).rows[0],
+        {
+          status: 'failed',
+          delivery_status: 'failed',
+          delivery_failure_code: code,
+          external_message_id: null,
+        },
+      );
+      const after = await effects();
+      assert.equal((await f.integration.recordEvent(failure)).duplicate, true);
+      assert.deepEqual(await effects(), after);
+    });
+    for (const terminal of ['outcome_unknown', 'sent']) {
+      test(`OPS-INBOX-SEND-06: ${code} cannot regress ${terminal}`, async () => {
+        const f = await mediaPanelCommand('text');
+        await f.integration.recordEvent(f.event('recipient-reserve'));
+        await pool.query('UPDATE crm.messages SET status=$2 WHERE id=$1', [
+          f.sent.id,
+          terminal,
+        ]);
+        await pool.query(
+          'UPDATE crm.n8n_commands SET status=$2,completed_at=now(),locked_by=NULL,locked_until=NULL WHERE command_id=$1',
+          [f.row.command_id, terminal],
+        );
+        const failure = f.event('recipient-abort', {
+          event_type: 'workflow.failed',
+          failure: { phase: 'before_message_send', code },
+        });
+        delete failure.message;
+        const before = await effects();
+        await assert.rejects(f.integration.recordEvent(failure), {
+          statusCode: 409,
+        });
+        assert.deepEqual(await effects(), before);
+        assert.equal(
+          (
+            await pool.query('SELECT status FROM crm.messages WHERE id=$1', [
+              f.sent.id,
+            ])
+          ).rows[0].status,
+          terminal,
+        );
+        assert.equal(
+          (
+            await pool.query(
+              'SELECT status FROM crm.n8n_commands WHERE command_id=$1',
+              [f.row.command_id],
+            )
+          ).rows[0].status,
+          terminal,
+        );
+      });
+    }
+  }
   for (const terminal of ['outcome_unknown', 'sent'])
     test(`T13/MED-24: before-send failure cannot regress ${terminal} or another execution`, async () => {
       const f = await mediaPanelCommand();

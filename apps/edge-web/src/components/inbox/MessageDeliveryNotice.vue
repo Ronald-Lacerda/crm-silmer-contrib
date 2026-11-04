@@ -30,14 +30,26 @@ const technicalCode = computed(() =>
 const technicalHint = computed(() =>
   deliveryFailureHint(props.message.deliveryErrorCode),
 );
+// OPS-INBOX-SEND-06: only a known pre-send failure can say it was not sent.
+const recipientFailure = computed(() =>
+  props.message.deliveryStatus === 'failed' ? technicalCode.value : null,
+);
 const fromAssistant = computed(() => props.message.authorKind === 'assistant');
 const title = computed(() => {
   if (uncertain.value) return 'Ainda não conseguimos confirmar o envio';
+  if (recipientFailure.value === 'EVOLUTION_RECIPIENT_NOT_FOUND')
+    return 'WhatsApp não reconheceu este número';
+  if (recipientFailure.value === 'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE')
+    return 'Não foi possível verificar o número no WhatsApp';
   return fromAssistant.value
     ? `A resposta ${assistantOf()} não foi enviada`
     : 'O envio encontrou um problema';
 });
 const description = computed(() => {
+  if (recipientFailure.value === 'EVOLUTION_RECIPIENT_NOT_FOUND')
+    return 'A mensagem não foi enviada. Confira o telefone do cliente antes de enviar outra mensagem.';
+  if (recipientFailure.value === 'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE')
+    return 'A mensagem não foi enviada porque a verificação do número não pôde ser concluída. Verifique o status atualizado antes de tentar outra mensagem.';
   if (fromAssistant.value) {
     return uncertain.value
       ? `A confirmação desta resposta ${assistantOf()} está demorando. Verifique o envio antes de repetir a informação ao cliente.`

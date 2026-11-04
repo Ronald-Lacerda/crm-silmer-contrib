@@ -3,6 +3,57 @@
 Rastreabilidade: INBOX-DELIVERY-01, OPS-INBOX-ACK-01, MSG-02/03, ORC-08,
 INBOX-3 e INT-2. O contrato de reserva e idempotência permanece vigente.
 
+## Destinatário não reconhecido — 04/11/2026
+
+OPS-INBOX-SEND-06 / MSG-02/03, ORC-08 e PRV-01. Às 08h20 de Brasília,
+consultas somente leitura encontraram três comandos humanos incertos criados
+entre 07h56 e 08h12, em duas conversas. Todos tinham reserva e evento
+`message.send.unknown` com `EVOLUTION_SEND_OUTCOME_UNKNOWN`, em menos de
+cinco segundos e sem ID externo. Outros 70 comandos de envio dos dois dias
+anteriores estavam `sent`; isso não equivale a recibo de entrega.
+
+A consulta autenticada `chat/whatsappNumbers` retornou `exists:false` para
+os dois destinos originais. Não havia mensagem outbound persistida nos
+instantes das três tentativas. O upstream rejeita `exists:false` antes de
+`sendMessageWithTyping` enviar. Essa evidência explica a recusa atual e é
+compatível com o incidente; como a resposta HTTP original não foi retida,
+não autoriza reclassificar os resultados antigos nem afirmar ausência
+definitiva da conta. Nenhum telefone, conteúdo ou ID pessoal foi exportado
+para esta evidência; não houve envio de teste nem correção heurística do 9.
+
+O patch offline `ops/n8n/evolution-recipient-preflight.mjs` atua somente no
+ramo WhatsApp após a reserva humana. Texto e mídia consultam o número
+original, com timeout de quatro segundos, sem retry/redirect. `fullResponse`
+preserva o array do provider num único item n8n; o validador devolve somente
+um booleano. Um registro de mesmo número com `exists:true` libera o fluxo.
+`false` gera `EVOLUTION_RECIPIENT_NOT_FOUND`; erro HTTP, timeout ou formato
+inesperado geram `EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE`, sem chegar ao
+transporte. O retorno de rejeição é HTTP 422, depois do recibo CRM, e nunca
+declara envio aceito. O texto na Inbox orienta conferir o telefone.
+
+A API deve ser implantada antes do workflow: aceita os dois motivos no
+contrato `workflow.failed / before_message_send`, persiste o código da
+mensagem e valida a reserva original. Uma conclusão tardia por timeout do
+worker exige execução, versão, epoch, revisão, autoria e recibos originais,
+ambos os registros incertos e sem ID externo ou evento de incerteza do
+transporte. A fila termina como falha sem retry somente com essa prova.
+Timeout após tentativa de envio continua incerto. A consulta não muda a
+identidade, o destino, o conteúdo ou o hash do comando.
+
+Rollout: conferir CI, implantar API/worker/edge compatíveis, guardar export
+privado do workflow atual e inventário dos demais, aplicar o helper sobre
+esse export e revisar o delta de sete nós adicionados/uma conexão alterada.
+Publicar a versão revisada pela UI, conferir versão ativa e fingerprints
+preservados e acompanhar envios naturais. Não executar mensagens ou
+callbacks antigos para testar. A preparação usa dados sintéticos nos gates;
+consulta de produção somente leitura não é homologação de entrega.
+
+Rollback: restaurar o export privado anterior somente no principal e
+publicá-lo novamente. Reverter o commit da aplicação se necessário; não há
+migration nem mudança de identidade, pareamento ou transporte. Preservar
+todos os resultados incertos e as marcas de arquivo do WAHA. O auxiliar de
+diagnóstico autenticado deve ser removido ao encerrar a verificação.
+
 ## Diagnóstico de 30/10/2026
 
 O incidente apresentado pelo proprietário envolve duas mensagens humanas de

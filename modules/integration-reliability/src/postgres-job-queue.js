@@ -153,6 +153,11 @@ export class PostgresJobQueue {
         claimedAt,
         normalizedQueue,
       );
+      await this.#reconcileRejectedN8nRecipients(
+        client,
+        claimedAt,
+        normalizedQueue,
+      );
       const selected = await client.query(
         `SELECT id, job_type, idempotency_key, channel_event_id,
                 transient_media_id, message_id, chat_media_id, queue, priority, available_at,
@@ -472,6 +477,77 @@ export class PostgresJobQueue {
        UPDATE crm.reconciliation_items r
        SET status = 'resolved', resolved_at = greatest(r.created_at, $2::timestamptz)
        FROM completed WHERE r.job_id = completed.id AND r.status = 'open'`,
+      [queue, now],
+    );
+  }
+
+  /**
+   * OPS-INBOX-SEND-06: a late recipient preflight can prove that transport
+   * never ran. Resolve only its exact authenticated reservation, without
+   * replaying the job or rewriting the uncertain processing attempt.
+   * @param {Queryable} client @param {Date} now @param {string} queue
+   */
+  async #reconcileRejectedN8nRecipients(client, now, queue) {
+    await client.query(
+      `WITH rejected AS (
+         SELECT j.id, c.last_error_code
+         FROM crm.outbox_jobs j
+         JOIN crm.n8n_commands c ON c.command_id = j.n8n_command_id
+         JOIN crm.messages m ON m.id = c.message_id
+         WHERE j.queue = $1 AND j.job_type = 'n8n.command.deliver'
+           AND j.status = 'outcome_unknown'
+           AND c.action = 'send_message' AND c.actor_kind = 'human'
+           AND c.status = 'failed' AND c.retryable = false AND c.retry_safe = false
+           AND m.command_id = c.command_id
+           AND m.conversation_id = c.conversation_id AND m.status = 'failed'
+           AND m.delivery_status = 'failed' AND m.author_kind = 'human'
+           AND m.author_id = c.actor_id
+           AND m.automation_epoch = c.automation_epoch
+           AND m.external_message_id IS NULL AND c.external_message_id IS NULL
+           AND m.delivery_failure_code = c.last_error_code
+           AND c.last_error_code IN (
+             'EVOLUTION_RECIPIENT_NOT_FOUND',
+             'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE'
+           )
+           AND EXISTS (
+             SELECT 1 FROM crm.n8n_events failure
+             JOIN crm.n8n_events reservation
+               ON reservation.message_id = failure.message_id
+              AND reservation.conversation_id = failure.conversation_id
+              AND reservation.event_type = 'message.send.requested'
+              AND reservation.execution_id = failure.execution_id
+              AND reservation.workflow_key = failure.workflow_key
+              AND reservation.workflow_version = failure.workflow_version
+              AND reservation.automation_epoch = failure.automation_epoch
+              AND reservation.source_revision = failure.source_revision
+             WHERE failure.message_id = m.id
+               AND failure.conversation_id = c.conversation_id
+               AND failure.event_type = 'workflow.failed'
+               AND failure.execution_id = m.n8n_execution_id
+               AND failure.automation_epoch = c.automation_epoch
+               AND failure.outcome->>'failureCode' = c.last_error_code
+               AND failure.outcome->>'deliveryStatus' = 'failed'
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM crm.n8n_events transport
+             WHERE transport.message_id = m.id
+               AND transport.conversation_id = c.conversation_id
+               AND transport.execution_id = m.n8n_execution_id
+               AND transport.event_type = 'message.send.unknown'
+           )
+         ORDER BY j.updated_at, j.id
+         FOR UPDATE OF j SKIP LOCKED LIMIT 100
+       ), concluded AS (
+         UPDATE crm.outbox_jobs j
+         SET status = 'dead_letter', last_error_code = rejected.last_error_code,
+             updated_at = greatest(j.updated_at, $2::timestamptz),
+             completed_at = greatest(j.completed_at, $2::timestamptz)
+         FROM rejected WHERE j.id = rejected.id
+         RETURNING j.id
+       )
+       UPDATE crm.reconciliation_items r
+       SET status = 'resolved', resolved_at = greatest(r.created_at, $2::timestamptz)
+       FROM concluded WHERE r.job_id = concluded.id AND r.status = 'open'`,
       [queue, now],
     );
   }

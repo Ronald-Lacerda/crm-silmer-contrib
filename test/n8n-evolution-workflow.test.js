@@ -1036,7 +1036,8 @@ test('EVOL-01: latest WAHA graph is restored narrowly using Meta transport basel
   const all = new Map(
     result.nodes.map((/** @type {any} */ node) => [node.name, node]),
   );
-  assert.equal(result.nodes.length, current.nodes.length);
+  // OPS-INBOX-SEND-06 adds seven recipient-check/failure nodes after the reserve.
+  assert.equal(result.nodes.length, current.nodes.length + 7);
   assert.equal(
     all.get(journey.name).parameters.latestDomain,
     journey.parameters.latestDomain,

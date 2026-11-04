@@ -18,6 +18,10 @@ const UNCONFIRMED =
 
 const HINTS = Object.freeze({
   COMMAND_LEASE_EXPIRED: 'O envio demorou demais e foi interrompido.',
+  EVOLUTION_RECIPIENT_NOT_FOUND:
+    'O WhatsApp não reconheceu o número informado na verificação.',
+  EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE:
+    'A verificação do número no WhatsApp não pôde ser concluída.',
   N8N_COMMAND_ACK_MISMATCH: REFUSED,
   N8N_COMMAND_DELIVERY_FAILED: 'A automação de envio informou uma falha.',
   N8N_COMMAND_HTTP_401: CREDENTIALS,

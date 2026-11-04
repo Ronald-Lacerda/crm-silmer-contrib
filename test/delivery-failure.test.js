@@ -68,3 +68,14 @@ test('an unknown code keeps the code and adds no guess', () => {
   assert.equal(deliveryFailureHint('toString'), '');
   assert.equal(deliveryFailureHint(undefined), '');
 });
+
+test('explains recipient checks without claiming a permanent account state', () => {
+  assert.equal(
+    deliveryFailureHint('EVOLUTION_RECIPIENT_NOT_FOUND'),
+    'O WhatsApp não reconheceu o número informado na verificação.',
+  );
+  assert.equal(
+    deliveryFailureHint('EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE'),
+    'A verificação do número no WhatsApp não pôde ser concluída.',
+  );
+});

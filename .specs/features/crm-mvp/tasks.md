@@ -632,6 +632,18 @@ recovery demonstrados. Instagram e PAY diferidos têm UAT próprio posterior.
 
 ## Confiabilidade da Inbox — 24/10/2026
 
+- [ ] **OPS-INBOX-SEND-06 — recusa de destinatário sem novo envio incerto**
+      (MSG-02/03, ORC-08, PRV-01, EVOL-01D / INT-2–3).
+      Consulta autenticada do destinatário depois da reserva humana e antes de
+      texto/mídia; resposta inequívoca libera o destino original. Recusa,
+      indisponibilidade ou formato inesperado concluem falha sem retry, com
+      motivo visível e ACK de rejeição. Callback tardio e fila exigem recibos
+      da mesma reserva, preservando estados conclusivos e incerteza posterior
+      ao transporte. Gates: contrato/SQL sintético, negativos, replay,
+      teclado/axe, CI, publicação e acompanhamento natural. Não reenviar nem
+      reclassificar os três comandos históricos pela consulta atual.
+      [Diagnóstico e rollout](../../../docs/runbooks/inbox-delivery-feedback.md#destinatário-não-reconhecido--04112026).
+
 - [ ] **OPS-INBOX-ACK-05 — corrigir correlação de recibos Evolution com LID**
       (EVOL-01D, ORC-05/08, MSG-01–03, PRV-01 / INT-2–3).
       Correção publicada em 03/11 no principal de 113 nós: ACK consulta ID
