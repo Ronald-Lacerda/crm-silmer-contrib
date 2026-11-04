@@ -1,0 +1,23 @@
+{
+  "task": "OLIST-T02",
+  "executedAt": "2026-11-04T19:12:07.861629+00:00",
+  "command": "python docs/integrations/olist/verify_contract.py",
+  "python": "3.14.7",
+  "jsonschema": "4.26.0",
+  "testsRun": 11,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "probeSha256": "25d4ade182661e3ff942c6345c27f58623b9f2538c97f09e88096db59e6c42b2",
+  "fixturesSha256": "1967a0fcd7dfa44e4b23aa8dd672b9be1d4844f0abb55a20b1be68228eb175d8",
+  "projectionSha256": "cd4a7f75ed87299db768bc04a40a895c003cb60705ade98ada719ac7e0724a83",
+  "authenticatedAccountCalls": 0,
+  "erpWrites": 0,
+  "f1GatePassed": false,
+  "limitations": [
+    "Offline structural validation only",
+    "Money rounding and scale are hypotheses",
+    "Recovery fixture coverage is not a runtime fault-injection test",
+    "Dedicated ERP test account not confirmed"
+  ]
+}

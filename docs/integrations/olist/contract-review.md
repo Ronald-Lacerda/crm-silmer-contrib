@@ -77,4 +77,4 @@ Revisão cruzada de RULES, spec CRM, PRD, TDD, ARCHITECTURE, ADR 057 e RFC 044;
 cobertura dos 50 IDs; links locais e Markdown alterado; `git diff --check`.
 Sem alteração de runtime, migração, conta, cadastro, impressão ou infraestrutura.
 T02 registra separadamente schema/hash, fixtures, resultados e plano de prova
-na matriz de capacidades a publicar na entrega T02.
+na [matriz de capacidades](capabilities.md).

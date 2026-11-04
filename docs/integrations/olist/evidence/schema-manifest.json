@@ -1,0 +1,44 @@
+{
+  "accountCalls": 0,
+  "apiVersion": "3.1",
+  "capturedAt": "2026-11-04T19:07:17.516815+00:00",
+  "liveProven": false,
+  "openapi": "3.0.0",
+  "operations": {
+    "/contatos": [
+      "get",
+      "post"
+    ],
+    "/contatos/{idContato}": [
+      "get"
+    ],
+    "/info": [
+      "get"
+    ],
+    "/pedidos": [
+      "get",
+      "post"
+    ],
+    "/pedidos/{idPedido}": [
+      "get"
+    ],
+    "/produtos": [
+      "get",
+      "post"
+    ],
+    "/produtos/{idProduto}": [
+      "get"
+    ],
+    "/produtos/{idProduto}/variacoes": [
+      "post"
+    ]
+  },
+  "projectionFile": "openapi-v3.projection.json",
+  "projectionRule": "Selected operations plus unchanged transitive local components; sorted UTF-8 JSON with LF.",
+  "projectionSha256": "cd4a7f75ed87299db768bc04a40a895c003cb60705ade98ada719ac7e0724a83",
+  "sourceBytes": 844559,
+  "sourceLastModified": "Thu, 29 Oct 2026 16:58:38 GMT",
+  "sourceSha256": "107f8d039de20401097443038efb1459c9c2ff01599830fe1274cfa0d9f47216",
+  "sourceUrl": "https://erp.olist.com/public-api/v3/swagger/swagger-mintlify.json",
+  "task": "OLIST-T02"
+}

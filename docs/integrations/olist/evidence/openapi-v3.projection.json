@@ -1,0 +1,4847 @@
+{
+  "components": {
+    "parameters": {
+      "celularContato": {
+        "description": "Pesquisa pelo celular",
+        "in": "query",
+        "name": "celular",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "codigoClientePedido": {
+        "description": "Pesquisa por código do cliente",
+        "in": "query",
+        "name": "codigoCliente",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "codigoContato": {
+        "description": "Pesquisa por codigo completo",
+        "in": "query",
+        "name": "codigo",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "codigoProduto": {
+        "description": "Pesquisa pelo código do produto",
+        "in": "query",
+        "name": "codigo",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "cpfCnpjClientePedido": {
+        "description": "Pesquisa por CPF/CNPJ do cliente",
+        "in": "query",
+        "name": "cpfCnpj",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "cpfCnpjContato": {
+        "description": "Pesquisa por CPF ou CNPJ",
+        "in": "query",
+        "name": "cpfCnpj",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "dataAlteracao": {
+        "description": "Pesquisa através da data de última alteração do produto",
+        "in": "query",
+        "name": "dataAlteracao",
+        "required": false,
+        "schema": {
+          "example": "2023-01-01 10:00:00",
+          "type": "string"
+        }
+      },
+      "dataAtualizacaoContato": {
+        "description": "Pesquisa por data de atualização",
+        "in": "query",
+        "name": "dataAtualizacao",
+        "required": false,
+        "schema": {
+          "example": "2023-01-01 10:00:00",
+          "type": "string"
+        }
+      },
+      "dataAtualizacaoPedido": {
+        "description": "Pesquisa através da data de atualização do pedido",
+        "in": "query",
+        "name": "dataAtualizacao",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "dataCriacao": {
+        "description": "Pesquisa através da data de criação do produto",
+        "in": "query",
+        "name": "dataCriacao",
+        "required": false,
+        "schema": {
+          "example": "2023-01-01 10:00:00",
+          "type": "string"
+        }
+      },
+      "dataCriacaoContato": {
+        "description": "Pesquisa por data de criação",
+        "in": "query",
+        "name": "dataCriacao",
+        "required": false,
+        "schema": {
+          "example": "2023-01-01 10:00:00",
+          "type": "string"
+        }
+      },
+      "dataFinalPedido": {
+        "description": "Pesquisa através da data de criação do pedido",
+        "in": "query",
+        "name": "dataFinal",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "dataInicialPedido": {
+        "description": "Pesquisa através da data de criação do pedido",
+        "in": "query",
+        "name": "dataInicial",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "emailContato": {
+        "description": "Pesquisa pelo e-mail completo",
+        "in": "query",
+        "name": "email",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "get_contatos_idContato_idContato": {
+        "in": "path",
+        "name": "idContato",
+        "required": true,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "get_contatos_limit": {
+        "description": "Limite da paginação",
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "default": 100,
+          "type": "integer"
+        }
+      },
+      "get_contatos_offset": {
+        "description": "Offset da paginação",
+        "in": "query",
+        "name": "offset",
+        "required": false,
+        "schema": {
+          "default": 0,
+          "type": "integer"
+        }
+      },
+      "get_pedidos_idPedido_idPedido": {
+        "description": "Identificador do pedido",
+        "in": "path",
+        "name": "idPedido",
+        "required": true,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "get_pedidos_limit": {
+        "description": "Limite da paginação",
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "default": 100,
+          "type": "integer"
+        }
+      },
+      "get_pedidos_offset": {
+        "description": "Offset da paginação",
+        "in": "query",
+        "name": "offset",
+        "required": false,
+        "schema": {
+          "default": 0,
+          "type": "integer"
+        }
+      },
+      "get_produtos_idProduto_idProduto": {
+        "in": "path",
+        "name": "idProduto",
+        "required": true,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "get_produtos_limit": {
+        "description": "Limite da paginação",
+        "in": "query",
+        "name": "limit",
+        "required": false,
+        "schema": {
+          "default": 100,
+          "type": "integer"
+        }
+      },
+      "get_produtos_offset": {
+        "description": "Offset da paginação",
+        "in": "query",
+        "name": "offset",
+        "required": false,
+        "schema": {
+          "default": 0,
+          "type": "integer"
+        }
+      },
+      "gtin": {
+        "description": "Pesquisa através do código GTIN do produto",
+        "in": "query",
+        "name": "gtin",
+        "required": false,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "idListaPreco": {
+        "description": "Filtra produtos que estão cadastrados na lista de preços informada. Quando informado, retorna apenas produtos que possuem preço definido nesta lista.",
+        "in": "query",
+        "name": "idListaPreco",
+        "required": false,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "idVendedorContato": {
+        "description": "Pesquisa por vendedor padrão",
+        "in": "query",
+        "name": "idVendedor",
+        "required": false,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "idVendedorPedido": {
+        "description": "Pesquisa por id do vendedor",
+        "in": "query",
+        "name": "idVendedor",
+        "required": false,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "marcadoresPedido": {
+        "description": "Pesquisa por marcadores",
+        "in": "query",
+        "name": "marcadores",
+        "required": false,
+        "schema": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "nomeClientePedido": {
+        "description": "Pesquisa por nome do cliente",
+        "in": "query",
+        "name": "nomeCliente",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "nomeContato": {
+        "description": "Pesquisa por nome parcial ou completo",
+        "in": "query",
+        "name": "nome",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "nomeProduto": {
+        "description": "Pesquisa por nome parcial ou completo do produto",
+        "in": "query",
+        "name": "nome",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "numeroPedido": {
+        "description": "Pesquisa por número do pedido",
+        "in": "query",
+        "name": "numero",
+        "required": false,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "numeroPedidoEcommercePedido": {
+        "description": "Pesquisa por número do pedido no e-commerce",
+        "in": "query",
+        "name": "numeroPedidoEcommerce",
+        "required": false,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "orderBy": {
+        "description": "Define a ordenação da listagem por ordem crescente ou decrescente\n- asc - Crescente\n- desc - Descrescente",
+        "in": "query",
+        "name": "orderBy",
+        "required": false,
+        "schema": {
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        },
+        "x-enumDescriptions": [
+          "asc - Crescente",
+          "desc - Descrescente"
+        ]
+      },
+      "origemPedido": {
+        "description": "Pesquise através da origem do pedido (0 = Pedido de Venda, 1 = PDV)",
+        "in": "query",
+        "name": "origemPedido",
+        "required": false,
+        "schema": {
+          "enum": [
+            0,
+            1
+          ],
+          "type": "integer"
+        }
+      },
+      "post_produtos_idProduto_variacoes_idProduto": {
+        "description": "Identificador do produto",
+        "in": "path",
+        "name": "idProduto",
+        "required": true,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "situacao": {
+        "description": "Pesquisa com base na situação informada\n- A - Ativo\n- I - Inativo\n- E - Excluido",
+        "in": "query",
+        "name": "situacao",
+        "required": false,
+        "schema": {
+          "enum": [
+            "A",
+            "I",
+            "E"
+          ]
+        },
+        "x-enumDescriptions": [
+          "A - Ativo",
+          "I - Inativo",
+          "E - Excluido"
+        ]
+      },
+      "situacaoContato": {
+        "description": "Pesquisa por situacao\n- B - Ativo\n- A - Ativo Com Acesso Sistema\n- I - Inativo\n- E - Excluido",
+        "in": "query",
+        "name": "situacao",
+        "required": false,
+        "schema": {
+          "enum": [
+            "B",
+            "A",
+            "I",
+            "E"
+          ]
+        },
+        "x-enumDescriptions": [
+          "B - Ativo",
+          "A - Ativo Com Acesso Sistema",
+          "I - Inativo",
+          "E - Excluido"
+        ]
+      },
+      "situacaoPedido": {
+        "description": "Pesquisa com base na situação informada\n- 8 - Dados Incompletos\n- 0 - Aberta\n- 3 - Aprovada\n- 4 - Preparando Envio\n- 1 - Faturada\n- 7 - Pronto Envio\n- 5 - Enviada\n- 6 - Entregue\n- 10 - Em Devolucao\n- 2 - Cancelada\n- 9 - Nao Entregue",
+        "in": "query",
+        "name": "situacao",
+        "required": false,
+        "schema": {
+          "enum": [
+            8,
+            0,
+            3,
+            4,
+            1,
+            7,
+            5,
+            6,
+            10,
+            2,
+            9
+          ]
+        },
+        "x-enumDescriptions": [
+          "8 - Dados Incompletos",
+          "0 - Aberta",
+          "3 - Aprovada",
+          "4 - Preparando Envio",
+          "1 - Faturada",
+          "7 - Pronto Envio",
+          "5 - Enviada",
+          "6 - Entregue",
+          "10 - Em Devolucao",
+          "2 - Cancelada",
+          "9 - Nao Entregue"
+        ]
+      }
+    },
+    "schemas": {
+      "AnexoRequestModel": {
+        "description": " ",
+        "properties": {
+          "externo": {
+            "type": "boolean"
+          },
+          "url": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "title": " ",
+        "type": "object"
+      },
+      "AnexoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "externo": {
+                "nullable": true,
+                "type": "boolean"
+              },
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "url": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "BaseContatoModel": {
+        "allOf": [
+          {
+            "properties": {
+              "celular": {
+                "nullable": true,
+                "type": "string"
+              },
+              "codigo": {
+                "nullable": true,
+                "type": "string"
+              },
+              "cpfCnpj": {
+                "nullable": true,
+                "type": "string"
+              },
+              "email": {
+                "nullable": true,
+                "type": "string"
+              },
+              "endereco": {
+                "$ref": "#/components/schemas/EnderecoModel"
+              },
+              "fantasia": {
+                "nullable": true,
+                "type": "string"
+              },
+              "inscricaoEstadual": {
+                "nullable": true,
+                "type": "string"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              },
+              "rg": {
+                "nullable": true,
+                "type": "string"
+              },
+              "telefone": {
+                "nullable": true,
+                "type": "string"
+              },
+              "tipoPessoa": {
+                "description": "\n- J - Juridica\n- F - Fisica\n- E - Estrangeiro\n- X - Estrangeiro No Brasil",
+                "enum": [
+                  "J",
+                  "F",
+                  "E",
+                  "X"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "J - Juridica",
+                  "F - Fisica",
+                  "E - Estrangeiro",
+                  "X - Estrangeiro No Brasil"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "BaseMarcadorModel": {
+        "allOf": [
+          {
+            "properties": {
+              "descricao": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "BasePedidoModel": {
+        "description": " ",
+        "properties": {
+          "dataEnvio": {
+            "example": "2024-01-01 00:00:00",
+            "nullable": true,
+            "type": "string"
+          },
+          "dataPrevista": {
+            "example": "2024-01-01",
+            "nullable": true,
+            "type": "string"
+          },
+          "observacoes": {
+            "nullable": true,
+            "type": "string"
+          },
+          "observacoesInternas": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "title": " ",
+        "type": "object"
+      },
+      "BasePessoaContatoModel": {
+        "allOf": [
+          {
+            "properties": {
+              "email": {
+                "nullable": true,
+                "type": "string"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              },
+              "ramal": {
+                "nullable": true,
+                "type": "string"
+              },
+              "setor": {
+                "nullable": true,
+                "type": "string"
+              },
+              "telefone": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "CategoriaReceitaDespesaRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "description": "Identificador da categoria de receita ou despesa, obtido em /categorias-receita-despesa. Envie 0 para gravar o pedido sem categoria. Se o objeto não for enviado, a criação assume a categoria padrão de venda da conta e a atualização mantém a categoria atual do pedido",
+                "nullable": true,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "CategoriaReceitaDespesaResponseModel": {
+        "description": " ",
+        "properties": {
+          "descricao": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          }
+        },
+        "title": " ",
+        "type": "object"
+      },
+      "CategoriaRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "CategoriaResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "caminhoCompleto": {
+                "nullable": true,
+                "type": "string"
+              },
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ConsumidorFinalRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "clienteConsumidorFinal": {
+                "type": "boolean"
+              },
+              "cpfCnpj": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ContatoModel": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseContatoModel"
+          },
+          {
+            "properties": {
+              "cpfMae": {
+                "nullable": true,
+                "type": "string"
+              },
+              "cpfPai": {
+                "nullable": true,
+                "type": "string"
+              },
+              "dataNascimento": {
+                "nullable": true,
+                "type": "string"
+              },
+              "emailNfe": {
+                "nullable": true,
+                "type": "string"
+              },
+              "enderecoCobranca": {
+                "$ref": "#/components/schemas/EnderecoModel"
+              },
+              "estadoCivil": {
+                "description": "\n- 1 - Casado\n- 2 - Solteiro\n- 3 - Viuvo\n- 4 - Separado\n- 5 - Desquitado",
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5
+                ],
+                "nullable": true,
+                "type": "integer",
+                "x-enumDescriptions": [
+                  "1 - Casado",
+                  "2 - Solteiro",
+                  "3 - Viuvo",
+                  "4 - Separado",
+                  "5 - Desquitado"
+                ]
+              },
+              "inscricaoMunicipal": {
+                "nullable": true,
+                "type": "string"
+              },
+              "limiteCredito": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "naturalidade": {
+                "nullable": true,
+                "type": "string"
+              },
+              "nomeMae": {
+                "nullable": true,
+                "type": "string"
+              },
+              "nomePai": {
+                "nullable": true,
+                "type": "string"
+              },
+              "observacoes": {
+                "nullable": true,
+                "type": "string"
+              },
+              "observacoesDoContato": {
+                "nullable": true,
+                "type": "string"
+              },
+              "profissao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "regimeTributario": {
+                "description": "\n- 1 - Simples Nacional\n- 2 - Simples Nacional Excesso Receita\n- 3 - Regime Normal\n- 4 - Mei",
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "nullable": true,
+                "type": "integer",
+                "x-enumDescriptions": [
+                  "1 - Simples Nacional",
+                  "2 - Simples Nacional Excesso Receita",
+                  "3 - Regime Normal",
+                  "4 - Mei"
+                ]
+              },
+              "sexo": {
+                "description": "\n- masculino - Masculino\n- feminino - Feminino",
+                "enum": [
+                  "masculino",
+                  "feminino"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "masculino - Masculino",
+                  "feminino - Feminino"
+                ]
+              },
+              "site": {
+                "nullable": true,
+                "type": "string"
+              },
+              "situacao": {
+                "description": "\n- B - Ativo\n- A - Ativo Com Acesso Sistema\n- I - Inativo\n- E - Excluido",
+                "enum": [
+                  "B",
+                  "A",
+                  "I",
+                  "E"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "B - Ativo",
+                  "A - Ativo Com Acesso Sistema",
+                  "I - Inativo",
+                  "E - Excluido"
+                ]
+              },
+              "telefoneAdicional": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "CriarAtualizarContatoModelRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ContatoModel"
+          },
+          {
+            "properties": {
+              "contatos": {
+                "items": {
+                  "$ref": "#/components/schemas/CriarContatoContatoModelRequest"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "tipos": {
+                "items": {
+                  "type": "integer"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "vendedor": {
+                "$ref": "#/components/schemas/VendedorRequestModel"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "CriarContatoContatoModelRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BasePessoaContatoModel"
+          },
+          {
+            "properties": {},
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " "
+      },
+      "CriarContatoModelRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CriarAtualizarContatoModelRequest"
+          },
+          {
+            "properties": {},
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " "
+      },
+      "CriarContatoModelResponse": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "CriarPedidoModelRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PedidoModel"
+          },
+          {
+            "properties": {
+              "consumidorFinal": {
+                "$ref": "#/components/schemas/ConsumidorFinalRequestModel"
+              },
+              "deposito": {
+                "$ref": "#/components/schemas/DepositoRequestModel"
+              },
+              "ecommerce": {
+                "$ref": "#/components/schemas/EcommerceRequestModel"
+              },
+              "enderecoEntrega": {
+                "$ref": "#/components/schemas/EnderecoEntregaPedidoModelRequest"
+              },
+              "idContato": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "intermediador": {
+                "$ref": "#/components/schemas/IntermediadorRequestModel"
+              },
+              "itens": {
+                "items": {
+                  "$ref": "#/components/schemas/ItemPedidoRequestModel"
+                },
+                "type": "array"
+              },
+              "listaPreco": {
+                "$ref": "#/components/schemas/ListaPrecoRequestModel"
+              },
+              "naturezaOperacao": {
+                "$ref": "#/components/schemas/NaturezaOperacaoRequestModel"
+              },
+              "pagamento": {
+                "$ref": "#/components/schemas/PedidoPagamentoRequestModel"
+              },
+              "pagamentosIntegrados": {
+                "items": {
+                  "$ref": "#/components/schemas/PagamentoIntegradoModelRequest"
+                },
+                "type": "array"
+              },
+              "transportador": {
+                "$ref": "#/components/schemas/TransportadorRequestModel"
+              },
+              "vendedor": {
+                "$ref": "#/components/schemas/VendedorRequestModel"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "CriarPedidoModelResponse": {
+        "description": " ",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "numeroPedido": {
+            "type": "string"
+          }
+        },
+        "title": " ",
+        "type": "object"
+      },
+      "CriarProdutoComVariacoesResponseModel": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CriarProdutoResponseModel"
+          },
+          {
+            "properties": {
+              "variacoes": {
+                "items": {
+                  "$ref": "#/components/schemas/CriarProdutoResponseModel"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "CriarProdutoEstoqueRequestModel": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EstoqueProdutoRequestModel"
+          },
+          {
+            "properties": {
+              "inicial": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "CriarProdutoRequestModel": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProdutoModel"
+          },
+          {
+            "properties": {
+              "anexos": {
+                "items": {
+                  "$ref": "#/components/schemas/AnexoRequestModel"
+                },
+                "type": "array"
+              },
+              "descricao": {
+                "nullable": false,
+                "type": "string"
+              },
+              "estoque": {
+                "$ref": "#/components/schemas/CriarProdutoEstoqueRequestModel"
+              },
+              "grade": {
+                "description": "Lista de chaves da grade. Obrigatório quando tipo = 'V'. Exemplo: ['Tamanho', 'Cor']. As chaves devem corresponder às chaves das grades das variações.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "kit": {
+                "description": "Lista de produtos do kit. Obrigatório quando tipo = 'K' (Kit).",
+                "items": {
+                  "$ref": "#/components/schemas/ProdutoKitRequestModel"
+                },
+                "type": "array"
+              },
+              "producao": {
+                "description": "Informações de produção do produto. Obrigatório quando tipo = 'F' (Fabricado). Deve conter ao menos um produto ou uma etapa de produção.",
+                "nullable": true,
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ProducaoProdutoRequestModel"
+                  }
+                ]
+              },
+              "seo": {
+                "$ref": "#/components/schemas/SeoProdutoRequestModel"
+              },
+              "tipo": {
+                "description": "\n- K - Kit\n- S - Simples\n- V - Com Variacoes\n- F - Fabricado\n- M - Materia Prima",
+                "enum": [
+                  "K",
+                  "S",
+                  "V",
+                  "F",
+                  "M"
+                ],
+                "type": "string",
+                "x-enumDescriptions": [
+                  "K - Kit",
+                  "S - Simples",
+                  "V - Com Variacoes",
+                  "F - Fabricado",
+                  "M - Materia Prima"
+                ]
+              },
+              "variacoes": {
+                "description": "Lista de variações do produto. Obrigatório quando tipo = 'V'.",
+                "items": {
+                  "$ref": "#/components/schemas/VariacaoProdutoRequestModel"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "tipo",
+              "descricao"
+            ],
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "CriarProdutoResponseModel": {
+        "description": " ",
+        "properties": {
+          "codigo": {
+            "type": "string"
+          },
+          "descricao": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer"
+          }
+        },
+        "title": " ",
+        "type": "object"
+      },
+      "DepositoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "DepositoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "nome": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "DimensoesProdutoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "altura": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "comprimento": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "diametro": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "embalagem": {
+                "$ref": "#/components/schemas/EmbalagemRequestModel"
+              },
+              "largura": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "pesoBruto": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "pesoLiquido": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "DimensoesProdutoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "altura": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "comprimento": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "diametro": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "embalagem": {
+                "$ref": "#/components/schemas/EmbalagemResponseModel"
+              },
+              "largura": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "pesoBruto": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "pesoLiquido": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "quantidadeVolumes": {
+                "nullable": true,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "EcommerceRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "numeroPedidoEcommerce": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "EcommerceResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "canalVenda": {
+                "nullable": true,
+                "type": "string"
+              },
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              },
+              "numeroPedidoCanalVenda": {
+                "nullable": true,
+                "type": "string"
+              },
+              "numeroPedidoEcommerce": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "EmbalagemRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "tipo": {
+                "description": "\n- 0 - Nao Definido\n- 1 - Envelope\n- 2 - Caixa\n- 3 - Cilindro",
+                "enum": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "nullable": true,
+                "type": "integer",
+                "x-enumDescriptions": [
+                  "0 - Nao Definido",
+                  "1 - Envelope",
+                  "2 - Caixa",
+                  "3 - Cilindro"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "EmbalagemResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "descricao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "tipo": {
+                "description": "\n- 0 - Nao Definido\n- 1 - Envelope\n- 2 - Caixa\n- 3 - Cilindro",
+                "enum": [
+                  0,
+                  1,
+                  2,
+                  3
+                ],
+                "nullable": true,
+                "type": "integer",
+                "x-enumDescriptions": [
+                  "0 - Nao Definido",
+                  "1 - Envelope",
+                  "2 - Caixa",
+                  "3 - Cilindro"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "EnderecoEntregaModelResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EnderecoModel"
+          },
+          {
+            "properties": {
+              "cpfCnpj": {
+                "nullable": true,
+                "type": "string"
+              },
+              "inscricaoEstadual": {
+                "nullable": true,
+                "type": "string"
+              },
+              "nomeDestinatario": {
+                "nullable": true,
+                "type": "string"
+              },
+              "telefone": {
+                "nullable": true,
+                "type": "string"
+              },
+              "tipoPessoa": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "EnderecoEntregaPedidoModel": {
+        "allOf": [
+          {
+            "properties": {
+              "bairro": {
+                "nullable": true,
+                "type": "string"
+              },
+              "cep": {
+                "nullable": true,
+                "type": "string"
+              },
+              "complemento": {
+                "nullable": true,
+                "type": "string"
+              },
+              "cpfCnpj": {
+                "nullable": true,
+                "type": "string"
+              },
+              "endereco": {
+                "nullable": true,
+                "type": "string"
+              },
+              "enderecoNro": {
+                "nullable": true,
+                "type": "string"
+              },
+              "fone": {
+                "nullable": true,
+                "type": "string"
+              },
+              "ie": {
+                "nullable": true,
+                "type": "string"
+              },
+              "municipio": {
+                "nullable": true,
+                "type": "string"
+              },
+              "nomeDestinatario": {
+                "nullable": true,
+                "type": "string"
+              },
+              "tipoPessoa": {
+                "description": "\n- J - Juridica\n- F - Fisica\n- E - Estrangeiro\n- X - Estrangeiro No Brasil",
+                "enum": [
+                  "J",
+                  "F",
+                  "E",
+                  "X"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "J - Juridica",
+                  "F - Fisica",
+                  "E - Estrangeiro",
+                  "X - Estrangeiro No Brasil"
+                ]
+              },
+              "uf": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "EnderecoEntregaPedidoModelRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/EnderecoEntregaPedidoModel"
+          },
+          {
+            "properties": {},
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " "
+      },
+      "EnderecoModel": {
+        "allOf": [
+          {
+            "properties": {
+              "bairro": {
+                "nullable": true,
+                "type": "string"
+              },
+              "cep": {
+                "nullable": true,
+                "type": "string"
+              },
+              "complemento": {
+                "nullable": true,
+                "type": "string"
+              },
+              "endereco": {
+                "nullable": true,
+                "type": "string"
+              },
+              "municipio": {
+                "nullable": true,
+                "type": "string"
+              },
+              "numero": {
+                "nullable": true,
+                "type": "string"
+              },
+              "pais": {
+                "nullable": true,
+                "type": "string"
+              },
+              "uf": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ErrorDTO": {
+        "description": " ",
+        "properties": {
+          "detalhes": {
+            "description": "Detalhes específicos do erro",
+            "example": [
+              {
+                "campo": "codigo",
+                "mensagem": "O campo código é obrigatório"
+              }
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ErrorDetailDTO"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "mensagem": {
+            "description": "Mensagem de erro geral",
+            "example": "Ocorreram erros de validação",
+            "type": "string"
+          }
+        },
+        "title": " ",
+        "type": "object"
+      },
+      "ErrorDetailDTO": {
+        "description": " ",
+        "properties": {
+          "campo": {
+            "description": "Campo que gerou o erro",
+            "example": "codigo",
+            "type": "string"
+          },
+          "mensagem": {
+            "description": "Mensagem de erro específica do campo",
+            "example": "O campo código é obrigatório",
+            "type": "string"
+          }
+        },
+        "title": " ",
+        "type": "object"
+      },
+      "EstoqueListagemResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "localizacao": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "EstoqueProdutoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "controlar": {
+                "type": "boolean"
+              },
+              "diasPreparacao": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "localizacao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "maximo": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "minimo": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "sobEncomenda": {
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "EstoqueProdutoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "controlar": {
+                "nullable": true,
+                "type": "boolean"
+              },
+              "diasPreparacao": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "localizacao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "maximo": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "minimo": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "quantidade": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "sobEncomenda": {
+                "nullable": true,
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "EstoqueVariacaoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "inicial": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "FormaEnvioRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "FormaEnvioResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "FormaFreteRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "FormaFreteResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "FormaRecebimentoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "FormaRecebimentoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "FornecedorProdutoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "codigoProdutoNoFornecedor": {
+                "nullable": true,
+                "type": "string"
+              },
+              "id": {
+                "nullable": false,
+                "type": "integer"
+              },
+              "padrao": {
+                "nullable": false,
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "FornecedorProdutoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "codigoProdutoNoFornecedor": {
+                "nullable": true,
+                "type": "string"
+              },
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "GradeVariacaoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "chave": {
+                "nullable": false,
+                "type": "string"
+              },
+              "valor": {
+                "nullable": false,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "IntermediadorRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "IntermediadorResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "cnpj": {
+                "type": "string"
+              },
+              "cnpjPagamentoInstituicao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "id": {
+                "type": "integer"
+              },
+              "nome": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ItemPedidoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "infoAdicional": {
+                "nullable": true,
+                "type": "string"
+              },
+              "produto": {
+                "$ref": "#/components/schemas/ProdutoRequestModel"
+              },
+              "quantidade": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "valorUnitario": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ItemPedidoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "infoAdicional": {
+                "type": "string"
+              },
+              "produto": {
+                "$ref": "#/components/schemas/ProdutoResponseModel"
+              },
+              "quantidade": {
+                "format": "float",
+                "type": "number"
+              },
+              "valorUnitario": {
+                "format": "float",
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ListaPrecoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ListaPrecoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "acrescimoDesconto": {
+                "format": "float",
+                "type": "number"
+              },
+              "id": {
+                "type": "integer"
+              },
+              "nome": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ListagemContatoModelResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseContatoModel"
+          },
+          {
+            "properties": {
+              "contatos": {
+                "items": {
+                  "$ref": "#/components/schemas/PessoaContatoModel"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "dataAtualizacao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "dataCriacao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "id": {
+                "type": "integer"
+              },
+              "situacao": {
+                "description": "\n- B - Ativo\n- A - Ativo Com Acesso Sistema\n- I - Inativo\n- E - Excluido",
+                "enum": [
+                  "B",
+                  "A",
+                  "I",
+                  "E"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "B - Ativo",
+                  "A - Ativo Com Acesso Sistema",
+                  "I - Inativo",
+                  "E - Excluido"
+                ]
+              },
+              "statusCrm": {
+                "description": "\n- L - Lead\n- P - Prospect\n- C - Cliente\n- I - Inativo",
+                "enum": [
+                  "L",
+                  "P",
+                  "C",
+                  "I"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "L - Lead",
+                  "P - Prospect",
+                  "C - Cliente",
+                  "I - Inativo"
+                ]
+              },
+              "tipos": {
+                "items": {
+                  "$ref": "#/components/schemas/TipoContatoModel"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "vendedor": {
+                "nullable": true,
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/VendedorResponseModel"
+                  }
+                ]
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ListagemPedidoModelResponse": {
+        "allOf": [
+          {
+            "properties": {
+              "cliente": {
+                "$ref": "#/components/schemas/PedidoClienteModel"
+              },
+              "dataCriacao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "dataPrevista": {
+                "nullable": true,
+                "type": "string"
+              },
+              "ecommerce": {
+                "$ref": "#/components/schemas/EcommerceResponseModel"
+              },
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "numeroPedido": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "origemPedido": {
+                "description": "\n- 0 - Pedido Venda\n- 1 - Pdv",
+                "enum": [
+                  0,
+                  1
+                ],
+                "nullable": true,
+                "type": "integer",
+                "x-enumDescriptions": [
+                  "0 - Pedido Venda",
+                  "1 - Pdv"
+                ]
+              },
+              "situacao": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "transportador": {
+                "$ref": "#/components/schemas/TransportadorResponseModel"
+              },
+              "valor": {
+                "nullable": true,
+                "type": "string"
+              },
+              "vendedor": {
+                "$ref": "#/components/schemas/VendedorResponseModel"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ListagemProdutoCustosResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "custoMedio": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "data": {
+                "nullable": true,
+                "type": "string"
+              },
+              "impostosRecuperaveis": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "precoCusto": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "precoVenda": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "saldoAnterior": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "saldoAtual": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ListagemProdutosResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "dataAlteracao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "dataCriacao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "descricao": {
+                "type": "string"
+              },
+              "estoque": {
+                "$ref": "#/components/schemas/EstoqueListagemResponseModel"
+              },
+              "gtin": {
+                "type": "string"
+              },
+              "id": {
+                "type": "integer"
+              },
+              "precos": {
+                "$ref": "#/components/schemas/PrecoProdutoResponseModel"
+              },
+              "situacao": {
+                "description": "\n- A - Ativo\n- I - Inativo\n- E - Excluido",
+                "enum": [
+                  "A",
+                  "I",
+                  "E"
+                ],
+                "type": "string",
+                "x-enumDescriptions": [
+                  "A - Ativo",
+                  "I - Inativo",
+                  "E - Excluido"
+                ]
+              },
+              "sku": {
+                "type": "string"
+              },
+              "tipo": {
+                "description": "\n- K - Kit\n- S - Simples\n- V - Com Variacoes\n- F - Fabricado\n- M - Materia Prima",
+                "enum": [
+                  "K",
+                  "S",
+                  "V",
+                  "F",
+                  "M"
+                ],
+                "type": "string",
+                "x-enumDescriptions": [
+                  "K - Kit",
+                  "S - Simples",
+                  "V - Com Variacoes",
+                  "F - Fabricado",
+                  "M - Materia Prima"
+                ]
+              },
+              "tipoVariacao": {
+                "description": "\n- N - Normal\n- P - Pai\n- V - Variacao",
+                "enum": [
+                  "N",
+                  "P",
+                  "V"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "N - Normal",
+                  "P - Pai",
+                  "V - Variacao"
+                ]
+              },
+              "unidade": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "MarcaRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "MarcaResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "MeioPagamentoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "MeioPagamentoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "NaturezaOperacaoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "NaturezaOperacaoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "NotaFiscalPedidoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "chaveAcesso": {
+                "nullable": true,
+                "type": "string"
+              },
+              "dataEmissao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "horaEmissao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "numero": {
+                "nullable": true,
+                "type": "string"
+              },
+              "serie": {
+                "nullable": true,
+                "type": "string"
+              },
+              "situacao": {
+                "description": "\n- 1 - Pendente\n- 2 - Emitida\n- 3 - Cancelada\n- 4 - Enviada Aguardando Recibo\n- 5 - Rejeitada\n- 6 - Autorizada\n- 7 - Emitida Danfe\n- 8 - Registrada\n- 9 - Enviada Aguardando Protocolo\n- 10 - Denegada",
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4,
+                  5,
+                  6,
+                  7,
+                  8,
+                  9,
+                  10
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "1 - Pendente",
+                  "2 - Emitida",
+                  "3 - Cancelada",
+                  "4 - Enviada Aguardando Recibo",
+                  "5 - Rejeitada",
+                  "6 - Autorizada",
+                  "7 - Emitida Danfe",
+                  "8 - Registrada",
+                  "9 - Enviada Aguardando Protocolo",
+                  "10 - Denegada"
+                ]
+              },
+              "valor": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ObterContatoModelResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ContatoModel"
+          },
+          {
+            "properties": {
+              "contatos": {
+                "items": {
+                  "$ref": "#/components/schemas/PessoaContatoModel"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "dataAtualizacao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "dataCriacao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "id": {
+                "type": "integer"
+              },
+              "statusCrm": {
+                "description": "\n- L - Lead\n- P - Prospect\n- C - Cliente\n- I - Inativo",
+                "enum": [
+                  "L",
+                  "P",
+                  "C",
+                  "I"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "L - Lead",
+                  "P - Prospect",
+                  "C - Cliente",
+                  "I - Inativo"
+                ]
+              },
+              "tipos": {
+                "items": {
+                  "$ref": "#/components/schemas/TipoContatoModel"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "vendedor": {
+                "nullable": true,
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/VendedorResponseModel"
+                  }
+                ]
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ObterInfoContaModelResponse": {
+        "allOf": [
+          {
+            "properties": {
+              "cpfCnpj": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "enderecoEmpresa": {
+                "$ref": "#/components/schemas/EnderecoModel"
+              },
+              "fantasia": {
+                "type": "string"
+              },
+              "fone": {
+                "type": "string"
+              },
+              "inscricaoEstadual": {
+                "type": "string"
+              },
+              "razaoSocial": {
+                "type": "string"
+              },
+              "regimeTributario": {
+                "description": "\n- 1 - Simples Nacional\n- 2 - Simples Nacional Excesso Receita\n- 3 - Regime Normal\n- 4 - Mei",
+                "enum": [
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "type": "integer",
+                "x-enumDescriptions": [
+                  "1 - Simples Nacional",
+                  "2 - Simples Nacional Excesso Receita",
+                  "3 - Regime Normal",
+                  "4 - Mei"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ObterMarcadorResponseModel": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseMarcadorModel"
+          },
+          {
+            "properties": {},
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " "
+      },
+      "ObterPedidoModelResponse": {
+        "description": " ",
+        "properties": {
+          "cliente": {
+            "$ref": "#/components/schemas/PedidoClienteModel"
+          },
+          "data": {
+            "example": "2024-01-01",
+            "nullable": true,
+            "type": "string"
+          },
+          "dataEntrega": {
+            "example": "2024-01-01",
+            "nullable": true,
+            "type": "string"
+          },
+          "dataEnvio": {
+            "example": "2024-01-01 00:00:00",
+            "nullable": true,
+            "type": "string"
+          },
+          "dataFaturamento": {
+            "nullable": true,
+            "type": "string"
+          },
+          "dataPrevista": {
+            "example": "2024-01-01",
+            "nullable": true,
+            "type": "string"
+          },
+          "deposito": {
+            "$ref": "#/components/schemas/DepositoResponseModel"
+          },
+          "ecommerce": {
+            "$ref": "#/components/schemas/EcommerceResponseModel"
+          },
+          "enderecoEntrega": {
+            "$ref": "#/components/schemas/EnderecoEntregaModelResponse"
+          },
+          "id": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "idNotaFiscal": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "intermediador": {
+            "$ref": "#/components/schemas/IntermediadorResponseModel"
+          },
+          "itens": {
+            "items": {
+              "$ref": "#/components/schemas/ItemPedidoResponseModel"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "listaPreco": {
+            "$ref": "#/components/schemas/ListaPrecoResponseModel"
+          },
+          "marcadores": {
+            "description": "Marcadores do pedido.",
+            "items": {
+              "$ref": "#/components/schemas/ObterMarcadorResponseModel"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "naturezaOperacao": {
+            "$ref": "#/components/schemas/NaturezaOperacaoResponseModel"
+          },
+          "notaFiscal": {
+            "description": "Nota fiscal vinculada ao pedido.",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NotaFiscalPedidoResponseModel"
+              }
+            ]
+          },
+          "numeroOrdemCompra": {
+            "nullable": true,
+            "type": "string"
+          },
+          "numeroPedido": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "observacoes": {
+            "nullable": true,
+            "type": "string"
+          },
+          "observacoesInternas": {
+            "nullable": true,
+            "type": "string"
+          },
+          "origemPedido": {
+            "description": "Origem do pedido (0 = Pedido de Venda, 1 = PDV)",
+            "nullable": true,
+            "type": "integer"
+          },
+          "pagamento": {
+            "$ref": "#/components/schemas/PagamentoResponseModel"
+          },
+          "pagamentosIntegrados": {
+            "items": {
+              "$ref": "#/components/schemas/PagamentoIntegradoModelResponse"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "situacao": {
+            "description": "\n- 8 - Dados Incompletos\n- 0 - Aberta\n- 3 - Aprovada\n- 4 - Preparando Envio\n- 1 - Faturada\n- 7 - Pronto Envio\n- 5 - Enviada\n- 6 - Entregue\n- 10 - Em Devolucao\n- 2 - Cancelada\n- 9 - Nao Entregue",
+            "enum": [
+              8,
+              0,
+              3,
+              4,
+              1,
+              7,
+              5,
+              6,
+              10,
+              2,
+              9
+            ],
+            "nullable": true,
+            "type": "integer",
+            "x-enumDescriptions": [
+              "8 - Dados Incompletos",
+              "0 - Aberta",
+              "3 - Aprovada",
+              "4 - Preparando Envio",
+              "1 - Faturada",
+              "7 - Pronto Envio",
+              "5 - Enviada",
+              "6 - Entregue",
+              "10 - Em Devolucao",
+              "2 - Cancelada",
+              "9 - Nao Entregue"
+            ]
+          },
+          "transportador": {
+            "$ref": "#/components/schemas/TransportadorResponseModel"
+          },
+          "valorDesconto": {
+            "format": "float",
+            "nullable": true,
+            "type": "number"
+          },
+          "valorFrete": {
+            "format": "float",
+            "nullable": true,
+            "type": "number"
+          },
+          "valorFretePagoEmpresa": {
+            "description": "Valor de frete pago pela empresa. Valor informativo, de uso interno para apuração de custos.",
+            "format": "float",
+            "nullable": true,
+            "type": "number"
+          },
+          "valorOutrasDespesas": {
+            "format": "float",
+            "nullable": true,
+            "type": "number"
+          },
+          "valorTotalPedido": {
+            "format": "float",
+            "nullable": true,
+            "type": "number"
+          },
+          "valorTotalProdutos": {
+            "format": "float",
+            "nullable": true,
+            "type": "number"
+          },
+          "vendedor": {
+            "$ref": "#/components/schemas/VendedorResponseModel"
+          }
+        },
+        "title": " ",
+        "type": "object"
+      },
+      "ObterProdutoModelResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProdutoResponseModel"
+          },
+          {
+            "properties": {
+              "anexos": {
+                "items": {
+                  "$ref": "#/components/schemas/AnexoResponseModel"
+                },
+                "type": "array"
+              },
+              "categoria": {
+                "$ref": "#/components/schemas/CategoriaResponseModel"
+              },
+              "codigoListaServicos": {
+                "nullable": true,
+                "type": "string"
+              },
+              "custos": {
+                "description": "Histórico dos últimos custos do produto.",
+                "items": {
+                  "$ref": "#/components/schemas/ListagemProdutoCustosResponseModel"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "descricaoComplementar": {
+                "nullable": true,
+                "type": "string"
+              },
+              "dimensoes": {
+                "$ref": "#/components/schemas/DimensoesProdutoResponseModel"
+              },
+              "estoque": {
+                "$ref": "#/components/schemas/EstoqueProdutoResponseModel"
+              },
+              "fornecedores": {
+                "items": {
+                  "$ref": "#/components/schemas/FornecedorProdutoResponseModel"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "garantia": {
+                "nullable": true,
+                "type": "string"
+              },
+              "gtin": {
+                "nullable": true,
+                "type": "string"
+              },
+              "kit": {
+                "items": {
+                  "$ref": "#/components/schemas/ProdutoKitResponseModel"
+                },
+                "type": "array"
+              },
+              "marca": {
+                "$ref": "#/components/schemas/MarcaResponseModel"
+              },
+              "ncm": {
+                "nullable": true,
+                "type": "string"
+              },
+              "observacoes": {
+                "nullable": true,
+                "type": "string"
+              },
+              "origem": {
+                "description": "\n- 0 - Nacional Exceto Codigo 3 A 5\n- 4 - Nacional Producao Conforme Ajustes\n- 5 - Nacional Conteudo Importacao Inferior 40\n- 3 - Nacional Conteudo Importacao Superior 40\n- 8 - Nacional Conteudo Importacao Superior 70\n- 1 - Estrangeira Importacao Direta Exceto Codigo 6\n- 6 - Estrangeira Importacao Direta Sem Similar\n- 2 - Estrangeira Adquirida Mercado Interno\n- 7 - Estrangeira Adquirida Mercado Interno Sem Similar",
+                "enum": [
+                  0,
+                  4,
+                  5,
+                  3,
+                  8,
+                  1,
+                  6,
+                  2,
+                  7
+                ],
+                "type": "string",
+                "x-enumDescriptions": [
+                  "0 - Nacional Exceto Codigo 3 A 5",
+                  "4 - Nacional Producao Conforme Ajustes",
+                  "5 - Nacional Conteudo Importacao Inferior 40",
+                  "3 - Nacional Conteudo Importacao Superior 40",
+                  "8 - Nacional Conteudo Importacao Superior 70",
+                  "1 - Estrangeira Importacao Direta Exceto Codigo 6",
+                  "6 - Estrangeira Importacao Direta Sem Similar",
+                  "2 - Estrangeira Adquirida Mercado Interno",
+                  "7 - Estrangeira Adquirida Mercado Interno Sem Similar"
+                ]
+              },
+              "precos": {
+                "$ref": "#/components/schemas/PrecoProdutoResponseModel"
+              },
+              "producao": {
+                "$ref": "#/components/schemas/ProducaoProdutoResponseModel"
+              },
+              "produtoPai": {
+                "$ref": "#/components/schemas/ProdutoResponseModel"
+              },
+              "seo": {
+                "$ref": "#/components/schemas/SeoProdutoModelResponse"
+              },
+              "situacao": {
+                "description": "\n- A - Ativo\n- I - Inativo\n- E - Excluido",
+                "enum": [
+                  "A",
+                  "I",
+                  "E"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "A - Ativo",
+                  "I - Inativo",
+                  "E - Excluido"
+                ]
+              },
+              "tags": {
+                "description": "Tags do produto.",
+                "items": {
+                  "$ref": "#/components/schemas/TagProdutoModelResponse"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "tipo": {
+                "description": "\n- K - Kit\n- S - Simples\n- V - Com Variacoes\n- F - Fabricado\n- M - Materia Prima",
+                "enum": [
+                  "K",
+                  "S",
+                  "V",
+                  "F",
+                  "M"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "K - Kit",
+                  "S - Simples",
+                  "V - Com Variacoes",
+                  "F - Fabricado",
+                  "M - Materia Prima"
+                ]
+              },
+              "tipoVariacao": {
+                "description": "\n- N - Normal\n- P - Pai\n- V - Variacao",
+                "enum": [
+                  "N",
+                  "P",
+                  "V"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "N - Normal",
+                  "P - Pai",
+                  "V - Variacao"
+                ]
+              },
+              "tributacao": {
+                "$ref": "#/components/schemas/TributacaoProdutoResponseModel"
+              },
+              "unidade": {
+                "nullable": true,
+                "type": "string"
+              },
+              "unidadePorCaixa": {
+                "nullable": true,
+                "type": "string"
+              },
+              "variacoes": {
+                "items": {
+                  "$ref": "#/components/schemas/VariacaoProdutoResponseModel"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "PagamentoIntegradoModelRequest": {
+        "allOf": [
+          {
+            "properties": {
+              "cnpjIntermediador": {
+                "description": "CNPJ do intermediador",
+                "example": "00000000000191",
+                "nullable": true,
+                "type": "string"
+              },
+              "codigoAutorizacao": {
+                "description": "Código de autorização da transação",
+                "example": "123456",
+                "nullable": true,
+                "type": "string"
+              },
+              "codigoBandeira": {
+                "description": "Código da bandeira da operadora de cartão",
+                "example": 1,
+                "nullable": true,
+                "type": "integer"
+              },
+              "tipoPagamento": {
+                "description": "Tipo de pagamento (código)",
+                "example": 1,
+                "nullable": true,
+                "type": "integer"
+              },
+              "valor": {
+                "description": "Valor do pagamento",
+                "example": 10.5,
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "PagamentoIntegradoModelResponse": {
+        "allOf": [
+          {
+            "properties": {
+              "cnpjIntermediador": {
+                "description": "CNPJ do intermediador",
+                "type": "string"
+              },
+              "codigoAutorizacao": {
+                "description": "Código de autorização",
+                "type": "string"
+              },
+              "codigoBandeira": {
+                "description": "Código da bandeira",
+                "type": "integer"
+              },
+              "tipoPagamento": {
+                "description": "Tipo de pagamento",
+                "type": "integer"
+              },
+              "valor": {
+                "description": "Valor do pagamento",
+                "format": "float",
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "PagamentoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "formaRecebimento": {
+                "$ref": "#/components/schemas/FormaRecebimentoRequestModel"
+              },
+              "meioPagamento": {
+                "$ref": "#/components/schemas/MeioPagamentoRequestModel"
+              },
+              "parcelas": {
+                "items": {
+                  "$ref": "#/components/schemas/ParcelaModelRequest"
+                },
+                "nullable": true,
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "PagamentoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "categoria": {
+                "$ref": "#/components/schemas/CategoriaReceitaDespesaResponseModel"
+              },
+              "condicaoPagamento": {
+                "nullable": true,
+                "type": "string"
+              },
+              "formaRecebimento": {
+                "$ref": "#/components/schemas/FormaRecebimentoResponseModel"
+              },
+              "meioPagamento": {
+                "$ref": "#/components/schemas/MeioPagamentoResponseModel"
+              },
+              "parcelas": {
+                "items": {
+                  "$ref": "#/components/schemas/ParcelaModelResponse"
+                },
+                "nullable": true,
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "PaginatedResultModel": {
+        "allOf": [
+          {
+            "properties": {
+              "limit": {
+                "type": "integer"
+              },
+              "offset": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ParcelaModel": {
+        "allOf": [
+          {
+            "properties": {
+              "data": {
+                "example": "2024-01-01",
+                "nullable": true,
+                "type": "string"
+              },
+              "dias": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "observacoes": {
+                "nullable": true,
+                "type": "string"
+              },
+              "valor": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ParcelaModelRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ParcelaModel"
+          },
+          {
+            "properties": {
+              "formaRecebimento": {
+                "$ref": "#/components/schemas/FormaRecebimentoRequestModel"
+              },
+              "meioPagamento": {
+                "$ref": "#/components/schemas/MeioPagamentoRequestModel"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ParcelaModelResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ParcelaModel"
+          },
+          {
+            "properties": {
+              "formaRecebimento": {
+                "$ref": "#/components/schemas/FormaRecebimentoResponseModel"
+              },
+              "meioPagamento": {
+                "$ref": "#/components/schemas/MeioPagamentoResponseModel"
+              },
+              "transacao": {
+                "$ref": "#/components/schemas/TransacaoPagamentoResponseModel"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "PedidoClienteModel": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BaseContatoModel"
+          },
+          {
+            "properties": {
+              "emailNfe": {
+                "nullable": true,
+                "type": "string"
+              },
+              "id": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "PedidoModel": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BasePedidoModel"
+          },
+          {
+            "properties": {
+              "data": {
+                "example": "2024-01-01",
+                "nullable": true,
+                "type": "string"
+              },
+              "dataEntrega": {
+                "example": "2024-01-01",
+                "nullable": true,
+                "type": "string"
+              },
+              "numeroOrdemCompra": {
+                "nullable": true,
+                "type": "string"
+              },
+              "situacao": {
+                "description": "\n- 8 - Dados Incompletos\n- 0 - Aberta\n- 3 - Aprovada\n- 4 - Preparando Envio\n- 1 - Faturada\n- 7 - Pronto Envio\n- 5 - Enviada\n- 6 - Entregue\n- 10 - Em Devolucao\n- 2 - Cancelada\n- 9 - Nao Entregue",
+                "enum": [
+                  8,
+                  0,
+                  3,
+                  4,
+                  1,
+                  7,
+                  5,
+                  6,
+                  10,
+                  2,
+                  9
+                ],
+                "nullable": true,
+                "type": "integer",
+                "x-enumDescriptions": [
+                  "8 - Dados Incompletos",
+                  "0 - Aberta",
+                  "3 - Aprovada",
+                  "4 - Preparando Envio",
+                  "1 - Faturada",
+                  "7 - Pronto Envio",
+                  "5 - Enviada",
+                  "6 - Entregue",
+                  "10 - Em Devolucao",
+                  "2 - Cancelada",
+                  "9 - Nao Entregue"
+                ]
+              },
+              "valorDesconto": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "valorFrete": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "valorOutrasDespesas": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "PedidoPagamentoRequestModel": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PagamentoRequestModel"
+          },
+          {
+            "properties": {
+              "categoria": {
+                "$ref": "#/components/schemas/CategoriaReceitaDespesaRequestModel"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "PessoaContatoModel": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BasePessoaContatoModel"
+          },
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "PrecoProdutoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "preco": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "precoCusto": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "precoPromocional": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "PrecoProdutoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "preco": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "precoCusto": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "precoCustoMedio": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "precoPromocional": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "PrecoVariacaoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "preco": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              },
+              "precoPromocional": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ProducaoProdutoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "etapas": {
+                "description": "Lista de etapas de produção. Deve conter ao menos um produto ou uma etapa.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "produtos": {
+                "description": "Lista de produtos que compõem a estrutura de produção. Deve conter ao menos um produto ou uma etapa.",
+                "items": {
+                  "$ref": "#/components/schemas/ProdutoFabricadoRequestModel"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ProducaoProdutoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "etapas": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "produtos": {
+                "items": {
+                  "$ref": "#/components/schemas/ProdutoFabricadoResponseModel"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ProdutoFabricadoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "produto": {
+                "$ref": "#/components/schemas/ProdutoRequestModel"
+              },
+              "quantidade": {
+                "format": "float",
+                "nullable": false,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ProdutoFabricadoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "produto": {
+                "$ref": "#/components/schemas/ProdutoResponseModel"
+              },
+              "quantidade": {
+                "format": "float",
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ProdutoKitRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "produto": {
+                "$ref": "#/components/schemas/ProdutoRequestModel"
+              },
+              "quantidade": {
+                "format": "float",
+                "nullable": false,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ProdutoKitResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "produto": {
+                "$ref": "#/components/schemas/ProdutoResponseModel"
+              },
+              "quantidade": {
+                "format": "float",
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ProdutoModel": {
+        "allOf": [
+          {
+            "properties": {
+              "categoria": {
+                "$ref": "#/components/schemas/CategoriaRequestModel"
+              },
+              "codigoEspecificadorSubstituicaoTributaria": {
+                "nullable": true,
+                "type": "string"
+              },
+              "descricaoComplementar": {
+                "nullable": true,
+                "type": "string"
+              },
+              "dimensoes": {
+                "$ref": "#/components/schemas/DimensoesProdutoRequestModel"
+              },
+              "fornecedores": {
+                "items": {
+                  "$ref": "#/components/schemas/FornecedorProdutoRequestModel"
+                },
+                "type": "array"
+              },
+              "garantia": {
+                "nullable": true,
+                "type": "string"
+              },
+              "gtin": {
+                "nullable": true,
+                "type": "string"
+              },
+              "marca": {
+                "$ref": "#/components/schemas/MarcaRequestModel"
+              },
+              "ncm": {
+                "nullable": true,
+                "type": "string"
+              },
+              "observacoes": {
+                "nullable": true,
+                "type": "string"
+              },
+              "origem": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "precos": {
+                "$ref": "#/components/schemas/PrecoProdutoRequestModel"
+              },
+              "seo": {
+                "$ref": "#/components/schemas/SeoProdutoRequestModel"
+              },
+              "sku": {
+                "nullable": false,
+                "type": "string"
+              },
+              "tributacao": {
+                "$ref": "#/components/schemas/TributacaoProdutoRequestModel"
+              },
+              "unidade": {
+                "nullable": true,
+                "type": "string"
+              },
+              "unidadePorCaixa": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "required": [
+              "sku"
+            ],
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ProdutoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": false,
+                "type": "integer"
+              },
+              "tipo": {
+                "description": "\n- P - Produto\n- S - Servico",
+                "enum": [
+                  "P",
+                  "S"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "P - Produto",
+                  "S - Servico"
+                ]
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "ProdutoResponseModel": {
+        "description": " ",
+        "properties": {
+          "descricao": {
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "sku": {
+            "nullable": true,
+            "type": "string"
+          },
+          "tipo": {
+            "description": "\n- P - Produto\n- S - Servico",
+            "enum": [
+              "P",
+              "S"
+            ],
+            "nullable": true,
+            "type": "string",
+            "x-enumDescriptions": [
+              "P - Produto",
+              "S - Servico"
+            ]
+          }
+        },
+        "title": " ",
+        "type": "object"
+      },
+      "SeoProdutoModelResponse": {
+        "allOf": [
+          {
+            "properties": {
+              "descricao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "keywords": {
+                "items": {
+                  "type": "string"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "linkVideo": {
+                "nullable": true,
+                "type": "string"
+              },
+              "slug": {
+                "nullable": true,
+                "type": "string"
+              },
+              "titulo": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "SeoProdutoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "descricao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "keywords": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "linkVideo": {
+                "nullable": true,
+                "type": "string"
+              },
+              "slug": {
+                "nullable": true,
+                "type": "string"
+              },
+              "titulo": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "TagProdutoModelResponse": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "idGrupoTag": {
+                "description": "ID do grupo de tags",
+                "nullable": true,
+                "type": "integer"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              },
+              "nomeGrupoTag": {
+                "description": "Nome do grupo de tags",
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "TipoContatoModel": {
+        "allOf": [
+          {
+            "properties": {
+              "descricao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "TransacaoPagamentoResponseModel": {
+        "description": " ",
+        "properties": {
+          "idExterno": {
+            "nullable": true,
+            "type": "string"
+          },
+          "idPagamentoExterno": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "title": " ",
+        "type": "object"
+      },
+      "TransportadorRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "codigoRastreamento": {
+                "nullable": true,
+                "type": "string"
+              },
+              "formaEnvio": {
+                "$ref": "#/components/schemas/FormaEnvioRequestModel"
+              },
+              "formaFrete": {
+                "$ref": "#/components/schemas/FormaFreteRequestModel"
+              },
+              "fretePorConta": {
+                "description": "\n- R - Remetente\n- D - Destinatario\n- T - Terceiros\n- 3 - Proprio Remetente\n- 4 - Proprio Destinatario\n- S - Sem Transporte",
+                "enum": [
+                  "R",
+                  "D",
+                  "T",
+                  "3",
+                  "4",
+                  "S"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "R - Remetente",
+                  "D - Destinatario",
+                  "T - Terceiros",
+                  "3 - Proprio Remetente",
+                  "4 - Proprio Destinatario",
+                  "S - Sem Transporte"
+                ]
+              },
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "urlRastreamento": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "TransportadorResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "codigoRastreamento": {
+                "nullable": true,
+                "type": "string"
+              },
+              "formaEnvio": {
+                "$ref": "#/components/schemas/FormaEnvioResponseModel"
+              },
+              "formaFrete": {
+                "$ref": "#/components/schemas/FormaFreteResponseModel"
+              },
+              "fretePorConta": {
+                "description": "\n- R - Remetente\n- D - Destinatario\n- T - Terceiros\n- 3 - Proprio Remetente\n- 4 - Proprio Destinatario\n- S - Sem Transporte",
+                "enum": [
+                  "R",
+                  "D",
+                  "T",
+                  "3",
+                  "4",
+                  "S"
+                ],
+                "nullable": true,
+                "type": "string",
+                "x-enumDescriptions": [
+                  "R - Remetente",
+                  "D - Destinatario",
+                  "T - Terceiros",
+                  "3 - Proprio Remetente",
+                  "4 - Proprio Destinatario",
+                  "S - Sem Transporte"
+                ]
+              },
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              },
+              "urlRastreamento": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "TributacaoProdutoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "classeIPI": {
+                "nullable": true,
+                "type": "string"
+              },
+              "gtinEmbalagem": {
+                "nullable": true,
+                "type": "string"
+              },
+              "valorIPIFixo": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "TributacaoProdutoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "classeIPI": {
+                "nullable": true,
+                "type": "string"
+              },
+              "gtinEmbalagem": {
+                "nullable": true,
+                "type": "string"
+              },
+              "valorIPIFixo": {
+                "format": "float",
+                "nullable": true,
+                "type": "number"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "VariacaoProdutoRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "estoque": {
+                "$ref": "#/components/schemas/EstoqueVariacaoRequestModel"
+              },
+              "grade": {
+                "description": "Grade da variação. Cada item deve conter 'chave' e 'valor'. As chaves devem corresponder exatamente às chaves informadas na grade do produto. A quantidade de itens deve ser igual à quantidade de chaves na grade do produto.",
+                "items": {
+                  "$ref": "#/components/schemas/GradeVariacaoRequestModel"
+                },
+                "nullable": false,
+                "type": "array"
+              },
+              "gtin": {
+                "nullable": true,
+                "type": "string"
+              },
+              "precos": {
+                "$ref": "#/components/schemas/PrecoVariacaoRequestModel"
+              },
+              "sku": {
+                "nullable": false,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "VariacaoProdutoResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "descricao": {
+                "nullable": true,
+                "type": "string"
+              },
+              "estoque": {
+                "$ref": "#/components/schemas/EstoqueProdutoResponseModel"
+              },
+              "grade": {
+                "items": {
+                  "$ref": "#/components/schemas/GradeVariacaoRequestModel"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "gtin": {
+                "nullable": true,
+                "type": "string"
+              },
+              "id": {
+                "nullable": true,
+                "type": "integer"
+              },
+              "precos": {
+                "$ref": "#/components/schemas/PrecoProdutoResponseModel"
+              },
+              "sku": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "VendedorRequestModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      },
+      "VendedorResponseModel": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "nome": {
+                "nullable": true,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        ],
+        "description": " ",
+        "title": " ",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Documentação completa: <a href=\"https://api-docs.erp.olist.com\" target=\"_blank\">https://api-docs.erp.olist.com</a>",
+    "title": "Olist ERP API v3",
+    "version": "3.1"
+  },
+  "openapi": "3.0.0",
+  "paths": {
+    "/contatos": {
+      "get": {
+        "operationId": "ListarContatosAction",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/nomeContato"
+          },
+          {
+            "$ref": "#/components/parameters/codigoContato"
+          },
+          {
+            "$ref": "#/components/parameters/situacaoContato"
+          },
+          {
+            "$ref": "#/components/parameters/idVendedorContato"
+          },
+          {
+            "$ref": "#/components/parameters/cpfCnpjContato"
+          },
+          {
+            "$ref": "#/components/parameters/celularContato"
+          },
+          {
+            "$ref": "#/components/parameters/emailContato"
+          },
+          {
+            "$ref": "#/components/parameters/dataCriacaoContato"
+          },
+          {
+            "$ref": "#/components/parameters/dataAtualizacaoContato"
+          },
+          {
+            "$ref": "#/components/parameters/orderBy"
+          },
+          {
+            "$ref": "#/components/parameters/get_contatos_limit"
+          },
+          {
+            "$ref": "#/components/parameters/get_contatos_offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "itens": {
+                      "items": {
+                        "$ref": "#/components/schemas/ListagemContatoModelResponse"
+                      },
+                      "type": "array"
+                    },
+                    "paginacao": {
+                      "$ref": "#/components/schemas/PaginatedResultModel"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Listar contatos",
+        "tags": [
+          "Contatos"
+        ]
+      },
+      "post": {
+        "operationId": "CriarContatoAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CriarContatoModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CriarContatoModelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Criar contato",
+        "tags": [
+          "Contatos"
+        ]
+      }
+    },
+    "/contatos/{idContato}": {
+      "get": {
+        "operationId": "ObterContatoAction",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/get_contatos_idContato_idContato"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObterContatoModelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Obter contato",
+        "tags": [
+          "Contatos"
+        ]
+      }
+    },
+    "/info": {
+      "get": {
+        "operationId": "ObterInfoContaAction",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObterInfoContaModelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Obter informações da conta da empresa",
+        "tags": [
+          "Dados da empresa"
+        ]
+      }
+    },
+    "/pedidos": {
+      "get": {
+        "operationId": "ListarPedidosAction",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/numeroPedido"
+          },
+          {
+            "$ref": "#/components/parameters/nomeClientePedido"
+          },
+          {
+            "$ref": "#/components/parameters/codigoClientePedido"
+          },
+          {
+            "$ref": "#/components/parameters/cpfCnpjClientePedido"
+          },
+          {
+            "$ref": "#/components/parameters/dataInicialPedido"
+          },
+          {
+            "$ref": "#/components/parameters/dataFinalPedido"
+          },
+          {
+            "$ref": "#/components/parameters/dataAtualizacaoPedido"
+          },
+          {
+            "$ref": "#/components/parameters/situacaoPedido"
+          },
+          {
+            "$ref": "#/components/parameters/numeroPedidoEcommercePedido"
+          },
+          {
+            "$ref": "#/components/parameters/idVendedorPedido"
+          },
+          {
+            "$ref": "#/components/parameters/marcadoresPedido"
+          },
+          {
+            "$ref": "#/components/parameters/origemPedido"
+          },
+          {
+            "$ref": "#/components/parameters/orderBy"
+          },
+          {
+            "$ref": "#/components/parameters/get_pedidos_limit"
+          },
+          {
+            "$ref": "#/components/parameters/get_pedidos_offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "itens": {
+                      "items": {
+                        "$ref": "#/components/schemas/ListagemPedidoModelResponse"
+                      },
+                      "type": "array"
+                    },
+                    "paginacao": {
+                      "$ref": "#/components/schemas/PaginatedResultModel"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Listar pedidos",
+        "tags": [
+          "Pedidos"
+        ]
+      },
+      "post": {
+        "operationId": "CriarPedidoAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CriarPedidoModelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CriarPedidoModelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Criar pedido",
+        "tags": [
+          "Pedidos"
+        ]
+      }
+    },
+    "/pedidos/{idPedido}": {
+      "get": {
+        "operationId": "ObterPedidoAction",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/get_pedidos_idPedido_idPedido"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObterPedidoModelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Obter pedido",
+        "tags": [
+          "Pedidos"
+        ]
+      }
+    },
+    "/produtos": {
+      "get": {
+        "operationId": "ListarProdutosAction",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/nomeProduto"
+          },
+          {
+            "$ref": "#/components/parameters/codigoProduto"
+          },
+          {
+            "$ref": "#/components/parameters/gtin"
+          },
+          {
+            "$ref": "#/components/parameters/situacao"
+          },
+          {
+            "$ref": "#/components/parameters/dataCriacao"
+          },
+          {
+            "$ref": "#/components/parameters/dataAlteracao"
+          },
+          {
+            "$ref": "#/components/parameters/idListaPreco"
+          },
+          {
+            "$ref": "#/components/parameters/get_produtos_limit"
+          },
+          {
+            "$ref": "#/components/parameters/get_produtos_offset"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "itens": {
+                      "items": {
+                        "$ref": "#/components/schemas/ListagemProdutosResponseModel"
+                      },
+                      "type": "array"
+                    },
+                    "paginacao": {
+                      "$ref": "#/components/schemas/PaginatedResultModel"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Listar produtos",
+        "tags": [
+          "Produtos"
+        ]
+      },
+      "post": {
+        "operationId": "CriarProdutoAction",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CriarProdutoRequestModel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CriarProdutoComVariacoesResponseModel"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Criar produto",
+        "tags": [
+          "Produtos"
+        ]
+      }
+    },
+    "/produtos/{idProduto}": {
+      "get": {
+        "operationId": "ObterProdutoAction",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/get_produtos_idProduto_idProduto"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObterProdutoModelResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Obter produto",
+        "tags": [
+          "Produtos"
+        ]
+      }
+    },
+    "/produtos/{idProduto}/variacoes": {
+      "post": {
+        "operationId": "CriarProdutoVariacaoAction",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/post_produtos_idProduto_variacoes_idProduto"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VariacaoProdutoRequestModel"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CriarProdutoResponseModel"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDTO"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "500": {
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Criar variação do produto",
+        "tags": [
+          "Produtos"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.tiny.com.br/public-api/v3"
+    }
+  ]
+}

@@ -1,0 +1,321 @@
+{
+  "task": "OLIST-T02",
+  "synthetic": true,
+  "sendable": false,
+  "notice": "Structural examples only. Document is intentionally invalid; IDs do not identify a real account. Never POST these fixtures.",
+  "requests": {
+    "contact": {
+      "nome": "Comprador sintético T02",
+      "codigo": "crm-t02-cliente-001",
+      "tipoPessoa": "F",
+      "cpfCnpj": "00000000000",
+      "situacao": "B",
+      "email": "comprador@example.invalid",
+      "endereco": {
+        "endereco": "Rua Sintética",
+        "numero": "1",
+        "bairro": "Bairro Sintético",
+        "municipio": "Cidade Sintética",
+        "cep": "00000000",
+        "uf": "SP",
+        "pais": "Brasil"
+      }
+    },
+    "parent": {
+      "sku": "crm-t02-pai-a",
+      "descricao": "Camisa sintética grupo A",
+      "tipo": "V",
+      "grade": ["Tamanho"],
+      "variacoes": [
+        {
+          "sku": "crm-t02-pai-a-m",
+          "grade": [
+            {
+              "chave": "Tamanho",
+              "valor": "M"
+            }
+          ]
+        },
+        {
+          "sku": "crm-t02-pai-a-g",
+          "grade": [
+            {
+              "chave": "Tamanho",
+              "valor": "G"
+            }
+          ]
+        }
+      ]
+    },
+    "variation": {
+      "sku": "crm-t02-pai-a-gg",
+      "grade": [
+        {
+          "chave": "Tamanho",
+          "valor": "GG"
+        }
+      ]
+    },
+    "order": {
+      "idContato": 91001,
+      "data": "2026-11-04",
+      "dataPrevista": "2026-11-30",
+      "ecommerce": {
+        "numeroPedidoEcommerce": "crm-t02-venda-001"
+      },
+      "itens": [
+        {
+          "produto": {
+            "id": 92001
+          },
+          "quantidade": 10,
+          "valorUnitario": 18
+        },
+        {
+          "produto": {
+            "id": 92002
+          },
+          "quantidade": 20,
+          "valorUnitario": 16
+        }
+      ]
+    }
+  },
+  "money": [
+    {
+      "id": "discount-M",
+      "quantity": 10,
+      "subtotalCents": 18000,
+      "scale": 2,
+      "representable": true
+    },
+    {
+      "id": "discount-G",
+      "quantity": 20,
+      "subtotalCents": 32000,
+      "scale": 2,
+      "representable": true
+    },
+    {
+      "id": "third-two-decimals",
+      "quantity": 3,
+      "subtotalCents": 100,
+      "scale": 2,
+      "representable": false
+    },
+    {
+      "id": "third-four-decimals",
+      "quantity": 3,
+      "subtotalCents": 100,
+      "scale": 4,
+      "representable": true
+    },
+    {
+      "id": "tiny-four-decimals",
+      "quantity": 1000,
+      "subtotalCents": 1,
+      "scale": 4,
+      "representable": false
+    },
+    {
+      "id": "tiny-six-decimals",
+      "quantity": 1000,
+      "subtotalCents": 1,
+      "scale": 6,
+      "representable": true
+    }
+  ],
+  "recovery": [
+    {
+      "entity": "contact",
+      "fault": "timeout-after-reservation",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "contact",
+      "fault": "crash-after-reservation",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "contact",
+      "fault": "http-5xx",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "contact",
+      "fault": "invalid-json",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "contact",
+      "fault": "success-without-id",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "contact",
+      "fault": "local-commit-failure",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "parent-with-initial-variations",
+      "fault": "timeout-after-reservation",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "parent-with-initial-variations",
+      "fault": "crash-after-reservation",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "parent-with-initial-variations",
+      "fault": "http-5xx",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "parent-with-initial-variations",
+      "fault": "invalid-json",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "parent-with-initial-variations",
+      "fault": "success-without-id",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "parent-with-initial-variations",
+      "fault": "local-commit-failure",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "additional-variation",
+      "fault": "timeout-after-reservation",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "additional-variation",
+      "fault": "crash-after-reservation",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "additional-variation",
+      "fault": "http-5xx",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "additional-variation",
+      "fault": "invalid-json",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "additional-variation",
+      "fault": "success-without-id",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "additional-variation",
+      "fault": "local-commit-failure",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "order",
+      "fault": "timeout-after-reservation",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "order",
+      "fault": "crash-after-reservation",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "order",
+      "fault": "http-5xx",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "order",
+      "fault": "invalid-json",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "order",
+      "fault": "success-without-id",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    },
+    {
+      "entity": "order",
+      "fault": "local-commit-failure",
+      "expected": "outcome_unknown",
+      "nextCreationAllowed": false,
+      "dependentCreationAllowed": false
+    }
+  ],
+  "readback": {
+    "expectedLineCents": [100, 100],
+    "remoteLineCents": [99, 101],
+    "expectedTotalCents": 200,
+    "remoteTotalCents": 200,
+    "expected": "divergent"
+  },
+  "groupIdentity": [
+    {
+      "groupId": "group-A",
+      "lineId": "line-A-M",
+      "size": "M",
+      "productId": 92001,
+      "subtotalCents": 18000
+    },
+    {
+      "groupId": "group-B",
+      "lineId": "line-B-M",
+      "size": "M",
+      "productId": 93001,
+      "subtotalCents": 10000
+    }
+  ]
+}
