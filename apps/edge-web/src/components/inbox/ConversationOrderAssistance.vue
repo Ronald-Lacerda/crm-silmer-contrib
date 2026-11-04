@@ -1,5 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import AppIcon from '../AppIcon.vue';
 import { commandKey, request } from '../../lib/api-client.js';
 import { dateTimeBR } from '../../lib/format.js';
 import {
@@ -14,9 +15,16 @@ const props = defineProps({
   canManage: { type: Boolean, default: false },
   refreshKey: { type: [String, Number], default: '' },
   messages: { type: Array, default: () => [] },
+  detailsTarget: { type: Object, default: null },
+  detailsOpen: { type: Boolean, default: false },
 });
 const emit = defineEmits(['created', 'changed', 'evidence', 'review']);
 const heading = ref(null);
+const detailsHeading = ref(null);
+const detailsFeedbackTarget = ref(null);
+const detailsFormTarget = ref(null);
+const expanded = ref(true);
+const feedbackInDetails = ref(false);
 const errorNotice = ref(null);
 const reasonField = ref(null);
 const evidenceField = ref(null);
@@ -54,6 +62,20 @@ const blockedHint = computed(() =>
     : answer.value?.blockedReason === 'pending_order_exists'
       ? 'Já existe um pedido pendente neste atendimento. Revise o pedido antes de criar outro.'
       : '',
+);
+const decisionBodyVisible = computed(
+  () =>
+    pending.value.length > 0 || Boolean(mode.value && mode.value !== 'missed'),
+);
+const feedbackAtDetails = computed(
+  () => feedbackInDetails.value && props.detailsOpen,
+);
+const footerVisible = computed(
+  () =>
+    pending.value.length > 0 ||
+    (loading.value && !answer.value) ||
+    (!feedbackAtDetails.value && Boolean(error.value || notice.value)) ||
+    Boolean(mode.value && mode.value !== 'missed'),
 );
 const evidence = computed(() => orderAssistanceEvidence(props.messages));
 const actionable = computed(
@@ -123,6 +145,8 @@ function closeForm() {
 /** @param {'defer'|'reject'|'missed'} decision @param {string} [id] */
 async function openForm(decision, id = '') {
   if (!actionable.value) return;
+  expanded.value = true;
+  feedbackInDetails.value = decision === 'missed';
   mode.value = decision;
   selectedId.value = id;
   reason.value = '';
@@ -150,6 +174,7 @@ async function decide(decision, suggestion = null) {
     reasonField.value?.focus();
     return;
   }
+  feedbackInDetails.value = decision === 'missed';
   const conversation = props.conversationId;
   const body = {
     decision,
@@ -199,7 +224,7 @@ async function decide(decision, suggestion = null) {
     await load();
     await nextTick();
     if (!disposed && conversation === props.conversationId)
-      heading.value?.focus();
+      (feedbackAtDetails.value ? detailsHeading.value : heading.value)?.focus();
   } catch (cause) {
     if (
       own !== writeController ||
@@ -227,9 +252,18 @@ async function retry() {
   if (busy.value || loading.value) return;
   closeForm();
   await load();
+  if (
+    !error.value &&
+    !pending.value.length &&
+    !notice.value &&
+    !unavailable.value
+  )
+    notice.value =
+      'Sugestões atualizadas. Nenhuma sugestão aguardando decisão.';
   await nextTick();
   if (error.value) errorNotice.value?.focus();
-  else heading.value?.focus();
+  else
+    (feedbackAtDetails.value ? detailsHeading.value : heading.value)?.focus();
 }
 
 watch(
@@ -239,6 +273,8 @@ watch(
     writeController?.abort();
     readController = undefined;
     writeController = undefined;
+    expanded.value = true;
+    feedbackInDetails.value = false;
     answer.value = null;
     error.value = '';
     notice.value = '';
@@ -271,260 +307,431 @@ onBeforeUnmount(() => {
 <template>
   <section
     v-if="!unavailable"
+    v-show="footerVisible"
     class="order-assistance"
     :aria-labelledby="titleId"
     :aria-busy="loading || busy ? 'true' : undefined"
   >
-    <h3 :id="titleId" ref="heading" tabindex="-1">Sugestões de pedido</h3>
-    <p v-if="loading && !answer" class="op-hint" role="status">
-      Consultando sugestões…
-    </p>
-    <div v-if="error" class="order-assistance-error">
-      <p ref="errorNotice" role="alert" tabindex="-1">{{ error }}</p>
-      <button
-        type="button"
-        :aria-disabled="loading || busy ? 'true' : undefined"
-        @click="retry"
-      >
-        {{ loading ? 'Atualizando…' : 'Atualizar sugestões' }}
-      </button>
-    </div>
-    <p v-if="notice" role="status">{{ notice }}</p>
-    <div v-if="blockedHint" class="order-assistance-review">
-      <p class="op-hint">{{ blockedHint }}</p>
-      <button type="button" class="quiet" @click="emit('review')">
-        Revisar atendimento
-      </button>
-    </div>
-    <div
-      v-for="suggestion in pending"
-      :key="suggestion.id"
-      class="order-assistance-card"
+    <header
+      class="order-assistance-heading"
+      :class="{
+        'order-assistance-heading--error-only': error && !decisionBodyVisible,
+      }"
     >
-      <p>
-        <strong
-          >Cliente confirmou que quer fechar
-          {{ suggestion.productSummary || 'a compra' }}. Criar pedido?</strong
-        >
-      </p>
-      <p class="op-hint">
-        Sugestão interna · {{ dateTimeBR(suggestion.createdAt) }}
-      </p>
-      <blockquote v-if="evidenceFor(suggestion.evidenceMessageId)?.text">
-        {{ evidenceFor(suggestion.evidenceMessageId).text }}
-      </blockquote>
-      <button
-        v-if="evidenceFor(suggestion.evidenceMessageId)"
-        class="quiet"
-        type="button"
-        @click="emit('evidence', suggestion.evidenceMessageId)"
+      <h3 :id="titleId" ref="heading" tabindex="-1">Sugestões de pedido</h3>
+      <span class="order-assistance-internal">Só para a equipe</span>
+      <time
+        v-if="pending.length === 1"
+        class="order-assistance-date"
+        :datetime="pending[0].createdAt"
+        :title="`Sugestão interna · ${dateTimeBR(pending[0].createdAt)}`"
+        >{{ dateTimeBR(pending[0].createdAt) }}</time
       >
-        Ver mensagem do cliente
+      <button
+        v-if="pending.length || (mode && mode !== 'missed')"
+        type="button"
+        class="quiet order-assistance-toggle"
+        :aria-label="
+          expanded
+            ? 'Recolher sugestões de pedido'
+            : 'Expandir sugestões de pedido'
+        "
+        :aria-expanded="expanded"
+        :aria-controls="`${titleId}-body`"
+        @click="expanded = !expanded"
+      >
+        <AppIcon name="chevron-down" />
       </button>
-      <template v-if="canManage">
-        <p class="op-hint">
-          Ao criar, você confirma que o cliente decidiu fechar esta compra.
+    </header>
+    <Teleport
+      :to="detailsFeedbackTarget || detailsTarget || 'body'"
+      :disabled="!detailsTarget || !feedbackAtDetails"
+    >
+      <div
+        v-if="(loading && !answer) || error || notice"
+        class="order-assistance-feedback"
+        role="group"
+        aria-label="Atualizações das sugestões"
+        tabindex="0"
+      >
+        <p v-if="loading && !answer" class="op-hint" role="status">
+          Consultando sugestões…
         </p>
-        <div class="order-assistance-actions">
+        <div v-if="error" class="order-assistance-error">
+          <p ref="errorNotice" role="alert" tabindex="-1">{{ error }}</p>
           <button
             type="button"
-            class="primary"
-            :disabled="!actionable || Boolean(answer?.blockedReason)"
-            @click="decide('accept', suggestion)"
+            :aria-disabled="loading || busy ? 'true' : undefined"
+            @click="retry"
           >
-            Criar pedido
-          </button>
-          <button
-            type="button"
-            :disabled="!actionable"
-            @click="openForm('defer', suggestion.id)"
-          >
-            Ainda não
-          </button>
-          <button
-            type="button"
-            class="quiet"
-            :disabled="!actionable"
-            @click="openForm('reject', suggestion.id)"
-          >
-            Não vai seguir
+            {{ loading ? 'Atualizando…' : 'Atualizar sugestões' }}
           </button>
         </div>
-      </template>
-      <p v-else class="op-hint">
-        O responsável pelo atendimento ou um administrador decide a criação.
-      </p>
-    </div>
-    <p
-      v-if="answer && !pending.length && !notice && !blockedHint"
-      class="op-hint"
+        <p v-if="notice" role="status">{{ notice }}</p>
+      </div>
+    </Teleport>
+    <div
+      :id="`${titleId}-body`"
+      v-show="expanded && decisionBodyVisible"
+      class="order-assistance-body"
+      role="group"
+      :tabindex="decisionBodyVisible ? 0 : undefined"
+      aria-label="Sugestões e decisão"
     >
-      Nenhuma sugestão aguardando decisão.
-    </p>
-    <button
-      v-if="canManage && answer"
-      type="button"
-      class="quiet"
-      :disabled="!actionable || !evidence.length"
-      @click="openForm('missed')"
-    >
-      Já deveria ter sugerido
-    </button>
-    <form
-      v-if="mode"
-      class="order-assistance-form"
-      @submit.prevent="decide(mode)"
-    >
-      <p>
-        <strong>{{
-          mode === 'missed'
-            ? 'O cliente já confirmou que quer fechar?'
-            : mode === 'defer'
-              ? 'Por que ainda não é hora de criar?'
-              : 'Por que não vai seguir?'
-        }}</strong>
-      </p>
-      <template v-if="mode === 'missed'">
-        <label :for="`${titleId}-evidence`"
-          >Mensagem em que o cliente confirmou o fechamento</label
-        >
-        <select
-          :id="`${titleId}-evidence`"
-          ref="evidenceField"
-          v-model="sourceMessageId"
-          required
-          :disabled="busy"
-        >
-          <option value="">Selecione a mensagem do cliente</option>
-          <option
-            v-for="message in evidence"
-            :key="message.id"
-            :value="message.id"
+      <div
+        v-for="suggestion in pending"
+        :key="suggestion.id"
+        class="order-assistance-card"
+      >
+        <p>
+          <strong
+            >Cliente confirmou o fechamento ·
+            {{ suggestion.productSummary || 'a compra' }}.</strong
           >
-            {{ message.occurredAt ? `${dateTimeBR(message.occurredAt)} · ` : ''
-            }}{{ message.text || 'Mensagem de mídia do cliente' }}
-          </option>
-        </select>
-        <p class="op-hint">
-          Registra um caso que o agente deixou passar. Isso não cria um pedido.
         </p>
-      </template>
-      <template v-else>
-        <label :for="`${titleId}-reason`">Motivo</label>
-        <select
-          :id="`${titleId}-reason`"
-          ref="reasonField"
-          v-model="reason"
-          required
-          :disabled="busy"
-        >
-          <option value="">Selecione o motivo</option>
-          <option
-            v-for="item in ORDER_ASSISTANCE_REASONS"
-            :key="item.value"
-            :value="item.value"
+        <p v-if="pending.length > 1" class="order-assistance-date">
+          Sugestão interna · {{ dateTimeBR(suggestion.createdAt) }}
+        </p>
+        <div class="order-assistance-evidence">
+          <blockquote v-if="evidenceFor(suggestion.evidenceMessageId)?.text">
+            {{ evidenceFor(suggestion.evidenceMessageId).text }}
+          </blockquote>
+          <button
+            v-if="evidenceFor(suggestion.evidenceMessageId)"
+            class="quiet"
+            type="button"
+            @click="emit('evidence', suggestion.evidenceMessageId)"
           >
-            {{ item.label }}
-          </option>
-        </select>
-      </template>
-      <div class="order-assistance-actions">
-        <button type="submit" :disabled="!actionable">
-          {{ busy ? 'Salvando…' : 'Registrar decisão' }}
-        </button>
+            Ver mensagem
+          </button>
+        </div>
+        <template v-if="canManage">
+          <p class="order-assistance-confirmation">
+            Ao criar, você confirma que o cliente decidiu fechar. O pedido nasce
+            pendente.
+          </p>
+          <p v-if="answer?.blockedReason" class="order-assistance-blocked">
+            {{ blockedHint }}
+          </p>
+          <div class="order-assistance-actions">
+            <button
+              type="button"
+              class="primary"
+              :disabled="!actionable || Boolean(answer?.blockedReason)"
+              @click="decide('accept', suggestion)"
+            >
+              Criar pedido
+            </button>
+            <button
+              type="button"
+              :disabled="!actionable"
+              @click="openForm('defer', suggestion.id)"
+            >
+              Ainda não
+            </button>
+            <button
+              type="button"
+              class="quiet"
+              :disabled="!actionable"
+              @click="openForm('reject', suggestion.id)"
+            >
+              Não vai seguir
+            </button>
+          </div>
+        </template>
+        <p v-else class="op-hint">
+          O responsável pelo atendimento ou um administrador decide a criação.
+        </p>
+      </div>
+
+      <Teleport
+        :to="detailsFormTarget || detailsTarget || 'body'"
+        :disabled="!detailsTarget || mode !== 'missed'"
+      >
+        <form
+          v-if="mode"
+          class="order-assistance-form"
+          @submit.prevent="decide(mode)"
+        >
+          <p>
+            <strong>{{
+              mode === 'missed'
+                ? 'O cliente já confirmou que quer fechar?'
+                : mode === 'defer'
+                  ? 'Por que ainda não é hora de criar?'
+                  : 'Por que não vai seguir?'
+            }}</strong>
+          </p>
+          <template v-if="mode === 'missed'">
+            <label :for="`${titleId}-evidence`"
+              >Mensagem em que o cliente confirmou o fechamento</label
+            >
+            <select
+              :id="`${titleId}-evidence`"
+              ref="evidenceField"
+              v-model="sourceMessageId"
+              required
+              :disabled="busy"
+            >
+              <option value="">Selecione a mensagem do cliente</option>
+              <option
+                v-for="message in evidence"
+                :key="message.id"
+                :value="message.id"
+              >
+                {{
+                  message.occurredAt
+                    ? `${dateTimeBR(message.occurredAt)} · `
+                    : ''
+                }}{{ message.text || 'Mensagem de mídia do cliente' }}
+              </option>
+            </select>
+            <p class="op-hint">
+              Registra um caso que o agente deixou passar. Isso não cria um
+              pedido.
+            </p>
+          </template>
+          <template v-else>
+            <label :for="`${titleId}-reason`">Motivo</label>
+            <select
+              :id="`${titleId}-reason`"
+              ref="reasonField"
+              v-model="reason"
+              required
+              :disabled="busy"
+            >
+              <option value="">Selecione o motivo</option>
+              <option
+                v-for="item in ORDER_ASSISTANCE_REASONS"
+                :key="item.value"
+                :value="item.value"
+              >
+                {{ item.label }}
+              </option>
+            </select>
+          </template>
+          <div class="order-assistance-actions">
+            <button type="submit" :disabled="!actionable">
+              {{ busy ? 'Salvando…' : 'Registrar decisão' }}
+            </button>
+            <button
+              type="button"
+              class="quiet"
+              :disabled="busy"
+              @click="
+                closeForm();
+                (feedbackInDetails ? detailsHeading : heading)?.focus();
+              "
+            >
+              Cancelar
+            </button>
+          </div>
+        </form>
+      </Teleport>
+    </div>
+    <Teleport :to="detailsTarget || 'body'" :disabled="!detailsTarget">
+      <section
+        class="order-assistance-details"
+        :aria-labelledby="`${titleId}-details`"
+        :aria-busy="loading || busy ? 'true' : undefined"
+      >
+        <h3 :id="`${titleId}-details`" ref="detailsHeading" tabindex="-1">
+          Avaliar sugestões de pedido
+        </h3>
+        <div ref="detailsFeedbackTarget" />
+        <div v-if="blockedHint" class="order-assistance-review">
+          <p class="op-hint">{{ blockedHint }}</p>
+          <button type="button" class="quiet" @click="emit('review')">
+            Revisar atendimento
+          </button>
+        </div>
+
+        <p
+          v-if="answer && !pending.length && !notice && !blockedHint"
+          class="op-hint"
+        >
+          Nenhuma sugestão aguardando decisão.
+        </p>
         <button
+          v-if="canManage && answer"
           type="button"
           class="quiet"
-          :disabled="busy"
-          @click="
-            closeForm();
-            heading?.focus();
-          "
+          :disabled="!actionable || !evidence.length"
+          @click="openForm('missed')"
         >
-          Cancelar
+          Já deveria ter sugerido
         </button>
-      </div>
-    </form>
-    <details
-      v-if="history.length || evaluations.length"
-      :key="conversationId"
-      class="order-assistance-history"
-    >
-      <summary>Histórico das decisões</summary>
-      <ul>
-        <li v-for="suggestion in history" :key="suggestion.id">
-          <strong>{{ orderAssistanceStatus(suggestion.status) }}</strong>
-          <span v-if="suggestion.productSummary">
-            · {{ suggestion.productSummary }}</span
-          >
-          <span v-if="orderAssistanceReason(suggestion.reason)">
-            · {{ orderAssistanceReason(suggestion.reason) }}</span
-          >
-          <time
-            v-if="
-              suggestion.decidedAt ||
-              suggestion.resolvedAt ||
-              suggestion.createdAt
-            "
-            :datetime="
-              suggestion.decidedAt ||
-              suggestion.resolvedAt ||
-              suggestion.createdAt
-            "
-          >
-            ·
-            {{
-              dateTimeBR(
-                suggestion.decidedAt ||
-                  suggestion.resolvedAt ||
-                  suggestion.createdAt,
-              )
-            }}</time
-          >
-        </li>
-        <li
-          v-for="evaluation in evaluations.filter(
-            (item) => item.decision === 'missed',
-          )"
-          :key="evaluation.id"
+
+        <div ref="detailsFormTarget" />
+        <details
+          v-if="history.length || evaluations.length"
+          :key="conversationId"
+          class="order-assistance-history"
         >
-          Omissão registrada pelo vendedor ·
-          {{ dateTimeBR(evaluation.createdAt) }}
-        </li>
-      </ul>
-    </details>
+          <summary>Histórico das decisões</summary>
+          <ul>
+            <li v-for="suggestion in history" :key="suggestion.id">
+              <strong>{{ orderAssistanceStatus(suggestion.status) }}</strong>
+              <span v-if="suggestion.productSummary">
+                · {{ suggestion.productSummary }}</span
+              >
+              <span v-if="orderAssistanceReason(suggestion.reason)">
+                · {{ orderAssistanceReason(suggestion.reason) }}</span
+              >
+              <time
+                v-if="
+                  suggestion.decidedAt ||
+                  suggestion.resolvedAt ||
+                  suggestion.createdAt
+                "
+                :datetime="
+                  suggestion.decidedAt ||
+                  suggestion.resolvedAt ||
+                  suggestion.createdAt
+                "
+              >
+                ·
+                {{
+                  dateTimeBR(
+                    suggestion.decidedAt ||
+                      suggestion.resolvedAt ||
+                      suggestion.createdAt,
+                  )
+                }}</time
+              >
+            </li>
+            <li
+              v-for="evaluation in evaluations.filter(
+                (item) => item.decision === 'missed',
+              )"
+              :key="evaluation.id"
+            >
+              Omissão registrada pelo vendedor ·
+              {{ dateTimeBR(evaluation.createdAt) }}
+            </li>
+          </ul>
+        </details>
+      </section>
+    </Teleport>
   </section>
 </template>
 
 <style scoped>
 .order-assistance {
-  padding: var(--space-3);
-  border-block-end: 1px solid var(--color-border);
-}
-.order-assistance h3 {
-  margin-block: 0 var(--space-2);
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-block-size: var(--target-min);
+  max-block-size: 30%;
+  padding: 0 var(--space-4);
+  color: var(--status-info-text);
+  background: var(--status-info-surface);
   font-size: var(--text-sm);
 }
-.order-assistance p {
-  margin-block: var(--space-2);
+.order-assistance-heading {
+  flex: none;
+  min-block-size: var(--target-min);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.order-assistance h3,
+.order-assistance-details h3 {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.order-assistance-internal,
+.order-assistance-date,
+.order-assistance-confirmation {
+  font-size: var(--text-xs);
+}
+.order-assistance-toggle {
+  margin-inline-start: auto;
+  color: inherit;
+  min-inline-size: var(--control-height);
+  min-block-size: var(--control-height);
+  padding: var(--space-1);
+}
+.order-assistance-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.order-assistance-heading--error-only {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  min-block-size: 0;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.order-assistance-body,
+.order-assistance-feedback {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+.order-assistance p,
+.order-assistance-details p {
+  margin-block: var(--space-1);
   overflow-wrap: anywhere;
 }
 .order-assistance-card {
-  border-inline-start: 3px solid var(--color-focus);
-  padding-inline-start: var(--space-3);
-  margin-block: var(--space-3);
+  display: grid;
+  gap: var(--space-1);
+  padding-block-end: var(--space-1);
+  font-size: var(--text-xs);
+}
+.order-assistance-card > p {
+  margin: 0;
+}
+.order-assistance-card > p:first-child strong {
+  font-weight: 500;
+}
+.order-assistance-card .order-assistance-actions {
+  margin-block: 0;
+}
+.order-assistance-card .order-assistance-actions button {
+  font-size: var(--text-xs);
+  padding-inline: var(--space-2);
+}
+.order-assistance-card + .order-assistance-card {
+  border-block-start: 1px solid var(--color-border);
+  padding-block-start: var(--space-2);
+  margin-block-start: var(--space-2);
 }
 .order-assistance blockquote {
-  margin: var(--space-2) 0;
-  padding-inline-start: var(--space-3);
-  border-inline-start: 1px solid var(--color-border-strong);
+  margin: 0;
+  max-inline-size: 65ch;
+  font-style: italic;
   overflow-wrap: anywhere;
+}
+.order-assistance-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+}
+.order-assistance .op-hint {
+  color: inherit;
+}
+.order-assistance-evidence > .quiet {
+  color: inherit;
+  padding-inline: 0;
+  text-decoration: underline;
+  text-underline-offset: var(--space-1);
 }
 .order-assistance-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-block: var(--space-2);
+}
+.order-assistance-actions .quiet {
+  color: inherit;
 }
 .order-assistance-form {
   display: grid;
@@ -534,6 +741,22 @@ onBeforeUnmount(() => {
 .order-assistance-form select {
   min-inline-size: 0;
   inline-size: 100%;
+}
+.order-assistance-details {
+  padding-block: var(--space-3);
+  border-block-start: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+}
+.order-assistance-details p {
+  color: var(--color-text-muted);
+}
+.order-assistance-error {
+  padding: var(--space-2);
+  background: var(--status-error-surface);
+  border-radius: var(--radius-sm);
+}
+.order-assistance-error p {
+  color: var(--status-error-text);
 }
 .order-assistance-history {
   margin-block-start: var(--space-3);
@@ -549,5 +772,13 @@ onBeforeUnmount(() => {
 .order-assistance-history li {
   margin-block: var(--space-2);
   overflow-wrap: anywhere;
+}
+@media (max-width: 768px) {
+  .order-assistance {
+    padding-inline: var(--space-3);
+  }
+  .order-assistance-internal {
+    display: none;
+  }
 }
 </style>

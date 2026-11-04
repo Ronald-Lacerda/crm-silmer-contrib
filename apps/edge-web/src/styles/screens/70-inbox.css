@@ -8,6 +8,11 @@
  * Phone: one pane at a time, the list or the
  * conversation opened by its address (/inbox/:conversationId).
  */
+.app-shell:has(.inbox-page) {
+  --sidebar-rail-size: var(--inbox-rail-inline-size);
+  --topbar-block-size: var(--inbox-topbar-block-size);
+}
+
 .app-frame:has(> #main-content > .inbox-page) {
   block-size: calc(100dvh - var(--shell-gap) * 2);
   min-block-size: 0;
@@ -23,9 +28,9 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 0;
   min-block-size: 0;
-  padding: var(--space-3) var(--space-4) var(--space-4);
+  padding: var(--space-2);
 }
 
 .inbox-toolbar {
@@ -235,13 +240,13 @@
 }
 
 .inbox-workspace {
-  --inbox-list-column: minmax(14rem, 17rem);
+  --inbox-list-column: var(--inbox-list-inline-size);
   --inbox-context-column: minmax(14rem, 16rem);
   position: relative;
   display: grid;
   flex: 1;
   grid-template-columns: var(--inbox-list-column) minmax(0, 1fr);
-  gap: var(--space-3);
+  gap: 0;
   min-block-size: 0;
 }
 
@@ -1721,6 +1726,271 @@
   .inbox-composer .media-composer__tools button,
   .inbox-composer .media-composer__actions button {
     min-inline-size: var(--target-min);
+    min-block-size: var(--target-min);
+  }
+}
+
+/* INBOX-UX-04: approved compact workspace; the existing commands are unchanged. */
+.page.inbox-page > .inbox-title {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.inbox-page .inbox-toolbar {
+  gap: var(--space-2);
+  padding: 0 var(--space-2) var(--space-2);
+}
+.inbox-page .inbox-tabs {
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+}
+.inbox-page .inbox-tabs .inbox-tab {
+  min-block-size: var(--control-height);
+  padding-inline: var(--space-2);
+  font-size: var(--text-xs);
+}
+.inbox-page .inbox-tab[aria-pressed='true'] {
+  background: var(--color-selected);
+  box-shadow: none;
+}
+.inbox-page .inbox-tab-count {
+  min-inline-size: auto;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+.inbox-page .inbox-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  border-block-end: 0;
+}
+.inbox-search .search-field,
+.inbox-search input {
+  min-inline-size: 0;
+}
+.inbox-filters-button {
+  min-inline-size: var(--control-height);
+  min-block-size: var(--control-height);
+  padding-inline: var(--space-2);
+}
+.inbox-filter-popover {
+  padding: var(--space-4);
+}
+.inbox-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-block-end: var(--space-2);
+}
+.inbox-filter-head h2 {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.inbox-filter-head button {
+  min-inline-size: var(--target-min);
+  min-block-size: var(--target-min);
+  padding: var(--space-2);
+}
+.inbox-filter-field {
+  display: grid;
+  gap: var(--space-2);
+  margin-block: 0 var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+.inbox-filter-field select {
+  min-inline-size: 0;
+  inline-size: 100%;
+  min-block-size: var(--target-min);
+  color: var(--color-text);
+}
+.inbox-filter-result {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+.anchored-popover.conv-more-panel {
+  position: fixed;
+  inset: auto;
+  display: block;
+  inline-size: min(17rem, calc(100vw - var(--space-6)));
+  min-inline-size: 0;
+  max-block-size: calc(100dvh - var(--space-6));
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.anchored-popover.conv-more-panel:not(:popover-open) {
+  display: none;
+}
+.conv-more-items {
+  display: grid;
+  gap: var(--space-1);
+}
+.conv-more-label {
+  margin: var(--space-1) var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+.conv-more-items > button {
+  min-block-size: var(--target-min);
+  gap: var(--space-3);
+}
+.conv-more-items .app-icon {
+  inline-size: var(--space-4);
+  block-size: var(--space-4);
+  flex: none;
+}
+.conv-more-items > .conv-more-danger {
+  margin-block-start: var(--space-1);
+  color: var(--status-error-text);
+  border-block-start: 1px solid var(--color-border-subtle);
+}
+.conv-more-items > .conv-more-danger:hover {
+  background: var(--status-error-surface);
+}
+.conv-more-items > .conv-more-danger .app-icon {
+  color: inherit;
+}
+.inbox-expand-toggle {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: var(--control-height);
+  min-block-size: var(--control-height);
+  padding: var(--space-2);
+}
+.context-assistance {
+  min-inline-size: 0;
+}
+.inbox-page[data-expanded='true'] .inbox-workspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+.inbox-page[data-expanded='true'] .inbox-list-pane {
+  display: none;
+}
+.inbox-page .inbox-list-pane {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+  border-inline-end: 0;
+  background: var(--color-page);
+}
+.inbox-page .inbox-conversation {
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+.conv-next-action {
+  display: flex;
+  gap: var(--space-1);
+  align-items: start;
+  overflow-wrap: anywhere;
+}
+.conv-next-action .app-icon {
+  flex: none;
+  inline-size: var(--text-sm);
+  block-size: var(--text-sm);
+  margin-block-start: var(--space-1);
+}
+.conv-next-action[data-tone='warning'] {
+  color: var(--status-warning-text);
+}
+.handoff-reason {
+  padding-block: var(--space-2);
+  color: var(--status-warning-text);
+  background: var(--status-warning-surface);
+}
+.inbox-takeover-reason {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: center;
+}
+.inbox-takeover-reason > span {
+  color: inherit;
+}
+.inbox-pane-notices > [role='status'] {
+  color: var(--status-success-text);
+  background: var(--status-success-surface);
+}
+.inbox-page .inbox-composer {
+  padding: var(--space-2) var(--space-3);
+}
+.inbox-page .inbox-composer .audio-recorder {
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+}
+.inbox-page .inbox-composer .composer textarea {
+  max-block-size: 6rem;
+}
+@media (min-width: 769px) {
+  .app-shell:has(.inbox-page) {
+    grid-template-columns: var(--inbox-rail-inline-size) minmax(0, 1fr);
+  }
+  .app-shell:has(.inbox-page) .app-frame {
+    grid-column: 2;
+  }
+  .app-shell:has(.inbox-page) .app-topbar {
+    min-block-size: var(--inbox-topbar-block-size);
+    padding: var(--space-1) var(--space-4);
+    background: var(--color-page);
+    backdrop-filter: none;
+  }
+  .app-shell[data-sidebar='expanded']:has(.inbox-page) .app-sidebar {
+    position: fixed;
+    inset-block: 0;
+    inset-inline-start: 0;
+    inline-size: var(--sidebar-inline-size);
+    box-shadow: var(--shadow-overlay);
+    border-inline-end: 1px solid var(--color-border);
+  }
+}
+@media (max-width: 768px) {
+  .inbox-page .conv-head {
+    display: grid;
+    grid-template-columns: var(--target-min) minmax(0, 1fr);
+  }
+  .inbox-page .conv-actions {
+    grid-column: 2;
+    justify-self: end;
+    max-inline-size: 100%;
+    flex-wrap: wrap;
+  }
+  .inbox-page .inbox-tabs {
+    flex-basis: 100%;
+    gap: var(--space-2);
+  }
+  .inbox-page .inbox-filters-button {
+    min-inline-size: var(--target-min);
+    min-block-size: var(--target-min);
+  }
+  .inbox-page .inbox-tabs .inbox-tab {
+    min-block-size: var(--target-min);
+  }
+  .inbox-page .inbox-list-pane {
+    border: 0;
+    border-radius: 0;
+  }
+  .inbox-page .inbox-toolbar {
+    padding-block-end: var(--space-2);
+  }
+}
+@media (pointer: coarse) {
+  .inbox-page .inbox-tabs {
+    gap: var(--space-2);
+  }
+  .inbox-page .inbox-tabs .inbox-tab,
+  .inbox-filters-button,
+  .inbox-expand-toggle {
     min-block-size: var(--target-min);
   }
 }

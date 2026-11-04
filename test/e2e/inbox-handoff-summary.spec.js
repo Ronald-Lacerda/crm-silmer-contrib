@@ -163,25 +163,29 @@ test('shows the handoff summary of a transferred conversation to the seller', as
   await expect(heading).toBeVisible();
 
   const toggle = page.getByRole('button', { name: 'Resumo da transferência' });
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  const summary = page.getByRole('region', { name: 'Resumo da transferência' });
-  await expect(summary).toContainText('Motivo: Perguntou o valor.');
-  await expect(summary).toContainText(
-    'Atenção: Bordado em dry fit pede teste.',
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.handoff-summary-warning')).toContainText(
+    'Bordado em dry fit pede teste.',
   );
-  await expect(summary).toContainText('Ficha: 5 de 9 (56%).');
-  await expect(summary).toContainText('Dica: Possível parceria/revenda.');
-  const questions = summary.getByRole('listitem').filter({
-    hasText: /^(Vocês fazem parceria\?|Qual o mínimo para revenda\?)$/u,
-  });
-  await expect(questions).toHaveCount(2);
-
   // Loading the summary never takes the focus away from where the seller is.
   const focused = await page.evaluate(
     () =>
       globalThis.document.activeElement?.closest('.handoff-summary') !== null,
   );
   expect(focused).toBe(false);
+  await toggle.click();
+  const summary = page.getByRole('region', { name: 'Resumo da transferência' });
+  await expect(summary).toContainText('Motivo: Perguntou o valor.');
+  await expect(summary).toContainText(
+    'Atenção: Bordado em dry fit pede teste.',
+  );
+  await expect(summary).toContainText('Dados coletados: 5 de 9 (56%).');
+  await expect(summary).toContainText('Dica: Possível parceria/revenda.');
+  const questions = summary.getByRole('listitem').filter({
+    hasText: /^(Vocês fazem parceria\?|Qual o mínimo para revenda\?)$/u,
+  });
+  await expect(questions).toHaveCount(2);
+
   // The summary is PII: never in the URL, the address bar or browser storage.
   expect(summaryRequests).toEqual(['conversation-1']);
   expect(page.url()).not.toContain('Perguntou');
@@ -197,7 +201,12 @@ test('shows the handoff summary of a transferred conversation to the seller', as
   await toggle.focus();
   await page.keyboard.press('Enter');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByText('Ficha: 5 de 9 (56%).')).toBeHidden();
+  await expect(
+    page
+      .locator('.handoff-summary-lines')
+      .getByText('Dados coletados: 5 de 9 (56%).'),
+  ).toBeHidden();
+  await expect(page.locator('.handoff-summary-warning')).toBeVisible();
   await expect(toggle).toBeFocused();
   await page.keyboard.press('Space');
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -228,7 +237,7 @@ test('starts the summary closed once a seller took the conversation', async ({
   await toggle.click();
   await expect(
     page.getByRole('region', { name: 'Resumo da transferência' }),
-  ).toContainText('Ficha: 5 de 9 (56%).');
+  ).toContainText('Dados coletados: 5 de 9 (56%).');
 });
 
 test('leaves the summary out when the reader may not read handoffs', async ({
@@ -257,6 +266,7 @@ test('INBOX-HANDOFF-02: names the seller the customer asked for', async ({
   await expect(
     page.locator('[data-conversation-id="conversation-2"]'),
   ).not.toContainText('Cliente pediu');
+  await page.getByRole('button', { name: 'Resumo da transferência' }).click();
   const summary = page.getByRole('region', { name: 'Resumo da transferência' });
   await expect(summary.getByRole('listitem').first()).toHaveText(
     'Cliente pediu: Ana',

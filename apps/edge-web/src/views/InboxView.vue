@@ -11,7 +11,7 @@ import {
 import { useRoute, useRouter } from 'vue-router';
 import { brand } from '../brand/index.js';
 import AppIcon from '../components/AppIcon.vue';
-import FilterSheet from '../components/FilterSheet.vue';
+import AnchoredPopover from '../components/AnchoredPopover.vue';
 import AssistantTakeoverContext from '../components/inbox/AssistantTakeoverContext.vue';
 import AudioRecorder from '../components/inbox/AudioRecorder.vue';
 import ConversationHandoffSummary from '../components/inbox/ConversationHandoffSummary.vue';
@@ -167,6 +167,9 @@ const transferSelect = ref(null);
 const moreOpen = ref(false);
 const contextOpen = ref(false);
 const contextDialog = ref(null);
+const assistanceDetailsTarget = ref(null);
+const conversationExpanded = ref(false);
+const expandToggle = ref(null);
 const contactDialog = ref(null);
 const contextTab = ref('orders');
 const subjectActionsOpen = ref(false);
@@ -195,11 +198,8 @@ const stateTab = ref(
     (route.query.situacao || route.query.fila ? 'all' : 'attention'),
 );
 const queueFilter = ref(ROUTE_QUEUE[String(route.query.fila ?? '')] ?? 'all');
-const filterSheet = ref(null);
 const filtersButton = ref(null);
-// The sheet edits a draft; "Ver resultados" applies it, Esc discards it.
-const draftTab = ref('all');
-const draftQueue = ref('all');
+const filtersOpen = ref(false);
 /**
  * Totals of the shortcuts, by shortcut value; a failed one is absent.
  *
@@ -342,6 +342,9 @@ const liveStatusMessage = computed(() => {
   return 'Atualizações automáticas indisponíveis. Você pode consultar as conversas agora.';
 });
 const active = computed(() => detail.value?.conversation ?? null);
+watch(active, (conversation) => {
+  if (!conversation) conversationExpanded.value = false;
+});
 const isTerminal = computed(() =>
   ['convertida_em_lead', 'sem_lead', 'encerrada'].includes(active.value?.state),
 );
@@ -633,6 +636,15 @@ const canSendReply = computed(
  */
 const phoneQuery = globalThis.matchMedia?.('(max-width: 768px)');
 const isPhone = ref(phoneQuery?.matches ?? false);
+watch(isPhone, async (phone) => {
+  if (!phone) return;
+  conversationExpanded.value = false;
+  if (filtersOpen.value && props.conversationId) {
+    filtersOpen.value = false;
+    await nextTick();
+    conversationHeading.value?.focus();
+  }
+});
 /** @param {MediaQueryListEvent} event */
 function phoneChanged(event) {
   isPhone.value = event.matches;
@@ -720,23 +732,19 @@ function selectShortcut(shortcut) {
   queueFilter.value = shortcut.queue;
 }
 
-/** PCX-14: the sheet opens on the filters in use. @param {Event} event */
-function openFilters(event) {
-  draftTab.value = stateTab.value;
-  draftQueue.value = queueFilter.value;
-  /** @type {any} */ (filterSheet.value)?.open(
-    /** @type {HTMLElement} */ (event.currentTarget),
-  );
+/** INBOX-UX-04: filters apply to the same official read model immediately. */
+function openFilters() {
+  filtersOpen.value = !filtersOpen.value;
 }
 
-function applySheetFilters() {
-  stateTab.value = draftTab.value;
-  queueFilter.value = draftQueue.value;
+function clearPopoverFilters() {
+  stateTab.value = 'all';
+  queueFilter.value = 'all';
 }
 
-function clearSheetDraft() {
-  draftTab.value = 'all';
-  draftQueue.value = 'all';
+async function toggleConversationWidth() {
+  conversationExpanded.value = !conversationExpanded.value;
+  await anchorThread();
 }
 
 /**
@@ -871,16 +879,6 @@ function closeMore(restoreFocus = false) {
   if (restoreFocus) moreToggle.value?.focus();
 }
 
-/** @param {FocusEvent} event */
-function moreFocusOut(event) {
-  // The phone sheet closes on its backdrop, an entry or Esc; closing it on
-  // blur would let the tap that blurred it fall through to the page.
-  if (isPhone.value) return;
-  const next = event.relatedTarget;
-  const container = /** @type {HTMLElement} */ (event.currentTarget);
-  if (!(next instanceof Node) || !container.contains(next)) closeMore();
-}
-
 /**
  * Enter sends and Shift+Enter breaks the line, as in the chat apps the team
  * already uses. On a touch keyboard Enter keeps writing a new line, and an
@@ -963,7 +961,8 @@ async function orderSuggestedCreated(order) {
   notify(`Pedido ${order.number} criado.`);
 }
 
-function revealOrderEvidence(messageId) {
+async function revealOrderEvidence(messageId) {
+  if (contextOpen.value) await toggleContext(false);
   const message = Array.from(
     thread.value?.querySelectorAll('[data-message-id]') ?? [],
   ).find((element) => element.getAttribute('data-message-id') === messageId);
@@ -2131,116 +2130,77 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="page inbox-page" :data-view="workspaceView">
-    <div class="inbox-toolbar">
-      <h1 ref="heading" class="inbox-title" tabindex="-1">Caixa de Entrada</h1>
-      <!-- PCX-14 (RFC 024): search, three shortcuts and "Filtros". -->
-      <div class="inbox-tabs" role="group" aria-label="Atalhos da Caixa">
-        <button
-          v-for="shortcut in SHORTCUTS"
-          :key="shortcut.value"
-          type="button"
-          class="inbox-tab"
-          :aria-pressed="activeShortcut === shortcut.value"
-          @click="selectShortcut(shortcut)"
-        >
-          {{ shortcut.label }}
-          <span
-            v-if="shortcutCount(shortcut.value) !== null"
-            class="inbox-tab-count"
-            :data-tone="
-              shortcut.value === 'waiting' && shortcutCount(shortcut.value) > 0
-                ? 'attention'
-                : undefined
-            "
-            >{{ shortcutCount(shortcut.value) }}</span
-          >
-        </button>
-      </div>
+  <div
+    class="page inbox-page"
+    :data-view="workspaceView"
+    :data-expanded="conversationExpanded || undefined"
+  >
+    <h1 ref="heading" class="inbox-title" tabindex="-1">Caixa de Entrada</h1>
+    <Teleport to="#inbox-view-tools" defer>
       <button
-        ref="filtersButton"
+        v-if="active && !isPhone"
+        ref="expandToggle"
         type="button"
-        class="inbox-filters-button"
-        aria-haspopup="dialog"
-        :data-active="activeFilters.length ? 'true' : undefined"
-        @click="openFilters"
+        class="quiet inbox-expand-toggle"
+        :aria-label="
+          conversationExpanded
+            ? 'Mostrar lista de conversas'
+            : 'Ampliar conversa'
+        "
+        :title="
+          conversationExpanded
+            ? 'Mostrar lista de conversas'
+            : 'Ampliar conversa'
+        "
+        :aria-pressed="conversationExpanded"
+        @click="toggleConversationWidth"
       >
-        Filtros
-        <span v-if="activeFilters.length" class="inbox-tab-count"
-          >{{ activeFilters.length
-          }}<span class="sr-only">
-            {{ activeFilters.length === 1 ? 'ativo' : 'ativos' }}</span
-          ></span
-        >
+        <AppIcon :name="conversationExpanded ? 'minimize' : 'maximize'" />
       </button>
-      <div
-        v-if="activeFilters.length"
-        class="inbox-active-filter"
-        role="group"
-        aria-labelledby="inbox-active-filter-label"
-      >
-        <span id="inbox-active-filter-label">Filtro:</span>
+    </Teleport>
+    <AnchoredPopover
+      v-model:open="filtersOpen"
+      :anchor="filtersButton"
+      class="inbox-filter-popover"
+      label="Filtrar conversas"
+      align="start"
+    >
+      <div class="inbox-filter-head">
+        <h2>Filtrar conversas</h2>
         <button
-          v-for="filter in activeFilters"
-          :key="filter.key"
-          type="button"
-          class="inbox-filter-chip"
-          :aria-label="`Remover filtro ${filter.label}`"
-          @click="removeFilter(filter.key)"
-        >
-          {{ filter.label }}
-          <AppIcon name="close" />
-        </button>
-        <button
-          v-if="activeFilters.length > 1"
           type="button"
           class="quiet"
-          @click="clearFilters"
+          aria-label="Limpar filtros"
+          title="Limpar filtros"
+          @click="clearPopoverFilters"
         >
-          Limpar filtros
+          <AppIcon name="reset" />
         </button>
       </div>
-    </div>
-
-    <FilterSheet
-      ref="filterSheet"
-      title="Filtrar conversas"
-      @apply="applySheetFilters"
-      @clear="clearSheetDraft"
-    >
-      <fieldset class="filter-sheet-group">
-        <legend>Situação</legend>
-        <label
-          v-for="tab in STATE_TABS"
-          :key="tab.value"
-          class="filter-sheet-option"
-        >
-          <input
-            v-model="draftTab"
-            type="radio"
-            name="inbox-situacao"
-            :value="tab.value"
-          />
-          {{ tab.label }}
-        </label>
-      </fieldset>
-      <fieldset class="filter-sheet-group">
-        <legend>Responsável</legend>
-        <label
-          v-for="queue in QUEUE_FILTERS"
-          :key="queue.value"
-          class="filter-sheet-option"
-        >
-          <input
-            v-model="draftQueue"
-            type="radio"
-            name="inbox-responsavel"
+      <div class="inbox-filter-field">
+        <label for="inbox-situation">Situação</label>
+        <select id="inbox-situation" v-model="stateTab">
+          <option v-for="tab in STATE_TABS" :key="tab.value" :value="tab.value">
+            {{ tab.label }}
+          </option>
+        </select>
+      </div>
+      <div class="inbox-filter-field">
+        <label for="inbox-responsible">Responsável</label>
+        <select id="inbox-responsible" v-model="queueFilter">
+          <option
+            v-for="queue in QUEUE_FILTERS"
+            :key="queue.value"
             :value="queue.value"
-          />
-          {{ queue.label }}
-        </label>
-      </fieldset>
-    </FilterSheet>
+          >
+            {{ queue.label }}
+          </option>
+        </select>
+      </div>
+      <p class="inbox-filter-result" role="status">
+        {{ loading ? 'Carregando conversas…' : visibleConversationLabel }}
+      </p>
+    </AnchoredPopover>
 
     <div v-if="liveStatusMessage" class="inbox-notice inbox-live-notice">
       <p role="status">{{ liveStatusMessage }}</p>
@@ -2289,11 +2249,84 @@ onBeforeUnmount(() => {
               Limpar
             </button>
           </div>
+          <button
+            ref="filtersButton"
+            type="button"
+            class="inbox-filters-button"
+            aria-haspopup="dialog"
+            aria-label="Filtros"
+            :aria-expanded="filtersOpen"
+            :data-active="activeFilters.length ? 'true' : undefined"
+            @click="openFilters"
+          >
+            <AppIcon name="filters" /><span class="sr-only">Filtros</span>
+            <span v-if="activeFilters.length" class="inbox-tab-count"
+              >{{ activeFilters.length
+              }}<span class="sr-only">
+                {{ activeFilters.length === 1 ? 'ativo' : 'ativos' }}</span
+              ></span
+            >
+          </button>
           <p id="inbox-search-help" class="sr-only">
             Busca em até 100 conversas carregadas: contato, telefone ou última
             mensagem.
           </p>
         </div>
+        <div class="inbox-toolbar">
+          <!-- PCX-14 (RFC 024): search, three shortcuts and "Filtros". -->
+          <div class="inbox-tabs" role="group" aria-label="Atalhos da Caixa">
+            <button
+              v-for="shortcut in SHORTCUTS"
+              :key="shortcut.value"
+              type="button"
+              class="inbox-tab"
+              :aria-pressed="activeShortcut === shortcut.value"
+              @click="selectShortcut(shortcut)"
+            >
+              {{ shortcut.label }}
+              <span
+                v-if="shortcutCount(shortcut.value) !== null"
+                class="inbox-tab-count"
+                :data-tone="
+                  shortcut.value === 'waiting' &&
+                  shortcutCount(shortcut.value) > 0
+                    ? 'attention'
+                    : undefined
+                "
+                >{{ shortcutCount(shortcut.value) }}</span
+              >
+            </button>
+          </div>
+
+          <div
+            v-if="activeFilters.length"
+            class="inbox-active-filter"
+            role="group"
+            aria-labelledby="inbox-active-filter-label"
+          >
+            <span id="inbox-active-filter-label">Filtro:</span>
+            <button
+              v-for="filter in activeFilters"
+              :key="filter.key"
+              type="button"
+              class="inbox-filter-chip"
+              :aria-label="`Remover filtro ${filter.label}`"
+              @click="removeFilter(filter.key)"
+            >
+              {{ filter.label }}
+              <AppIcon name="close" />
+            </button>
+            <button
+              v-if="activeFilters.length > 1"
+              type="button"
+              class="quiet"
+              @click="clearFilters"
+            >
+              Limpar filtros
+            </button>
+          </div>
+        </div>
+
         <p class="inbox-list-summary" role="status">
           {{ loading ? 'Carregando conversas…' : visibleConversationLabel }}
           <span
@@ -2333,7 +2366,13 @@ onBeforeUnmount(() => {
               <span
                 class="conv-next-action"
                 :data-tone="nextAction(conversation).tone || undefined"
-                >{{ nextAction(conversation).label }}</span
+                ><AppIcon
+                  v-if="nextAction(conversation).tone === 'error'"
+                  name="alert"
+                /><AppIcon
+                  v-else-if="nextAction(conversation).tone === 'warning'"
+                  name="alert"
+                />{{ nextAction(conversation).label }}</span
               >
             </button>
           </li>
@@ -2391,7 +2430,6 @@ onBeforeUnmount(() => {
                     :aria-label="`Dados de ${active.contact.label}`"
                     @click="openContact"
                   >
-                    <span class="contact-avatar" aria-hidden="true">🙂</span>
                     <span>{{ active.contact.label }}</span
                     ><AppIcon name="chevron-down" />
                   </button>
@@ -2457,7 +2495,6 @@ onBeforeUnmount(() => {
               <div
                 v-if="hasMoreActions"
                 class="conv-more"
-                @focusout="moreFocusOut"
                 @keydown.esc.stop="closeMore(true)"
               >
                 <button
@@ -2471,62 +2508,64 @@ onBeforeUnmount(() => {
                 >
                   <AppIcon name="more" />
                 </button>
-                <div
-                  v-if="moreOpen && isPhone"
-                  class="conv-more-backdrop"
-                  aria-hidden="true"
-                  @click="closeMore(true)"
-                ></div>
-                <div
+                <AnchoredPopover
+                  v-model:open="moreOpen"
+                  :anchor="moreToggle"
+                  label="Mais ações"
+                  role="group"
                   id="conv-more-menu"
-                  ref="moreMenu"
                   class="conv-more-panel"
-                  :hidden="!moreOpen"
                 >
-                  <button
-                    v-if="createOrderInMore"
-                    type="button"
-                    :aria-disabled="orderCreating || busy ? 'true' : undefined"
-                    @click="createOrder(true)"
-                  >
-                    Criar pedido
-                  </button>
-                  <button
-                    v-if="canTransfer"
-                    type="button"
-                    :disabled="busy"
-                    @click="openTransfer"
-                  >
-                    Transferir atendimento
-                  </button>
-                  <button
-                    v-if="canArchiveActive"
-                    type="button"
-                    :disabled="busy"
-                    @click="requestArchiveConfirmation"
-                  >
-                    Arquivar conversa
-                  </button>
-                  <button
-                    v-if="canUnarchive"
-                    type="button"
-                    :disabled="busy"
-                    @click="
-                      closeMore(true);
-                      unarchiveConversation();
-                    "
-                  >
-                    Desarquivar conversa
-                  </button>
-                  <button
-                    v-if="canClose"
-                    type="button"
-                    :disabled="busy"
-                    @click="requestCloseFromMore"
-                  >
-                    Encerrar conversa
-                  </button>
-                </div>
+                  <div ref="moreMenu" class="conv-more-items">
+                    <p class="conv-more-label">Atendimento</p>
+                    <button
+                      v-if="createOrderInMore"
+                      type="button"
+                      :aria-disabled="
+                        orderCreating || busy ? 'true' : undefined
+                      "
+                      @click="createOrder(true)"
+                    >
+                      Criar pedido
+                    </button>
+                    <button
+                      v-if="canTransfer"
+                      type="button"
+                      :disabled="busy"
+                      @click="openTransfer"
+                    >
+                      <AppIcon name="transfer" />Transferir atendimento
+                    </button>
+                    <button
+                      v-if="canArchiveActive"
+                      type="button"
+                      :disabled="busy"
+                      @click="requestArchiveConfirmation"
+                    >
+                      <AppIcon name="archive" />Arquivar conversa
+                    </button>
+                    <button
+                      v-if="canUnarchive"
+                      type="button"
+                      :disabled="busy"
+                      @click="
+                        closeMore(true);
+                        unarchiveConversation();
+                      "
+                    >
+                      <AppIcon name="archive" />Desarquivar conversa
+                    </button>
+                    <button
+                      v-if="canClose"
+                      type="button"
+                      class="conv-more-danger"
+                      :disabled="busy"
+                      @click="requestCloseFromMore"
+                    >
+                      <AppIcon name="close-circle" />Encerrar conversa
+                    </button>
+                  </div>
+                </AnchoredPopover>
               </div>
               <button
                 ref="contextToggle"
@@ -2845,23 +2884,24 @@ onBeforeUnmount(() => {
             <li v-if="!detail.messages.length" class="empty-list">
               Sem mensagens persistidas.
             </li>
-            <li class="inbox-assistance-item">
-              <ConversationOrderAssistance
-                :key="active.id"
-                :conversation-id="active.id"
-                :can-manage="canCreateOrder"
-                :messages="detail?.messages ?? []"
-                :refresh-key="`${active.version}:${liveEvent?.receivedAt ?? ''}:${detail?.messages?.length ?? 0}`"
-                @created="orderSuggestedCreated"
-                @changed="refreshInbox(true)"
-                @evidence="revealOrderEvidence"
-                @review="
-                  contextTab = 'orders';
-                  toggleContext(true);
-                "
-              />
-            </li>
           </ol>
+
+          <ConversationOrderAssistance
+            :key="active.id"
+            :details-target="assistanceDetailsTarget"
+            :details-open="contextOpen && contextTab === 'orders'"
+            :conversation-id="active.id"
+            :can-manage="canCreateOrder"
+            :messages="detail?.messages ?? []"
+            :refresh-key="`${active.version}:${liveEvent?.receivedAt ?? ''}:${detail?.messages?.length ?? 0}`"
+            @created="orderSuggestedCreated"
+            @changed="refreshInbox(true)"
+            @evidence="revealOrderEvidence"
+            @review="
+              contextTab = 'orders';
+              toggleContext(true);
+            "
+          />
 
           <div v-if="!needsTakeover" class="inbox-composer">
             <!-- PCX-13: until a person has the conversation, taking it is the
@@ -2896,16 +2936,7 @@ onBeforeUnmount(() => {
                   @submit.prevent="sendReply"
                 >
                   <label for="reply" class="sr-only">Responder</label>
-                  <button
-                    v-if="headerOrder"
-                    type="button"
-                    class="composer-order-context"
-                    @click="toggleContext(true)"
-                  >
-                    <AppIcon name="orders" />{{ headerOrder.number }} ·
-                    {{ orderStatusLabel(headerOrder.status)
-                    }}<AppIcon name="chevron-down" />
-                  </button>
+
                   <textarea
                     id="reply"
                     ref="replyInput"
@@ -3019,6 +3050,7 @@ onBeforeUnmount(() => {
           </button>
         </div>
         <div v-show="contextTab === 'orders'">
+          <div ref="assistanceDetailsTarget" class="context-assistance" />
           <ConversationOrderSummary
             :conversation-id="active.id"
             :order="headerOrder"

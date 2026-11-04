@@ -77,6 +77,9 @@
     --sidebar-inline-size: 15.5rem;
     --sidebar-rail-size: 4.5rem;
     --topbar-block-size: 56px;
+    --inbox-topbar-block-size: 3rem;
+    --inbox-rail-inline-size: 3.5rem;
+    --inbox-list-inline-size: 14rem;
     /* Bottom tab bar on phones; screens reserve it above their own footer. */
     --mobile-nav-block-size: 4rem;
     --shell-gap: 0.5rem;

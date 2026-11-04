@@ -25,11 +25,17 @@ const loading = ref(false);
 const error = ref('');
 /** Without `handoff.read` (or with no summary) the section stays out. */
 const unavailable = ref(false);
-/** Open while the handoff waits for a seller; closed once someone took it. */
+/** INBOX-UX-04: compact initially; commercial warnings stay visible. */
 const expanded = ref(false);
 let controller;
 
 const lines = computed(() => handoffSummaryLines(summary.value));
+const collected = computed(
+  () => lines.value.find((line) => line.label === 'Ficha')?.text ?? '',
+);
+const warnings = computed(() =>
+  lines.value.filter((line) => line.tone === 'warning'),
+);
 const bodyId = computed(() => `handoff-summary-${props.conversationId}`);
 const visible = computed(
   () =>
@@ -96,9 +102,7 @@ watch(
     preferredSeller.value = '';
     error.value = '';
     unavailable.value = false;
-    expanded.value =
-      props.handoff?.status === 'pending' &&
-      props.handoff?.reasonCode !== 'unsupported';
+    expanded.value = false;
     void load();
   },
   { immediate: true },
@@ -118,14 +122,45 @@ onBeforeUnmount(() => controller?.abort());
         ref="toggle"
         type="button"
         class="quiet"
+        :aria-label="
+          collected
+            ? `Resumo da transferência · Dados coletados · ${collected}`
+            : 'Resumo da transferência'
+        "
         :aria-expanded="expanded ? 'true' : 'false'"
         :aria-controls="bodyId"
         @click="expanded = !expanded"
       >
-        Resumo da transferência
+        <span>{{
+          collected
+            ? `Dados coletados · ${collected}`
+            : 'Resumo da transferência'
+        }}</span>
         <AppIcon name="chevron-down" />
       </button>
     </h3>
+    <div
+      v-if="!expanded && (preferredSeller || warnings.length || error)"
+      class="handoff-summary-preview"
+      tabindex="0"
+      role="group"
+      aria-label="Avisos da transferência"
+    >
+      <p v-if="preferredSeller">
+        <strong>Cliente pediu:</strong> {{ preferredSeller }}
+      </p>
+      <p
+        v-for="line in warnings"
+        :key="line.key"
+        class="handoff-summary-warning"
+      >
+        <strong>{{ line.label }}:</strong> {{ line.text }}
+      </p>
+      <div v-if="error" class="handoff-summary-error">
+        <p role="status">{{ error }}</p>
+        <button type="button" @click="retry">Tentar novamente</button>
+      </div>
+    </div>
     <!-- A scrollable summary must be reachable by keyboard (WCAG 2.1.1). -->
     <div
       :id="bodyId"
@@ -139,7 +174,11 @@ onBeforeUnmount(() => controller?.abort());
         <p>{{ error }}</p>
         <button type="button" @click="retry">Tentar novamente</button>
       </div>
-      <ul v-else class="handoff-summary-lines">
+      <p v-if="!loading && !error && collected" class="op-hint">
+        Pré-ficha coletada pelo agente. O pedido ainda precisa de revisão
+        humana.
+      </p>
+      <ul v-if="!loading && !error" class="handoff-summary-lines">
         <li v-if="preferredSeller" data-tone="info">
           <strong>Cliente pediu:</strong>{{ ' ' }}{{ preferredSeller }}
         </li>
@@ -149,7 +188,11 @@ onBeforeUnmount(() => controller?.abort());
           :data-tone="line.tone || undefined"
         >
           <template v-if="line.label">
-            <strong>{{ line.label }}:</strong>{{ ' ' }}
+            <strong
+              >{{
+                line.label === 'Ficha' ? 'Dados coletados' : line.label
+              }}:</strong
+            >{{ ' ' }}
           </template>
           <template v-if="line.items.length">
             <ul class="handoff-summary-questions">
@@ -164,3 +207,74 @@ onBeforeUnmount(() => controller?.abort());
     </div>
   </section>
 </template>
+
+<style scoped>
+.handoff-summary {
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-block-size: var(--target-min);
+  max-block-size: 30%;
+  margin: 0;
+  border: 0;
+  border-block-end: 1px solid var(--color-border-subtle);
+  border-radius: 0;
+  background: var(--color-surface-raised);
+}
+.handoff-summary-title {
+  flex: none;
+}
+.handoff-summary-title button {
+  min-block-size: var(--target-min);
+  padding: var(--space-1) var(--space-4);
+  font-weight: 500;
+  color: var(--color-link);
+}
+.handoff-summary-title button span {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.handoff-summary-preview {
+  flex: 0 1 auto;
+  min-block-size: 0;
+  max-block-size: none;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 0 var(--space-4) var(--space-2);
+  font-size: var(--text-sm);
+}
+.handoff-summary-preview p {
+  margin: var(--space-1) 0;
+  overflow-wrap: anywhere;
+}
+.handoff-summary-warning {
+  color: var(--status-warning-text);
+  background: var(--status-warning-surface);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+.handoff-summary-body {
+  flex: 0 1 auto;
+  min-block-size: 0;
+  max-block-size: none;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding-inline: var(--space-4);
+}
+.handoff-summary-lines > li[data-tone='info'] {
+  padding-block: 0;
+  background: transparent;
+  color: var(--color-text);
+}
+@media (max-width: 768px) {
+  .handoff-summary-title button,
+  .handoff-summary-body {
+    padding-inline: var(--space-3);
+  }
+  .handoff-summary-preview {
+    padding-inline: var(--space-3);
+  }
+}
+</style>

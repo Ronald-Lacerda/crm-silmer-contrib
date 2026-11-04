@@ -122,3 +122,66 @@ Não restaura banco, não apaga arquivos nem desfaz pedidos, mensagens, claims
 ou encerramentos já registrados. O booleano novo é uma projeção calculada;
 remover sua leitura não exige migração de dados. Preserve o guard de pendentes
 do backend e não faça retry de envio para tentar corrigir aparência.
+
+## Refinamento aprovado em 04/11/2026 — INBOX-UX-04
+
+PCX-16a–h complementa os contratos acima sem alterar APIs ou dados. Busca,
+atalhos e filtros ficam na lista; Situação e Responsável aplicam imediatamente,
+preservando parâmetros, contagens, autorização e links. Escape fecha sem
+reverter a escolha; fechar por clique externo respeita o destino do clique.
+Ações abrem junto ao botão, inclusive no celular, com ícones e encerramento
+semântico. As confirmações e guardas de arquivar/encerrar continuam existentes.
+
+Sugestões pendentes aparecem abertas entre histórico e compositor, com
+confirmação do cliente, evidência e as três decisões oficiais. Recolher não
+perde motivo nem cancela requisição. Histórico, bloqueios e omissão ficam em
+Atendimento › Pedidos e assuntos; uma única instância/consulta atende os dois
+lugares. O destino do conteúdo permanece montado quando o painel fecha.
+Fechar durante o registro de omissão não repete o comando nem reabre o painel:
+feedback tardio aparece na conversa, e o resultado permanece consultável.
+
+O resumo inicia compacto; avisos comerciais e vendedor solicitado continuam
+visíveis e o original completo pode ser aberto. Dados coletados da pré-ficha
+não comprovam prontidão para confirmar pedido. Atenção/pendente usa âmbar,
+sugestão usa informação, sucesso usa verde e falha/encerramento usa erro, sempre
+com texto ou ícone. Apenas os tokens atuais determinam as cores de cada tema.
+
+Ampliar conversa esconde a lista sem remontar histórico, alterar URL, apagar
+rascunho ou trocar filtros. O botão volta a mostrar a lista. No celular,
+navegação por endereço e voltar continuam valendo. Identidade e ações ocupam
+linhas separadas para preservar o nome do contato até em 320 px. Arquivar a
+última conversa ampliada restaura a lista vazia. O menu lateral tem botão
+apenas por ícone, mantendo nome acessível e preferência persistida; expandir
+na Inbox sobrepõe a lista para não estreitar o chat. Outras telas preservam
+sua composição anterior.
+
+Verificar dados sintéticos em 1366×657, 1366×768, 390×844 e reflow a 320 px,
+claro/escuro, toque e teclado. Abrir filtros, mudar seleções enquanto carrega,
+fechar por Escape/clique externo e confirmar parâmetros e foco. Abrir ações,
+confirmar suas permissões e retornar o foco. Recolher sugestão com motivo já
+selecionado; testar 403/404, 409 e resposta perdida com a mesma chave. Fechar
+Atendimento durante resposta tardia deve preservar resultado sem reabertura.
+Verificar múltiplas sugestões, evidência/resumo longos, compositor e rolagem
+interna, inclusive após ampliar e redimensionar.
+
+Rollback desta fatia restaura o frontend anterior. Não há migration ou mudança
+na API, nem reversão de decisões, pedidos, mensagens ou claims já registrados.
+O push segue GitHub → EasyPanel; CI e observação de SHA/health no alvo são
+necessários para declarar a versão implantada.
+
+
+Validação local desta entrega: `npm run validate` aprovado (1.691 testes,
+1.681 aprovados e 10 ignorados), `npm run test:e2e -- --workers=4` com
+476 aprovados e 7 ignorados pela configuração existente, incluindo axe e
+permissões. Os 18 cenários focais INBOX-UX-04 passaram. Após o último ajuste
+móvel, formatação, lint, tokens, diff-check e E2E foram conferidos novamente.
+`npm audit --audit-level=high` passou: zero alta/crítica; uma baixa e oito
+moderadas preexistentes, sem alteração de dependências.
+
+Revisões independentes de frontend/acessibilidade e QA sem bloqueantes.
+Conferência visual no bundle real com fixtures sintéticas em 1366×768,
+390×844 e 320×700, claro/escuro, filtros, ações e ampliação: sem erro de
+runtime nem mutações durante a inspeção. Testes adicionais cobrem 1366×657,
+390×440, teclado, conteúdos longos, foco, conflito e resposta tardia.
+Isso comprova apresentação e contratos locais; não é evidência de canal,
+zoom físico, dispositivo real ou publicação no EasyPanel.

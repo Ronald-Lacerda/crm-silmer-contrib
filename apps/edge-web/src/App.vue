@@ -566,18 +566,16 @@ function onCursor(cursor) {
       <button
         class="quiet sidebar-toggle"
         type="button"
+        :aria-label="sidebarCompact ? 'Expandir menu' : 'Recolher menu'"
         :aria-expanded="!sidebarCompact"
         aria-controls="main-navigation"
         :title="sidebarCompact ? 'Expandir menu' : 'Recolher menu'"
         @click="toggleSidebar"
       >
         <AppIcon name="menu" />
-        <span class="nav-label">{{
-          sidebarCompact ? 'Expandir menu' : 'Recolher menu'
-        }}</span>
         <span
           class="sidebar-tooltip"
-          data-label="Expandir menu"
+          :data-label="sidebarCompact ? 'Expandir menu' : 'Recolher menu'"
           aria-hidden="true"
         ></span>
       </button>
@@ -666,6 +664,10 @@ function onCursor(cursor) {
             {{ connectionLabel }}
             <span class="sr-only">{{ connectionDetail }}</span>
           </span>
+          <span
+            v-if="route.path.startsWith('/inbox')"
+            id="inbox-view-tools"
+          ></span>
           <ThemeSwitcher class="topbar-theme" />
         </div>
       </header>

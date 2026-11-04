@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
  * INBOX-UX-03 / CP-10: fixtures deliberately separate the canonical header
  * order from a pending order linked only by subject. No real contact data.
  * @param {import('@playwright/test').Page} page
- * @param {{canonicalStatus?: 'confirmado'|'pendente'|null, pending?: boolean, pendingOnFirstClose?: boolean, otherOwner?: boolean}} [options]
+ * @param {{canonicalStatus?: 'confirmado'|'pendente'|null, pending?: boolean, pendingOnFirstClose?: boolean, otherOwner?: boolean, longContext?: boolean}} [options]
  */
 async function setupInbox(page, options = {}) {
   let pending = options.pending ?? true;
@@ -45,7 +45,13 @@ async function setupInbox(page, options = {}) {
       id: 'contact-compact',
       label: 'Contato sintético',
     },
-    handoff: null,
+    handoff: options.longContext
+      ? {
+          id: 'handoff-long',
+          status: 'claimed',
+          reasonCode: 'customer_requested_human',
+        }
+      : null,
     hasPendingOrder: pending,
     id: 'conversation-compact',
     lastMessage: {
@@ -53,7 +59,9 @@ async function setupInbox(page, options = {}) {
       direction: 'inbound',
       id: 'message-compact',
       occurredAt: '2026-11-03T11:27:00.000Z',
-      preview: 'Pode conferir esta referência?',
+      preview: options.longContext
+        ? 'Pode fechar esta compra com os detalhes combinados. '.repeat(45)
+        : 'Pode conferir esta referência?',
       status: 'received',
       type: 'text',
     },
@@ -133,6 +141,47 @@ async function setupInbox(page, options = {}) {
           items: conversation.terminalAt ? [] : [conversation],
           totalCount: conversation.terminalAt ? 0 : 1,
           nextCursor: null,
+        },
+      });
+    if (
+      path ===
+      '/api/v1/inbox/conversations/conversation-compact/order-assistance'
+    )
+      return route.fulfill({
+        json: {
+          conversationVersion: 3,
+          sourceRevision: 4,
+          suggestions: options.longContext
+            ? [
+                {
+                  id: 'suggestion-long',
+                  version: 1,
+                  status: 'pending',
+                  productSummary:
+                    'Lote sintético com tamanhos e tecidos diferentes. '.repeat(
+                      35,
+                    ),
+                  evidenceMessageId: 'message-compact',
+                  sourceRevision: 4,
+                  createdAt: '2026-11-03T11:28:00.000Z',
+                },
+              ]
+            : [],
+          evaluations: [],
+        },
+      });
+    if (path === '/api/v1/inbox/conversations/conversation-compact/handoff')
+      return route.fulfill({
+        json: {
+          handoff: options.longContext
+            ? {
+                ...conversation.handoff,
+                summary:
+                  'Atenção: Conferir prazo e composição antes de confirmar. '.repeat(
+                    45,
+                  ),
+              }
+            : null,
         },
       });
     if (path === '/api/v1/inbox/conversations/conversation-compact/subjects')
@@ -472,4 +521,243 @@ test('INBOX-UX-03: another seller can read media but cannot send, close or attac
   await expect(
     page.getByRole('button', { name: 'Encerrar conversa', exact: true }),
   ).toHaveCount(0);
+});
+
+test('INBOX-UX-04: expanding preserves the live thread and draft, and phone navigation recovers after resize', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1366, height: 657 });
+  await setupInbox(page);
+  await page.goto('/inbox/conversation-compact');
+  const reply = page.getByRole('textbox', { name: 'Responder', exact: true });
+  await reply.fill('Rascunho sintético que deve permanecer.');
+  const thread = await page.locator('.thread').elementHandle();
+  if (!thread) throw new Error('The existing thread must be mounted');
+  const url = page.url();
+  const before = await page.locator('.inbox-conversation').boundingBox();
+  const expand = page.getByRole('button', {
+    name: 'Ampliar conversa',
+    exact: true,
+  });
+  await expand.focus();
+  await page.keyboard.press('Enter');
+  const restore = page.getByRole('button', {
+    name: 'Mostrar lista de conversas',
+    exact: true,
+  });
+  await expect(restore).toBeFocused();
+  await expect(page.locator('.inbox-list-pane')).toBeHidden();
+  const after = await page.locator('.inbox-conversation').boundingBox();
+  expect(after?.width).toBeGreaterThan(before?.width ?? 0);
+  expect(await thread.evaluate((element) => element.isConnected)).toBe(true);
+  await expect(reply).toHaveValue('Rascunho sintético que deve permanecer.');
+  await expect(page).toHaveURL(url);
+  await page.keyboard.press('Enter');
+  await expect(expand).toBeFocused();
+  await expect(page.locator('.inbox-list-pane')).toBeVisible();
+  await expand.click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(expand).toBeHidden();
+  await expect(restore).toBeHidden();
+  await expect(reply).toHaveValue('Rascunho sintético que deve permanecer.');
+  await expect(reply).toBeInViewport({ ratio: 1 });
+  await page.getByRole('link', { name: 'Conversas', exact: true }).click();
+  await expect(page.locator('.inbox-list-pane')).toBeVisible();
+  await expect(page).toHaveURL('/inbox');
+  await page.setViewportSize({ width: 1366, height: 657 });
+  await expect(page.locator('.inbox-list-pane')).toBeVisible();
+});
+
+for (const viewport of [
+  { width: 1366, height: 657 },
+  { width: 390, height: 844 },
+]) {
+  test(`INBOX-UX-04: long suggestion and handoff keep reply visible without document scroll at ${viewport.width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    const state = await setupInbox(page, { longContext: true });
+    await page.goto('/inbox/conversation-compact');
+    const assistance = page.getByRole('region', {
+      name: 'Sugestões de pedido',
+    });
+    await expect(assistance).toContainText('Lote sintético');
+    await expect(page.locator('.thread .order-assistance')).toHaveCount(0);
+    const summary = page.getByRole('button', {
+      name: 'Resumo da transferência',
+      exact: true,
+    });
+    await summary.click();
+    await expect(
+      page.getByRole('region', { name: 'Resumo da transferência' }),
+    ).toContainText('Conferir prazo e composição');
+    await expect(
+      page.getByRole('textbox', { name: 'Responder', exact: true }),
+    ).toBeInViewport({ ratio: 1 });
+    await expect(
+      page.getByRole('button', { name: 'Enviar resposta', exact: true }),
+    ).toBeInViewport({ ratio: 1 });
+    expect(
+      await page.evaluate(() => ({
+        vertical:
+          globalThis.document.documentElement.scrollHeight <=
+          globalThis.innerHeight,
+        horizontal:
+          globalThis.document.documentElement.scrollWidth <=
+          globalThis.innerWidth,
+      })),
+    ).toEqual({ vertical: true, horizontal: true });
+    expect(state.closes).toEqual([]);
+    expect(state.orderMutations).toEqual([]);
+    expect(state.archives).toEqual([]);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  });
+}
+
+test('INBOX-UX-04: archiving the last expanded conversation restores the empty list without sending', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await setupInbox(page, { pending: false });
+  let archived = false;
+  const mutations = /** @type {string[]} */ ([]);
+  const archives = /** @type {any[]} */ ([]);
+  page.on('request', (request) => {
+    if (
+      request.method() !== 'GET' &&
+      new URL(request.url()).pathname.startsWith('/api/v1/')
+    )
+      mutations.push(new URL(request.url()).pathname);
+  });
+  await page.route('**/api/v1/inbox/conversations?**', async (route) => {
+    if (!archived) return route.fallback();
+    return route.fulfill({
+      json: { items: [], totalCount: 0, nextCursor: null },
+    });
+  });
+  const archivePath = '/api/v1/conversations/conversation-compact/archive';
+  await page.route(`**${archivePath}`, async (route) => {
+    const request = route.request();
+    expect(request.method()).toBe('POST');
+    expect(request.headers()['idempotency-key']).toBeTruthy();
+    expect(request.headers()['x-csrf-token']).toBe('csrf-compact');
+    archives.push(request.postDataJSON());
+    archived = true;
+    return route.fulfill({ json: { accepted: true } });
+  });
+  await page.goto('/inbox/conversation-compact');
+  await page
+    .getByRole('group', { name: 'Atalhos da Caixa' })
+    .getByRole('button', { name: /^Todas/u })
+    .click();
+  await page
+    .getByRole('button', { name: 'Ampliar conversa', exact: true })
+    .click();
+  await expect(page.locator('.inbox-list-pane')).toBeHidden();
+  await page.getByRole('button', { name: 'Mais ações', exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Mais ações', exact: true })
+    .getByRole('button', { name: 'Arquivar conversa', exact: true })
+    .click();
+  const confirmation = page.getByRole('dialog', {
+    name: 'Arquivar conversa?',
+    exact: true,
+  });
+  await expect(confirmation).toBeVisible();
+  expect(archives).toEqual([]);
+  await confirmation
+    .getByRole('button', { name: 'Arquivar conversa', exact: true })
+    .click();
+  await expect(page).toHaveURL('/inbox');
+  await expect(confirmation).toBeHidden();
+  await expect(page.locator('.inbox-list-pane')).toBeVisible();
+  await expect(
+    page.getByRole('heading', {
+      name: 'Nenhuma conversa por enquanto',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Ampliar conversa', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('button', {
+      name: 'Mostrar lista de conversas',
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  expect(archives).toEqual([
+    { expectedVersion: 3, reason: 'Conversa arquivada na Caixa de Entrada' },
+  ]);
+  expect(mutations).toEqual([archivePath]);
+});
+
+test('INBOX-UX-04: at 320px the contact identity and order actions remain separate and usable', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  const state = await setupInbox(page, {
+    canonicalStatus: null,
+    pending: false,
+  });
+  await page.goto('/inbox/conversation-compact');
+  const name = page.getByRole('button', {
+    name: 'Dados de Contato sintético',
+    exact: true,
+  });
+  const header = page.locator('.conv-head');
+  await expect(name).toBeInViewport({ ratio: 1 });
+  await expect(
+    header.getByRole('heading', { name: 'Contato sintético', exact: true }),
+  ).toBeVisible();
+  await expect(header.locator('.conv-identity')).toContainText('WhatsApp');
+  await expect(
+    header.getByRole('button', { name: 'Criar pedido', exact: true }),
+  ).toBeVisible();
+  expect(
+    await name
+      .locator('span')
+      .evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBe(true);
+  const titleBox = await header.locator('.conv-title').boundingBox();
+  const identityBox = await header.locator('.conv-identity').boundingBox();
+  const actionsBox = await header.locator('.conv-actions').boundingBox();
+  if (!titleBox || !identityBox || !actionsBox)
+    throw new Error('The identity and actions must have visible bounds');
+  expect(titleBox.width).toBeGreaterThanOrEqual(180);
+  expect(titleBox.y + titleBox.height).toBeLessThanOrEqual(actionsBox.y + 1);
+  expect(identityBox.y + identityBox.height).toBeLessThanOrEqual(
+    actionsBox.y + 1,
+  );
+  for (const control of [
+    header.getByRole('link', { name: 'Conversas', exact: true }),
+    header.getByRole('button', { name: 'Criar pedido', exact: true }),
+    header.getByRole('button', { name: 'Mais ações', exact: true }),
+    header.getByRole('button', {
+      name: 'Detalhes do atendimento',
+      exact: true,
+    }),
+  ]) {
+    await expect(control).toBeInViewport({ ratio: 1 });
+    expect((await control.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+  }
+  await expect(
+    page.getByRole('textbox', { name: 'Responder', exact: true }),
+  ).toBeInViewport({ ratio: 1 });
+  await expect(
+    page.getByRole('button', { name: 'Enviar resposta', exact: true }),
+  ).toBeInViewport({ ratio: 1 });
+  expect(
+    await page.evaluate(() => ({
+      horizontal:
+        globalThis.document.documentElement.scrollWidth <=
+        globalThis.innerWidth,
+      vertical:
+        globalThis.document.documentElement.scrollHeight <=
+        globalThis.innerHeight,
+    })),
+  ).toEqual({ horizontal: true, vertical: true });
+  expect(state.closes).toEqual([]);
+  expect(state.archives).toEqual([]);
+  expect(state.orderMutations).toEqual([]);
 });

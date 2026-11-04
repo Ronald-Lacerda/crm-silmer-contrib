@@ -1,5 +1,29 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## INBOX-UX-04 — refinamento aprovado da Caixa (04/11/2026)
+
+PCX-16a–h, PCX-14/15 e OA-03–10/12. Implementação autorizada após a revisão
+visual do protótipo V2 no chat. Vue, Router, tokens, contratos de API e
+comandos oficiais permanecem; sem migration, dependência ou infraestrutura.
+
+- [x] Filtros imediatos e ações ancoradas, com teclado, foco e fechamento
+      externo; mesmas capacidades, parâmetros, confirmações e filas oficiais.
+- [x] Sugestões fora da trilha, uma instância persistente por conversa,
+      evidência/decisão visíveis e utilidades em Atendimento; feedback tardio
+      acessível sem reabrir painel nem duplicar comandos.
+- [x] Resumo compacto, cores semânticas, navegação por ícone e ampliação sem
+      remontar histórico ou perder rascunho; composição responsiva.
+- [x] Gates completos, revisão independente, commit e push atômicos.
+- [ ] Conferir CI e SHA/health no ambiente implantado antes de afirmar
+      publicação operacional; observar vendedores sem mutações reais de teste.
+
+Evidência local: `npm run validate` (1.681 aprovados, 10 ignorados),
+E2E completo (476 aprovados, 7 ignorados), 18 cenários focais e auditoria sem
+alta/crítica. Revisão independente sem bloqueantes; conferência visual sintética
+em claro/escuro, desktop, celular e 320 px. Detalhes no runbook.
+
+Operação e rollback em [inbox-compacta](../../../docs/runbooks/inbox-compacta.md).
+
 ## OA-T01 — Abertura assistida de pedidos (03/11/2026)
 
 Implementação autorizada pelo proprietário: [OA-01–12](../order-assistance/spec.md),

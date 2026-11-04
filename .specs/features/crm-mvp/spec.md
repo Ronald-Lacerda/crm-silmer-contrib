@@ -40,6 +40,43 @@ Critérios e evidências sintéticas no
 [runbook](../../../docs/runbooks/inbox-prioridades.md). Testes sintéticos não
 substituem observação de vendedores reais ou homologação do canal.
 
+## Inbox refinada — PCX-16 (04/11/2026)
+
+Apresentação aprovada pelo proprietário após revisão do protótipo, tarefa
+INBOX-UX-04. Complementa PCX-14/15 e OA-12; não muda contratos REST, regras,
+ACL, filas, contagens, estados comerciais ou comandos de envio.
+
+- **PCX-16a:** busca, Atender/Fechar pedidos/Todas e filtros SHALL ficar na
+  coluna da lista. Filtros SHALL abrir junto ao acionador, com Situação e
+  Responsável aplicados imediatamente pelos mesmos parâmetros oficiais.
+  Escape e clique externo fecham sem desfazer seleções; foco permanece no
+  campo durante atualização e retorna ao acionador ao fechar por Escape.
+- **PCX-16b:** Mais ações SHALL abrir painel ancorado em camada superior,
+  com nomes, ícones e encerramento em cor semântica de erro. Capacidades,
+  confirmações, versões, ciência de pedido pendente e efeitos atuais permanecem.
+- **PCX-16c:** sugestão pendente SHALL aparecer aberta fora da trilha de
+  mensagens, com evidência e Criar pedido/Ainda não/Não vai seguir. Recolher
+  SHALL preservar formulário, motivo e estado em andamento. O componente
+  SHALL existir uma vez por conversa; histórico, bloqueios e omissão ficam
+  em Atendimento sob demanda, preservando OA-03–10/12.
+- **PCX-16d:** resumo SHALL iniciar compacto, preservar acesso ao texto
+  completo e deixar avisos comerciais e vendedor solicitado perceptíveis.
+  Ficha/preenchimento do agente SHALL ser identificado como dados coletados,
+  sem afirmar prontidão ou confirmação comercial.
+- **PCX-16e:** ampliar conversa SHALL liberar o espaço da lista sem remontar
+  o histórico, trocar endereço, apagar rascunho ou alterar filtros. Reflow
+  móvel SHALL preservar a navegação lista/conversa e o compositor disponível.
+- **PCX-16f:** controle de expandir/recolher navegação SHALL usar só ícone,
+  nome acessível, dica e estado. Preferência manual continua persistida; na
+  Inbox expandida a navegação sobrepõe a lista sem estreitar a conversa.
+- **PCX-16g:** atenção/pendência, informação/sugestão, sucesso e erro SHALL
+  usar tokens semânticos atuais com texto/ícone, sem depender só de cor.
+  Laranja permanece reservado às ações primárias; seleção continua neutra.
+- **PCX-16h:** teclado, foco, claro/escuro, toque de 44 px e reflow SHALL
+  manter compositor e histórico utilizáveis com resumo, evidência e várias
+  sugestões longas. Fechar Atendimento durante decisão não cancela nem repete
+  o comando; feedback tardio aparece fora do painel fechado sem reabri-lo.
+
 ## Exceção vigente — ponte Evolution/Baileys
 
 A [ADR 050](../../../docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md)

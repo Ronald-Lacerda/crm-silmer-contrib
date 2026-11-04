@@ -535,7 +535,8 @@ test('INBOX-UX-02: unsupported has a plain reason beside the chat and preserves 
   expect(writes).toEqual([]);
   // The change preserves commercially useful information for other handoffs.
   await page.goto('/inbox/pending-ready');
-  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
   await expect(
     page.getByRole('region', { name: 'Resumo da transferência' }),
   ).toContainText('Rever o prazo com o cliente.');
@@ -623,7 +624,7 @@ test('INBOX-UX-02: legacy data does not invent an elapsed wait or an unread sign
   await expect(row(page, 'legacy')).not.toContainText(/não lid[ao]|atrasad/iu);
 });
 
-test('INBOX-UX-02: filter sheet still exposes situation and owner and restores focus', async ({
+test('INBOX-UX-04: anchored filters expose situation and owner and restore focus', async ({
   page,
 }) => {
   await setup(page);
@@ -633,8 +634,9 @@ test('INBOX-UX-02: filter sheet still exposes situation and owner and restores f
   await page.keyboard.press('Enter');
   const sheet = page.getByRole('dialog', { name: 'Filtrar conversas' });
   await expect(sheet).toBeVisible();
-  await expect(sheet.getByRole('group', { name: 'Situação' })).toBeVisible();
-  await expect(sheet.getByRole('group', { name: 'Responsável' })).toBeVisible();
+  await expect(sheet.getByLabel('Situação', { exact: true })).toBeVisible();
+  await expect(sheet.getByLabel('Responsável', { exact: true })).toBeVisible();
+  await expect(sheet).not.toHaveAttribute('aria-modal', 'true');
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
   await expect(filters).toBeFocused();
@@ -683,3 +685,81 @@ for (const theme of ['light', 'dark']) {
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   });
 }
+
+test('INBOX-UX-04: an immediate filter keeps focus while its official list is loading', async ({
+  page,
+}) => {
+  const { writes } = await setup(page);
+  let release = () => {};
+  const pending = new Promise((resolve) => {
+    release = () => resolve(undefined);
+  });
+  await page.route('**/api/v1/inbox/conversations?**', async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    if (params.get('workQueue') === 'closing' && params.get('limit') !== '1')
+      await pending;
+    await route.fallback();
+  });
+  await page.goto('/inbox');
+  const filters = page.getByRole('button', { name: 'Filtros', exact: true });
+  await filters.click();
+  const popover = page.getByRole('dialog', { name: 'Filtrar conversas' });
+  const situation = popover.getByLabel('Situação', { exact: true });
+  try {
+    const requested = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return (
+        url.pathname === '/api/v1/inbox/conversations' &&
+        url.searchParams.get('workQueue') === 'closing' &&
+        url.searchParams.get('limit') !== '1'
+      );
+    });
+    await situation.selectOption({ label: 'Fechar pedidos' });
+    await requested;
+    await expect(situation).toBeFocused();
+    await expect(popover).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden();
+    await expect(filters).toBeFocused();
+  } finally {
+    release();
+  }
+  await expect(
+    page
+      .getByRole('group', { name: 'Atalhos da Caixa' })
+      .getByRole('button', { name: /^Fechar pedidos/u }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(row(page, 'pending-ready')).toBeVisible();
+  await expect(filters).toBeFocused();
+  expect(writes).toEqual([]);
+});
+
+test('INBOX-UX-04: resizing an open filter to a phone closes it and leaves focus in the visible conversation', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const { writes } = await setup(page);
+  await page.goto('/inbox/ready');
+  await expect(page.locator('.inbox-conversation')).toBeVisible();
+  await page.getByRole('button', { name: 'Filtros', exact: true }).click();
+  const filters = page.getByRole('dialog', { name: 'Filtrar conversas' });
+  await expect(filters.getByLabel('Situação', { exact: true })).toBeFocused();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.inbox-list-pane')).toBeHidden();
+  await expect(filters).toBeHidden();
+  await expect
+    .poll(() =>
+      page
+        .locator('.inbox-conversation')
+        .evaluate((element) =>
+          element.contains(globalThis.document.activeElement),
+        ),
+    )
+    .toBe(true);
+  await expect(page.locator(':focus')).toBeVisible();
+  await expect(
+    page.getByRole('textbox', { name: 'Responder', exact: true }),
+  ).toBeInViewport({ ratio: 1 });
+  await expect(page).toHaveURL('/inbox/ready');
+  expect(writes).toEqual([]);
+});

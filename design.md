@@ -279,6 +279,24 @@ Cada componente precisa documentar: propósito, anatomia, variantes, estados, co
 
 ### Caixa de Entrada
 
+Apresentação refinada aprovada em 04/11/2026 (INBOX-UX-04, PCX-16a–h):
+na Inbox, rail de 56 px e topo de 48 px deixam mais espaço para o chat;
+expandir a navegação sobrepõe a lista e preserva a preferência manual. O
+acionador usa só ícone, nome acessível, dica e estado. Ampliar conversa libera
+a coluna da lista sem remontar histórico nem perder rascunho. Demais telas
+preservam seus tamanhos de shell.
+
+A lista concentra busca, Atender/Fechar pedidos/Todas e filtros. Filtros abre
+um painel ancorado com selects Situação/Responsável de aplicação imediata;
+Escape fecha mantendo a seleção e devolve foco. Mais ações também é ancorado
+nas larguras móvel e desktop, sem alterar capacidades ou confirmações.
+Sugestões ficam fora das mensagens, abertas quando pendentes e recolhíveis;
+histórico/omissão/bloqueios ficam em Atendimento, com uma única instância
+persistente. Resumo inicia compacto, preservando aviso comercial, vendedor
+solicitado e acesso ao texto completo. Estes pontos prevalecem sobre a
+apresentação anterior abaixo; contratos comerciais permanecem iguais.
+
+
 Workspace de altura fixa para a atendente (pesquisa UX de 15/10/2026, achado 1):
 a página ocupa exatamente a altura abaixo da barra superior e nunca rola; cada
 coluna rola por dentro.
