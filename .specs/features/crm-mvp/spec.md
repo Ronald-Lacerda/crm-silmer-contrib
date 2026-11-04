@@ -17,7 +17,8 @@ comerciais.
   pode ser removido por chip nomeado, preservando busca e links do Painel.
 - Vazio por filtro ou busca SHALL distinguir a causa e oferecer a recuperação
   correspondente. Buscar fora da visão de entrega informa a mudança de escopo;
-  o limite de até 100 conversas carregadas fica visível na busca da Inbox.
+  o alcance da busca nas conversas carregadas fica visível na Inbox; o total
+  carregado e a paginação seguem PCX-17, sem limite global implícito de 100.
 - Ação primária, continuidade, utilidade e navegação SHALL ter ênfases distintas;
   seleção, edição, prontidão, atenção e erro não dependem apenas de cor.
 - Sombra SHALL indicar sobreposição funcional; controles em repouso ficam planos.
@@ -25,13 +26,47 @@ comerciais.
 
 Entrega e evidências: [tarefa](tasks.md), [design](../../../design.md).
 
+## Inbox aberta em Todas — PCX-17 (04/11/2026)
+
+Tarefa INBOX-UX-05, solicitação do proprietário no chat. Emenda a entrada
+padrão de PCX-15a; as filas pessoais e capacidades permanecem existentes.
+
+- **PCX-17a:** sem filtro explícito na URL, a Caixa SHALL abrir em Todas,
+  sem restrição de responsável, agente ou situação. Inclui conversas de
+  outros vendedores e encerradas não arquivadas, respeitando conversation.read.
+  Arquivadas continuam no filtro próprio; links com fila/situação explícita
+  preservam a intenção. Todas/Atender/Fechar pedidos continuam refinamentos.
+- **PCX-17b:** Todas SHALL pedir `sort=urgency` à API, sem ordenar apenas a
+  página no navegador. A prioridade SHALL ser: falha/incerteza de envio;
+  transferência por urgência ainda aguardando atendimento/resposta; espera
+  humana/transferência pendente; pedido pronto para revisão; demais ativas
+  humanas; agente; terminais/arquivadas. Dentro do grupo, posição operacional
+  mais antiga e ID desempatarão. Encerradas/arquivadas não sobem por falha antiga.
+  Não inferir prazo por texto livre, pré-ficha ou dados ausentes.
+- **PCX-17c:** ordenação SHALL anteceder LIMIT; cursor assinado SHALL vincular
+  ordenação, filtros e ator autenticado. Total oficial SHALL contar o universo
+  filtrado sem transformar ordenação em fila pessoal. Chamadas sem sort
+  preservam ordem/cursor anteriores, inclusive Atender/Fechar pedidos.
+- **PCX-17d:** próximo cursor SHALL permitir Ver mais conversas até esgotar
+  o universo acessível, com ordem preservada, sem repetir IDs. Filtros,
+  recarregamento e troca de escopo SHALL invalidar páginas antigas em trânsito.
+  Falha de página adicional preserva lista, rascunho e retry; busca identifica
+  que alcança apenas conversas carregadas. Teclado e foco continuam utilizáveis.
+- **PCX-17e:** ler, filtrar e paginar SHALL NOT assumir, enviar, reenviar,
+  criar pedido, alterar estado ou ampliar permissões de mutação. Os critérios
+  de pedido pronto e espera humana de PCX-15 permanecem oficiais.
+- **PCX-17f:** os botões de refinamento SHALL distinguir seleção, rótulo e
+  contagem oficial, sem depender só de cor. Todas lidera o grupo; contagens
+  ficam alinhadas e o estado do botão Filtros indica abertura/filtro aplicado.
+  Toque, foco visível, temas e leitura até 320 px permanecem utilizáveis.
+
 ## Inbox orientada ao vendedor — PCX-15 (03/11/2026)
 
 Autorizada pelo proprietário no chat; tarefa INBOX-UX-02. Complementa INBOX-4,
 AGT-03/05 e emenda PCX-03/13/14 de
 [pedidos-mvp](../pedidos-mvp/spec.md). Não cria estados comerciais ou de leitura.
 
-- **PCX-15a:** a entrada padrão SHALL ser Atender, com handoffs sem responsável
+- **PCX-15a:** Atender SHALL reunir handoffs sem responsável
   e ações pendentes do próprio vendedor. Outro vendedor SHALL ficar fora dessa
   fila, inclusive quando quem consulta é administrador; Todas e os filtros de
   Situação/Responsável preservam a consulta e as capacidades anteriores.

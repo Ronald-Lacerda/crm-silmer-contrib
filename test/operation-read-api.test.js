@@ -689,3 +689,39 @@ test('AGENTE-OBS-01: the assistant performance is the manager panel; a plain sel
   assert.equal(context.statusCode, 200);
   await seller.api.close();
 });
+
+test('PCX-17: urgency sorting uses conversation.read and binds only the authenticated actor', async () => {
+  const reads = /** @type {any[]} */ ([]);
+  const { api, calls, headers } = harness({
+    async listInbox(/** @type {any} */ input, /** @type {any} */ access) {
+      reads.push({ input, access });
+      return { items: [], nextCursor: null, totalCount: 150 };
+    },
+  });
+  try {
+    const response = await api.inject({
+      headers,
+      method: 'GET',
+      url: '/api/v1/inbox/conversations?sort=urgency&archived=false&limit=1',
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().totalCount, 150);
+    assert.equal(calls[0][1].action, 'conversation.read');
+    assert.deepEqual(reads, [
+      {
+        input: { sort: 'urgency', archived: false, limit: 1 },
+        access: { actorId: 'operator-1' },
+      },
+    ]);
+    assert.equal(response.headers['cache-control'], 'private, no-cache');
+    const forged = await api.inject({
+      headers,
+      method: 'GET',
+      url: '/api/v1/inbox/conversations?sort=urgency&actorId=other',
+    });
+    assert.equal(forged.statusCode, 400);
+    assert.equal(reads.length, 1);
+  } finally {
+    await api.close();
+  }
+});

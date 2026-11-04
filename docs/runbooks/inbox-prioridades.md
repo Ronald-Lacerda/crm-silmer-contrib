@@ -5,9 +5,12 @@ em 03/11/2026: quem atender, maior espera e pedidos disponíveis para revisão f
 
 ## Comportamento
 
-Atender é a entrada padrão e reúne as ações do próprio vendedor e os handoffs
-sem dono. Todas mantém a consulta aos demais atendimentos; Situação e Responsável
-continuam na folha Filtros. Fechar pedidos usa um pedido elegível da conversa,
+Todas é a entrada padrão sem filtro explícito (INBOX-UX-05 / PCX-17).
+Inclui todos os atendimentos não arquivados autorizados: próprios, de outros
+vendedores, com o agente e encerrados. Atender continua reunindo ações do
+próprio vendedor e handoffs sem dono. Situação e Responsável refinam a lista
+no painel Filtros; Arquivadas permanece uma escolha explícita. Fechar pedidos
+usa um pedido elegível da conversa,
 pendente não teste, com validação persistida sem campos faltantes e peças,
 valor e condição válidos. Não representa probabilidade de venda. A confirmação
 continua na página do pedido e revalida versão, campos e autorização.
@@ -45,11 +48,40 @@ anteriores continuam nas mensagens. A leitura não autoriza reenvio. Arquivos
 indisponíveis preservam os avisos existentes junto ao arquivo. Nova não é
 recibo de leitura do vendedor.
 
-A lista carrega até 100 resultados e informa o total oficial quando maior;
-a busca continua limitada às conversas carregadas. Múltiplos assuntos usam
+A lista carrega páginas de até 100 resultados e informa o total oficial.
+Ver mais conversas permite percorrer o restante em ordem, sem duplicar IDs;
+a busca é limitada às conversas já carregadas e comunica esse alcance.
+Erro na próxima página preserva as conversas anteriores e oferece retry.
+Cursor inválido ou repetido oferece Atualizar lista, que reinicia sem cursor;
+se a atualização falhar, a ação e os dados anteriores permanecem disponíveis.
+Troca de filtro/escopo ou atualização invalida páginas antigas em trânsito. Múltiplos assuntos usam
 reviewOrder como alvo explícito pronto; order canônico permanece preservado.
 O header, link e resumo apontam ao mesmo alvo. Um pedido de outro ciclo só
 qualifica quando o responsável é o mesmo; nunca inferir alvo pelo texto.
+
+## Ordem de Todas — INBOX-UX-05
+
+`GET /api/v1/inbox/conversations?archived=false&sort=urgency` não aplica
+workQueue nem filtro oculto de responsável. A sessão autoriza a leitura e
+vincula o cursor, sem excluir atendimentos dos demais vendedores. Filtrar
+Responsável em Todas mantém a ordenação; Atender/Fechar pedidos e chamadas
+sem sort mantêm seus critérios anteriores.
+
+Prioridades: falha/incerteza de envio ainda efetiva; transferência por urgência
+que aguarda atendimento/resposta; espera humana/handoff pendente; pedido pronto
+para revisão; demais humanas; agente; terminais/arquivadas. A posição operacional
+mais antiga e ID desempatarão. Terminais/arquivadas não ganham prioridade por
+alerta histórico. Nenhum prazo é deduzido de resumo livre ou ficha cifrada.
+
+A ordenação é SQL antes de LIMIT. O cursor assinado de urgência transporta
+posição composta privada, vinculada a filtros/ordem/ator. Não reutilizar cursor
+após mudar escopo. O total continua global para o filtro; ordenar não altera
+permissões, estados nem inicia comandos.
+
+Rollback exige frontend e API compatíveis: o frontend anterior não pede sort e
+a API nova mantém esse contrato. Voltar primeiro o frontend; só depois a API.
+Uma UI nova sobre API antiga pode receber INVALID_REQUEST por sort; não retirar
+validação nem ocultar a falha. Não há migration nem decisões a desfazer.
 
 ## Validação sintética
 
@@ -88,3 +120,26 @@ pedido com dados autorizados; não enviar mensagens só para conferir layout.
 Rollback reimplanta a imagem anterior de API/frontend em conjunto. Não exige
 restaurar banco, reabrir conversa, desfazer claim ou repetir envio. A causa de
 um handoff unsupported real é investigação própria do workflow/telemetria.
+
+
+## Evidência local — INBOX-UX-05
+
+`npm run validate` aprovado com 1.690 testes aprovados e 10 ignorados.
+E2E completo: 484 aprovados, 7 ignorados pela configuração existente.
+Após o ajuste de recuperação, `inbox-priorities.spec.js`: 21 aprovados,
+incluindo INVALID_CURSOR → atualização503 → nova atualização bem-sucedida,
+sem perder itens/rascunho/foco nem repetir o cursor inválido. A consulta não
+executa comandos de domínio. Formatação, lint, typecheck, tokens e diff-check
+passaram. Auditoria: zero alta/crítica; baixas/moderadas preexistentes.
+
+Revisão independente backend/frontend/QA sem bloqueantes remanescentes.
+Inspeção visual em 1366×768, 390×844 e 320×700, nos dois temas, com dados
+sintéticos e sem erros de runtime/mutações; detector sem achados. Botões
+usam seleção por marca/peso/superfície, contagens alinhadas e alvos de toque.
+
+Sem PostgreSQL/Docker/WSL disponível localmente, o teste real adicionado em
+`test/operation-read-postgres-live.test.js` depende do gate PostgreSQL do CI.
+Ele cobre grupos e posições empatadas com microssegundos, paginação completa,
+total global, outros responsáveis, agente, terminais e cursor por escopo/ator.
+Não declarar implantação apenas com estes testes: publicar API compatível
+antes do frontend e conferir CI, SHA/health e bundle servido no alvo.

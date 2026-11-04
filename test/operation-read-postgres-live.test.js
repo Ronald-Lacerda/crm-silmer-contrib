@@ -938,6 +938,276 @@ if (connectionString) {
           .conversation.hasPendingOrder,
         false,
       );
+
+      // PCX-17 / INBOX-UX-05: a global ranked read is ordered before LIMIT,
+      // including other owners, agent conversations and closed cycles.
+      const otherSeller = `urgency-other-${runId}`;
+      await pool.query(
+        `INSERT INTO crm.users (id,email,password_hash,name)
+         VALUES ($1,$2,'$argon2id$synthetic','Outro vendedor sintético')`,
+        [otherSeller, `${otherSeller}@example.test`],
+      );
+      await pool.query(
+        "INSERT INTO crm.user_functions (user_id,function_name) VALUES ($1,'Vendedor')",
+        [otherSeller],
+      );
+      const rankIds = /** @type {Record<string, string>} */ ({});
+      /** @param {string} label @param {boolean} [human] */
+      const rankedConversation = async (label, human = true) => {
+        const id = await openConversation(
+          `rank-${label}`,
+          '2026-09-08T06:00:00.000Z',
+        );
+        rankIds[label] = id;
+        if (human)
+          await pool.query(
+            "UPDATE crm.conversations SET automation_state='human',assigned_user_id=$2 WHERE id=$1",
+            [id, otherSeller],
+          );
+        return id;
+      };
+      const delivery = await rankedConversation('delivery');
+      await addMessage(
+        delivery,
+        'rank-failure',
+        'outbound',
+        'human',
+        '2026-09-08T14:00:00.000Z',
+        'outcome_unknown',
+      );
+      await addMessage(
+        delivery,
+        'rank-queued',
+        'outbound',
+        'human',
+        '2026-09-08T14:01:00.000Z',
+        'queued',
+      );
+      const urgent = await rankedConversation('urgent', false);
+      await insertHandoff(
+        'rank-urgent',
+        urgent,
+        'urgency',
+        '2026-09-08T11:00:00.000Z',
+        'pending',
+      );
+      const pendingA = await rankedConversation('pending-a', false);
+      const pendingB = await rankedConversation('pending-b', false);
+      for (const [label, id] of [
+        ['a', pendingA],
+        ['b', pendingB],
+      ])
+        await insertHandoff(
+          `rank-pending-${label}`,
+          id,
+          'customer_requested_human',
+          label === 'a'
+            ? '2026-09-08T09:00:00.000111Z'
+            : '2026-09-08T09:00:00.000999Z',
+          'pending',
+        );
+      const legacyWait = await rankedConversation('legacy-wait');
+      assert.equal(
+        (await reads.getConversation({ conversationId: legacyWait }))
+          .conversation.waitingSince,
+        null,
+      );
+      const humanWait = await rankedConversation('human-wait');
+      await addMessage(
+        humanWait,
+        'rank-human-answered',
+        'outbound',
+        'human',
+        '2026-09-08T12:00:00.000Z',
+      );
+      await addMessage(
+        humanWait,
+        'rank-human-unanswered',
+        'inbound',
+        'contact',
+        '2026-09-08T13:00:00.000Z',
+      );
+      await addMessage(
+        humanWait,
+        'rank-human-bot',
+        'outbound',
+        'assistant',
+        '2026-09-08T15:00:00.000Z',
+      );
+      const ready = await rankedConversation('ready');
+      await addMessage(
+        ready,
+        'rank-ready-answered',
+        'outbound',
+        'human',
+        '2026-09-08T12:00:00.000Z',
+      );
+      await insertOrder(20, ready, 'pendente');
+      await pool.query(
+        "UPDATE crm.orders SET missing_fields='{}',total_pieces=1,final_amount_cents=1000,payment_condition='pix' WHERE id=$1",
+        [`order-20-${runId}`],
+      );
+      const activeHuman = await rankedConversation('active-human');
+      await addMessage(
+        activeHuman,
+        'rank-active-answered',
+        'outbound',
+        'human',
+        '2026-09-08T12:00:00.000Z',
+      );
+      const urgentAnswered = await rankedConversation('urgent-answered');
+      await insertHandoff(
+        'rank-urgent-answered',
+        urgentAnswered,
+        'urgency',
+        '2026-09-08T09:00:00.000Z',
+        'accepted',
+      );
+      await addMessage(
+        urgentAnswered,
+        'rank-urgent-answered',
+        'outbound',
+        'human',
+        '2026-09-08T12:00:00.000Z',
+      );
+      const agent = await rankedConversation('agent', false);
+      const closed = await rankedConversation('closed');
+      await addMessage(
+        closed,
+        'rank-closed-failure',
+        'outbound',
+        'human',
+        '2026-09-08T16:00:00.000Z',
+        'failed',
+      );
+      await pool.query(
+        "UPDATE crm.conversations SET state='encerrada',terminal_at=$2,closure_outcome='concluido',closed_by=$3 WHERE id=$1",
+        [closed, '2026-09-08T16:01:00.000Z', otherSeller],
+      );
+      const archivedFailure = await rankedConversation('archived');
+      await addMessage(
+        archivedFailure,
+        'rank-archived-failure',
+        'outbound',
+        'human',
+        '2026-09-08T16:00:00.000Z',
+        'failed',
+      );
+      await pool.query(
+        'UPDATE crm.conversations SET archived_at=$2 WHERE id=$1',
+        [archivedFailure, NOW],
+      );
+      const urgencyInput = { sort: 'urgency', limit: 100 };
+      const access = { actorId: sellerId };
+      const ranked = await reads.listInbox(urgencyInput, access);
+      const expectedRanked = [
+        delivery,
+        urgent,
+        legacyWait,
+        ...[pendingA, pendingB].sort(),
+        humanWait,
+        ready,
+        ...[activeHuman, urgentAnswered].sort(),
+        agent,
+        closed,
+      ];
+      const newIds = new Set(Object.values(rankIds));
+      assert.deepEqual(
+        ranked.items
+          .filter((/** @type {any} */ item) => newIds.has(item.id))
+          .map((/** @type {any} */ item) => item.id),
+        expectedRanked,
+      );
+      assert.equal(
+        ranked.items.some(
+          (/** @type {any} */ item) => item.id === archivedFailure,
+        ),
+        false,
+      );
+      assert.equal(
+        ranked.items.find((/** @type {any} */ item) => item.id === delivery)
+          .assignedUser.id,
+        otherSeller,
+      );
+      assert.equal(ranked.totalCount, ranked.items.length);
+      assert.equal(
+        (await reads.listInbox({}, access)).totalCount,
+        ranked.totalCount,
+        'sort adds no hidden filter',
+      );
+      const seen = /** @type {string[]} */ ([]);
+      let rankedCursor = /** @type {string|null} */ (null);
+      do {
+        const page = await reads.listInbox(
+          {
+            sort: 'urgency',
+            limit: 1,
+            ...(rankedCursor ? { cursor: rankedCursor } : {}),
+          },
+          access,
+        );
+        assert.equal(page.totalCount, ranked.totalCount);
+        assert.equal(page.items.length, 1);
+        seen.push(page.items[0].id);
+        rankedCursor = page.nextCursor;
+        assert.equal(
+          new Set(seen).size,
+          seen.length,
+          'keyset must not repeat ties or previous groups',
+        );
+        assert.ok(seen.length <= ranked.totalCount);
+      } while (rankedCursor);
+      assert.deepEqual(
+        seen,
+        ranked.items.map((/** @type {any} */ item) => item.id),
+        'limit=1 reaches every rank and equal-position tie',
+      );
+      const firstRanked = await reads.listInbox(
+        { sort: 'urgency', limit: 1 },
+        access,
+      );
+      assert.ok(firstRanked.nextCursor);
+      for (const [
+        input,
+        actorId,
+      ] of /** @type {Array<[Record<string, any>, string]>} */ ([
+        [{}, sellerId],
+        [{ sort: 'urgency' }, otherSeller],
+        [{ sort: 'urgency', assignedUserId: otherSeller }, sellerId],
+      ]))
+        await assert.rejects(
+          reads.listInbox(
+            { ...input, cursor: firstRanked.nextCursor },
+            { actorId },
+          ),
+          { code: 'INVALID_CURSOR' },
+        );
+      const archivedUrgency = await reads.listInbox(
+        { sort: 'urgency', archived: true },
+        access,
+      );
+      assert.ok(
+        archivedUrgency.items.some(
+          (/** @type {any} */ item) => item.id === archivedFailure,
+        ),
+      );
+      assert.equal(
+        archivedUrgency.totalCount,
+        (await reads.listInbox({ archived: true })).totalCount,
+      );
+      const explicitOwner = await reads.listInbox(
+        { sort: 'urgency', assignedUserId: otherSeller },
+        access,
+      );
+      assert.equal(
+        explicitOwner.totalCount,
+        (await reads.listInbox({ assignedUserId: otherSeller })).totalCount,
+      );
+      assert.ok(
+        explicitOwner.items.every(
+          (/** @type {any} */ item) => item.assignedUser.id === otherSeller,
+        ),
+      );
     } finally {
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');

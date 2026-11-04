@@ -193,7 +193,11 @@ async function setup(page, options = {}) {
     if (path === '/api/v1/inbox/conversations') {
       queries.push(Object.fromEntries(url.searchParams));
       const queue = url.searchParams.get('workQueue');
-      let matches = items;
+      let matches = items.filter(
+        (item) =>
+          Boolean(item.archivedAt) ===
+          (url.searchParams.get('archived') === 'true'),
+      );
       if (queue === 'attention')
         matches = matches.filter(
           (item) =>
@@ -221,16 +225,25 @@ async function setup(page, options = {}) {
           (item) =>
             (item.handoff?.status === 'pending') === (handoff === 'true'),
         );
-      matches = [...matches].sort((left, right) =>
-        String(left.queuePosition ?? '').localeCompare(
-          String(right.queuePosition ?? ''),
-        ),
-      );
+      // The urgency fixture is already in the official wire order; the UI
+      // must preserve it rather than deriving a second priority model.
+      if (url.searchParams.get('sort') !== 'urgency')
+        matches = [...matches].sort((left, right) =>
+          String(left.queuePosition ?? '').localeCompare(
+            String(right.queuePosition ?? ''),
+          ),
+        );
       const totalCount =
         options.totalCounts?.[queue ?? 'all'] ?? matches.length;
       const limit = Number(url.searchParams.get('limit') ?? 100);
+      const start =
+        url.searchParams.get('cursor') === 'synthetic-next' ? 100 : 0;
       return route.fulfill({
-        json: { items: matches.slice(0, limit), totalCount, nextCursor: null },
+        json: {
+          items: matches.slice(start, start + limit),
+          totalCount,
+          nextCursor: matches.length > start + limit ? 'synthetic-next' : null,
+        },
       });
     }
     if (path.endsWith('/subjects'))
@@ -321,11 +334,11 @@ function row(page, id) {
   return page.locator(`.conversation-row[data-conversation-id="${id}"]`);
 }
 
-test('INBOX-UX-02: starts with actionable customers, oldest wait first, in two lines', async ({
+test('INBOX-UX-02: explicit Atender shows actionable customers, oldest wait first, in two lines', async ({
   page,
 }, testInfo) => {
   const { queries } = await setup(page);
-  await page.goto('/inbox');
+  await page.goto('/inbox?situacao=atender');
   await expect(
     page.getByRole('group', { name: 'Atalhos da Caixa' }).getByRole('button', {
       name: /^Atender/u,
@@ -418,15 +431,63 @@ test('INBOX-UX-02: global closing filter uses official readiness and API totals'
   expect(writes).toEqual([]);
 });
 
-test('INBOX-UX-02: All retains other owners, automation and terminal context without granting actions', async ({
+test('INBOX-UX-05: defaults to Todas in official urgency order, retaining other owners, automation and terminal context', async ({
   page,
 }) => {
-  const { queries, writes } = await setup(page);
+  const existing = fixtures();
+  const ids = [
+    'unsupported',
+    'pending-ready',
+    'reply',
+    'incomplete',
+    'unproven',
+    'ready',
+    'other',
+    'assistant',
+    'closed',
+  ];
+  const failed = conversation('failed', {
+    deliveryIssue: { status: 'failed', occurredAt: '2026-11-03T11:55:00.000Z' },
+    requiresAttention: true,
+    updatedAt: '2026-11-03T11:59:00.000Z',
+  });
+  const urgent = conversation('urgent', {
+    assignedUser: null,
+    handoff: pending('urgent', 'urgency', '2026-11-03T11:40:00.000Z'),
+    waitingSince: '2026-11-03T11:40:00.000Z',
+    queuePosition: '2026-11-03T11:40:00.000Z',
+  });
+  // The fixed wire sequence comes from the official API priority groups.
+  // It intentionally differs from waiting/updatedAt order: no local resort.
+  const ordered = [
+    failed,
+    urgent,
+    ...ids.map((id) => {
+      const item = existing.find((candidate) => candidate.id === id);
+      if (!item) throw new Error(`Missing fixture ${id}`);
+      return item;
+    }),
+  ];
+  const { queries, writes } = await setup(page, {
+    items: [...ordered, conversation('archived', { archivedAt: NOW })],
+  });
   await page.goto('/inbox');
-  await page
-    .getByRole('group', { name: 'Atalhos da Caixa' })
-    .getByRole('button', { name: /^Todas/u })
-    .click();
+  const shortcuts = page.getByRole('group', { name: 'Atalhos da Caixa' });
+  await expect(shortcuts.getByRole('button').first()).toHaveText(/^Todas/u);
+  await expect(
+    shortcuts.getByRole('button', { name: /^Todas/u }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.inbox-list .conv-name')).toHaveText(
+    ordered.map((item) => item.contact.label),
+  );
+  await expect(row(page, 'archived')).toHaveCount(0);
+  await expect(page.locator('.inbox-list-summary')).toContainText(
+    'Mais urgentes primeiro',
+  );
+  await expect(page.getByRole('group', { name: 'Filtro:' })).toHaveCount(0);
+  await expect(
+    page.getByRole('dialog', { name: 'Filtrar conversas' }),
+  ).toBeHidden();
   await expect(row(page, 'other').locator('.conv-next-action')).toHaveText(
     'Com Colega sintético',
   );
@@ -438,7 +499,15 @@ test('INBOX-UX-02: All retains other owners, automation and terminal context wit
   );
   await expect
     .poll(() =>
-      queries.some((query) => query.limit !== '1' && !query.workQueue),
+      queries.some(
+        (query) =>
+          query.limit !== '1' &&
+          !query.workQueue &&
+          query.sort === 'urgency' &&
+          query.archived === 'false' &&
+          !query.assignedUserId &&
+          !query.unassignedHumanHandoff,
+      ),
     )
     .toBe(true);
   await row(page, 'other').click();
@@ -761,5 +830,343 @@ test('INBOX-UX-04: resizing an open filter to a phone closes it and leaves focus
     page.getByRole('textbox', { name: 'Responder', exact: true }),
   ).toBeInViewport({ ratio: 1 });
   await expect(page).toHaveURL('/inbox/ready');
+  expect(writes).toEqual([]);
+});
+
+test('INBOX-UX-05: optional owner filters retain urgency and clearing restores unrestricted Todas', async ({
+  page,
+}) => {
+  const { queries, writes } = await setup(page);
+  await page.goto('/inbox');
+  const filters = page.getByRole('button', { name: 'Filtros', exact: true });
+  await filters.click();
+  const panel = page.getByRole('dialog', { name: 'Filtrar conversas' });
+  const owner = panel.getByLabel('Responsável', { exact: true });
+  await expect(panel.getByLabel('Situação', { exact: true })).toHaveValue(
+    'all',
+  );
+  await owner.selectOption('mine');
+  await expect
+    .poll(() => queries.filter((query) => query.limit !== '1').at(-1))
+    .toMatchObject({
+      archived: 'false',
+      sort: 'urgency',
+      assignedUserId: OWNER,
+    });
+  await expect(row(page, 'other')).toHaveCount(0);
+  await owner.selectOption('unassignedHumanHandoff');
+  await expect
+    .poll(() => queries.filter((query) => query.limit !== '1').at(-1))
+    .toMatchObject({
+      archived: 'false',
+      sort: 'urgency',
+      unassignedHumanHandoff: 'true',
+    });
+  expect(
+    queries.filter((query) => query.limit !== '1').at(-1)?.assignedUserId,
+  ).toBeUndefined();
+  await page.keyboard.press('Escape');
+  await page
+    .getByRole('button', {
+      name: 'Remover filtro Sem responsável',
+      exact: true,
+    })
+    .click();
+  await expect
+    .poll(() => queries.filter((query) => query.limit !== '1').at(-1))
+    .toEqual({ archived: 'false', limit: '100', sort: 'urgency' });
+  await expect(row(page, 'other')).toBeVisible();
+  await expect(row(page, 'assistant')).toBeVisible();
+  await expect(row(page, 'closed')).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Filtro:' })).toHaveCount(0);
+  await expect(
+    page
+      .getByRole('group', { name: 'Atalhos da Caixa' })
+      .getByRole('button', { name: /^Todas/u }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  expect(writes).toEqual([]);
+});
+
+for (const [situation, queue, label] of [
+  ['atender', 'attention', 'Atender'],
+  ['fechar', 'closing', 'Fechar pedidos'],
+]) {
+  test(`INBOX-UX-05: explicit ${label} deep links retain their original queue`, async ({
+    page,
+  }) => {
+    const { queries, writes } = await setup(page);
+    await page.goto(`/inbox?situacao=${situation}`);
+    await expect(
+      page
+        .getByRole('group', { name: 'Atalhos da Caixa' })
+        .getByRole('button', { name: new RegExp(`^${label}`, 'u') }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await expect
+      .poll(() => queries.filter((query) => query.limit !== '1').at(-1))
+      .toEqual({ archived: 'false', limit: '100', workQueue: queue });
+    await expect(page.locator('.inbox-list-summary')).toContainText(
+      'Maior espera primeiro',
+    );
+    expect(writes).toEqual([]);
+  });
+}
+
+function paginatedItems() {
+  return Array.from({ length: 102 }, (_, index) =>
+    conversation(`paged-${String(index).padStart(3, '0')}`),
+  );
+}
+
+test('INBOX-UX-05: next page preserves official order, active conversation, draft and list scroll beyond 100', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const items = paginatedItems();
+  const { queries, writes } = await setup(page, { items });
+  await page.goto('/inbox/paged-000');
+  const reply = page.getByRole('textbox', { name: 'Responder', exact: true });
+  await reply.fill('Rascunho sintético preservado ao carregar mais.');
+  await expect(page.locator('.inbox-list .conv-name')).toHaveCount(100);
+  await expect(page.locator('.inbox-list-summary')).toContainText(
+    '100 de 102 conversas',
+  );
+  const more = page.getByRole('button', {
+    name: 'Ver mais conversas',
+    exact: true,
+  });
+  await more.scrollIntoViewIfNeeded();
+  await more.focus();
+  const before = await page
+    .locator('.inbox-list')
+    .evaluate((el) => el.scrollTop);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.inbox-list .conv-name')).toHaveText(
+    items.map((item) => item.contact.label),
+  );
+  await expect(row(page, 'paged-100')).toBeFocused();
+  await expect(reply).toHaveValue(
+    'Rascunho sintético preservado ao carregar mais.',
+  );
+  await expect(page).toHaveURL('/inbox/paged-000');
+  await expect(row(page, 'paged-000')).toHaveAttribute('aria-current', 'true');
+  expect(
+    await page.locator('.inbox-list').evaluate((el) => el.scrollTop),
+  ).toBeCloseTo(before, 0);
+  await expect(more).toHaveCount(0);
+  expect(queries).toContainEqual({
+    archived: 'false',
+    limit: '100',
+    sort: 'urgency',
+    cursor: 'synthetic-next',
+  });
+  expect(writes).toEqual([]);
+});
+
+test('INBOX-UX-05: changing filters aborts a pending page and excludes its late response', async ({
+  page,
+}) => {
+  const { queries, writes } = await setup(page, { items: paginatedItems() });
+  let release = () => {};
+  let responded = () => {};
+  const pendingPage = new Promise((resolve) => {
+    release = () => resolve(null);
+  });
+  const pageResponded = new Promise((resolve) => {
+    responded = () => resolve(null);
+  });
+  await page.route('**/api/v1/inbox/conversations?**', async (route) => {
+    if (!new URL(route.request().url()).searchParams.has('cursor'))
+      return route.fallback();
+    await pendingPage;
+    try {
+      await route.fulfill({
+        json: {
+          items: [conversation('stale-page')],
+          totalCount: 103,
+          nextCursor: null,
+        },
+      });
+    } finally {
+      responded();
+    }
+  });
+  await page.goto('/inbox');
+  const requested = page.waitForRequest((request) =>
+    new URL(request.url()).searchParams.has('cursor'),
+  );
+  await page
+    .getByRole('button', { name: 'Ver mais conversas', exact: true })
+    .click();
+  await requested;
+  const aborted = page.waitForEvent('requestfailed', (request) =>
+    new URL(request.url()).searchParams.has('cursor'),
+  );
+  await page
+    .getByRole('group', { name: 'Atalhos da Caixa' })
+    .getByRole('button', { name: /^Atender/u })
+    .click();
+  await aborted;
+  release();
+  await pageResponded;
+  await expect
+    .poll(
+      () => queries.filter((query) => query.limit !== '1').at(-1)?.workQueue,
+    )
+    .toBe('attention');
+  await expect(page.locator('.inbox-list .conv-name')).toHaveCount(100);
+  await expect(row(page, 'stale-page')).toHaveCount(0);
+  await expect(page.locator('.inbox-list-summary')).toContainText(
+    'Maior espera primeiro',
+  );
+  expect(writes).toEqual([]);
+});
+
+test('INBOX-UX-05: page failure keeps loaded rows and retry deduplicates without losing keyboard focus', async ({
+  page,
+}) => {
+  const items = paginatedItems();
+  const { writes } = await setup(page, { items });
+  const cursors = /** @type {string[]} */ ([]);
+  await page.route('**/api/v1/inbox/conversations?**', async (route) => {
+    const cursor = new URL(route.request().url()).searchParams.get('cursor');
+    if (!cursor) return route.fallback();
+    cursors.push(cursor);
+    if (cursors.length === 1)
+      return route.fulfill({
+        status: 503,
+        json: { error: { code: 'UNAVAILABLE' } },
+      });
+    return route.fulfill({
+      json: {
+        items: [items[99], items[100], items[101]],
+        totalCount: 103,
+        nextCursor: null,
+      },
+    });
+  });
+  await page.goto('/inbox');
+  const more = page.getByRole('button', {
+    name: 'Ver mais conversas',
+    exact: true,
+  });
+  await more.focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByRole('list', { name: 'Conversas' }).getByRole('alert'),
+  ).toContainText('as conversas já carregadas foram preservadas.');
+  await expect(more).toBeFocused();
+  await expect(page.locator('.inbox-list .conv-name')).toHaveCount(100);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.inbox-list .conv-name')).toHaveText(
+    items.map((item) => item.contact.label),
+  );
+  await expect(row(page, 'paged-099')).toHaveCount(1);
+  await expect(row(page, 'paged-100')).toBeFocused();
+  await expect(page.locator('.inbox-list-summary')).toContainText(
+    '102 de 103 conversas',
+  );
+  expect(cursors).toEqual(['synthetic-next', 'synthetic-next']);
+  expect(writes).toEqual([]);
+});
+
+test('INBOX-UX-05: a repeated cursor is reported without appending an invalid page', async ({
+  page,
+}) => {
+  const items = paginatedItems();
+  const { writes } = await setup(page, { items });
+  let requests = 0;
+  await page.route('**/api/v1/inbox/conversations?**', async (route) => {
+    if (!new URL(route.request().url()).searchParams.has('cursor'))
+      return route.fallback();
+    requests += 1;
+    return route.fulfill({
+      json: {
+        items: [items[100]],
+        totalCount: 102,
+        nextCursor: 'synthetic-next',
+      },
+    });
+  });
+  await page.goto('/inbox');
+  await page
+    .getByRole('button', { name: 'Ver mais conversas', exact: true })
+    .click();
+  await expect(
+    page.getByRole('list', { name: 'Conversas' }).getByRole('alert'),
+  ).toContainText('A lista mudou. Atualize a lista para continuar;');
+  await expect(page.locator('.inbox-list .conv-name')).toHaveCount(100);
+  await expect(row(page, 'paged-100')).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Atualizar lista', exact: true }),
+  ).toBeVisible();
+  expect(requests).toBe(1);
+  expect(writes).toEqual([]);
+});
+
+test('INBOX-UX-05: an invalid cursor offers a fresh first page without repeating it or losing the draft', async ({
+  page,
+}) => {
+  const items = paginatedItems();
+  const { writes } = await setup(page, { items });
+  const reads = /** @type {Array<string|null>} */ ([]);
+  let invalidSeen = false;
+  let recoveryFailures = 1;
+  await page.route('**/api/v1/inbox/conversations?**', async (route) => {
+    const params = new URL(route.request().url()).searchParams;
+    if (params.get('limit') === '100') reads.push(params.get('cursor'));
+    if (params.has('cursor')) {
+      invalidSeen = true;
+      return route.fulfill({
+        status: 400,
+        json: { error: { code: 'INVALID_CURSOR' } },
+      });
+    }
+    if (invalidSeen && params.get('limit') === '100' && recoveryFailures > 0) {
+      recoveryFailures -= 1;
+      return route.fulfill({
+        status: 503,
+        json: { error: { code: 'UNAVAILABLE' } },
+      });
+    }
+    return route.fallback();
+  });
+  await page.goto('/inbox/paged-000');
+  const reply = page.getByRole('textbox', { name: 'Responder', exact: true });
+  await reply.fill('Rascunho preservado depois do cursor inválido.');
+  await page
+    .getByRole('button', { name: 'Ver mais conversas', exact: true })
+    .click();
+  await expect(
+    page.getByRole('list', { name: 'Conversas' }).getByRole('alert'),
+  ).toContainText('A lista mudou.');
+  await expect(page.locator('.inbox-list .conv-name')).toHaveCount(100);
+  const refresh = page.getByRole('button', {
+    name: 'Atualizar lista',
+    exact: true,
+  });
+  await refresh.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('alert')).toContainText(
+    'Não foi possível atualizar a Caixa',
+  );
+  await expect(refresh).toBeFocused();
+  await expect(page.locator('.inbox-list .conv-name')).toHaveCount(100);
+  await expect(reply).toHaveValue(
+    'Rascunho preservado depois do cursor inválido.',
+  );
+  await page.keyboard.press('Enter');
+  await expect.poll(() => reads).toEqual([null, 'synthetic-next', null, null]);
+  await expect(refresh).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Ver mais conversas', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Ver mais conversas', exact: true }),
+  ).toBeFocused();
+  await expect(reply).toHaveValue(
+    'Rascunho preservado depois do cursor inválido.',
+  );
+  await expect(row(page, 'paged-000')).toHaveAttribute('aria-current', 'true');
+  await expect(page).toHaveURL('/inbox/paged-000');
   expect(writes).toEqual([]);
 });

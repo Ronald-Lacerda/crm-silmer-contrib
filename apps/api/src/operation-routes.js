@@ -256,6 +256,7 @@ export function registerOperationRoutes(api, operations, contextFor) {
         'cursor',
         'limit',
         'pendingHandoff',
+        'sort',
         'state',
         'unassignedHumanHandoff',
         'workQueue',
@@ -271,7 +272,9 @@ export function registerOperationRoutes(api, operations, contextFor) {
         .send(
           await operations.listInbox(
             input,
-            input.workQueue ? { actorId: access.actor.id } : undefined,
+            input.workQueue || input.sort === 'urgency'
+              ? { actorId: access.actor.id }
+              : undefined,
           ),
         );
     }),

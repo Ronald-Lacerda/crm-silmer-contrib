@@ -206,6 +206,11 @@ const WAITING_SINCE = `CASE WHEN handoff.status='pending' THEN handoff.created_a
               AND (human_reply.id IS NULL OR human_reply.occurred_at<takeover.occurred_at)
            THEN takeover.occurred_at
          WHEN human_reply.id IS NOT NULL THEN unanswered.since END END`;
+// A legacy human conversation can owe a reply without a reliable start for
+// its displayed wait. Keep that action distinct from inventing a duration.
+const AWAITING_HUMAN = `(handoff.status='pending'
+  OR (conversation.automation_state='human'
+    AND ((${WAITING_SINCE}) IS NOT NULL OR unanswered.since IS NOT NULL)))`;
 const DELIVERY_ISSUE = `CASE
   WHEN COALESCE(last_outbound.delivery_status,last_outbound.status) IN ('failed','outcome_unknown')
   THEN COALESCE(last_outbound.delivery_status,last_outbound.status) END`;
@@ -215,6 +220,24 @@ const QUEUE_POSITION = `COALESCE(${WAITING_SINCE},
 const PRIORITY_PROJECTION = `${WAITING_SINCE} waiting_since,
   ${QUEUE_POSITION} queue_position, ${DELIVERY_ISSUE} delivery_issue_status,
   last_outbound.occurred_at delivery_issue_at`;
+
+// PCX-17 / INBOX-UX-05: urgency is an ordering, never an ownership filter.
+// All inputs are official plain projections; no summary or ficha is decrypted
+// to infer urgency, deadlines or commercial readiness. Terminal/archive state
+// wins over stale handoffs, delivery failures and ready orders.
+const URGENCY_RANK = `CASE
+  WHEN conversation.archived_at IS NOT NULL OR conversation.terminal_at IS NOT NULL
+    OR conversation.state IN ('convertida_em_lead','sem_lead','encerrada') THEN 6
+  WHEN ${DELIVERY_ISSUE} IS NOT NULL THEN 0
+  WHEN handoff.reason_code='urgency'
+    AND ${AWAITING_HUMAN} THEN 1
+  WHEN ${AWAITING_HUMAN} THEN 2
+  WHEN review_order.id IS NOT NULL THEN 3
+  WHEN conversation.automation_state='human' THEN 4
+  ELSE 5 END`;
+const URGENCY_JOIN = `LEFT JOIN LATERAL (
+  SELECT ${URGENCY_RANK} rank, date_trunc('milliseconds', ${QUEUE_POSITION}) position
+) urgency ON true`;
 
 export class PostgresInboxReadRepository {
   /** @param {{database: {query: Function, transaction?: Function}, contactEnvelopeKey: Buffer, messageEnvelopeKey: Buffer}} options */
@@ -280,9 +303,7 @@ export class PostgresInboxReadRepository {
         if (input.workQueue === 'closing') {
           predicates.push('review_order.id IS NOT NULL');
         } else {
-          predicates.push(`(handoff.status='pending'
-            OR (conversation.automation_state='human'
-              AND ((${WAITING_SINCE}) IS NOT NULL OR unanswered.since IS NOT NULL))
+          predicates.push(`(${AWAITING_HUMAN}
             OR ${DELIVERY_ISSUE} IS NOT NULL)`);
         }
       }
@@ -290,22 +311,32 @@ export class PostgresInboxReadRepository {
       const countWhere = predicates.join(' AND ');
       // "Aguardando vendedor" puts the longest wait first; every other view
       // keeps the most recent message first.
+      const byUrgency = input.sort === 'urgency';
       const byWaitingTime =
         Boolean(input.workQueue) || input.pendingHandoff === true;
       const position = input.workQueue ? QUEUE_POSITION : 'handoff.created_at';
       const pagePredicates = [...predicates];
       if (input.after) {
-        values.push(input.after.updatedAt, input.after.id);
-        pagePredicates.push(
-          byWaitingTime
-            ? `(${position}, conversation.id) > ($${values.length - 1}::timestamptz, $${values.length})`
-            : `(conversation.last_message_at, conversation.id) < ($${values.length - 1}, $${values.length})`,
-        );
+        if (byUrgency) {
+          values.push(input.after.rank, input.after.updatedAt, input.after.id);
+          pagePredicates.push(
+            `(urgency.rank, urgency.position, conversation.id) > ($${values.length - 2}::integer, $${values.length - 1}::timestamptz, $${values.length})`,
+          );
+        } else {
+          values.push(input.after.updatedAt, input.after.id);
+          pagePredicates.push(
+            byWaitingTime
+              ? `(${position}, conversation.id) > ($${values.length - 1}::timestamptz, $${values.length})`
+              : `(conversation.last_message_at, conversation.id) < ($${values.length - 1}, $${values.length})`,
+          );
+        }
       }
       const where = pagePredicates.join(' AND ');
-      const orderBy = byWaitingTime
-        ? `${position} ASC, conversation.id ASC`
-        : 'conversation.last_message_at DESC, conversation.id DESC';
+      const orderBy = byUrgency
+        ? 'urgency.rank ASC, urgency.position ASC, conversation.id ASC'
+        : byWaitingTime
+          ? `${position} ASC, conversation.id ASC`
+          : 'conversation.last_message_at DESC, conversation.id DESC';
       values.push(input.limit + 1);
       const [page, count] = await Promise.all([
         database.query(
@@ -335,6 +366,7 @@ export class PostgresInboxReadRepository {
                   review_order.id review_order_id,review_order.number review_order_number,
                   review_order.status review_order_status,
                   ${PRIORITY_PROJECTION},
+                  ${byUrgency ? 'urgency.rank urgency_rank, urgency.position urgency_position,' : ''}
                   last_message.id last_message_id,
                   last_message.direction last_message_direction,
                   last_message.message_type last_message_type,
@@ -360,6 +392,7 @@ export class PostgresInboxReadRepository {
            ${CURRENT_ORDER_JOIN}
            ${REVIEW_ORDER_JOIN}
            ${WAITING_JOIN}
+           ${byUrgency ? URGENCY_JOIN : ''}
            LEFT JOIN LATERAL (
              SELECT message.id, message.direction, message.message_type,
                     message.content_envelope, message.status,
@@ -386,11 +419,20 @@ export class PostgresInboxReadRepository {
         ),
       ]);
       const hasMore = page.rows.length > input.limit;
+      const last = page.rows.slice(0, input.limit).at(-1);
       return {
         hasMore,
         items: page.rows
           .slice(0, input.limit)
           .map((/** @type {any} */ row) => mapConversationSummary(row, this)),
+        ...(byUrgency && last
+          ? {
+              nextPosition: {
+                rank: Number(last.urgency_rank),
+                updatedAt: new Date(last.urgency_position).toISOString(),
+              },
+            }
+          : {}),
         totalCount: Number(count.rows[0]?.count ?? 0),
       };
     });

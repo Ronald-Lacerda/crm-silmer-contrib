@@ -2106,7 +2106,7 @@ test('finds a new last message after the live event without moving search focus'
   ).toBeVisible();
   const search = page.locator('#inbox-search');
   await expect(page.locator('#inbox-search-help')).toContainText(
-    'até 100 conversas carregadas',
+    'nas conversas carregadas',
   );
   await search.fill('Mensagem nova');
   await expect(search).toBeFocused();
@@ -2180,9 +2180,9 @@ test('INBOX-UX-04 / PCX-14: anchored filters apply immediately and preserve offi
     shortcuts.getByRole('button', { name: new RegExp(`^${name}`, 'u') });
   const filters = page.getByRole('button', { name: 'Filtros', exact: true });
   await expect(shortcuts.getByRole('button')).toHaveText([
+    /^Todas\s*1$/u,
     /^Atender\s*1$/u,
     /^Fechar pedidos\s*0$/u,
-    /^Todas\s*1$/u,
   ]);
   await expect(
     page
@@ -2196,19 +2196,27 @@ test('INBOX-UX-04 / PCX-14: anchored filters apply immediately and preserve offi
   ).toBeVisible();
   await expect(page.locator('#inbox-search')).toBeVisible();
   await expect(page.locator('#inbox-queue')).toHaveCount(0);
-  await expect(shortcut('Atender')).toHaveAttribute('aria-pressed', 'true');
+  await expect(shortcut('Todas')).toHaveAttribute('aria-pressed', 'true');
   await expect(filters).toHaveAttribute('aria-haspopup', 'dialog');
   await expect(filters).toHaveAttribute('aria-expanded', 'false');
   expect(countQueries.slice(0, 2)).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ archived: 'false', workQueue: 'closing' }),
-      expect.objectContaining({ archived: 'false', limit: '1' }),
+      expect.objectContaining({
+        archived: 'false',
+        workQueue: 'attention',
+        limit: '1',
+      }),
     ]),
   );
   await selectInboxFilters(page, 'Todas', 'Minhas');
   await expect
     .poll(() => inboxQueries.at(-1))
-    .toMatchObject({ archived: 'false', assignedUserId: 'operator-1' });
+    .toMatchObject({
+      archived: 'false',
+      assignedUserId: 'operator-1',
+      sort: 'urgency',
+    });
   expect(inboxQueries.at(-1)?.workQueue).toBeUndefined();
   await selectInboxFilters(page, 'Aguardando vendedor', 'Todas');
   await expect
@@ -2332,7 +2340,7 @@ test('INBOX-UX-04 / PCX-14: anchored filters apply immediately and preserve offi
   await expect.poll(() => inboxQueries.length).toBeGreaterThan(beforeClear);
   await expect
     .poll(() => inboxQueries.at(-1))
-    .toEqual({ archived: 'false', limit: '100' });
+    .toEqual({ archived: 'false', limit: '100', sort: 'urgency' });
   expect(inboxQueries.at(-1)?.assignedUserId).toBeUndefined();
   expect(inboxQueries.at(-1)?.automationState).toBeUndefined();
   if (await popover.isVisible()) await page.keyboard.press('Escape');
@@ -2415,9 +2423,9 @@ test.describe('on a touch tablet', () => {
     ).toBe(true);
     const shortcuts = page.getByRole('group', { name: 'Atalhos da Caixa' });
     await expect(shortcuts.getByRole('button')).toHaveText([
+      /^Todas\s*1$/u,
       /^Atender\s*1$/u,
       /^Fechar pedidos\s*0$/u,
-      /^Todas\s*1$/u,
     ]);
     const buttons = await shortcuts.getByRole('button').all();
     const filters = page.getByRole('button', { name: /^Filtros/u });
@@ -2516,9 +2524,9 @@ test('PCX-14: an empty filter is not an empty Inbox and offers "Limpar filtros"'
   const list = page.getByRole('list', { name: 'Conversas' });
   // The count is the API's answer: 0 waiting, not a hidden number.
   await expect(shortcuts.getByRole('button')).toHaveText([
+    /^Todas\s*1$/u,
     /^Atender\s*1$/u,
     /^Fechar pedidos\s*0$/u,
-    /^Todas\s*1$/u,
   ]);
 
   await selectInboxFilters(page, 'Aguardando vendedor');
@@ -2558,9 +2566,9 @@ test('PCX-14: a total that fails to load is left out, never guessed', async ({
   await page.goto('/inbox');
   const shortcuts = page.getByRole('group', { name: 'Atalhos da Caixa' });
   await expect(shortcuts.getByRole('button')).toHaveText([
+    /^Todas\s*1$/u,
     /^Atender\s*1$/u,
     /^Fechar pedidos\s*$/u,
-    /^Todas\s*1$/u,
   ]);
   await expect(
     page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/ }),

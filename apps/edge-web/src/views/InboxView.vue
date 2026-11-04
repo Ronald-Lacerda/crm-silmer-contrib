@@ -100,6 +100,7 @@ const QUEUE_FILTERS = Object.freeze([
  * summary under the toolbar.
  */
 const SHORTCUTS = Object.freeze([
+  Object.freeze({ label: 'Todas', queue: 'all', tab: 'all', value: 'all' }),
   Object.freeze({
     label: 'Atender',
     queue: 'all',
@@ -112,7 +113,6 @@ const SHORTCUTS = Object.freeze([
     tab: 'closing',
     value: 'closing',
   }),
-  Object.freeze({ label: 'Todas', queue: 'all', tab: 'all', value: 'all' }),
 ]);
 const LIST_TIME = new Intl.DateTimeFormat('pt-BR', {
   hour: '2-digit',
@@ -143,6 +143,9 @@ const notify = inject('notify', () => {});
 
 const heading = ref(null);
 const searchInput = ref(null);
+const conversationList = ref(null);
+const listSummary = ref(null);
+const moreConversationsButton = ref(null);
 const replyInput = ref(null);
 const shippingQuote = ref(null);
 const takeoverButton = ref(null);
@@ -196,8 +199,7 @@ const ROUTE_QUEUE = Object.freeze({
   'sem-responsavel': 'unassignedHumanHandoff',
 });
 const stateTab = ref(
-  ROUTE_STATE_TAB[String(route.query.situacao ?? '')] ??
-    (route.query.situacao || route.query.fila ? 'all' : 'attention'),
+  ROUTE_STATE_TAB[String(route.query.situacao ?? '')] ?? 'all',
 );
 const queueFilter = ref(ROUTE_QUEUE[String(route.query.fila ?? '')] ?? 'all');
 const filtersButton = ref(null);
@@ -221,6 +223,10 @@ const deliveryCheckError = ref('');
 const deliveryCheckFailedId = ref('');
 const conversations = ref([]);
 const totalCount = ref(0);
+const nextCursor = ref('');
+const loadingMore = ref(false);
+const moreError = ref('');
+const moreNeedsRefresh = ref(false);
 const activeId = ref('');
 const detail = ref(null);
 const subjectState = ref(emptySubjects());
@@ -297,6 +303,8 @@ const assignableUsers = ref([]);
 // at whatever the first render happened to compute.
 const now = ref(new Date());
 let listController;
+let appendController;
+let listEpoch = 0;
 let countController;
 let detailController;
 let deliveryCheckController;
@@ -713,10 +721,12 @@ function shortcutCount(value) {
  * @param {{tab?: string, queue?: string}} [filter] the situation and the
  *   owner; the ones on screen by default
  * @param {number} [limit] 1 when only the total is wanted
+ * @param {string} [cursor] opaque cursor returned by the same official scope
  */
 function listUrl(
   { tab: tabValue = stateTab.value, queue = queueFilter.value } = {},
   limit = 100,
+  cursor = '',
 ) {
   const tab =
     STATE_TABS.find((item) => item.value === tabValue) ?? STATE_TABS[0];
@@ -724,6 +734,9 @@ function listUrl(
     archived: String(tab.archived === true),
     limit: String(limit),
   });
+  // PCX-17: Todas keeps the official urgency order, including owner filters.
+  if (tab.value === 'all') params.set('sort', 'urgency');
+  if (cursor) params.set('cursor', cursor);
   for (const [name, value] of Object.entries(tab.params)) {
     params.set(name, value);
   }
@@ -1263,6 +1276,14 @@ function describeError(cause) {
 
 /** @param {boolean} [silent] */
 async function loadInbox(silent = false) {
+  const restoreAppendFocus =
+    document.activeElement === moreConversationsButton.value;
+  listEpoch += 1;
+  appendController?.abort();
+  appendController = undefined;
+  loadingMore.value = false;
+  nextCursor.value = '';
+  moreError.value = '';
   listController?.abort();
   const controller = new AbortController();
   listController = controller;
@@ -1272,8 +1293,10 @@ async function loadInbox(silent = false) {
       signal: controller.signal,
     });
     if (controller !== listController) return;
+    moreNeedsRefresh.value = false;
     conversations.value = response.data.items;
     totalCount.value = response.data.totalCount;
+    nextCursor.value = response.data.nextCursor ?? '';
     if (
       activeShortcut.value &&
       (queueFilter.value !== 'mine' || currentUserId.value)
@@ -1296,7 +1319,92 @@ async function loadInbox(silent = false) {
         'Não foi possível atualizar a Caixa de Entrada. Os resultados exibidos podem estar desatualizados.';
     }
   } finally {
-    if (controller === listController) loading.value = false;
+    if (controller === listController) {
+      loading.value = false;
+      if (restoreAppendFocus && document.activeElement === document.body) {
+        await nextTick();
+        listSummary.value?.focus({ preventScroll: true });
+      }
+    }
+  }
+}
+
+/** PCX-17: append the official next page without disturbing the open conversation.
+ * @param {MouseEvent} event
+ */
+async function loadMoreConversations(event) {
+  if (loading.value || loadingMore.value) return;
+  if (moreNeedsRefresh.value) {
+    await loadInbox();
+    return;
+  }
+  if (!nextCursor.value) return;
+  const cursor = nextCursor.value;
+  const scope = listUrl();
+  const epoch = listEpoch;
+  const actor = currentUserId.value;
+  const trigger = event.currentTarget;
+  const controller = new AbortController();
+  appendController?.abort();
+  appendController = controller;
+  loadingMore.value = true;
+  moreError.value = '';
+  const isCurrent = () =>
+    controller === appendController &&
+    !controller.signal.aborted &&
+    epoch === listEpoch &&
+    actor === currentUserId.value &&
+    scope === listUrl();
+  try {
+    const response = await request(listUrl({}, 100, cursor), {
+      signal: controller.signal,
+    });
+    if (!isCurrent()) return;
+    const returnedCursor = response.data.nextCursor ?? '';
+    if (returnedCursor === cursor) throw new Error('CURSOR_DID_NOT_ADVANCE');
+    const known = new Set(conversations.value.map((item) => item.id));
+    const additions = response.data.items.filter((item) => {
+      if (known.has(item.id)) return false;
+      known.add(item.id);
+      return true;
+    });
+    const restoreFocus = document.activeElement === trigger;
+    const scrollTop = conversationList.value?.scrollTop ?? 0;
+    conversations.value = [...conversations.value, ...additions];
+    nextCursor.value = returnedCursor;
+    totalCount.value = response.data.totalCount;
+    if (
+      activeShortcut.value &&
+      (queueFilter.value !== 'mine' || currentUserId.value)
+    )
+      counts.value = {
+        ...counts.value,
+        [activeShortcut.value]: Number(response.data.totalCount),
+      };
+    await nextTick();
+    if (!isCurrent()) return;
+    if (conversationList.value) conversationList.value.scrollTop = scrollTop;
+    if (restoreFocus && !nextCursor.value) {
+      const firstNew = Array.from(
+        conversationList.value?.querySelectorAll('.conversation-row') ?? [],
+      ).find((element) =>
+        additions.some(
+          (item) => item.id === element.getAttribute('data-conversation-id'),
+        ),
+      );
+      (firstNew ?? listSummary.value)?.focus({ preventScroll: true });
+    }
+  } catch (cause) {
+    if (isCurrent() && /** @type {any} */ (cause)?.name !== 'AbortError') {
+      moreNeedsRefresh.value =
+        cause?.code === 'INVALID_CURSOR' ||
+        cause?.message === 'CURSOR_DID_NOT_ADVANCE';
+      moreError.value = moreNeedsRefresh.value
+        ? 'A lista mudou. Atualize a lista para continuar; as conversas já carregadas foram preservadas.'
+        : 'Não foi possível carregar mais conversas. Tente novamente; as conversas já carregadas foram preservadas.';
+    }
+  } finally {
+    if (controller === appendController) loadingMore.value = false;
   }
 }
 
@@ -2148,6 +2256,9 @@ onBeforeUnmount(() => {
   contactController?.abort();
   phoneQuery?.removeEventListener('change', phoneChanged);
   listController?.abort();
+  listEpoch += 1;
+  appendController?.abort();
+  appendController = undefined;
   countController?.abort();
   detailController?.abort();
   deliveryCheckController?.abort();
@@ -2189,6 +2300,7 @@ onBeforeUnmount(() => {
     <AnchoredPopover
       v-model:open="filtersOpen"
       :anchor="filtersButton"
+      id="inbox-filter-popover"
       class="inbox-filter-popover"
       label="Filtrar conversas"
       align="start"
@@ -2284,6 +2396,8 @@ onBeforeUnmount(() => {
             class="soft inbox-filters-button"
             aria-haspopup="dialog"
             aria-label="Filtros"
+            aria-controls="inbox-filter-popover"
+            title="Filtrar conversas"
             :aria-expanded="filtersOpen"
             :data-active="activeFilters.length ? 'true' : undefined"
             @click="openFilters"
@@ -2297,8 +2411,8 @@ onBeforeUnmount(() => {
             >
           </button>
           <AppHint id="inbox-search-help" class="inbox-search-hint"
-            >Busca nas até 100 conversas carregadas, pela última mensagem ou
-            contato.</AppHint
+            >Busca apenas nas conversas carregadas, por contato, telefone ou
+            última mensagem.</AppHint
           >
         </div>
         <div class="inbox-toolbar">
@@ -2312,7 +2426,8 @@ onBeforeUnmount(() => {
               :aria-pressed="activeShortcut === shortcut.value"
               @click="selectShortcut(shortcut)"
             >
-              {{ shortcut.label }}
+              <AppIcon name="check" class="inbox-tab-mark" />
+              <span class="inbox-tab-label">{{ shortcut.label }}</span>
               <span
                 v-if="shortcutCount(shortcut.value) !== null"
                 class="inbox-tab-count"
@@ -2352,17 +2467,30 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <p class="inbox-list-summary" role="status">
+        <p
+          ref="listSummary"
+          class="inbox-list-summary"
+          role="status"
+          tabindex="-1"
+        >
           {{ loading ? 'Carregando conversas…' : visibleConversationLabel }}
+          <span v-if="!loading && stateTab === 'all'">
+            · Mais urgentes primeiro</span
+          >
           <span
-            v-if="
+            v-else-if="
               !loading && ['attention', 'closing', 'waiting'].includes(stateTab)
             "
           >
             · Maior espera primeiro</span
           >
         </p>
-        <ul class="inbox-list" aria-label="Conversas" :aria-busy="loading">
+        <ul
+          ref="conversationList"
+          class="inbox-list"
+          aria-label="Conversas"
+          :aria-busy="loading || loadingMore"
+        >
           <li v-for="conversation in filtered" :key="conversation.id">
             <button
               type="button"
@@ -2399,6 +2527,24 @@ onBeforeUnmount(() => {
                   name="alert"
                 />{{ nextAction(conversation).label }}</span
               >
+            </button>
+          </li>
+          <li v-if="nextCursor || moreNeedsRefresh" class="empty-list">
+            <p v-if="moreError" role="alert">{{ moreError }}</p>
+            <button
+              ref="moreConversationsButton"
+              type="button"
+              class="quiet"
+              :aria-disabled="loading || loadingMore ? 'true' : undefined"
+              @click="loadMoreConversations"
+            >
+              {{
+                moreNeedsRefresh
+                  ? 'Atualizar lista'
+                  : loadingMore
+                    ? 'Carregando mais conversas…'
+                    : 'Ver mais conversas'
+              }}
             </button>
           </li>
           <li v-if="!loading && !filtered.length" class="empty-list">

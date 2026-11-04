@@ -217,3 +217,63 @@ test('INBOX-UX-02: actor, readiness and waiting predicates apply to page and glo
     assert.doesNotMatch(count.sql, /\(.*conversation\.id\) >/u);
   }
 });
+
+test('PCX-17: urgency uses rank/position/id before limit, with no implicit actor or active-state filter in page/count', async () => {
+  const { repository, calls } = harness([
+    syntheticRow({
+      urgency_rank: 2,
+      urgency_position: '2026-11-02T09:00:00.000Z',
+    }),
+  ]);
+  const result = await repository.list({
+    sort: 'urgency',
+    actorId: 'reader',
+    limit: 1,
+    after: { rank: 1, id: 'previous', updatedAt: '2026-11-02T09:00:00.000Z' },
+  });
+  const [page, count] = calls;
+  assert.deepEqual(page.values, [1, '2026-11-02T09:00:00.000Z', 'previous', 2]);
+  assert.deepEqual(count.values, []);
+  assert.match(
+    page.sql,
+    /ORDER BY urgency\.rank ASC, urgency\.position ASC, conversation\.id ASC\s+LIMIT \$4/u,
+  );
+  assert.match(
+    page.sql,
+    /\(urgency\.rank, urgency\.position, conversation\.id\) > \(\$1::integer, \$2::timestamptz, \$3\)/u,
+  );
+  assert.equal(
+    page.sql.indexOf('conversation.terminal_at IS NOT NULL') <
+      page.sql.indexOf('THEN 0'),
+    true,
+    'terminal/archive guard precedes effective failure',
+  );
+  assert.match(page.sql, /handoff\.reason_code='urgency'/u);
+  assert.match(page.sql, /date_trunc\('milliseconds', COALESCE/u);
+  assert.match(page.sql, /review_order\.id IS NOT NULL THEN 3/u);
+  assert.match(page.sql, /conversation\.automation_state='human' THEN 4/u);
+  assert.doesNotMatch(
+    count.sql,
+    /assigned_user_id|automation_state|state NOT IN|crm\.orders|crm\.messages|crm\.handoffs/u,
+  );
+  assert.doesNotMatch(
+    page.sql,
+    /assigned_user_id=\$|ficha_envelope|summary_envelope/u,
+  );
+  assert.deepEqual(result.nextPosition, {
+    rank: 2,
+    updatedAt: '2026-11-02T09:00:00.000Z',
+  });
+  assert.equal('urgency_rank' in result.items[0], false);
+  assert.equal(result.totalCount, 174);
+  const filtered = harness([]);
+  await filtered.repository.list({
+    sort: 'urgency',
+    archived: true,
+    assignedUserId: 'explicit-owner',
+    limit: 2,
+  });
+  assert.deepEqual(filtered.calls[1].values, ['explicit-owner']);
+  assert.match(filtered.calls[1].sql, /conversation\.archived_at IS NOT NULL/u);
+  assert.match(filtered.calls[1].sql, /conversation\.assigned_user_id = \$1/u);
+});

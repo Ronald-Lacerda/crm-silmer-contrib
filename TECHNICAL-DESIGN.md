@@ -205,6 +205,16 @@ reaplicação no restore têm gate T06.3/issue #3; auditoria não os substitui.
 
 ## 4. API e automação
 
+INBOX-UX-05 / PCX-17: a Inbox abre Todas e pede
+`GET /api/v1/inbox/conversations?archived=false&sort=urgency`.
+A API autoriza conversation.read, ordena o universo antes de LIMIT e emite
+cursor HMAC vinculado à ordenação, filtros e ator; ordenar não filtra por dono.
+A posição composta do cursor permanece privada. Sem sort, as ordenações e
+cursores anteriores permanecem válidos. A UI percorre nextCursor com
+Ver mais conversas, invalida páginas em trânsito ao trocar filtros/atualizar,
+e preserva lista, foco e rascunho após falha de página adicional.
+Contrato e rollback: [inbox-prioridades](docs/runbooks/inbox-prioridades.md).
+
 REST `/api/v1` segue o OpenAPI versionado. Os três endpoints n8n são inbound,
 attachment e events. Usam Basic Auth de serviço com `AUTOMATION_EXECUTOR`,
 idempotência, correlação e identificação de workflow. Credenciais n8n→CRM e

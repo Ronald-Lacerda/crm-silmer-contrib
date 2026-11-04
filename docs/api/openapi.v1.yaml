@@ -529,6 +529,17 @@ paths:
             com handoff pendente, ordenadas pelo tempo parado (a espera mais
             antiga primeiro); quando false, só conversas sem handoff pendente.
             Combina com os demais filtros.
+        - name: sort
+          in: query
+          schema: { type: string, enum: [urgency] }
+          description: >-
+            PCX-17 / INBOX-UX-05. Ordena todo o universo filtrado por prioridade
+            operacional antes de LIMIT, sem restringir ao responsável da sessão.
+            Falha/incerteza, transferência urgente aguardando ação, espera humana,
+            pedido pronto, demais humanas, agente e terminais; posição mais antiga
+            e ID desempatarão. Não infere prazos por texto livre. Cursor assinado
+            vincula ordem, filtros e ator; trocar escopo exige nova primeira página.
+            Sem sort, preserva a ordem anterior e as filas pessoais workQueue.
         - name: workQueue
           in: query
           schema: { type: string, enum: [attention, closing] }

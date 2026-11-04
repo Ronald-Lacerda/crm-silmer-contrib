@@ -237,6 +237,7 @@ export function createOperationReadService({
         'cursor',
         'limit',
         'pendingHandoff',
+        'sort',
         'state',
         'unassignedHumanHandoff',
         'workQueue',
@@ -252,6 +253,12 @@ export function createOperationReadService({
         if (input.archived === true || input.archived === 'true') {
           throw new OperationReadError(400, 'INVALID_FILTER');
         }
+      }
+      if (input.sort !== undefined) {
+        filters.sort = requireChoice(input.sort, new Set(['urgency']));
+        // Bind ranked cursors to the authenticated reader without restricting
+        // the all-conversations universe to that person's ownership.
+        filters.actorId = requireId(access.actorId, 'ACTOR_ID');
       }
       if (input.assignedUserId !== undefined) {
         filters.assignedUserId = requireId(
@@ -305,12 +312,14 @@ export function createOperationReadService({
         cursorKey,
         fingerprint,
         scope: 'inbox',
+        ranked: filters.sort === 'urgency',
       });
       const result = await inboxRepository.list({ after, ...filters, limit });
       return pageResponse(result, {
         cursorKey,
         fingerprint,
         scope: 'inbox',
+        ranked: filters.sort === 'urgency',
         // The waiting list is ordered by how long the handoff has waited,
         // so its cursor continues from that instant instead of the last message.
         ...(filters.workQueue
@@ -1190,7 +1199,7 @@ function readBooleanFilter(value) {
   return value === true || value === 'true';
 }
 
-/** @param {any} result @param {{cursorKey: Buffer, fingerprint: string, scope: string, position?: (item: any) => string}} context */
+/** @param {any} result @param {{cursorKey: Buffer, fingerprint: string, scope: string, ranked?: boolean, position?: (item: any) => string}} context */
 function pageResponse(result, context) {
   const items = result.items ?? [];
   const last = items.at(-1);
@@ -1199,9 +1208,11 @@ function pageResponse(result, context) {
     nextCursor:
       result.hasMore && items.length > 0
         ? encodeCursor(
-            context.position
-              ? { id: last.id, updatedAt: context.position(last) }
-              : last,
+            context.ranked
+              ? { id: last.id, ...result.nextPosition }
+              : context.position
+                ? { id: last.id, updatedAt: context.position(last) }
+                : last,
             context,
           )
         : null,
@@ -1209,12 +1220,13 @@ function pageResponse(result, context) {
   });
 }
 
-/** @param {any} value @param {{cursorKey: Buffer, fingerprint: string, scope: string}} context */
+/** @param {any} value @param {{cursorKey: Buffer, fingerprint: string, scope: string, ranked?: boolean}} context */
 function encodeCursor(value, context) {
   const payload = Buffer.from(
     JSON.stringify({
       fingerprint: context.fingerprint,
       id: value.id,
+      ...(context.ranked ? { rank: value.rank } : {}),
       scope: context.scope,
       updatedAt: value.updatedAt,
     }),
@@ -1226,7 +1238,7 @@ function encodeCursor(value, context) {
   return `${payload}.${signature}`;
 }
 
-/** @param {unknown} value @param {{cursorKey: Buffer, fingerprint: string, scope: string}} context */
+/** @param {unknown} value @param {{cursorKey: Buffer, fingerprint: string, scope: string, ranked?: boolean}} context */
 function readCursor(value, context) {
   if (value === undefined) return null;
   try {
@@ -1249,7 +1261,11 @@ function readCursor(value, context) {
     if (
       !parsed ||
       Object.keys(parsed).sort().join(',') !==
-        'fingerprint,id,scope,updatedAt' ||
+        (context.ranked
+          ? 'fingerprint,id,rank,scope,updatedAt'
+          : 'fingerprint,id,scope,updatedAt') ||
+      (context.ranked &&
+        (!Number.isSafeInteger(parsed.rank) || parsed.rank < 0)) ||
       parsed.fingerprint !== context.fingerprint ||
       parsed.scope !== context.scope ||
       requireId(parsed.id, 'CURSOR_ID') !== parsed.id ||
@@ -1257,7 +1273,11 @@ function readCursor(value, context) {
     ) {
       throw new Error();
     }
-    return Object.freeze({ id: parsed.id, updatedAt: parsed.updatedAt });
+    return Object.freeze({
+      id: parsed.id,
+      updatedAt: parsed.updatedAt,
+      ...(context.ranked ? { rank: parsed.rank } : {}),
+    });
   } catch {
     throw new OperationReadError(400, 'INVALID_CURSOR');
   }

@@ -44,6 +44,28 @@ AGT-06/10 e ORC-03/05, sob a ADR 052.
   canário comprova coleta, não evolução comercial. Sem backfill.
 - Commit/push e evidências operacionais registrados no handoff da entrega.
 
+## INBOX-UX-05 — Todas por urgência, filtros opcionais (04/11/2026)
+
+PCX-17a–f emenda a entrada padrão de PCX-15a. UI abre o universo não arquivado
+por urgência; as filas pessoais permanecem filtros explícitos. Sem migration,
+nova dependência, infraestrutura ou mudança nos comandos comerciais.
+
+- [x] Entrada Todas, filtros opcionais, links explícitos e ordem oficial.
+- [x] Botões refinados com seleção identificável, contagens alinhadas e temas.
+- [x] Ordenação antes da paginação, cursor assinado por ordem/filtro/ator,
+      total global e contratos anteriores preservados.
+- [x] Ver mais conversas, falha/retry, corrida de filtro e foco por teclado.
+- [x] Gates locais, revisão, commit e push atômicos.
+- [ ] CI e publicação verificadas no alvo antes de declarar implantação.
+
+Evidência local: validate aprovado (1.690 testes, 10 ignorados), suíte E2E
+completa com 484 aprovados/7 ignorados; depois da correção de recuperação,
+os 21 cenários de prioridades/paginação passaram. Auditoria sem alta/crítica,
+detector sem achados e revisão independente sem bloqueantes. O teste real
+PostgreSQL novo será executado no CI; não há banco/ferramenta local disponível.
+
+Contrato e operação em [inbox-prioridades](../../../docs/runbooks/inbox-prioridades.md).
+
 ## INBOX-UX-04 — refinamento aprovado da Caixa (04/11/2026)
 
 PCX-16a–h, PCX-14/15 e OA-03–10/12. Implementação autorizada após a revisão
