@@ -124,6 +124,9 @@
   .mobile-nav[data-finance] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .mobile-nav[data-finance][data-olist] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (pointer: coarse) {

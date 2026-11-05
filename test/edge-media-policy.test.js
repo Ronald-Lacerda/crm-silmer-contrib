@@ -22,80 +22,108 @@ function callbackReply(options = {}) {
   );
 }
 
-test('T138: callback smoke sends synthetic query and Referer and validates the real response boundary', async () => {
-  let fetched = false;
-  await checkOAuthCallback('http://127.0.0.1:8080', () => 'GET /healthz 200', {
-    fetch: async (url, init) => {
-      fetched = true;
-      const target = new URL(String(url));
-      assert.equal(target.pathname, '/melhor-envio');
-      assert.equal(target.searchParams.get('code'), 'synthetic-oauth-code');
-      assert.equal(target.searchParams.get('state'), 'synthetic-state');
-      assert.equal(
-        new globalThis.Headers(init?.headers).get('referer'),
-        'https://example.test/synthetic-oauth-referrer',
-      );
-      assert.equal(init?.redirect, 'error');
-      return callbackReply({
-        headers: { 'cache-control': 'private, no-store' },
-      });
-    },
+for (const path of [undefined, '/olist']) {
+  test(`T138/OLIST-T04: ${path ?? '/melhor-envio (default)'} smoke sends synthetic query and Referer and validates the response boundary`, async () => {
+    let fetched = false;
+    await checkOAuthCallback(
+      'http://127.0.0.1:8080',
+      () => 'GET /healthz 200',
+      {
+        path,
+        fetch: async (url, init) => {
+          fetched = true;
+          const target = new URL(String(url));
+          assert.equal(target.pathname, path ?? '/melhor-envio');
+          assert.equal(target.searchParams.get('code'), 'synthetic-oauth-code');
+          assert.equal(target.searchParams.get('state'), 'synthetic-state');
+          assert.equal(
+            new globalThis.Headers(init?.headers).get('referer'),
+            'https://example.test/synthetic-oauth-referrer',
+          );
+          assert.equal(init?.redirect, 'error');
+          return callbackReply({
+            headers: { 'cache-control': 'private, no-store' },
+          });
+        },
+      },
+    );
+    assert.equal(fetched, true);
   });
-  assert.equal(fetched, true);
-});
 
-test('T138: callback smoke fails if either log stream contains an OAuth or Referer marker', async () => {
-  for (const marker of [
-    'synthetic-oauth-code',
-    'synthetic-state',
-    'synthetic-oauth-referrer',
-  ])
-    for (const logs of [
-      `stdout: ${marker}\nstderr: clean`,
-      `stdout: clean\nstderr: ${marker}`,
+  test(`T138/OLIST-T04: ${path ?? '/melhor-envio'} smoke fails if either log stream contains an OAuth or Referer marker`, async () => {
+    for (const marker of [
+      'synthetic-oauth-code',
+      'synthetic-state',
+      'synthetic-oauth-referrer',
+    ])
+      for (const logs of [
+        `stdout: ${marker}\nstderr: clean`,
+        `stdout: clean\nstderr: ${marker}`,
+      ])
+        await assert.rejects(
+          checkOAuthCallback('http://127.0.0.1:8080', () => logs, {
+            path,
+            fetch: async () => callbackReply(),
+          }),
+          /OAuth markers must not enter nginx logs/u,
+        );
+  });
+
+  test(`T138/OLIST-T04: ${path ?? '/melhor-envio'} smoke rejects missing headers, caching, non-SPA HTML and redirects`, async () => {
+    for (const response of [
+      callbackReply({ headers: { 'content-security-policy': '' } }),
+      callbackReply({ headers: { 'referrer-policy': 'same-origin' } }),
+      callbackReply({ headers: { 'cache-control': '' } }),
+      callbackReply({ headers: { 'cache-control': 'public, max-age=60' } }),
+      callbackReply({
+        headers: { 'content-type': 'application/octet-stream' },
+      }),
+      callbackReply({ body: '<h1>Welcome to nginx!</h1>' }),
+      callbackReply({ status: 302 }),
+      callbackReply({
+        body: '<div id="app">Synthetic CRM SPA</div>synthetic-oauth-code',
+      }),
     ])
       await assert.rejects(
-        checkOAuthCallback('http://127.0.0.1:8080', () => logs, {
-          fetch: async () => callbackReply(),
+        checkOAuthCallback('http://127.0.0.1:8080', () => '', {
+          path,
+          fetch: async () => response,
         }),
-        /OAuth markers must not enter nginx logs/u,
       );
-});
-
-test('T138: callback smoke rejects missing headers, caching, non-SPA HTML and redirects', async () => {
-  for (const response of [
-    callbackReply({ headers: { 'content-security-policy': '' } }),
-    callbackReply({ headers: { 'referrer-policy': 'same-origin' } }),
-    callbackReply({ headers: { 'cache-control': '' } }),
-    callbackReply({ headers: { 'cache-control': 'public, max-age=60' } }),
-    callbackReply({ headers: { 'content-type': 'application/octet-stream' } }),
-    callbackReply({ body: '<h1>Welcome to nginx!</h1>' }),
-    callbackReply({ status: 302 }),
-    callbackReply({
-      body: '<div id="app">Synthetic CRM SPA</div>synthetic-oauth-code',
-    }),
-  ])
-    await assert.rejects(
-      checkOAuthCallback('http://127.0.0.1:8080', () => '', {
-        fetch: async () => response,
-      }),
-    );
-});
-
-test('T138: missing-index callback must stay a private 404 with inherited security headers', async () => {
-  await checkOAuthCallback('http://127.0.0.1:8080', () => '', {
-    expectedStatus: 404,
-    fetch: async () =>
-      callbackReply({ status: 404, body: '<h1>404 Not Found</h1>' }),
   });
-  await assert.rejects(
-    checkOAuthCallback('http://127.0.0.1:8080', () => 'synthetic-state', {
+
+  test(`T138/OLIST-T04: ${path ?? '/melhor-envio'} missing-index callback stays a private 404 with inherited security headers`, async () => {
+    await checkOAuthCallback('http://127.0.0.1:8080', () => '', {
+      path,
       expectedStatus: 404,
       fetch: async () =>
         callbackReply({ status: 404, body: '<h1>404 Not Found</h1>' }),
+    });
+    await assert.rejects(
+      checkOAuthCallback('http://127.0.0.1:8080', () => 'synthetic-state', {
+        path,
+        expectedStatus: 404,
+        fetch: async () =>
+          callbackReply({ status: 404, body: '<h1>404 Not Found</h1>' }),
+      }),
+      /OAuth markers must not enter nginx logs/u,
+    );
+  });
+}
+
+test('OLIST-T04: callback smoke rejects an unsupported path before HTTP', async () => {
+  let requests = 0;
+  await assert.rejects(
+    checkOAuthCallback('http://127.0.0.1:8080', () => '', {
+      path: '//elsewhere.example.test/callback',
+      fetch: async () => {
+        requests++;
+        return callbackReply();
+      },
     }),
-    /OAuth markers must not enter nginx logs/u,
+    /Unsupported OAuth callback path/u,
   );
+  assert.equal(requests, 0);
 });
 
 test('MED-01/02/03 edge permits local media previews without relaxing scripts or connections', async () => {

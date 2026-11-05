@@ -154,6 +154,7 @@ async function submitCreate(event) {
         name: values.name,
         password: values.password,
         accessType: values.accessType,
+        olistEnabled: values.olistEnabled === 'on',
         reason: CREATE_REASON,
       },
     });
@@ -183,13 +184,24 @@ async function submitEdit(event) {
   props.showError('');
   busy.value = true;
   try {
-    /** @type {Record<string, string>} */
+    /** @type {Record<string, string | boolean | number>} */
     const body = { reason: UPDATE_REASON };
     if (values.name !== target.name) body.name = values.name;
     if (values.email !== target.email) body.email = values.email;
     if (values.password !== '') body.password = values.password;
     if (values.accessType && values.accessType !== accessType(target))
       body.accessType = values.accessType;
+    const olistEnabled = values.olistEnabled === 'on';
+    const ownDisabledCheckbox =
+      target.id === currentUser.value.id && target.olistEnabled !== true;
+    if (
+      !ownDisabledCheckbox &&
+      olistEnabled !== (target.olistEnabled === true)
+    ) {
+      body.olistEnabled = olistEnabled;
+      body.expectedOlistAuthorizationVersion =
+        target.olistAuthorizationVersion ?? 0;
+    }
     if (Object.keys(body).length === 1) {
       editing.value = null;
       return;
@@ -443,6 +455,8 @@ function publicMessage(error) {
     if (error.status === 403)
       return 'Você não tem permissão para concluir esta ação.';
     if (error.status === 404) return 'Essa conta não existe mais.';
+    if (error.code === 'VERSION_CONFLICT')
+      return 'A habilitação Olist mudou em outra sessão. Feche a edição, atualize a lista e tente novamente.';
   }
   return 'Não foi possível concluir. Revise os dados e tente novamente.';
 }
@@ -631,6 +645,19 @@ function formValues(form) {
             <option value="finance">Financeiro</option>
             <option value="admin">Administrador</option>
           </select>
+          <label class="olist-checkbox" for="new-olist">
+            <input
+              id="new-olist"
+              name="olistEnabled"
+              type="checkbox"
+              :disabled="busy"
+            />
+            Habilitado Olist
+          </label>
+          <p class="field-help">
+            Permite consultar e operar pedidos no Olist, sem conceder edição de
+            pedidos de outras pessoas.
+          </p>
           <label for="new-password">Senha</label>
           <input
             id="new-password"
@@ -697,6 +724,27 @@ function formValues(form) {
             class="field-help"
           >
             Seu próprio perfil de acesso não pode ser alterado.
+          </p>
+          <label class="olist-checkbox" for="edit-olist">
+            <input
+              id="edit-olist"
+              name="olistEnabled"
+              type="checkbox"
+              :checked="editing.olistEnabled === true"
+              :disabled="
+                busy ||
+                (editing.id === currentUser.id && editing.olistEnabled !== true)
+              "
+              aria-describedby="edit-olist-help"
+            />
+            Habilitado Olist
+          </label>
+          <p id="edit-olist-help" class="field-help">
+            {{
+              editing.id === currentUser.id && editing.olistEnabled !== true
+                ? 'Outro administrador deve habilitar seu acesso ao Olist.'
+                : 'A alteração vale para as sessões e operações em andamento.'
+            }}
           </p>
           <label for="edit-password">Nova senha</label>
           <input

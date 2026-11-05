@@ -9,6 +9,7 @@ import {
   createPostgresIdentityRepository,
   OPERATIONAL_ACTIONS,
   FINANCE_ACTIONS,
+  OLIST_ACTIONS,
   authorize,
 } from '@crm-silmer/identity-access';
 import {
@@ -52,6 +53,8 @@ const OPERATIONAL_READ_ACTIONS = new Set([
   // AGENTE-OBS-01: manager only (COMMERCIAL_ADMIN), see authorization.js.
   'assistant.performance.read',
   'shipping.manage',
+  'olist.read',
+  'olist.manage',
   'health.errors.read',
 ]);
 
@@ -275,6 +278,7 @@ export function createIdentityApiRuntime(database, environment = process.env) {
       if (
         !OPERATIONAL_ACTIONS.has(input.action) &&
         !FINANCE_ACTIONS.has(input.action) &&
+        !OLIST_ACTIONS.has(input.action) &&
         input.action !== 'shipping.manage'
       ) {
         throw new IdentityHttpError(403, 'FORBIDDEN');
@@ -294,6 +298,8 @@ export function createIdentityApiRuntime(database, environment = process.env) {
             functionName: user.functionName,
             id: user.id,
             kind: 'human',
+            olistEnabled: user.olistEnabled === true,
+            olistAuthorizationVersion: user.olistAuthorizationVersion ?? 0,
           },
         };
       });
@@ -378,6 +384,9 @@ export function createIdentityApiRuntime(database, environment = process.env) {
             functionName: activeUser.functionName,
             id: activeUser.id,
             kind: 'human',
+            olistEnabled: activeUser.olistEnabled === true,
+            olistAuthorizationVersion:
+              activeUser.olistAuthorizationVersion ?? 0,
           },
         };
       });
@@ -450,12 +459,15 @@ export function createIdentityApiRuntime(database, environment = process.env) {
       );
     },
 
-    /** @param {{accessType?: 'seller'|'finance'|'admin', correlationId: string, csrfToken: string, email: string, idempotencyKey: string, name: string, password: string, reason: string, sessionToken: string}} input */
+    /** @param {{accessType?: 'seller'|'finance'|'admin', olistEnabled?: boolean, correlationId: string, csrfToken: string, email: string, idempotencyKey: string, name: string, password: string, reason: string, sessionToken: string}} input */
     async createUser(input) {
       return adminMutation(
         {
           action: 'identity.user.create',
           command: {
+            ...(input.olistEnabled === undefined
+              ? {}
+              : { olistEnabled: input.olistEnabled }),
             email: input.email,
             name: input.name,
             ...(input.accessType === undefined
@@ -475,6 +487,7 @@ export function createIdentityApiRuntime(database, environment = process.env) {
         (service, actorId) =>
           service.createOperationalUser({
             accessType: input.accessType,
+            olistEnabled: input.olistEnabled,
             actorId,
             correlationId: input.correlationId,
             email: input.email,
@@ -525,6 +538,8 @@ export function createIdentityApiRuntime(database, environment = process.env) {
               functionName: user.functionName,
               id: user.id,
               name: user.name,
+              olistEnabled: user.olistEnabled === true,
+              olistAuthorizationVersion: user.olistAuthorizationVersion ?? 0,
             },
           };
         });
@@ -613,7 +628,7 @@ export function createIdentityApiRuntime(database, environment = process.env) {
       );
     },
 
-    /** @param {{accessType?: 'seller'|'finance'|'admin', correlationId: string, csrfToken: string, email?: string, idempotencyKey: string, name?: string, password?: string, reason: string, sessionToken: string, targetId: string}} input */
+    /** @param {{accessType?: 'seller'|'finance'|'admin', olistEnabled?: boolean, expectedOlistAuthorizationVersion?: number, correlationId: string, csrfToken: string, email?: string, idempotencyKey: string, name?: string, password?: string, reason: string, sessionToken: string, targetId: string}} input */
     async updateUser(input) {
       return adminMutation(
         {
@@ -622,6 +637,13 @@ export function createIdentityApiRuntime(database, environment = process.env) {
           // values, and a patch that leaves a field untouched must not be
           // confused with one that sets it.
           command: {
+            ...(input.olistEnabled === undefined
+              ? {}
+              : {
+                  olistEnabled: input.olistEnabled,
+                  expectedOlistAuthorizationVersion:
+                    input.expectedOlistAuthorizationVersion,
+                }),
             ...(input.accessType === undefined
               ? {}
               : { accessType: input.accessType }),
@@ -640,6 +662,9 @@ export function createIdentityApiRuntime(database, environment = process.env) {
         (service, actorId) =>
           service.updateUser({
             accessType: input.accessType,
+            olistEnabled: input.olistEnabled,
+            expectedOlistAuthorizationVersion:
+              input.expectedOlistAuthorizationVersion,
             actorId,
             correlationId: input.correlationId,
             email: input.email,

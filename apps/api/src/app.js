@@ -26,6 +26,7 @@ import { registerConversationReminderRoutes } from './conversation-reminder-rout
 import { registerLeadOutcomeRoutes } from './lead-outcome-routes.js';
 import { registerOrderBillingRoutes } from './order-billing-routes.js';
 import { registerShippingRoutes } from './shipping-routes.js';
+import { registerOlistRoutes } from './olist-routes.js';
 import { registerN8nRoutes } from './n8n-routes.js';
 import { registerN8nCommandMediaRoutes } from './n8n-command-media-routes.js';
 import { registerOperationRoutes } from './operation-routes.js';
@@ -71,6 +72,7 @@ export const WEBHOOK_REQUESTS_PER_SECOND = 20;
  *   conversationReminders?: any,
  *   billing?: any,
  *   shipping?: any,
+ *   olist?: any,
  *   orderPdfRenderer?: (html: string) => Promise<Buffer>,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime
  *   subjects?: Record<string, any>,
@@ -323,6 +325,14 @@ export function createApi(options = {}, runtime = {}) {
       );
   }
 
+  if (runtime.olist) {
+    api.register(async (olistScope) => {
+      await olistScope.register(rateLimit, { global: false });
+      registerOlistRoutes(olistScope, runtime.olist, (request) => ({
+        correlationId: requests.get(request)?.correlationId ?? 'olist-request',
+      }));
+    });
+  }
   if (runtime.shipping) {
     api.register(async (shippingScope) => {
       await shippingScope.register(rateLimit, { global: false });

@@ -17,6 +17,8 @@ import { AccessControlError } from './authorization.js';
  *   functionName: OperationalFunction,
  *   id: string,
  *   name: string,
+ *   olistEnabled?: boolean,
+ *   olistAuthorizationVersion?: number,
  *   passwordHash: string,
  * }} IdentityUser
  * @typedef {{
@@ -25,6 +27,8 @@ import { AccessControlError } from './authorization.js';
  *   functionName?: OperationalFunction,
  *   capabilityGrantedBy?: string,
  *   name?: string,
+ *   olistEnabled?: boolean,
+ *   expectedOlistAuthorizationVersion?: number,
  *   passwordHash?: string,
  *   revokeSessionsAt?: string,
  * }} IdentityUserPatch
@@ -185,6 +189,8 @@ function freezeUser(user) {
     functionName: user.functionName,
     id: user.id,
     name: user.name,
+    olistEnabled: user.olistEnabled === true,
+    olistAuthorizationVersion: user.olistAuthorizationVersion ?? 0,
   });
 }
 
@@ -233,6 +239,8 @@ export function createInMemoryIdentityRepository() {
       users.set(user.id, {
         createdAt: new Date().toISOString(),
         disabledAt: null,
+        olistEnabled: false,
+        olistAuthorizationVersion: 0,
         ...user,
         capabilities: [...user.capabilities],
       });
@@ -295,6 +303,9 @@ export function createInMemoryIdentityRepository() {
     setUserDisabled(id, disabledAt) {
       const user = users.get(id);
       if (!user) return null;
+      if (user.disabledAt !== disabledAt)
+        user.olistAuthorizationVersion =
+          (user.olistAuthorizationVersion ?? 0) + 1;
       user.disabledAt = disabledAt;
       return { ...user, capabilities: [...user.capabilities] };
     },
@@ -307,6 +318,16 @@ export function createInMemoryIdentityRepository() {
     updateUser(id, patch) {
       const user = users.get(id);
       if (!user) return null;
+      if (
+        patch.olistEnabled !== undefined &&
+        (user.olistAuthorizationVersion ?? 0) !==
+          patch.expectedOlistAuthorizationVersion
+      )
+        throw new AccessControlError(
+          409,
+          'VERSION_CONFLICT',
+          'Olist authorization changed',
+        );
       if (patch.email !== undefined) {
         const taken = emails.get(patch.email.toLowerCase());
         if (taken && taken !== id) throw new Error('User exists');
@@ -315,6 +336,14 @@ export function createInMemoryIdentityRepository() {
         user.email = patch.email;
       }
       if (patch.name !== undefined) user.name = patch.name;
+      if (
+        patch.olistEnabled !== undefined &&
+        patch.olistEnabled !== (user.olistEnabled === true)
+      ) {
+        user.olistEnabled = patch.olistEnabled;
+        user.olistAuthorizationVersion =
+          (user.olistAuthorizationVersion ?? 0) + 1;
+      }
       if (patch.functionName !== undefined)
         user.functionName = patch.functionName;
       if (patch.capabilities !== undefined)
@@ -451,6 +480,7 @@ export function createIdentityAccessService({
 
   /** @param {{
    *   accessType?: AccessType,
+   *   olistEnabled?: boolean,
    *   actorId: string,
    *   correlationId: string,
    *   email: string,
@@ -465,6 +495,15 @@ export function createIdentityAccessService({
     requireNonEmptyString(input.correlationId, 'correlationId');
     const actor = await requireAdmin(input.actorId);
     const profile = accessProfile(input.accessType ?? 'seller');
+    if (
+      input.olistEnabled !== undefined &&
+      typeof input.olistEnabled !== 'boolean'
+    )
+      throw new AccessControlError(
+        400,
+        'INVALID_REQUEST',
+        'Invalid Olist authorization',
+      );
     const passwordHash = await hashPassword(input.password, passwordParameters);
     /** @type {IdentityUser} */
     const user = {
@@ -475,6 +514,8 @@ export function createIdentityAccessService({
       id: idFactory('user'),
       name: input.name.trim(),
       passwordHash,
+      olistEnabled: input.olistEnabled === true,
+      olistAuthorizationVersion: input.olistEnabled === true ? 1 : 0,
     };
     try {
       await repository.createUser(user);
@@ -497,6 +538,16 @@ export function createIdentityAccessService({
         reason: input.reason,
         target: { id: user.id, type: 'user' },
         version: input.accessType,
+      });
+    }
+    if (user.olistEnabled) {
+      await record({
+        action: 'identity.user.olist.enabled',
+        actor: actor.id,
+        correlationId: input.correlationId,
+        reason: input.reason,
+        target: { id: user.id, type: 'user' },
+        version: user.olistAuthorizationVersion ?? 0,
       });
     }
     return Object.freeze({ user: freezeUser(user) });
@@ -594,6 +645,8 @@ export function createIdentityAccessService({
    *   correlationId: string,
    *   email?: string,
    *   accessType?: AccessType,
+   *   olistEnabled?: boolean,
+   *   expectedOlistAuthorizationVersion?: number,
    *   name?: string,
    *   password?: string,
    *   reason: string,
@@ -606,6 +659,44 @@ export function createIdentityAccessService({
     const actor = await requireAdmin(input.actorId);
     /** @type {IdentityUserPatch} */
     const patch = {};
+    let olistChanged = false;
+    if (input.olistEnabled !== undefined) {
+      if (
+        typeof input.olistEnabled !== 'boolean' ||
+        !Number.isSafeInteger(input.expectedOlistAuthorizationVersion) ||
+        /** @type {number} */ (input.expectedOlistAuthorizationVersion) < 0
+      )
+        throw new AccessControlError(
+          400,
+          'INVALID_REQUEST',
+          'Invalid Olist authorization revision',
+        );
+      const target = await repository.findUserById(input.targetId);
+      if (!target) throw userNotFound(input.targetId);
+      if (
+        (target.olistAuthorizationVersion ?? 0) !==
+        input.expectedOlistAuthorizationVersion
+      )
+        throw new AccessControlError(
+          409,
+          'VERSION_CONFLICT',
+          'Olist authorization changed',
+        );
+      if (
+        actor.id === target.id &&
+        input.olistEnabled === true &&
+        target.olistEnabled !== true
+      )
+        throw new AccessControlError(
+          403,
+          'FORBIDDEN',
+          'An administrator cannot enable their own Olist access',
+        );
+      olistChanged = (target.olistEnabled === true) !== input.olistEnabled;
+      patch.olistEnabled = input.olistEnabled;
+      patch.expectedOlistAuthorizationVersion =
+        input.expectedOlistAuthorizationVersion;
+    }
     let profileChanged = false;
     if (input.accessType !== undefined) {
       const target = await repository.findUserById(input.targetId);
@@ -653,6 +744,18 @@ export function createIdentityAccessService({
       throw asDuplicateEmail(error);
     }
     if (!updated) throw userNotFound(input.targetId);
+    if (olistChanged) {
+      await record({
+        action: updated.olistEnabled
+          ? 'identity.user.olist.enabled'
+          : 'identity.user.olist.disabled',
+        actor: actor.id,
+        correlationId: input.correlationId,
+        reason: input.reason,
+        target: { id: updated.id, type: 'user' },
+        version: updated.olistAuthorizationVersion ?? 0,
+      });
+    }
     if (profileChanged) {
       await record({
         action: 'identity.user.access.changed',
@@ -827,6 +930,7 @@ export {
   AUTOMATION_STORE_ACTIONS,
   CAPABILITIES,
   FINANCE_ACTIONS,
+  OLIST_ACTIONS,
   OPERATIONAL_ACTIONS,
   authorize,
   createAccessControlService,

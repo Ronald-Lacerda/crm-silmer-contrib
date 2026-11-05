@@ -1,0 +1,10 @@
+{
+  "name": "@crm-silmer/olist",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.js",
+  "dependencies": {
+    "@crm-silmer/identity-access": "0.0.0"
+  }
+}

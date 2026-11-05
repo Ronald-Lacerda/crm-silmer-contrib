@@ -50,6 +50,8 @@ const copies = [
     'modules/n8n-integration/package.json',
     'runtime/modules/n8n-integration/package.json',
   ],
+  ['modules/olist/src', 'runtime/modules/olist/src'],
+  ['modules/olist/package.json', 'runtime/modules/olist/package.json'],
   ['modules/orders/src', 'runtime/modules/orders/src'],
   ['modules/orders/package.json', 'runtime/modules/orders/package.json'],
   ['modules/work-management/src', 'runtime/modules/work-management/src'],

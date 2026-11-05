@@ -62,6 +62,7 @@ export function registerIdentityRoutes(api, identity, contextFor) {
       const result = await identity.createUser({
         ...command,
         ...optionalAccessType(body.accessType),
+        ...optionalOlistAuthorization(body, false),
         correlationId: contextFor(request).correlationId,
         email: requireString(body.email, 'email'),
         idempotencyKey: requireHeader(request, 'idempotency-key'),
@@ -82,6 +83,7 @@ export function registerIdentityRoutes(api, identity, contextFor) {
       const body = requireBody(request.body);
       const patch = {
         ...optionalAccessType(body.accessType),
+        ...optionalOlistAuthorization(body, true),
         ...optionalString(body.email, 'email'),
         ...optionalString(body.name, 'name'),
         ...optionalString(body.password, 'password'),
@@ -249,6 +251,7 @@ function publicErrorCode(statusCode, error) {
         'EMAIL_ALREADY_REGISTERED',
         'USER_HAS_HISTORY',
         'USER_IS_ADMINISTRATOR',
+        'VERSION_CONFLICT',
       ].includes(code ?? '')
     ) {
       return code;
@@ -380,6 +383,26 @@ function optionalAccessType(value) {
     throw new IdentityRequestError(400, 'INVALID_REQUEST');
   }
   return { accessType: value };
+}
+
+/** @param {Record<string, unknown>} body @param {boolean} requireVersion
+ * @returns {{olistEnabled?: boolean, expectedOlistAuthorizationVersion?: number}} */
+function optionalOlistAuthorization(body, requireVersion) {
+  if (body.olistEnabled === undefined) {
+    if (body.expectedOlistAuthorizationVersion !== undefined)
+      throw new IdentityRequestError(400, 'INVALID_REQUEST');
+    return {};
+  }
+  if (typeof body.olistEnabled !== 'boolean')
+    throw new IdentityRequestError(400, 'INVALID_REQUEST');
+  if (!requireVersion) return { olistEnabled: body.olistEnabled };
+  const version = body.expectedOlistAuthorizationVersion;
+  if (!Number.isSafeInteger(version) || /** @type {number} */ (version) < 0)
+    throw new IdentityRequestError(400, 'INVALID_REQUEST');
+  return {
+    olistEnabled: body.olistEnabled,
+    expectedOlistAuthorizationVersion: /** @type {number} */ (version),
+  };
 }
 
 /** @param {unknown} value @param {string} field */

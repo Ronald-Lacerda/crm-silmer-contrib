@@ -1,6 +1,7 @@
 import { h } from 'vue';
 import { createRouter, createWebHistory } from 'vue-router';
 import { performanceTitle } from './lib/assistant-performance.js';
+import { captureOlistCallback } from './lib/olist-callback.js';
 import AccountView from './views/AccountView.vue';
 import AssistantPerformanceView from './views/AssistantPerformanceView.vue';
 import ClientsView from './views/ClientsView.vue';
@@ -9,12 +10,16 @@ import FinanceView from './views/FinanceView.vue';
 import HealthErrorsView from './views/HealthErrorsView.vue';
 import InboxView from './views/InboxView.vue';
 import MelhorEnvioView from './views/MelhorEnvioView.vue';
+import OlistView from './views/OlistView.vue';
 import OrdersView from './views/OrdersView.vue';
 import OrderView from './views/OrderView.vue';
 import UsersView from './views/UsersView.vue';
 
 const PublicRoute = { name: 'PublicRoute', render: () => h('span') };
 
+// Sanitize before createWebHistory snapshots the initial URL and before the
+// shell starts any session requests or telemetry.
+captureOlistCallback();
 export const router = createRouter({
   history: createWebHistory(),
   routes: [
@@ -80,6 +85,11 @@ export const router = createRouter({
         title: 'Melhor Envio',
         viewKey: 'melhor-envio',
       },
+    },
+    {
+      path: '/olist',
+      component: OlistView,
+      meta: { requiresOlist: true, title: 'Olist', viewKey: 'olist' },
     },
     {
       path: '/usuarios',

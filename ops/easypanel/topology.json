@@ -91,7 +91,14 @@
           "DAILY_CHECKPOINT_RECIPIENTS_JSON",
           "ORDER_BILLING_ENABLED",
           "ORDER_BILLING_RECEIVE_ENABLED",
-          "ORDER_BILLING_N8N_URL"
+          "ORDER_BILLING_N8N_URL",
+          "OLIST_ENABLED",
+          "OLIST_CLIENT_ID",
+          "OLIST_CLIENT_SECRET",
+          "OLIST_REDIRECT_URI",
+          "OLIST_EXPECTED_ACCOUNT_DOCUMENT",
+          "OLIST_ENVELOPE_KEY",
+          "OLIST_IDENTITY_HMAC_KEY"
         ]
       },
       "services": [

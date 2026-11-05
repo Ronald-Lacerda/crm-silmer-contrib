@@ -26,6 +26,8 @@ export function createPostgresAccessRepository(database) {
       const result = await database.query(
         `SELECT
            u.id,
+           u.olist_enabled,
+           u.olist_authorization_version,
            f.function_name,
            COALESCE(
              array_agg(c.capability ORDER BY c.capability)
@@ -45,6 +47,8 @@ export function createPostgresAccessRepository(database) {
         capabilities: /** @type {Capability[]} */ (row.capabilities),
         functionName: /** @type {OperationalFunction} */ (row.function_name),
         id: /** @type {string} */ (row.id),
+        olistEnabled: row.olist_enabled === true,
+        olistAuthorizationVersion: Number(row.olist_authorization_version ?? 0),
       };
     },
 

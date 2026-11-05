@@ -16,6 +16,7 @@
     "@crm-silmer/inbox-channels": "0.0.0",
     "@crm-silmer/integration-reliability": "0.0.0",
     "@crm-silmer/n8n-integration": "0.0.0",
+    "@crm-silmer/olist": "0.0.0",
     "@crm-silmer/orders": "0.0.0",
     "@crm-silmer/shared": "0.0.0",
     "@crm-silmer/shipping": "0.0.0",

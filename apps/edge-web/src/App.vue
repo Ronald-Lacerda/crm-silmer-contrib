@@ -103,11 +103,14 @@ const isAdmin = computed(() =>
   (user.value.capabilities ?? []).includes('COMMERCIAL_ADMIN'),
 );
 const isFinance = computed(() => user.value.functionName === 'Financeiro');
+const canOperateOlist = computed(() => user.value.olistEnabled === true);
+const canAccessOlist = computed(() => isAdmin.value || canOperateOlist.value);
 const canAccessHealthErrors = computed(() => canReadHealthErrors(user.value));
 const homePath = computed(() =>
   isFinance.value ? '/financeiro' : '/dashboard',
 );
 const canAccessCurrentRoute = computed(() => {
+  if (route.meta.requiresOlist) return canAccessOlist.value;
   if (isFinance.value) return ['/financeiro', '/conta'].includes(route.path);
   if (route.meta.requiresHealthErrors) return canAccessHealthErrors.value;
   if (route.meta.requiresFinance) return isAdmin.value;
@@ -119,6 +122,9 @@ const navItems = computed(() =>
   isFinance.value
     ? [
         { to: '/financeiro', label: 'Financeiro', icon: 'orders' },
+        ...(canOperateOlist.value
+          ? [{ to: '/olist', label: 'Olist', icon: 'orders' }]
+          : []),
         { to: '/conta', label: 'Minha conta', icon: 'account' },
       ]
     : [
@@ -141,6 +147,9 @@ const navItems = computed(() =>
           count: storeNewCount,
         },
         { to: '/clientes', label: 'Clientes', icon: 'clients' },
+        ...(canAccessOlist.value
+          ? [{ to: '/olist', label: 'Olist', icon: 'orders' }]
+          : []),
         ...(isAdmin.value
           ? [
               { to: '/financeiro', label: 'Financeiro', icon: 'orders' },
@@ -403,7 +412,11 @@ async function showSession(value, announceLogin = true) {
   // LOJ-24: a link opened without a session comes back to its page.
   if (route.path === '/') {
     await router.replace(
-      isFinance.value
+      isFinance.value &&
+        !(
+          canOperateOlist.value &&
+          safeReturnPath(route.query[RETURN_QUERY]) === '/olist'
+        )
         ? homePath.value
         : (safeReturnPath(route.query[RETURN_QUERY]) ?? homePath.value),
     );
@@ -704,6 +717,7 @@ function onCursor(cursor) {
       <nav
         class="mobile-nav"
         :data-finance="isFinance || undefined"
+        :data-olist="(isFinance && canOperateOlist) || undefined"
         aria-label="Navegação móvel"
       >
         <RouterLink

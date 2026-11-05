@@ -1,3 +1,5 @@
+import { AccessControlError } from './authorization.js';
+
 const bootstrapAdvisoryLock = 0x49414d31;
 
 /**
@@ -13,6 +15,8 @@ const bootstrapAdvisoryLock = 0x49414d31;
  *   functionName: OperationalFunction,
  *   id: string,
  *   name: string,
+ *   olistEnabled?: boolean,
+ *   olistAuthorizationVersion?: number,
  *   passwordHash: string,
  * }} IdentityUser
  * @typedef {{
@@ -21,6 +25,8 @@ const bootstrapAdvisoryLock = 0x49414d31;
  *   functionName?: OperationalFunction,
  *   capabilityGrantedBy?: string,
  *   name?: string,
+ *   olistEnabled?: boolean,
+ *   expectedOlistAuthorizationVersion?: number,
  *   passwordHash?: string,
  *   revokeSessionsAt?: string,
  * }} IdentityUserPatch
@@ -49,6 +55,8 @@ const userSelect = `
     u.password_hash,
     u.created_at,
     u.disabled_at,
+    u.olist_enabled,
+    u.olist_authorization_version,
     f.function_name,
     COALESCE(
       (
@@ -133,9 +141,16 @@ export function createPostgresIdentityRepository(database) {
   /** @param {IdentityUser} user */
   async function insertUser(user) {
     await database.query(
-      `INSERT INTO crm.users (id, email, name, password_hash)
-       VALUES ($1, $2, $3, $4)`,
-      [user.id, user.email, user.name, user.passwordHash],
+      `INSERT INTO crm.users (id, email, name, password_hash, olist_enabled, olist_authorization_version)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        user.id,
+        user.email,
+        user.name,
+        user.passwordHash,
+        user.olistEnabled === true,
+        user.olistAuthorizationVersion ?? 0,
+      ],
     );
     await database.query(
       `INSERT INTO crm.user_functions (user_id, function_name)
@@ -306,7 +321,9 @@ export function createPostgresIdentityRepository(database) {
     async setUserDisabled(id, disabledAt) {
       const result = await database.query(
         `UPDATE crm.users
-         SET disabled_at = $2::timestamptz
+         SET disabled_at = $2::timestamptz,
+             olist_authorization_version = olist_authorization_version +
+               CASE WHEN disabled_at IS DISTINCT FROM $2::timestamptz THEN 1 ELSE 0 END
          WHERE id = $1
          RETURNING id`,
         [id, disabledAt],
@@ -328,10 +345,30 @@ export function createPostgresIdentityRepository(database) {
     /** @param {string} id @param {IdentityUserPatch} patch */
     async updateUser(id, patch) {
       const target = await database.query(
-        'SELECT id FROM crm.users WHERE id = $1 FOR UPDATE',
+        'SELECT id, olist_enabled, olist_authorization_version FROM crm.users WHERE id = $1 FOR UPDATE',
         [id],
       );
       if (!target.rows[0]) return null;
+      if (patch.olistEnabled !== undefined) {
+        const current = target.rows[0];
+        if (
+          current.olist_authorization_version !==
+          patch.expectedOlistAuthorizationVersion
+        )
+          throw new AccessControlError(
+            409,
+            'VERSION_CONFLICT',
+            'Olist authorization changed',
+          );
+        if (current.olist_enabled !== patch.olistEnabled) {
+          await database.query(
+            `UPDATE crm.users SET olist_enabled = $2,
+               olist_authorization_version = olist_authorization_version + 1
+             WHERE id = $1`,
+            [id, patch.olistEnabled],
+          );
+        }
+      }
       if (patch.functionName !== undefined) {
         await database.query(
           'DELETE FROM crm.user_capabilities WHERE user_id = $1',
@@ -422,6 +459,8 @@ function mapUser(row) {
     functionName: /** @type {OperationalFunction} */ (row.function_name),
     id: /** @type {string} */ (row.id),
     name: /** @type {string} */ (row.name),
+    olistEnabled: row.olist_enabled === true,
+    olistAuthorizationVersion: Number(row.olist_authorization_version ?? 0),
     passwordHash: /** @type {string} */ (row.password_hash),
   };
 }

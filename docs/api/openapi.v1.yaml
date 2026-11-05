@@ -73,6 +73,338 @@ paths:
     $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1lookup'
   /integrations/n8n/billing/charges/{chargeId}/payment:
     $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1payment'
+  /integrations/olist/status:
+    get:
+      operationId: readOlistStatus
+      summary: Estado protegido da conexão Olist da empresa
+      description: >-
+        OLIST-T04/T19. Administrador humano ativo, independentemente do checkbox
+        Olist. Não devolve documento da conta, segredos ou tokens. Criação permanece
+        desativada. Resposta private, no-store, Vary Origin/Cookie e no-referrer.
+        Limite de 60 consultas por minuto.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/HumanReadOrigin'
+      responses:
+        '200':
+          description: Conexão e parâmetros centrais, inclusive configuração ausente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistStatus' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /integrations/olist/authorize:
+    post:
+      operationId: authorizeOlist
+      summary: Iniciar autorização OAuth Olist da empresa
+      description: >-
+        Administrador ativo; estado aleatório de dez minutos e uso único vinculado
+        à sessão, ator, aplicação e versão da conexão. Replays da chave revalidam
+        autorização e não transferem o estado entre sessões. Corpo máximo 8192
+        bytes; dez comandos por minuto. Não habilita usuário ou criação ERP.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OlistEmptyCommand' }
+      responses:
+        '200':
+          description: URL oficial de autorização, sem token
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [authorizationUrl]
+                properties:
+                  authorizationUrl:
+                    type: string
+                    format: uri
+                    pattern: '^https://accounts\.tiny\.com\.br/realms/tiny/protocol/openid-connect/auth\?'
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /integrations/olist/complete:
+    post:
+      operationId: completeOlistAuthorization
+      summary: Consumir o callback OAuth pela sessão que iniciou a autorização
+      description: >-
+        Administrador ativo, mesma sessão CRM e CSRF. O frontend remove code/state
+        do endereço e histórico antes de inicializar navegação, requests ou
+        telemetria. O estado é consumido uma vez; expiração, replay, reconexão e
+        resposta tardia não restauram credenciais. Não requer Idempotency-Key;
+        não repetir a troca de código automaticamente. Máximo 8192 bytes e dez
+        comandos por minuto. Nenhum token é retornado ao navegador.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [code, state]
+              properties:
+                code:
+                  {
+                    type: string,
+                    minLength: 1,
+                    maxLength: 4096,
+                    pattern: '^[^\x00-\x20\x7f]+$',
+                  }
+                state: { type: string, pattern: '^[A-Za-z0-9_-]{43}$' }
+      responses:
+        '200':
+          description: Conta verificada e credenciais cifradas no servidor
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistStatus' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '502': { $ref: '#/components/responses/OlistFailure' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /integrations/olist/disconnect:
+    post:
+      operationId: disconnectOlist
+      summary: Invalidar credenciais e autorizações Olist pendentes no CRM
+      description: >-
+        Administrador ativo; compara a versão da conexão e invalida gerações
+        anteriores. Preserva recursos, vendas, histórico e reconciliação; não
+        cancela nem exclui registros ERP. Máximo 8192 bytes e dez comandos/minuto.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OlistVersionCommand' }
+      responses:
+        '200':
+          description: Estado desconectado persistido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistStatus' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /integrations/olist/settings:
+    post:
+      operationId: updateOlistSettings
+      summary: Substituir os parâmetros comerciais centrais da conta Olist
+      description: >-
+        Administrador ativo; expectedVersion compara settingsVersion, distinto
+        da versão da conexão. Todos os campos são explícitos e anuláveis; não
+        inferir vendedor ERP do responsável CRM. Parâmetros cifrados, versão e
+        auditoria na mesma transação. Máximo 8192 bytes e dez comandos/minuto.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion, reason, settings]
+              properties:
+                expectedVersion: { type: integer, minimum: 0 }
+                reason: { type: string, minLength: 1, maxLength: 500 }
+                settings: { $ref: '#/components/schemas/OlistSettings' }
+      responses:
+        '200':
+          description: Estado e nova settingsVersion
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistStatus' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /integrations/olist/order-lookup:
+    post:
+      operationId: lookupOlistOrder
+      summary: Localizar pedido exato pela projeção mínima Olist
+      description: >-
+        Usuário humano ativo com olistEnabled, inclusive Financeiro e pedido de
+        outro responsável/origem/status. Admin sem checkbox não passa. Não
+        concede Inbox, lista geral, cadastro completo ou edição comercial.
+        Busca exata por número CRM ou UUID; quinze consultas/minuto e corpo
+        máximo 8192 bytes. Não consulta nem cria entidades remotas nesta fase.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [query]
+              properties:
+                query:
+                  type: string
+                  maxLength: 64
+                  description: Número NN-CRM completo ou UUID; espaços externos são aparados.
+                  pattern: '^\s*(?:[0-9]{2,15}-[Cc][Rr][Mm]|[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12})\s*$'
+      responses:
+        '200':
+          description: Projeção mínima, sem conteúdo do atendimento ou cadastro
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistOrderProjection' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /integrations/olist/lookups:
+    post:
+      operationId: lookupOlistCommercialCatalog
+      summary: Consultar candidatos de parâmetros comerciais da conta Olist
+      description: >-
+        Administrador ativo. Catálogo fechado, host oficial e enumeração limitada
+        e completa; ausência não é inferida de páginas truncadas. Quota compartilhada
+        entre processos; não aceita URL, conta, filtros ou payload ERP arbitrários.
+        Máximo 8192 bytes e dez comandos/minuto. Somente leitura no provedor.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [kind]
+              properties:
+                kind:
+                  {
+                    enum:
+                      [
+                        sellers,
+                        warehouses,
+                        paymentMethods,
+                        receivingMethods,
+                        priceLists,
+                      ],
+                  }
+      responses:
+        '200':
+          description: Identificadores e nomes necessários à configuração
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    maxItems: 250
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, name]
+                      properties:
+                        id:
+                          {
+                            type: integer,
+                            minimum: 1,
+                            maximum: 9007199254740991,
+                          }
+                        name: { type: string, minLength: 1, maxLength: 120 }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '502': { $ref: '#/components/responses/OlistFailure' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /integrations/olist/mappings:
+    post:
+      operationId: readOlistMapping
+      summary: Consultar vínculo mínimo de um recurso da conta Olist
+      description: >-
+        Administrador ativo; consulta apenas vínculo existente da conta configurada.
+        Não cria, altera ou remove vínculos, nem devolve identidade fiscal, assinatura
+        comercial, snapshots ou respostas remotas. Dez consultas/minuto, 8192 bytes.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [resourceId]
+              properties:
+                resourceId: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Identidade interna, tipo, estado e identificador remoto
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [id, kind, state, remoteId]
+                properties:
+                  id: { type: string, format: uuid }
+                  kind: { enum: [customer, product, variation] }
+                  state:
+                    {
+                      enum: [pending, reserved, confirmed, uncertain, rejected],
+                    }
+                  remoteId:
+                    { type: [string, 'null'], pattern: '^[1-9][0-9]{0,18}$' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /orders/{orderId}/olist:
+    get:
+      operationId: readOrderOlistProjection
+      summary: Consultar estado mínimo da operação Olist de um pedido
+      description: >-
+        Habilitação Olist ativa permite ler pedido de qualquer responsável ou
+        origem, inclusive Financeiro. Leitura comercial já autorizada também
+        permite esta projeção mínima, sem conceder geração. Autorizações atuais
+        são revalidadas; não devolve dados fiscais, conversa ou ficha. Trinta
+        consultas/minuto. Não há rota pública de criação ERP nesta fase.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/HumanReadOrigin'
+      responses:
+        '200':
+          description: Estado persistido e geração desativada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistOrderProjection' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
   /inbox/conversations/{conversationId}/order-assistance:
     get:
       operationId: readConversationOrderAssistance
@@ -104,17 +436,44 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [decision, reason, expectedConversationVersion, expectedSourceRevision]
+              required:
+                [
+                  decision,
+                  reason,
+                  expectedConversationVersion,
+                  expectedSourceRevision,
+                ]
               properties:
                 decision: { enum: [accept, defer, reject, missed] }
-                reason: { enum: [ready, not_ready, withdrawn, unsupported, wrong_product, other] }
+                reason:
+                  {
+                    enum:
+                      [
+                        ready,
+                        not_ready,
+                        withdrawn,
+                        unsupported,
+                        wrong_product,
+                        other,
+                      ],
+                  }
                 suggestionId: { type: string }
-                sourceMessageId: { type: string, description: Mensagem cliente exigida para missed }
-                expectedVersion: { type: integer, minimum: 0, description: Versão da sugestão; exigida salvo missed }
+                sourceMessageId:
+                  {
+                    type: string,
+                    description: Mensagem cliente exigida para missed,
+                  }
+                expectedVersion:
+                  {
+                    type: integer,
+                    minimum: 0,
+                    description: Versão da sugestão; exigida salvo missed,
+                  }
                 expectedConversationVersion: { type: integer, minimum: 0 }
                 expectedSourceRevision: { type: integer, minimum: 0 }
       responses:
-        '200': { description: Decisão persistida e pedido pendente quando aceito }
+        '200':
+          { description: Decisão persistida e pedido pendente quando aceito }
         '400': { description: Comando ou evidência inválidos }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
@@ -129,7 +488,14 @@ paths:
           name: days
           schema: { type: integer, minimum: 1, maximum: 90, default: 30 }
       responses:
-        '200': { description: Contagens de análise, falhas, sugestões, decisões, omissões e tempos }
+        '200':
+          {
+            description: Contagens de análise,
+            falhas,
+            sugestões,
+            decisões,
+            omissões e tempos,
+          }
         '403': { $ref: '#/components/responses/Forbidden' }
   /conversations/{conversationId}/shipping-quotes:
     post:
@@ -2908,6 +3274,141 @@ components:
       required: true
       schema: { type: string, minLength: 1, maxLength: 128 }
   schemas:
+    OlistEmptyCommand:
+      type: object
+      additionalProperties: false
+      maxProperties: 0
+    OlistVersionCommand:
+      type: object
+      additionalProperties: false
+      required: [expectedVersion, reason]
+      properties:
+        expectedVersion: { type: integer, minimum: 0 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    OlistSettings:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          sellerId,
+          operationNatureId,
+          warehouseId,
+          paymentMethodId,
+          priceListId,
+          originId,
+          paymentTerms,
+          purchaseOrder,
+        ]
+      properties:
+        sellerId:
+          { type: [integer, 'null'], minimum: 1, maximum: 9007199254740991 }
+        operationNatureId:
+          { type: [integer, 'null'], minimum: 1, maximum: 9007199254740991 }
+        warehouseId:
+          { type: [integer, 'null'], minimum: 1, maximum: 9007199254740991 }
+        paymentMethodId:
+          { type: [integer, 'null'], minimum: 1, maximum: 9007199254740991 }
+        priceListId:
+          { type: [integer, 'null'], minimum: 1, maximum: 9007199254740991 }
+        originId:
+          { type: [integer, 'null'], minimum: 1, maximum: 9007199254740991 }
+        paymentTerms: { type: [string, 'null'], minLength: 1, maxLength: 120 }
+        purchaseOrder: { type: [string, 'null'], minLength: 1, maxLength: 120 }
+    OlistStatus:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          configured,
+          connected,
+          reconnectRequired,
+          environment,
+          version,
+          generation,
+          expiresAt,
+          accountConfigured,
+          creationEnabled,
+          settingsVersion,
+          settings,
+        ]
+      properties:
+        configured: { type: boolean }
+        connected: { type: boolean }
+        reconnectRequired: { type: boolean }
+        environment: { const: production }
+        version: { type: integer, minimum: 0 }
+        generation: { type: integer, minimum: 0 }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        accountConfigured: { type: boolean }
+        creationEnabled:
+          {
+            const: false,
+            description: Inclusões ERP permanecem desligadas na fase 2.,
+          }
+        settingsVersion: { type: integer, minimum: 0 }
+        settings: { $ref: '#/components/schemas/OlistSettings' }
+    OlistOrderProjection:
+      type: object
+      additionalProperties: false
+      required:
+        [orderId, number, status, creationEnabled, pendingFields, operation]
+      properties:
+        orderId: { type: string }
+        number: { type: string }
+        status: { enum: [pendente, confirmado] }
+        creationEnabled: { const: false }
+        pendingFields:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [code, label]
+            properties:
+              code: { const: OLIST_CREATION_DISABLED }
+              label: { const: Geração Olist ainda indisponível. }
+        operation:
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [state, stage, number]
+              properties:
+                state:
+                  {
+                    enum:
+                      [
+                        queued,
+                        resolving,
+                        ready,
+                        reserved,
+                        confirmed,
+                        linked,
+                        uncertain,
+                        rejected,
+                        invalidated,
+                      ],
+                  }
+                stage: { enum: [customer, product, variation, sale, complete] }
+                number: { type: [string, 'null'] }
+    OlistProblem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code]
+      properties:
+        type: { const: 'about:blank' }
+        title: { type: string }
+        status: { type: integer, minimum: 400, maximum: 599 }
+        code:
+          type: string
+          description: Código público allowlisted; exceções desconhecidas retornam SERVICE_UNAVAILABLE, sem payload ou mensagem do provedor.
+    OlistBoundaryError:
+      type: object
+      description: Resposta de limite do servidor HTTP, antes do handler de domínio.
+      required: [statusCode, error, message]
+      properties:
+        statusCode: { type: integer, enum: [413, 429] }
+        error: { type: string }
+        message: { type: string }
     ConversationShippingQuoteResponse:
       type: object
       additionalProperties: false
@@ -3465,11 +3966,27 @@ components:
           required: [signal]
           description: OA-02. Somente order.assistance.observed; não autoriza envio nem criação.
           properties:
-            signal: { enum: [purchase_confirmed, not_ready, withdrawn, unsupported, uncertain, analysis_failed] }
+            signal:
+              {
+                enum:
+                  [
+                    purchase_confirmed,
+                    not_ready,
+                    withdrawn,
+                    unsupported,
+                    uncertain,
+                    analysis_failed,
+                  ],
+              }
             product_summary: { type: [string, 'null'], maxLength: 256 }
             evidence_message_id: { type: [string, 'null'] }
             subject_id: { type: [string, 'null'] }
-            briefing_patch: { type: [object, 'null'], description: Mesma allowlist de qualificação; texto até 2000 caracteres, sem preço/pagamento/status }
+            briefing_patch:
+              {
+                type: [object, 'null'],
+                description: Mesma allowlist de qualificação; texto até 2000 caracteres,
+                sem preço/pagamento/status,
+              }
         automation_epoch: { type: integer, minimum: 0 }
         source_revision: { type: integer, minimum: 1 }
         target_contract:
@@ -4524,7 +5041,17 @@ components:
     User:
       type: object
       additionalProperties: false
-      required: [id, name, email, functionName, capabilities, canDelete]
+      required:
+        [
+          id,
+          name,
+          email,
+          functionName,
+          capabilities,
+          canDelete,
+          olistEnabled,
+          olistAuthorizationVersion,
+        ]
       properties:
         id: { type: string }
         name: { type: string, minLength: 1, maxLength: 120 }
@@ -4532,6 +5059,16 @@ components:
         functionName: { type: string, enum: [Vendedor, Financeiro] }
         createdAt: { type: [string, 'null'], format: date-time }
         disabledAt: { type: [string, 'null'], format: date-time }
+        olistEnabled:
+          type: boolean
+          default: false
+          readOnly: true
+          description: Habilitação ortogonal ao perfil; Admin não herda geração Olist.
+        olistAuthorizationVersion:
+          type: integer
+          minimum: 0
+          readOnly: true
+          description: Revisão monotônica da habilitação, revalidada em sessões e operações.
         capabilities:
           type: array
           uniqueItems: true
@@ -4584,17 +5121,31 @@ components:
           enum: [seller, finance, admin]
           default: seller
           description: Admin é Vendedor + COMMERCIAL_ADMIN; Financeiro sem capacidade.
+        olistEnabled:
+          type: boolean
+          default: false
+          description: Somente administrador habilita; não concede edição comercial ou gestão ERP.
     UpdateUserRequest:
       type: object
       additionalProperties: false
       required: [reason]
       minProperties: 2
+      dependentRequired:
+        olistEnabled: [expectedOlistAuthorizationVersion]
+        expectedOlistAuthorizationVersion: [olistEnabled]
       properties:
         email: { type: string, format: email }
         name: { type: string, minLength: 1, maxLength: 120 }
         password: { type: string, minLength: 1 }
         reason: { type: string, minLength: 1 }
         accessType: { type: string, enum: [seller, finance, admin] }
+        olistEnabled:
+          type: boolean
+          description: Outro administrador deve habilitar o próprio administrador; autodesabilitação é permitida. Alteração versionada e auditada, efetiva nas sessões/jobs atuais.
+        expectedOlistAuthorizationVersion:
+          type: integer
+          minimum: 0
+          description: Obrigatória sempre que olistEnabled é enviado; divergência retorna VERSION_CONFLICT.
     CapabilityRequest:
       type: object
       additionalProperties: false
@@ -5888,6 +6439,25 @@ components:
               title: { type: string }
               status: { type: integer }
               code: { type: string }
+    OlistFailure:
+      description: Erro público Olist, sem mensagem interna, credencial ou payload remoto.
+      headers:
+        Cache-Control:
+          schema: { const: 'private, no-store' }
+        Referrer-Policy:
+          schema: { const: no-referrer }
+        Vary:
+          schema: { const: 'Origin, Cookie' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/OlistProblem' }
+    OlistThrottled:
+      description: Limite local de requests ou quota compartilhada do provedor; não repetir automaticamente.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/OlistBoundaryError' }
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/OlistProblem' }
     N8nProblem:
       description: Erro compatível em application/problem+json sem eco de PII
       content:

@@ -17,6 +17,8 @@ class RecordingDatabase {
             capabilities: ['COMMERCIAL_ADMIN'],
             function_name: 'Vendedor',
             id: 'admin-1',
+            olist_enabled: false,
+            olist_authorization_version: 0,
           },
         ],
       };
@@ -33,6 +35,8 @@ test('maps ACL users and records the grant authority', async () => {
     capabilities: ['COMMERCIAL_ADMIN'],
     functionName: 'Vendedor',
     id: 'admin-1',
+    olistEnabled: false,
+    olistAuthorizationVersion: 0,
   });
   await repository.grant('seller-1', 'COMMERCIAL_ADMIN', 'admin-1');
 

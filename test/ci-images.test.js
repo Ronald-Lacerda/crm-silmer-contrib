@@ -57,17 +57,22 @@ test('routes the edge proxy to the canonical API service', async () => {
   assert.match(nginx, /X-Frame-Options "DENY"/u);
 });
 
-test('T138: OAuth codes and state never enter edge access/error logs', async () => {
+test('T138/OLIST-T04: OAuth codes and state never enter edge access/error logs', async () => {
   const nginx = await text('docker/nginx.conf');
   const format = /log_format crm_safe '([^']+)';/u.exec(nginx);
   assert.ok(format);
   assert.doesNotMatch(format[1], /\$(?:request(?:_uri)?|args|http_referer)\b/u);
   assert.match(nginx, /access_log \/dev\/stdout crm_safe;/u);
-  const callback = /location = \/melhor-envio \{([^}]+)\}/u.exec(nginx);
-  assert.ok(callback);
-  assert.match(callback[1], /access_log off;/u);
-  assert.match(callback[1], /error_log \/dev\/null;/u);
-  assert.match(callback[1], /try_files \/index\.html =404;/u);
+  for (const path of ['melhor-envio', 'olist']) {
+    const callback = new RegExp(`location = /${path} \\{([^}]+)\\}`, 'u').exec(
+      nginx,
+    );
+    assert.ok(callback, `/${path} needs an exact callback boundary`);
+    assert.match(callback[1], /access_log off;/u);
+    assert.match(callback[1], /error_log \/dev\/null;/u);
+    assert.match(callback[1], /try_files \/index\.html =404;/u);
+    assert.ok(nginx.includes(`~^/${path}(?:\\?|$) "private, no-store";`));
+  }
   assert.match(nginx, /Referrer-Policy "no-referrer" always;/u);
 });
 
@@ -128,7 +133,7 @@ test('packages every runtime workspace required by the API', async () => {
   }
   const runtimeModules = [...runtimeModuleSet].sort();
 
-  for (const moduleName of ['database', 'orders', 'shared']) {
+  for (const moduleName of ['database', 'olist', 'orders', 'shared']) {
     assert.ok(
       runtimeModules.includes(moduleName),
       `${moduleName} must be resolved as a runtime workspace dependency`,

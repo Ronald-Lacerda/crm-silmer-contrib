@@ -33,17 +33,23 @@ const OAUTH_MARKERS = Object.freeze([
   'synthetic-oauth-referrer',
 ]);
 const SPA_MARKER = '<div id="app">Synthetic CRM SPA</div>';
+const OAUTH_CALLBACK_PATHS = Object.freeze(['/melhor-envio', '/olist']);
 
 /** Exercise the actual callback response and then inspect both nginx streams.
  * The injected boundaries let unit tests prove that this gate fails on leaks.
  * @param {string} origin
  * @param {()=>string|Promise<string>} readLogs
- * @param {{expectedStatus?:number, fetch?:typeof globalThis.fetch}} [options]
+ * @param {{path?:string, expectedStatus?:number, fetch?:typeof globalThis.fetch}} [options]
  */
 export async function checkOAuthCallback(origin, readLogs, options = {}) {
   const expectedStatus = options.expectedStatus ?? 200;
+  const path = options.path ?? '/melhor-envio';
+  assert.ok(
+    OAUTH_CALLBACK_PATHS.includes(path),
+    'Unsupported OAuth callback path',
+  );
   const response = await (options.fetch ?? globalThis.fetch)(
-    `${origin}/melhor-envio?code=${OAUTH_MARKERS[0]}&state=${OAUTH_MARKERS[1]}`,
+    `${origin}${path}?code=${OAUTH_MARKERS[0]}&state=${OAUTH_MARKERS[1]}`,
     {
       headers: { Referer: `https://example.test/${OAUTH_MARKERS[2]}` },
       redirect: 'error',
@@ -194,7 +200,8 @@ async function main() {
       '-c',
       `printf '%s' '<!doctype html><html><body>${SPA_MARKER}</body></html>' > /usr/share/nginx/html/index.html`,
     );
-    await checkOAuthCallback(origin, () => docker('logs', edgeId));
+    for (const path of OAUTH_CALLBACK_PATHS)
+      await checkOAuthCallback(origin, () => docker('logs', edgeId), { path });
     docker(
       'exec',
       '--user',
@@ -205,9 +212,11 @@ async function main() {
       '/tmp/t138-index.html',
     );
     try {
-      await checkOAuthCallback(origin, () => docker('logs', edgeId), {
-        expectedStatus: 404,
-      });
+      for (const path of OAUTH_CALLBACK_PATHS)
+        await checkOAuthCallback(origin, () => docker('logs', edgeId), {
+          path,
+          expectedStatus: 404,
+        });
     } finally {
       docker(
         'exec',
@@ -288,7 +297,7 @@ async function main() {
     }
     console.log(
       `PASS: ${cases.length}/` +
-        `${cases.length} routes/limits, inbound methods, actual response headers, nginx syntax, OAuth callback HTML/404 and credential-free logs`,
+        `${cases.length} routes/limits, inbound methods, actual response headers, nginx syntax, both OAuth callback HTML/404 and credential-free logs`,
     );
   } finally {
     const failures = [];

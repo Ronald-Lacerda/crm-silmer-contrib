@@ -85,6 +85,16 @@ export const FINANCE_ACTIONS = Object.freeze(
   new Set(['finance.read', 'finance.complete', 'finance.reopen']),
 );
 
+export const OLIST_ACTIONS = Object.freeze(
+  new Set([
+    'olist.read',
+    'olist.export',
+    'olist.manage',
+    'olist.link',
+    'olist.reconcile',
+  ]),
+);
+
 const operationalActions = OPERATIONAL_ACTIONS;
 /** @type {Map<string, Capability>} */
 const actionCapabilities = new Map([
@@ -130,7 +140,7 @@ function notFound(message) {
 }
 
 /**
- * @typedef {{ id: string, email?: string, kind?: 'human'|'assistant', functionName: OperationalFunction, capabilities: Capability[] }} AccessActor
+ * @typedef {{ id: string, email?: string, kind?: 'human'|'assistant', disabledAt?: string|null, olistEnabled?: boolean, olistAuthorizationVersion?: number, functionName: OperationalFunction, capabilities: Capability[] }} AccessActor
  */
 
 /**
@@ -140,7 +150,23 @@ function notFound(message) {
  * @param {string} action
  */
 export function authorize(actor, action) {
-  if (actor.kind === 'assistant') throw forbidden('Forbidden');
+  if (actor.kind === 'assistant' || actor.disabledAt)
+    throw forbidden('Forbidden');
+  if (OLIST_ACTIONS.has(action)) {
+    if (action === 'olist.read' || action === 'olist.export') {
+      if (
+        actor.olistEnabled !== true ||
+        !['Vendedor', 'Financeiro'].includes(actor.functionName)
+      )
+        throw forbidden('Forbidden');
+    } else if (
+      actor.functionName !== 'Vendedor' ||
+      !actor.capabilities.includes(CAPABILITIES.COMMERCIAL_ADMIN)
+    ) {
+      throw forbidden('Forbidden');
+    }
+    return;
+  }
   // OPS-ERR-01: this console belongs to one current human account, not the
   // administrator role. The identity runtime loads this email from PostgreSQL.
   if (action === 'health.errors.read' || action === 'health.errors.update') {

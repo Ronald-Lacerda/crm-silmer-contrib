@@ -33,6 +33,7 @@ import { createOrderBillingRuntime } from './order-billing-runtime.js';
 import { createHealthErrorsRuntime } from './health-errors-runtime.js';
 import { registerHealthErrorsRoutes } from './health-errors-routes.js';
 import { createShippingApiRuntime } from './shipping-runtime.js';
+import { createOlistApiRuntime } from './olist-runtime.js';
 import { createN8nApiRuntime } from './n8n-runtime.js';
 import { createOperationReadRuntime } from './operation-runtime.js';
 import { createOperationalHealth } from './operational-health.js';
@@ -81,6 +82,7 @@ import { createSafeLogger, SERVICES } from '@crm-silmer/shared';
  *   healthErrors?: ReturnType<typeof createHealthErrorsRuntime>,
  *   operationalHealth?: ReturnType<typeof createOperationalHealth>,
  *   shipping?: ReturnType<typeof createShippingApiRuntime>,
+ *   olist?: ReturnType<typeof createOlistApiRuntime>,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime,
  *   subjects?: Record<string, any>,
  *   trustProxy?: import('fastify').FastifyServerOptions['trustProxy']
@@ -320,6 +322,14 @@ export function createServerApi(runtime = {}) {
           environment,
         })
       : undefined);
+  const olist =
+    runtime.olist ??
+    (runtime.database && operations
+      ? createOlistApiRuntime(runtime.database, {
+          access: operations,
+          environment,
+        })
+      : undefined);
   const shipping =
     runtime.shipping ??
     (runtime.database && operations
@@ -356,6 +366,7 @@ export function createServerApi(runtime = {}) {
       conversationReminders,
       billing,
       shipping,
+      olist,
       automationAuth,
       commercial,
       chatMedia,

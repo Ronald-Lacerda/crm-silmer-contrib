@@ -19,6 +19,16 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## Olist — fundação da Fase 2 (05/11/2026)
+
+OLIST-F2 / OLIST-T03/T04/T19/T05 implementa dados expand, checkbox ortogonal
+com revisão, projeção mínima por número/UUID, conexão OAuth e parâmetros
+centrais cifrados. API/adapter usam conta esperada, quota compartilhada no
+PostgreSQL, refresh reservado e fencing de disconnect/revogação. HTTP nunca
+mantém transação SQL aberta. Eventos, snapshots e reservas preservam recuperação.
+A geração continua desligada; não há ativação de conta real, piloto ou
+handler de exportação nesta fase. [Runbook e limites](docs/runbooks/olist-phase2.md).
+
 ## Olist — escopo inicial de centavos exatos (05/11/2026)
 
 A [ADR 062](docs/adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) /
