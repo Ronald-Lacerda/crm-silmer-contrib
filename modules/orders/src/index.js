@@ -1,5 +1,9 @@
 // Orders module (ADR 006): the Pedido aggregate, its ficha and persistence.
 export {
+  prepareExactCentExport,
+  reconcileExactCentExport,
+} from './domain/olist-exact-cent.js';
+export {
   calculateSizePricing,
   changeSizePricingQuantity,
   createSizePricing,

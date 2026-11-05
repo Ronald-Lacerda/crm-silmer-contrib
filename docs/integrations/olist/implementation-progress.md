@@ -70,3 +70,30 @@ válidos no CRM continuam válidos mesmo quando não representáveis no ERP.
 Não há mudança de banco ou superfície HTTP a validar em ambiente remoto.
 Rollback desta preparação remove os exports e o arquivo novo; nenhum dado
 persistido depende deles. Publicação do código não equivale a deploy ou piloto.
+
+## Ampliação autorizada — bloqueio exato de exportação
+
+A [ADR 059](../../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) /
+[RFC 046](../../rfc/046-olist-escopo-inicial-de-centavos-exatos.md) registra a
+escolha posterior do PO pelo subconjunto exato. O módulo
+[olist-exact-cent.js](../../../modules/orders/src/domain/olist-exact-cent.js)
+usa o núcleo de subtotais e bloqueia a preparação inteira quando uma divisão
+exige fração de centavo. O Pedido CRM permanece válido. O plano elegível é
+copiado/congelado; sua conferência exige marcador único, quantidade, unitário
+retornado e ambos os totais exatos, sem arredondamento ou compensação.
+
+O [executor da prova](exact-cent-proof.mjs) chama a mesma guarda antes dos
+POSTs e confere produto/SKU, conta, comprador, referência e identidade opaca.
+O [modo OAuth](monetary-readback-session.mjs) exige aprovação/digest próprios
+e guarda os limites 3 POSTs/14 GETs/R$ 5,20 em journal exclusivo. Timeout,
+divergência e quota interrompem sem criar pedidos dependentes ou repetir POST.
+ID confirmado é preservado antes da etapa seguinte. Não há rota de produção
+ou UI habilitada: esta entrega implementa a fronteira usada pela prova e a
+futura geração, sem afirmar que todos os fluxos CRM já estão integrados.
+
+Validação atual: 160/160 testes de domínio/pedidos/loja e 126/126 testes Olist,
+sem skips (conjuntos separados). Typecheck local, lint do patch com globals
+Node das ferramentas de prova, fronteiras e build aprovados. QA independente:
+29/29 testes de domínio/executor, sem finding bloqueante para a prova limitada.
+A prova real permanece pendente da recuperação do controle do Chrome; zero
+GETs/POSTs dessa prova foram executados até esse checkpoint.

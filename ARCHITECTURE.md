@@ -1,5 +1,17 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Olist — escopo inicial de centavos exatos (05/11/2026)
+
+A [ADR 059](docs/adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) /
+[RFC 046](docs/rfc/046-olist-escopo-inicial-de-centavos-exatos.md), aprovada pelo PO,
+restringe a exportação automática inicial a subtotal em centavos divisível pela
+quantidade sem arredondamento. Frações permanecem válidas no CRM e bloqueiam
+somente exportação; nenhuma inclusão parcial ou compensação entre linhas.
+Identificador opaco em `infoAdicional`, produto e quantidade devem voltar
+corretos; multiplicação exata do unitário retornado confere a linha, e ambos
+os totais devem coincidir. F1 só fecha para esse subconjunto após prova API/UI;
+os gates de conexão/ACL/runtime/piloto continuam separados. Sem nova infraestrutura.
+
 ## Olist por habilitação e subtotal por tamanho em 04/11/2026
 
 [ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), OLIST-PLAN-02. Desenho

@@ -21,6 +21,11 @@ import {
   verifyFiveReadContinuation,
   FIVE_READ_APPROVAL,
 } from './monetary-readback-probe.mjs';
+import {
+  EXACT_CENT_APPROVAL,
+  validateExactCentPlan,
+  executeExactCentProof,
+} from './exact-cent-proof.mjs';
 
 const LOCAL = 'http://127.0.0.1:8765';
 const TOKEN =
@@ -93,11 +98,27 @@ export async function startMonetarySession(
   } = {},
 ) {
   root = resolve(root);
+  const exactCentProof = mode === 'exact-cent-proof';
   const prepared = JSON.parse(
-    await readFile(join(root, 'private-plan.json'), 'utf8'),
+    await readFile(
+      join(root, exactCentProof ? 'exact-cent-plan.json' : 'private-plan.json'),
+      'utf8',
+    ),
   );
-  if (!['initial', 'continuation-five'].includes(mode))
+  if (!['initial', 'continuation-five', 'exact-cent-proof'].includes(mode))
     throw new Error('INVALID_READBACK_MODE');
+  if (exactCentProof) {
+    const approval = JSON.parse(
+      await readFile(join(root, 'exact-cent-approval.json'), 'utf8'),
+    );
+    if (
+      approval.approved !== true ||
+      approval.approval !== EXACT_CENT_APPROVAL ||
+      approval.approvedDigest !== prepared.approvedDigest
+    )
+      throw new Error('EXPLICIT_EXACT_CENT_APPROVAL_REQUIRED');
+    validateExactCentPlan(prepared.plan, prepared.approvedDigest);
+  }
   let continuation = null;
   if (mode === 'continuation-five') {
     const approval = JSON.parse(
@@ -116,14 +137,22 @@ export async function startMonetarySession(
       continuation,
     );
   }
-  const maximumOrderReads = continuation ? 5 : 6;
+  const maximumOrderReads = exactCentProof ? 14 : continuation ? 5 : 6;
   const journalPath = join(
     root,
-    continuation ? 'five-read-journal.jsonl' : 'six-read-journal.jsonl',
+    exactCentProof
+      ? 'exact-cent-journal.jsonl'
+      : continuation
+        ? 'five-read-journal.jsonl'
+        : 'six-read-journal.jsonl',
   );
   const resultPath = join(
     root,
-    continuation ? 'five-read-result.json' : 'six-read-result.json',
+    exactCentProof
+      ? 'exact-cent-result.json'
+      : continuation
+        ? 'five-read-result.json'
+        : 'six-read-result.json',
   );
   try {
     await stat(journalPath);
@@ -181,13 +210,17 @@ export async function startMonetarySession(
       if (phase === 'ready_oauth')
         return send(
           200,
-          '<p>Conta conferida e credenciais renovadas importadas em memória. Até ' +
-            maximumOrderReads +
-            ' consultas de pedidos, sem criação ou alteração.</p><a href="' +
+          (exactCentProof
+            ? '<p>Prova autorizada: até 3 novos pedidos abertos, R$ 5,20 no total, até 14 leituras. Sem emissão fiscal, lançamento de estoque ou contas.</p><a href="'
+            : '<p>Conta conferida e credenciais renovadas importadas em memória. Até ' +
+              maximumOrderReads +
+              ' consultas de pedidos, sem criação ou alteração.</p><a href="') +
             escape(authorizationUrl(credentials.clientId, state)) +
-            '">Conectar Olist para ' +
-            maximumOrderReads +
-            ' consultas</a>',
+            (exactCentProof
+              ? '">Conectar Olist para prova de centavos</a>'
+              : '">Conectar Olist para ' +
+                maximumOrderReads +
+                ' consultas</a>'),
         );
       return send(
         200,
@@ -258,7 +291,9 @@ export async function startMonetarySession(
       credentials = null;
       try {
         stage = 'order_readback';
-        result = await runReadbackProbe(prepared.plan, {
+        result = await (
+          exactCentProof ? executeExactCentProof : runReadbackProbe
+        )(prepared.plan, {
           credentials: fresh,
           approvedDigest: prepared.approvedDigest,
           journalPath,
@@ -346,7 +381,7 @@ export async function startMonetarySession(
       importing = false;
     }
   }, importIntervalMs);
-  let expiry;
+  let expiry = null;
   const close = () => {
     if (closing) return;
     closing = true;
@@ -390,11 +425,17 @@ if (
   try {
     if (
       ![3, 4].includes(process.argv.length) ||
-      (process.argv.length === 4 && process.argv[3] !== '--continue-five')
+      (process.argv.length === 4 &&
+        !['--continue-five', '--exact-cent-proof'].includes(process.argv[3]))
     )
       throw new Error();
     const session = await startMonetarySession(process.argv[2], {
-      mode: process.argv[3] ? 'continuation-five' : 'initial',
+      mode:
+        process.argv[3] === '--exact-cent-proof'
+          ? 'exact-cent-proof'
+          : process.argv[3]
+            ? 'continuation-five'
+            : 'initial',
     });
     process.stdout.write(
       JSON.stringify({

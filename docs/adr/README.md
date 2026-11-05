@@ -163,3 +163,5 @@ canônicos; ele registra o contexto e o motivo da escolha.
 - [042 — Perfis e nova quitação no Financeiro](042-perfis-e-requitacao-do-financeiro.md); Usuários e invalidação do check quando o valor muda.
 
 - [044 — Atendimento comercial concentrado no WhatsApp](044-atendimento-comercial-concentrado-no-whatsapp.md), decisão na RFC 032; supersede atendimento ativo do site e retira mochilas/bolsas da coleta.
+
+- [059 — Olist com unitário exato em centavos](059-olist-exportacao-com-unitario-exato-em-centavos.md); escopo inicial menor aprovado pelo PO, sem arredondamento de negociação.

@@ -21,6 +21,11 @@ import {
   READ_APPROVAL,
   FIVE_READ_APPROVAL,
 } from './monetary-readback-probe.mjs';
+import {
+  exactCentFixture,
+  exactCentMock,
+} from './exact-cent-proof.fixtures.mjs';
+import { EXACT_CENT_APPROVAL } from './exact-cent-proof.mjs';
 
 const input = () => ({
   clientId: 'MOCK_CLIENT',
@@ -532,5 +537,82 @@ test('approved continuation session obtains one fresh token then exactly five fi
     await readFile(join(root, 'six-read-journal.jsonl'), 'utf8'),
     baseline,
   );
+  assert.equal(session.result.f1GatePassed, false);
+});
+
+test('exact-cent proof requires explicit scope approval before listening', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'olist-exact-approval-'));
+  t.after(async () => {
+    for (const f of await readdir(root)) await unlink(join(root, f));
+    await rmdir(root);
+  });
+  await writeFile(
+    join(root, 'exact-cent-plan.json'),
+    JSON.stringify(exactCentFixture()),
+  );
+  await writeFile(
+    join(root, 'exact-cent-approval.json'),
+    JSON.stringify({ approved: false }),
+  );
+  await assert.rejects(
+    startMonetarySession(root, {
+      mode: 'exact-cent-proof',
+      fetcher: () => assert.fail('NO NETWORK'),
+    }),
+    /EXPLICIT_EXACT_CENT_APPROVAL_REQUIRED/,
+  );
+});
+
+test('exact-cent OAuth session executes only three new orders and fourteen fixed reads', async (t) => {
+  const prepared = exactCentFixture();
+  const transport = exactCentMock(prepared.plan);
+  let oauth = 0;
+  const fetcher = async (url, init) => {
+    if (
+      url ===
+      'https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/token'
+    ) {
+      oauth++;
+      return new Response(JSON.stringify({ access_token: 'MOCK_ACCESS' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return transport.fetcher(url, init);
+  };
+  const { session, envelope } = await setup(t, fetcher, {
+    mode: 'exact-cent-proof',
+    beforeStart: async (root) => {
+      await writeFile(
+        join(root, 'exact-cent-plan.json'),
+        JSON.stringify(prepared),
+      );
+      await writeFile(
+        join(root, 'exact-cent-approval.json'),
+        JSON.stringify({
+          approved: true,
+          approval: EXACT_CENT_APPROVAL,
+          approvedDigest: prepared.approvedDigest,
+        }),
+      );
+    },
+  });
+  await envelope(input());
+  await waitUntil(() => session.phase === 'ready_oauth');
+  const html = await (await fetch('http://127.0.0.1:8765/')).text();
+  assert.ok(html.includes('3 novos pedidos'));
+  assert.ok(html.includes('5,20'));
+  const auth = new URL(
+    html.match(/href="([^"]+)"/)[1].replaceAll('&amp;', '&'),
+  );
+  await fetch(
+    'http://127.0.0.1:8765/olist/callback?code=MOCK_CODE&state=' +
+      auth.searchParams.get('state'),
+    { redirect: 'manual' },
+  );
+  await waitUntil(() => session.phase === 'exact_cent_api_proof_completed');
+  assert.equal(oauth, 1);
+  assert.equal(transport.calls.length, 17);
+  assert.equal(session.result.createdOrders, 3);
+  assert.equal(session.result.nominalTotalCents, 520);
   assert.equal(session.result.f1GatePassed, false);
 });

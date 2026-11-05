@@ -151,3 +151,5 @@ entre os documentos.
 - [023 — Backup externo e recuperação do CRM e do n8n](023-backup-externo-e-recuperacao-do-crm-e-n8n.md), pendente de destino externo, execução e drill.
 
 - [032 — Atendimento comercial concentrado no WhatsApp](032-atendimento-comercial-concentrado-no-whatsapp.md), decidida na ADR 044.
+
+- [046 — Escopo inicial Olist de centavos exatos](046-olist-escopo-inicial-de-centavos-exatos.md), aceita na ADR 059; prova restrita e bloqueio fracionário.

@@ -1,0 +1,23 @@
+{
+  "task": "OLIST-T02/T06a",
+  "observedOn": "2026-11-05",
+  "policy": "exact-cent-v1",
+  "scopeApprovedByUser": true,
+  "fractionalBlockImplemented": true,
+  "offlineDomainOrderTestsPassed": 160,
+  "offlineOlistTestsPassed": 126,
+  "qaDomainExecutorTestsPassed": 29,
+  "plannedCases": ["C05", "C06", "C07"],
+  "maximumNewOrders": 3,
+  "maximumGetAttempts": 14,
+  "maximumPostAttempts": 3,
+  "maximumNominalTotalCents": 520,
+  "actualGetAttempts": 0,
+  "actualPostAttempts": 0,
+  "newOrdersCreated": 0,
+  "apiProofPassed": false,
+  "nativeUiProofPassed": false,
+  "f1GatePassed": false,
+  "currentBlocker": "BROWSER_CONTROL_NOT_RESPONDING",
+  "privateValuesIncluded": false
+}

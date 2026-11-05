@@ -1,5 +1,15 @@
 # CRM Silmer — Especificação de Produto do MVP
 
+## Emenda Olist — centavos exatos (05/11/2026)
+
+[ADR 059](docs/adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) e
+[RFC 046](docs/rfc/046-olist-escopo-inicial-de-centavos-exatos.md), aprovadas
+pelo PO: exportação automática inicial somente com unitário exato em centavos,
+sem arredondamento. Subtotais não divisíveis pela quantidade continuam válidos
+no CRM e bloqueiam a exportação inteira antes de qualquer inclusão. Identidade
+por linha e conferência exata de valores retornados/totais são obrigatórias;
+F1 restrito depende da prova API e tela. Demais regras de produto preservadas.
+
 ## Evolução aprovada Olist e subtotal por tamanho em 04/11/2026
 
 [ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), requisitos OLIST-01–50,

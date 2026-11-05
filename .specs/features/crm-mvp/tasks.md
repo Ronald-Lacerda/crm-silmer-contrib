@@ -1,5 +1,17 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## OLIST-T02/T06a — Escopo de centavos exatos (05/11/2026)
+
+- [x] Registrar redução de escopo aprovada na [ADR 059](../../../docs/adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) / [RFC 046](../../../docs/rfc/046-olist-escopo-inicial-de-centavos-exatos.md).
+- [x] Implementar bloqueio fracionário e conferência exata por identidade de linha no núcleo Orders.
+- [x] Validar negativos offline e preparar prova C05–C07, até três pedidos/R$ 5,20, 14 GETs, sem retry.
+- [ ] Executar prova API e tela na conta autorizada; fechar T02/F1 somente para o subconjunto se passar.
+
+O bloqueio não altera subtotais negociados nem a validade do CRM. Controles de
+API/persistência/ACL/piloto continuam nas tarefas próprias. A prova real ainda
+não foi iniciada: o controle do Chrome está sem resposta; aguarda recuperar a
+aba autenticada. Nenhuma inclusão nova por esta etapa.
+
 ## OLIST-T02 — Prova de capacidades em andamento (04/11/2026)
 
 Status parcial: schema oficial 3.1/OpenAPI 3.0.0 com hashes e captura

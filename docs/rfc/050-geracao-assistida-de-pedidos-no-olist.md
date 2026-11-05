@@ -1,5 +1,11 @@
 # Geração assistida de pedidos de venda no Olist
 
+Emenda de escopo de 05/11/2026: [RFC 046](046-olist-escopo-inicial-de-centavos-exatos.md)
+/[ADR 059](../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) supersede
+a amplitude monetária inicial: somente unitários exatos em centavos, com
+frações bloqueadas antes de qualquer inclusão. F1 permanece condicionado à
+prova real desse subconjunto. Os demais requisitos continuam vigentes.
+
 RFC 050. Especificação de produto, desenho técnico e plano de execução.
 Revisão 2 de 04/11/2026. Responsável: Tech Lead. Decisor: proprietário.
 Público: Produto, Backend/Dados, Integrações, Frontend/A11y, QA e DevOps.

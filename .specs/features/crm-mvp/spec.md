@@ -1,5 +1,15 @@
 # CRM Silmer MVP — Requisitos Rastreáveis
 
+## Emenda Olist — centavos exatos (05/11/2026)
+
+[ADR 059](../../../docs/adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) e
+[RFC 046](../../../docs/rfc/046-olist-escopo-inicial-de-centavos-exatos.md), aprovadas
+pelo PO: exportação automática inicial somente com unitário exato em centavos,
+sem arredondamento. Subtotais não divisíveis pela quantidade continuam válidos
+no CRM e bloqueiam a exportação inteira antes de qualquer inclusão. Identidade
+por linha e conferência exata de valores retornados/totais são obrigatórias;
+F1 restrito depende da prova API e tela. Demais regras de produto preservadas.
+
 ## Cobranças do pedido — extensão aprovada (05/11/2026)
 
 Após aprovação do protótipo, [ADR 058](../../../docs/adr/058-cobrancas-do-pedido-com-infinitepay.md)
