@@ -68,7 +68,16 @@ sem envio, IDs, documentos fiscais, dados de compradores ou credenciais.
 Enquanto não houver rota/contrato comprovados, o gate continua aberto e os
 registros atuais permanecem intactos.
 
-## Verificação desta entrega
+## Continuação em pequenas entregas
+
+Em 05/11/2026, o PO autorizou prosseguir com comparador local e prova de até
+seis leituras v2 × v3 nos pedidos existentes. O [plano dividido](monetary-readback-plan.md)
+registra a implementação offline e o executor limitado. O PO informou que as
+credenciais expostas ainda não foram trocadas; a execução remota não ocorreu.
+O gate permanece aberto, inclusive se um candidato apenas reproduzir valores
+sob hipótese de arredondamento sem identificar as linhas repetidas.
+
+## Verificação da investigação pública original
 
 Mudança somente documental. JSON, links locais, comparação dos três modelos,
 formatação e git diff --check conferidos. Zero chamadas autenticadas, zero

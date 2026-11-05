@@ -125,9 +125,15 @@ fiscal real aceito, não uma validação fiscal universal. OAuth/refresh/PKCE,
 concorrência, quotas compartilhadas e falhas de runtime continuam nos gates
 T03/T04/T08/T09/T14/T15 correspondentes; mocks não são evidência remota.
 
+Continuação em 05/11: o PO autorizou comparador local e até seis leituras v2 ×
+v3 de C02–C04. O [plano dividido](monetary-readback-plan.md) e os testes
+diagnosticam valores/identidade separadamente. A preparação local foi feita;
+o PO confirmou que as credenciais expostas ainda não foram trocadas, portanto
+a prova remota não foi executada. F1-G01/T02 permanecem abertos.
+
 ## Verificação e segurança
 
-Os 25 testes atuais passaram: 24 de guardas/retomada e um transporte OAuth
+Os 25 testes do executor do lote passaram: 24 de guardas/retomada e um transporte OAuth
 mockado em loopback. Nenhuma chamada externa foi feita pelos testes. Os hashes
 em [evidência offline](evidence/controlled-batch-offline-result.json) identificam
 os fontes atuais; os hashes do checkpoint corrigido são preservados à parte.
