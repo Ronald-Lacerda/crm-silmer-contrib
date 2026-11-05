@@ -709,6 +709,12 @@ test('T25/MED-25/31: attachment picker is styled, keyboard operable and sized fo
 /** @type {Array<[number, string, string, boolean]>} */
 const sendRefusals = [
   [
+    403,
+    'NON_PRODUCTION_CONVERSATION',
+    'Esta conversa é de teste e não envia mensagens pelo WhatsApp.',
+    false,
+  ],
+  [
     401,
     'INVALID_REQUEST',
     'Sua sessão expirou. Entre novamente antes de tentar o mesmo envio.',
@@ -758,7 +764,7 @@ const sendRefusals = [
   ],
 ];
 for (const [code, sendCode, message, retryAllowed] of sendRefusals)
-  test(`T25-FIX1/MED-32: known send refusal ${code} preserves the draft and offers the appropriate action without exposing private details`, async ({
+  test(`T25-FIX1/MED-32: known send refusal ${code}/${sendCode} preserves the draft and offers the appropriate action without exposing private details`, async ({
     page,
   }) => {
     const { uploads, sends } = await setup(page, {

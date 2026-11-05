@@ -9,6 +9,7 @@ import {
 import { InboxConflictError, InboxForbiddenError } from '../domain/errors.js';
 import {
   assertConversationMutation,
+  assertProductionHumanSend,
   freezeInboxRecord,
   isTerminalInboxState,
 } from '../domain/inbox.js';
@@ -329,6 +330,11 @@ export class PostgresInboxRepository {
         throw new InboxConflictError('Conversation is not archived');
       }
       assertConversationOwnership(kind, current, input.actor);
+      if (kind === 'send')
+        assertProductionHumanSend(
+          current.provider,
+          current.provider_account_id,
+        );
       if (kind === 'transition' && input.state === 'encerrada') {
         if (
           current.assigned_user_id === null &&

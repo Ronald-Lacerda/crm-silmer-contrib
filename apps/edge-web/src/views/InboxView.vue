@@ -1261,6 +1261,8 @@ function describeError(cause) {
   const status = Number(/** @type {any} */ (cause)?.status);
   const requestId = /** @type {any} */ (cause)?.problem?.request_id;
   const suffix = requestId ? ` (id ${requestId})` : '';
+  if (/** @type {any} */ (cause)?.code === 'NON_PRODUCTION_CONVERSATION')
+    return 'Esta conversa é de teste e não envia mensagens pelo WhatsApp.';
   if (status === 403) {
     return `Sem permissão para esta ação. A conversa pode estar com outro vendedor.${suffix}`;
   }

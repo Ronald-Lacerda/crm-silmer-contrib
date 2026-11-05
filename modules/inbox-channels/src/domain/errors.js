@@ -35,3 +35,13 @@ export class InboxConflictError extends InboxError {
     super(message, 'INBOX_CONFLICT', 409);
   }
 }
+
+export class InboxNonProductionConversationError extends InboxError {
+  constructor() {
+    super(
+      'Esta conversa é de teste e não envia mensagens pelo WhatsApp.',
+      'NON_PRODUCTION_CONVERSATION',
+      403,
+    );
+  }
+}

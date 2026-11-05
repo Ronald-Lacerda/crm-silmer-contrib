@@ -3,6 +3,77 @@
 Rastreabilidade: INBOX-DELIVERY-01, OPS-INBOX-ACK-01, MSG-02/03, ORC-08,
 INBOX-3 e INT-2. O contrato de reserva e idempotência permanece vigente.
 
+## Encerramento das pendências e reserva obsoleta da IA — 04/11/2026
+
+OPS-INBOX-SEND-08 / MSG-02/03, ORC-08, PRV-01 e OPS-ERR-03/06/08/10/11.
+O proprietário autorizou resolver as pendências da central, investigar a IA e
+conferir cada resultado incerto antes de repetir uma mensagem.
+
+A reserva automática observada às 21:39 UTC recebeu três recusas auditadas
+`STALE_AUTOMATION_FENCE`, após uma nova entrada às 21:39:23 UTC. O event bus
+confirma o término no nó de reserva da IA, sem chegar ao transporte. O fence
+estava correto; o retry do workflow transformava uma rodada ultrapassada em
+falha operacional. O patch `ops/n8n/patch-ai-stale-reservation.mjs` desliga o
+retry desse HTTP e preserva a resposta completa para um validador fechado.
+Somente HTTP 409 com o problema autenticado exato encerra o ramo sem itens.
+Sucessos mantêm o corpo original; erros de rede, autenticação, servidor, outro
+conflito ou formato inválido continuam visíveis. As duas saídas originais
+permanecem depois do validador; o CRM não relaxa reserva, epoch ou revisão.
+
+As duas conversas adicionais foram criadas por contas de canal DEV/QA,
+confirmadas no registro persistido e pela origem sintética de todas as entradas.
+Respostas humanas dessas conversas chegavam ao transporte real. A API agora
+recusa contas Meta `dev-phone-number` e prefixo `synthetic-` antes de qualquer
+mensagem, tomada humana, vínculo de mídia ou outbox. A recusa usa
+`NON_PRODUCTION_CONVERSATION` e mantém o rascunho na interface. Não se usa nome,
+texto ou heurística de telefone para classificar a conversa. Inbound, IA,
+transporte do site e replay idempotente anterior conservam seus contratos.
+
+As três tentativas antigas dessas conversas têm reserva e incerteza de
+transporte. As recusas atuais por destinatário inexistente e a ausência de um
+registro no provedor não provam falha histórica. Não reclassificá-las como
+enviadas/falhas nem reenviá-las. Uma disposição operacional humana auditada
+pode retirá-las do recorte ativo por origem comprovadamente não produtiva,
+preservando `outcome_unknown`, recibos, tentativas e bloqueio de retry.
+
+A quarta tentativa incerta, de 30/10 às 09:32 (Brasília), já tinha sido
+substituída por outra operação humana às 09:40. A conferência privada comparou
+destino e estrutura completa da mensagem descriptografada, encontrou igualdade
+e verificou comando/mensagem posteriores `sent`, ID externo concordante e
+evento imutável `message.sent`. A resposta do cliente às 09:32 era ao cumprimento
+anterior; não comprova o envio incerto. O atendimento comercial continuou após
+o envio confirmado das 09:40. Encerrar a necessidade de recuperação do original
+não altera seu resultado desconhecido e nunca autoriza um terceiro envio.
+
+A projeção ativa exclui falhas conclusivas somente com comando/mensagem
+`failed`, retry desabilitado, fila `dead_letter`, reconciliação resolvida e
+prova específica: recusa autenticada anterior ao transporte ou reconciliação
+manual auditada da falha anterior à reserva. Provas contraditórias mantêm a
+fonte ativa. O histórico continua coletando todas as ocorrências.
+
+Disposições de resultados incertos exigem auditoria exata da conta operadora,
+versão e motivo controlados. Para teste, a projeção reconfirma a conta de canal
+persistida; para substituição, reconfirma operação posterior, humana, distinta,
+da mesma conversa, mensagem/comando enviados com ID externo igual e recibo
+imutável. A igualdade privada de destino/conteúdo é verificada sob lock antes
+da auditoria de disposição. Nem a triagem do grupo nem o relógio substituem
+essas provas. Não há alteração do resultado, execução de callback antigo,
+troca de identidade, reativação do bot ou envio pelo procedimento.
+
+Antes de aplicar: guardar export privado dos workflows, comparar fingerprints
+dos preservados, executar testes sintéticos e gates/CI com PostgreSQL. Os
+manifestos privados de manutenção usam plano/fingerprint, transação, operador
+ativo autorizado e auditoria; imprimem somente contagens/códigos técnicos.
+As duas recusas conclusivas de destinatário encerram apenas a reconciliação
+operacional. As quatro disposições acrescentam somente auditoria.
+
+Depois de publicar: verificar imagem/versão e live/readiness, versão publicada
+do principal n8n, fingerprints dos outros workflows e Ativas/Histórico. Não
+gerar mensagens reais para testar. Rollback restaura a aplicação anterior e o
+export privado do principal; preserva auditoria e resultados, podendo reexibir
+pendências no recorte antigo. Nunca restaurar banco ou reexecutar envios como
+primeiro recurso.
+
 ## Resposta humana após confirmar pedido — 04/11/2026
 
 OPS-INBOX-SEND-07 / MSG-02/03, ORC-08 e INT-2. Duas respostas humanas do

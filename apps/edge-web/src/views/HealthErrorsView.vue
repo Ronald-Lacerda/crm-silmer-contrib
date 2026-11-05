@@ -449,7 +449,7 @@ onBeforeUnmount(() => {
       <p v-if="answer" class="health-errors-checked">
         {{
           answeredView === 'active'
-            ? 'Somente fontes que ainda têm pendências. A mesma operação pode aparecer em Processamento e Automação n8n; não some as contagens desses grupos. As contagens atuais não são repetições históricas.'
+            ? 'Somente fontes que ainda exigem tratamento. Falhas concluídas e pendências encerradas com evidência ficam no histórico, sem alterar o resultado original. A mesma operação pode aparecer em Processamento e Automação n8n; não some as contagens desses grupos.'
             : 'Ocorrências e mudanças registradas, inclusive de pendências arquivadas. O estado de acompanhamento não comprova o resultado dos envios.'
         }}
       </p>

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createApi } from '../apps/api/src/app.js';
+import { InboxNonProductionConversationError } from '../modules/inbox-channels/src/index.js';
 
 const baseHeaders = Object.freeze({
   cookie: 'crm_session=session-synthetic; crm_csrf=csrf-synthetic',
@@ -47,6 +48,44 @@ function harness() {
   };
   return { api: createApi({}, { conversations }), calls };
 }
+
+test('OPS-INBOX-SEND-08: a non-production conversation exposes only its bounded refusal after authorization', async (t) => {
+  let authorized = false;
+  const api = createApi(
+    {},
+    {
+      conversations: {
+        async authorize() {
+          authorized = true;
+          return { actor: { id: 'seller-test', kind: 'human' } };
+        },
+        async sendMessage() {
+          assert.equal(authorized, true);
+          throw new InboxNonProductionConversationError();
+        },
+      },
+    },
+  );
+  t.after(() => api.close());
+  const response = await api.inject({
+    headers: baseHeaders,
+    method: 'POST',
+    payload: {
+      content: { text: 'private-content-canary' },
+      expectedVersion: 1,
+      messageType: 'text',
+      reason: 'Resposta',
+    },
+    url: '/api/v1/conversations/non-production/messages',
+  });
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.json().accepted, false);
+  assert.equal(response.json().error.code, 'NON_PRODUCTION_CONVERSATION');
+  assert.doesNotMatch(
+    response.body,
+    /private-content-canary|provider_account_id/u,
+  );
+});
 
 test('human conversation routes authorize, mutate state and enqueue commands', async (t) => {
   const { api, calls } = harness();

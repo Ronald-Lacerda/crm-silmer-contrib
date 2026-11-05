@@ -78,6 +78,118 @@ test('defines the approved backlog states and receives inbound without creating 
   assert.equal(received.message.content.text, undefined);
 });
 
+test('OPS-INBOX-SEND-08: explicit non-production accounts refuse all human sends before state or audit changes', async () => {
+  for (const providerAccountId of [
+    'dev-phone-number',
+    'synthetic-ux-longitudinal',
+  ]) {
+    const { audits, service } = createHarness();
+    const received = await service.receiveInbound(
+      inbound({ providerAccountId }),
+    );
+    const base = {
+      actor: ATTENDANT,
+      conversationId: received.conversation.id,
+      correlationId: 'non-production-send',
+      expectedVersion: received.conversation.version,
+      idempotencyKey: 'refused-send-key',
+      messageType: 'text',
+      content: { text: 'Resposta sintética' },
+      reason: 'Resposta humana sintética',
+    };
+    for (const messageType of ['text', 'image', 'audio', 'video'])
+      for (let attempt = 0; attempt < 2; attempt++)
+        await assert.rejects(
+          service.sendHumanMessage({
+            ...base,
+            messageType,
+            content:
+              messageType === 'text'
+                ? base.content
+                : { mediaId: '11111111-1111-4111-8111-111111111111' },
+          }),
+          { code: 'NON_PRODUCTION_CONVERSATION', statusCode: 403 },
+        );
+    assert.equal(audits.length, 0);
+    // The failed send did not take over, bump a version or reserve its key.
+    const owned = await service.takeover({
+      ...base,
+      idempotencyKey: 'test-takeover',
+    });
+    assert.equal(owned.version, received.conversation.version + 1);
+    assert.equal(owned.automationEpoch, 1);
+    const production = await service.receiveInbound(
+      inbound({ providerAccountId: 'production-account' }),
+    );
+    const sent = await service.sendHumanMessage({
+      ...base,
+      conversationId: production.conversation.id,
+      expectedVersion: production.conversation.version,
+    });
+    assert.equal(sent.status, 'queued');
+    assert.deepEqual(
+      await service.sendHumanMessage({
+        ...base,
+        conversationId: production.conversation.id,
+        expectedVersion: production.conversation.version,
+      }),
+      sent,
+    );
+  }
+});
+
+test('OPS-INBOX-SEND-08: account guards preserve ownership checks and ignore names, content and site transport', async () => {
+  const { service } = createHarness();
+  const received = await service.receiveInbound(
+    inbound({ providerAccountId: 'dev-phone-number' }),
+  );
+  const owned = await service.takeover({
+    actor: ATTENDANT,
+    conversationId: received.conversation.id,
+    correlationId: 'own-test',
+    expectedVersion: received.conversation.version,
+    idempotencyKey: 'own-test',
+    reason: 'Atendimento sintético',
+  });
+  const command = {
+    actor: { ...ATTENDANT, id: 'different-seller' },
+    content: { text: 'Resposta' },
+    conversationId: owned.id,
+    correlationId: 'forbidden-test',
+    expectedVersion: owned.version,
+    idempotencyKey: 'forbidden-test',
+    messageType: 'text',
+    reason: 'Resposta',
+  };
+  await assert.rejects(service.sendHumanMessage(command), {
+    code: 'INBOX_FORBIDDEN',
+  });
+  await assert.rejects(
+    service.sendHumanMessage({
+      ...command,
+      actor: ATTENDANT,
+      expectedVersion: owned.version + 1,
+    }),
+    { code: 'INBOX_CONFLICT' },
+  );
+  for (const account of [
+    { provider: 'meta', providerAccountId: 'production-synthetic-label' },
+    { provider: 'meta', providerAccountId: 'dev-phone-number-production' },
+    { provider: 'site', providerAccountId: 'synthetic-site' },
+  ]) {
+    const conversation = await service.receiveInbound(inbound(account));
+    const sent = await service.sendHumanMessage({
+      ...command,
+      actor: ATTENDANT,
+      conversationId: conversation.conversation.id,
+      expectedVersion: conversation.conversation.version,
+      idempotencyKey: `send-${account.providerAccountId}`,
+      content: { text: 'synthetic- dev-phone-number 5500000000000' },
+    });
+    assert.equal(sent.status, 'queued');
+  }
+});
+
 test('replays a provider-scoped message once and isolates equal ids across provider accounts', async () => {
   const { service } = createHarness();
   const first = await service.receiveInbound(inbound());

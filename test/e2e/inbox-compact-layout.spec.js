@@ -278,6 +278,41 @@ async function setupInbox(page, options = {}) {
   return { archives, closes, initialOrder, order, orderMutations };
 }
 
+test('OPS-INBOX-SEND-08: refusing a test conversation preserves the text draft and announces the explicit reason', async ({
+  page,
+}) => {
+  await setupInbox(page, { pending: false });
+  let sends = 0;
+  await page.route(
+    '**/api/v1/conversations/conversation-compact/messages',
+    (route) => {
+      sends++;
+      return route.fulfill({
+        status: 403,
+        json: {
+          accepted: false,
+          error: {
+            code: 'NON_PRODUCTION_CONVERSATION',
+            detail: 'PRIVATE_REFUSAL_CANARY',
+          },
+        },
+      });
+    },
+  );
+  await page.goto('/inbox/conversation-compact');
+  const reply = page.getByRole('textbox', { name: 'Responder', exact: true });
+  await reply.fill('Rascunho sintético preservado');
+  await reply.press('Enter');
+  await expect(page.getByRole('alert')).toHaveText(
+    'Esta conversa é de teste e não envia mensagens pelo WhatsApp.',
+  );
+  await expect(reply).toHaveValue('Rascunho sintético preservado');
+  await expect(page.getByRole('alert')).not.toContainText(
+    'PRIVATE_REFUSAL_CANARY',
+  );
+  expect(sends).toBe(1);
+});
+
 for (const viewport of [
   { width: 1366, height: 768 },
   { width: 390, height: 844 },

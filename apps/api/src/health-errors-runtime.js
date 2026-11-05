@@ -226,13 +226,156 @@ const SOURCE_FAILURES_SQL = `
     SELECT 1 FROM crm.operational_incident_receipts r WHERE r.event_key = c.event_key
   ) ORDER BY observed_at ASC, event_key ASC LIMIT 501`;
 
-const ACTIVE_FAILURES_SQL = `WITH sources AS (${SOURCE_STATES_SQL})
+// OPS-INBOX-SEND-08: a concluded failure remains in intake/history. Only its
+// active projection can omit it, with immutable evidence and a closed queue
+// reconciliation. Triage alone and an uncertain transport never satisfy this.
+const CONCLUDED_SENDS_SQL = `
+  SELECT c.command_id
+  FROM crm.n8n_commands c
+  JOIN crm.messages m ON m.id=c.message_id AND m.command_id=c.command_id
+    AND m.conversation_id=c.conversation_id
+  JOIN crm.outbox_jobs j ON j.n8n_command_id=c.command_id
+    AND j.message_id=m.id AND j.job_type='n8n.command.deliver'
+  JOIN crm.reconciliation_items r ON r.job_id=j.id
+  WHERE c.action='send_message' AND c.actor_kind='human'
+    AND m.author_kind='human' AND m.author_id=c.actor_id
+    AND c.status='failed' AND m.status='failed' AND m.delivery_status='failed'
+    AND c.retryable=false AND c.retry_safe=false
+    AND c.external_message_id IS NULL AND m.external_message_id IS NULL
+    AND j.status='dead_letter'
+    AND r.status='resolved' AND r.resolved_at IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM crm.n8n_events effect WHERE effect.message_id=m.id
+        AND effect.event_type IN ('message.sent','message.delivered','message.read','message.send.unknown')
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM crm.message_delivery_attempts effect WHERE effect.message_id=m.id
+        AND (effect.external_message_id IS NOT NULL
+          OR effect.status IN ('pending','sent','delivered','read','outcome_unknown'))
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM crm.outbox_jobs other_job
+      WHERE other_job.n8n_command_id=c.command_id
+        AND (other_job.status<>'dead_letter' OR NOT EXISTS (
+          SELECT 1 FROM crm.reconciliation_items closed
+          WHERE closed.job_id=other_job.id AND closed.status='resolved'
+            AND closed.resolved_at IS NOT NULL
+        ))
+    )
+    AND (
+      (c.last_error_code='N8N_COMMAND_RESERVATION_REJECTED'
+        AND j.last_error_code=c.last_error_code
+        AND m.n8n_execution_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM crm.n8n_events e WHERE e.message_id=m.id)
+        AND NOT EXISTS (SELECT 1 FROM crm.message_delivery_attempts a WHERE a.message_id=m.id)
+        AND EXISTS (
+          SELECT 1 FROM crm.audit_events audit
+          WHERE audit.action='integration.n8n.command.reconciled'
+            AND audit.target_type='n8n_command' AND audit.target_id=c.command_id
+            AND audit.version='OPS-INBOX-SEND-07'
+            AND audit.reason='PROVEN_FAILURE_BEFORE_SEND_RESERVATION'
+            AND audit.correlation_id ~ '^n8n-execution:[0-9]{1,12}$'
+        ))
+      OR
+      (c.last_error_code IN ('EVOLUTION_RECIPIENT_NOT_FOUND','EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE')
+        AND (j.last_error_code=c.last_error_code OR j.last_error_code='N8N_COMMAND_REJECTED')
+        AND m.delivery_failure_code=c.last_error_code
+        AND m.automation_epoch=c.automation_epoch
+        AND EXISTS (
+          SELECT 1 FROM crm.n8n_events failure
+          JOIN crm.n8n_events reservation ON reservation.message_id=failure.message_id
+            AND reservation.conversation_id=failure.conversation_id
+            AND reservation.event_type='message.send.requested'
+            AND reservation.execution_id=failure.execution_id
+            AND reservation.workflow_key=failure.workflow_key
+            AND reservation.workflow_version=failure.workflow_version
+            AND reservation.automation_epoch=failure.automation_epoch
+            AND reservation.source_revision=failure.source_revision
+          WHERE failure.message_id=m.id AND failure.conversation_id=c.conversation_id
+            AND failure.event_type='workflow.failed'
+            AND failure.execution_id=m.n8n_execution_id
+            AND failure.automation_epoch=c.automation_epoch
+            AND failure.outcome->>'failureCode'=c.last_error_code
+            AND (NOT failure.outcome ? 'deliveryStatus'
+                 OR failure.outcome->>'deliveryStatus'='failed')
+        ))
+    )`;
+
+// An operator disposition can end actionable work without inventing the old
+// transport result. Source state and history remain unknown. The private helper
+// verifies the replacement's unchanged destination/content before this audit.
+const OPERATIONALLY_CLOSED_SENDS_SQL = `
+  SELECT c.command_id
+  FROM crm.n8n_commands c
+  JOIN crm.messages m ON m.id=c.message_id AND m.command_id=c.command_id
+    AND m.conversation_id=c.conversation_id
+  JOIN crm.conversations conversation ON conversation.id=c.conversation_id
+  JOIN crm.audit_events audit ON audit.target_id=c.command_id
+    AND audit.target_type='n8n_command'
+    AND audit.action='integration.n8n.command.operationally_closed'
+    AND audit.version='OPS-INBOX-SEND-08'
+  JOIN crm.users operator ON operator.id=audit.actor_id
+    AND operator.email='admin@crm-silmer.local'
+  WHERE c.action='send_message' AND c.actor_kind='human'
+    AND m.author_kind='human' AND m.author_id=c.actor_id AND m.message_type='text'
+    AND c.status='outcome_unknown' AND m.status='outcome_unknown'
+    AND m.delivery_status='outcome_unknown'
+    AND c.retryable=false AND c.retry_safe=false
+    AND c.external_message_id IS NULL AND m.external_message_id IS NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM crm.n8n_events positive WHERE positive.message_id=m.id
+        AND positive.event_type IN ('message.sent','message.delivered','message.read')
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM crm.message_delivery_attempts positive WHERE positive.message_id=m.id
+        AND (positive.external_message_id IS NOT NULL
+          OR positive.status IN ('sent','delivered','read'))
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM crm.outbox_jobs job WHERE job.n8n_command_id=c.command_id
+        AND (job.job_type<>'n8n.command.deliver' OR job.message_id IS DISTINCT FROM m.id
+          OR job.status NOT IN ('outcome_unknown','dead_letter','completed'))
+    )
+    AND (
+      (audit.reason='NON_PRODUCTION_CONVERSATION'
+        AND conversation.provider_account_id IN ('dev-phone-number','synthetic-ux-longitudinal')
+        AND m.provider_account_id=conversation.provider_account_id
+        AND m.provider=conversation.provider)
+      OR
+      (audit.reason='SUPERSEDED_BY_VERIFIED_SENT_COMMAND' AND EXISTS (
+        SELECT 1 FROM crm.n8n_commands replacement
+        JOIN crm.messages sent ON sent.id=replacement.message_id
+          AND sent.command_id=replacement.command_id
+          AND sent.conversation_id=replacement.conversation_id
+        WHERE audit.correlation_id='n8n-command:' || replacement.command_id
+          AND replacement.command_id<>c.command_id
+          AND replacement.conversation_id=c.conversation_id
+          AND replacement.created_at>c.created_at
+          AND replacement.action='send_message' AND replacement.actor_kind='human'
+          AND sent.author_kind='human' AND sent.author_id=replacement.actor_id
+          AND sent.message_type=m.message_type
+          AND replacement.status='sent' AND sent.status='sent'
+          AND sent.delivery_status IN ('sent','delivered','read')
+          AND replacement.external_message_id IS NOT NULL
+          AND length(replacement.external_message_id)>0
+          AND replacement.external_message_id=sent.external_message_id
+          AND EXISTS (SELECT 1 FROM crm.n8n_events receipt
+            WHERE receipt.message_id=sent.id AND receipt.conversation_id=c.conversation_id
+              AND receipt.event_type='message.sent')
+      ))
+    )`;
+
+const ACTIVE_FAILURES_SQL = `WITH sources AS (${SOURCE_STATES_SQL}),
+  concluded AS (${CONCLUDED_SENDS_SQL}),
+  operationally_closed AS (${OPERATIONALLY_CLOSED_SENDS_SQL})
   SELECT source, code, count(*)::int AS active_count,
     min(observed_at) AS active_first_seen_at, max(observed_at) AS active_last_seen_at
   FROM sources s
   WHERE observed_at <= now() AND observed_at >= now() - interval '30 days'
     AND NOT EXISTS (SELECT 1 FROM crm.n8n_command_operational_archives a
                     WHERE a.command_id = s.n8n_command_id)
+    AND NOT EXISTS (SELECT 1 FROM concluded c WHERE c.command_id=s.n8n_command_id)
+    AND NOT EXISTS (SELECT 1 FROM operationally_closed c WHERE c.command_id=s.n8n_command_id)
   GROUP BY source, code`;
 
 /** @param {any} client @param {any[]} rows */

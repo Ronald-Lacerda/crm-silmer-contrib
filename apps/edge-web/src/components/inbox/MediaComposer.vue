@@ -356,6 +356,16 @@ async function send() {
     state.value = 'ready';
     error.value =
       'Não foi possível confirmar o envio. Tente novamente para consultar o mesmo envio.';
+    if (
+      cause instanceof ApiError &&
+      cause.problem.accepted === false &&
+      cause.code === 'NON_PRODUCTION_CONVERSATION'
+    ) {
+      error.value =
+        'Esta conversa é de teste e não envia mensagens pelo WhatsApp.';
+      state.value = 'blocked';
+      return;
+    }
     // Only the API's explicit refusal contract permits distinguishing a
     // rejected command from an uncertain request. Never render server details.
     if (

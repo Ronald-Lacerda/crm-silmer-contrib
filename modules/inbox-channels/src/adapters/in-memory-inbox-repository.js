@@ -1,6 +1,7 @@
 import { InboxConflictError, InboxForbiddenError } from '../domain/errors.js';
 import {
   assertConversationMutation,
+  assertProductionHumanSend,
   freezeInboxRecord,
   isTerminalInboxState,
 } from '../domain/inbox.js';
@@ -183,6 +184,11 @@ export class InMemoryInboxRepository {
           'Conversation is assigned to another operator',
         );
       }
+      if (kind === 'send')
+        assertProductionHumanSend(
+          conversation.provider,
+          conversation.providerAccountId,
+        );
       if (kind === 'transition' && input.state === 'encerrada') {
         if (!conversation.assignedUserId && !isAdmin) {
           throw new InboxForbiddenError(

@@ -1,4 +1,20 @@
-import { InboxValidationError } from './errors.js';
+import {
+  InboxNonProductionConversationError,
+  InboxValidationError,
+} from './errors.js';
+
+/** OPS-INBOX-SEND-08: use only the persisted channel account, never content,
+ * contact labels or phone heuristics. Site messages keep their own transport.
+ * @param {string} provider @param {string} providerAccountId
+ */
+export function assertProductionHumanSend(provider, providerAccountId) {
+  if (
+    provider === 'meta' &&
+    (providerAccountId === 'dev-phone-number' ||
+      providerAccountId.startsWith('synthetic-'))
+  )
+    throw new InboxNonProductionConversationError();
+}
 
 export const INBOX_STATES = Object.freeze([
   'nova',

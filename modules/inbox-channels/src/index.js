@@ -35,6 +35,7 @@ export {
   InboxConflictError,
   InboxError,
   InboxForbiddenError,
+  InboxNonProductionConversationError,
   InboxValidationError,
 } from './domain/errors.js';
 export {

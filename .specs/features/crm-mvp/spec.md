@@ -465,22 +465,39 @@ tarefa OPS-ERR-T01. Complementa PRV-01 e a observabilidade da issue #11.
    autoria, horário e motivo e removê-los somente do recorte ativo. Comandos,
    mensagens, jobs, tentativas e ocorrências históricas SHALL conservar seus
    resultados e horários; arquivamento SHALL não resolver entrega nem reenviar.
-   Pendências Evolution SHALL permanecer ativas. Ativas e Histórico SHALL
+   Pendências Evolution SHALL permanecer ativas, salvo disposição comprovada
+   nos critérios de OPS-ERR-10/11. Ativas e Histórico SHALL
    distinguir contagens e datas, inclusive quando a mesma operação aparece
    nas projeções de worker e n8n.
+10. **OPS-ERR-10:** WHEN uma pendência incerta não requer nova recuperação por
+    ser conversa de teste comprovada ou por ter sido substituída por envio
+    humano confirmado THEN SHALL exigir disposição auditada da conta operadora,
+    motivo/versão controlados e prova verificável antes de sair de Ativas.
+    Teste exige conta de canal persistida não produtiva; substituição exige
+    destino e mensagem iguais, operação posterior distinta da mesma conversa,
+    comando/mensagem enviados, ID externo concordante e recibo imutável.
+    O resultado original SHALL continuar desconhecido, sem retry ou reenvio;
+    histórico e tentativas SHALL permanecer preservados. Triagem sem essas
+    provas SHALL não retirar resultado incerto de Ativas.
+11. **OPS-ERR-11:** WHEN uma falha conclusiva foi tratada THEN SHALL sair somente
+    da projeção ativa após verificar mensagem/comando failed, retry desabilitado,
+    fila terminal, reconciliação resolvida e recusa autenticada anterior ao
+    transporte ou auditoria específica de falha anterior à reserva. Recibos
+    contraditórios ou ausência de prova SHALL manter a fonte ativa; coleta e
+    histórico SHALL continuar sem alterar os efeitos originais.
 
-| Grupo              | IDs                     | Status                                                                                   |
-| ------------------ | ----------------------- | ---------------------------------------------------------------------------------------- |
-| Orquestração n8n   | ORC-01 a ORC-09         | WhatsApp implementado; homologação pendente; ORC-09 em CANAL-2                           |
-| Inbox e conversão  | INB-01 a INB-04         | Implementada no contrato n8n v1                                                          |
-| Agente vendedor    | AGT-01 a AGT-10         | Implementado; AGT-09..10 aguardam implantação e publicação do `mvp-simple-20` (ADR 052)  |
-| Pedido             | ORD-01 a ORD-05         | Pedido e impressão v5 implementados; encaminhamento e assinatura física pendentes        |
-| Mensagens e canais | MSG-01 a MSG-04         | WhatsApp: homologação pendente; Instagram em CANAL-2                                     |
-| Financeiro         | FIN-01 a FIN-03         | Confirmados e valor vendido implementados; UAT pendente                                  |
-| Privacidade        | PRV-01 a PRV-03         | Coberta no contrato; homologação pendente                                                |
-| PIX e boas-vindas  | PAY-01 a PAY-05         | Diferidos pela ADR 006; datas manuais não implementam cobrança                           |
-| Painel por papel   | PNL-01 a PNL-04         | PNL-01..03 cobertos em `ux/jornadas` (T130, `069ae76`); PNL-04 adiado pelo PO (D3, T131) |
-| Saúde e erros      | OPS-ERR-01 a OPS-ERR-09 | Central restrita à conta operadora; implementação e gates em OPS-ERR-T01 e OPS-INBOX-ACK-04 |
+| Grupo              | IDs                     | Status                                                                                                         |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Orquestração n8n   | ORC-01 a ORC-09         | WhatsApp implementado; homologação pendente; ORC-09 em CANAL-2                                                 |
+| Inbox e conversão  | INB-01 a INB-04         | Implementada no contrato n8n v1                                                                                |
+| Agente vendedor    | AGT-01 a AGT-10         | Implementado; AGT-09..10 aguardam implantação e publicação do `mvp-simple-20` (ADR 052)                        |
+| Pedido             | ORD-01 a ORD-05         | Pedido e impressão v5 implementados; encaminhamento e assinatura física pendentes                              |
+| Mensagens e canais | MSG-01 a MSG-04         | WhatsApp: homologação pendente; Instagram em CANAL-2                                                           |
+| Financeiro         | FIN-01 a FIN-03         | Confirmados e valor vendido implementados; UAT pendente                                                        |
+| Privacidade        | PRV-01 a PRV-03         | Coberta no contrato; homologação pendente                                                                      |
+| PIX e boas-vindas  | PAY-01 a PAY-05         | Diferidos pela ADR 006; datas manuais não implementam cobrança                                                 |
+| Painel por papel   | PNL-01 a PNL-04         | PNL-01..03 cobertos em `ux/jornadas` (T130, `069ae76`); PNL-04 adiado pelo PO (D3, T131)                       |
+| Saúde e erros      | OPS-ERR-01 a OPS-ERR-11 | Central restrita à conta operadora; implementação e gates em OPS-ERR-T01, OPS-INBOX-ACK-04 e OPS-INBOX-SEND-08 |
 
 **Cobertura:** 45 IDs preservados, incluindo 5 PAY diferidos e o PNL-04 adiado; implementação, homologação e aprovação externa têm estados distintos. Essa cobertura não representa aprovação humana dos gates operacionais. A decomposição em tarefas pertence ao Tech Lead.
 

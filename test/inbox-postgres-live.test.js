@@ -177,6 +177,107 @@ function canonicalWebhookEvent(runId) {
 }
 
 if (connectionString) {
+  test('OPS-INBOX-SEND-08: PostgreSQL refuses test accounts before message, audit, command or outbox writes', async () => {
+    assert.equal(
+      new URL(connectionString).pathname.slice(1),
+      'crm_silmer_test',
+    );
+    const pool = new Pool({ connectionString, max: 4 });
+    try {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await migrate(pool, { migrations: await loadMigrations() });
+      await seedAttendant(pool);
+      const { contacts, inbox } = servicesFor(pool, {
+        outboundMessageOutbox: new PostgresN8nCommandOutbox({
+          envelopeKey: Buffer.alloc(32, 44),
+          messageEnvelopeKey: Buffer.alloc(32, 41),
+          contactEnvelopeKey: Buffer.alloc(32, 42),
+        }),
+      });
+      for (const providerAccountId of [
+        'dev-phone-number',
+        'synthetic-ux-longitudinal',
+      ]) {
+        const runId = randomUUID().replaceAll('-', '');
+        const identity = await contacts.resolveInboundIdentity(
+          identityInput(runId, providerAccountId),
+        );
+        const received = await inbox.receiveInbound(
+          inboundInput(runId, identity, { providerAccountId }),
+        );
+        const command = {
+          actor: ATTENDANT,
+          content: { text: 'Mensagem sintética' },
+          conversationId: received.conversation.id,
+          correlationId: `blocked-${runId}`,
+          expectedVersion: received.conversation.version,
+          idempotencyKey: `blocked-${runId}`,
+          messageType: 'text',
+          reason: 'Resposta',
+        };
+        const snapshot = async () =>
+          (
+            await pool.query(
+              `SELECT to_jsonb(conversation) AS conversation,
+          (SELECT count(*)::integer FROM crm.messages) AS messages,
+          (SELECT count(*)::integer FROM crm.audit_events) AS audits,
+          (SELECT count(*)::integer FROM crm.inbox_commands) AS commands,
+          (SELECT count(*)::integer FROM crm.n8n_commands) AS n8n_commands,
+          (SELECT count(*)::integer FROM crm.domain_events) AS events,
+          (SELECT count(*)::integer FROM crm.outbox_jobs) AS jobs
+          FROM crm.conversations conversation WHERE id=$1`,
+              [received.conversation.id],
+            )
+          ).rows[0];
+        const before = await snapshot();
+        for (const messageType of ['text', 'image', 'audio', 'video'])
+          for (let attempt = 0; attempt < 2; attempt++)
+            await assert.rejects(
+              inbox.sendHumanMessage({
+                ...command,
+                messageType,
+                content:
+                  messageType === 'text'
+                    ? command.content
+                    : { mediaId: '11111111-1111-4111-8111-111111111111' },
+              }),
+              { code: 'NON_PRODUCTION_CONVERSATION', statusCode: 403 },
+            );
+        assert.deepEqual(await snapshot(), before);
+        const productionId = `${runId}-production`;
+        const productionAccount = `account-${productionId}`;
+        const productionIdentity = await contacts.resolveInboundIdentity(
+          identityInput(productionId, productionAccount),
+        );
+        const production = await inbox.receiveInbound(
+          inboundInput(productionId, productionIdentity, {
+            providerAccountId: productionAccount,
+          }),
+        );
+        const allowed = {
+          ...command,
+          conversationId: production.conversation.id,
+          expectedVersion: production.conversation.version,
+        };
+        const sent = await inbox.sendHumanMessage(allowed);
+        assert.equal(sent.status, 'queued');
+        assert.deepEqual(await inbox.sendHumanMessage(allowed), sent);
+        const queued = (
+          await pool.query(
+            `SELECT count(*)::integer AS count FROM crm.n8n_commands WHERE command_id=$1`,
+            [command.idempotencyKey],
+          )
+        ).rows[0];
+        assert.equal(queued.count, 1);
+      }
+    } finally {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await pool.end();
+    }
+  });
+
   test('PostgreSQL coalesces concurrent inbound into one anchored identity, contact, cycle and message', async () => {
     const databaseName = new URL(connectionString).pathname.slice(1);
     assert.equal(databaseName, 'crm_silmer_test');

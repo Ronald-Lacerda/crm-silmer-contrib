@@ -1,5 +1,24 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## OPS-INBOX-SEND-08 — Encerrar pendências sem duplicar envios (04/11/2026)
+
+MSG-02/03, ORC-08, PRV-01 e OPS-ERR-03/06/08/10/11. Autorização do
+proprietário no chat: investigar a IA, corrigir causas e conferir resultados
+incertos antes de qualquer reenvio.
+
+- [x] Identificar a reserva obsoleta da IA por nova revisão de entrada e
+      preparar tratamento fechado de `STALE_AUTOMATION_FENCE`, sem retry.
+- [x] Impedir envio humano de contas Meta DEV/sintéticas antes de criar
+      mensagem, tomar atendimento ou enfileirar transporte; preservar rascunho.
+- [x] Separar falhas conclusivas encerradas e disposições operacionais
+      auditadas da projeção ativa, preservando resultados e histórico.
+- [ ] Executar gates completos, CI PostgreSQL e revisar casos negativos.
+- [ ] Publicar e verificar versões, health, workflow e preservação dos demais.
+- [ ] Aplicar os manifestos privados revisados, sem enviar mensagens, e
+      conferir Ativas e Histórico da central.
+
+[Diagnóstico, critérios e rollback](../../../docs/runbooks/inbox-delivery-feedback.md#encerramento-das-pendências-e-reserva-obsoleta-da-ia--04112026).
+
 ## OPS-INBOX-SEND-07 — Resposta humana após confirmar pedido (04/11/2026)
 
 MSG-02/03, ORC-08, INBOX-3 e INT-2. A reserva de resposta humana usa o comando
