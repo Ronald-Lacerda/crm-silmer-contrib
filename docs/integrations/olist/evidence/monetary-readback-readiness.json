@@ -1,0 +1,25 @@
+{
+  "observedOn": "2026-11-05",
+  "accessibleServicesChecked": 44,
+  "environmentReferencesFound": 0,
+  "sourceRepositoryRuntimeReferencesFound": 0,
+  "n8nUi": {
+    "visibleNonArchivedWorkflowNamesChecked": 12,
+    "olistNamesFound": 0,
+    "credentialNamesChecked": 20,
+    "olistCredentialNamesFound": 0,
+    "workflowBodiesAndArchivedWorkflowsVerified": false
+  },
+  "erpAccountIntegrationDependenciesVerified": false,
+  "dependencyFreeConclusionProven": false,
+  "credentialRotations": 0,
+  "authorizedOrderReadBudget": 6,
+  "attemptedOrderReads": 0,
+  "remainingOrderReads": 6,
+  "blockers": [
+    "ERP_LOGIN_REQUIRED",
+    "LEGACY_TOKEN_DEPENDENCIES_NOT_FULLY_VERIFIED",
+    "CREDENTIAL_RENEWAL_PENDING"
+  ],
+  "privateValuesIncluded": false
+}

@@ -113,3 +113,60 @@ Evidências de 05/11/2026, Node 24.20.0:
 Não se aplicam build de UI, E2E ou banco live: não houve mudança em runtime,
 dependências, migrations, permissões ou componentes do produto. A entrega é
 uma ferramenta diagnóstica de T02, não a conclusão de T02 ou homologação ERP.
+
+## Retomada operacional — renovação autorizada em 05/11
+
+O PO autorizou explicitamente renovar as credenciais, conferir dependências
+do token legado e executar as seis consultas. A inspeção encontrou sessão
+Olist expirada; o login foi solicitado ao usuário. Não houve renovação,
+revogação ou chamada autenticada ao ERP. O journal remoto ainda não existe:
+seis leituras permanecem disponíveis, e F1-G01/T02 continuam abertos.
+
+A [projeção sanitizada de prontidão](evidence/monetary-readback-readiness.json)
+registra os limites da revisão de dependências:
+
+- Nenhuma referência Olist/Tiny nas fronteiras de runtime/configuração
+  rastreadas do CRM consultadas.
+- As configurações de ambiente dos 44 serviços acessíveis foram verificadas
+  sem encontrar variável com nome/referência Olist/Tiny/API v2.
+- Na UI n8n foram observados 12 nomes de workflows não arquivados e 20 nomes
+  de credenciais sem identificação Olist/Tiny. Isso não verifica tokens
+  embutidos nos corpos dos workflows, credenciais genéricas ou fluxos arquivados.
+- As integrações da conta ERP não foram verificadas nesta retomada por falta
+  de sessão autenticada. **Ausência de dependência não está comprovada**;
+  não revogar o token legado com base apenas nessas buscas.
+
+Foi acrescentada [sessão OAuth específica](monetary-readback-session.mjs),
+sem os oito GETs do coletor antigo. Ela importa um envelope RSA-OAEP/SHA-256
+cifrado de 512 bytes, valida a declaração de renovação dos dois segredos e
+o documento conferido na sessão ERP, troca uma vez o código OAuth e entrega
+o access token em memória ao executor das seis leituras. Não há `/info`,
+refresh, retry ou criação ERP implícitos. Callback de uso único limpa a URL;
+fechamento/falha descartam credenciais. Não executar o coletor de leitura ou
+de lote antigo para obter o access token desta prova.
+
+```text
+node docs/integrations/olist/monetary-readback-session.mjs <diretorio-privado-f1>/monetary-readback
+```
+
+O comando informa somente URL local e caminhos da chave pública/envelope.
+O envelope privado contém `clientId`, `clientSecret`, `v2Token`,
+`verifiedAccountDocument` e `credentialsRenewed: true`; a chave privada fica
+em memória. Só gerar/importar esse envelope após renovação real e revisão
+das dependências. Nunca colocar os valores em chat, argumentos de shell,
+capturas ou arquivos em claro. Não há coletor real iniciado nesta etapa.
+
+Validação da retomada: 31/31 testes offline aprovados em Node 24.20.0, sem
+skips, incluindo OAuth mockado + exatamente seis consultas, callback forjado,
+credenciais não renovadas e fechamento durante importação do envelope.
+QA identificou uma corrida de descarte na importação; a guarda de fechamento
+e o descarte em `finally` foram incorporados antes da publicação.
+
+Incidente de coleta: a saída inicial do inventário de infraestrutura foi
+emitida sem projeção e incluiu configurações com segredos. O usuário foi
+informado; valores não foram copiados para arquivos versionados. Um registro
+privado sanitizado de acompanhamento foi criado fora do Git, sem os valores.
+A revisão de revogação/rotação dos demais serviços afetados está pendente e
+não foi executada como parte da autorização restrita a Olist. As consultas
+posteriores projetaram somente nomes/contagens/conclusões; não reemitir nem
+publicar o inventário integral.
