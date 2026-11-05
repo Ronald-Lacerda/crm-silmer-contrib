@@ -265,7 +265,7 @@ test('incomplete fiscal/address buyer is not silently repaired', async (t) => {
     { ...buyer(), inscricaoEstadual: null },
     { ...buyer(), endereco: {} },
     { ...buyer(), cpfCnpj: '22222222222222' },
-    { ...buyer(), situacao: 'A' },
+    { ...buyer(), situacao: 'I' },
   ]) {
     const f = fixture(({ path }) =>
       path === '/contatos/101' ? json(body) : undefined,
@@ -497,4 +497,61 @@ test('caller mutation during preflight cannot change the approved payload', asyn
   );
   assert.equal(r.state, 'api_readback_matched');
   assert.equal(f.calls.filter((c) => c.method === 'POST').length, 1);
+});
+
+test('preflight reuses an existing active A buyer without creating or granting account access', async (t) => {
+  const directory = await temporary(t),
+    active = { ...buyer(), situacao: 'A' };
+  const f = fixture(({ path, query }) => {
+    if (path === '/contatos/101') return json(active);
+    if (path === '/contatos') {
+      assert.equal(query.get('situacao'), 'A');
+      return json(page([active]));
+    }
+  });
+  const r = await executeC01(
+    input(),
+    options(directory, f.fetcher, {
+      prepareOnly: true,
+      approvedPlanDigest: undefined,
+    }),
+  );
+  assert.equal(r.state, 'ready_for_approval');
+  assert.equal(r.erpPostAttempts, 0);
+  assert.equal(r.getCount, 9);
+  assert.equal(
+    f.calls.every((c) => c.method === 'GET'),
+    true,
+  );
+  await assert.rejects(readFile(join(directory, C01_REFERENCE + '.jsonl')), {
+    code: 'ENOENT',
+  });
+});
+test('one bounded formatted-document read is permitted only after normalized lookup returns zero', async (t) => {
+  const directory = await temporary(t),
+    seen = [];
+  const f = fixture(({ path, query }) => {
+    if (path === '/contatos') {
+      seen.push(query.get('cpfCnpj'));
+      assert.equal(query.get('situacao'), 'B');
+      return json(
+        page(query.get('cpfCnpj') === '11111111111111' ? [] : [buyer()]),
+      );
+    }
+  });
+  const r = await executeC01(
+    input(),
+    options(directory, f.fetcher, {
+      prepareOnly: true,
+      approvedPlanDigest: undefined,
+    }),
+  );
+  assert.equal(r.state, 'ready_for_approval');
+  assert.equal(r.getCount, 10);
+  assert.deepEqual(seen, ['11111111111111', '11.111.111/1111-11']);
+  assert.equal(r.erpPostAttempts, 0);
+  assert.equal(
+    f.calls.every((c) => c.method === 'GET'),
+    true,
+  );
 });

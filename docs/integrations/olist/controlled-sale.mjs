@@ -115,7 +115,7 @@ function checkBuyer(body, plan) {
     body?.id !== plan.buyer.id ||
     !sameDocument(body.cpfCnpj, plan.buyer.document) ||
     body.tipoPessoa !== 'J' ||
-    body.situacao !== 'B' ||
+    !['A', 'B'].includes(body.situacao) ||
     !['nome', 'inscricaoEstadual'].every(
       (k) => typeof body[k] === 'string' && body[k].trim(),
     ) ||
@@ -226,11 +226,19 @@ async function appendJournal(path, event, exclusive = false) {
  */
 export async function executeC01(
   input,
-  { token, approvedPlanDigest, journalDirectory, fetcher = fetch, signal } = {},
+  {
+    token,
+    approvedPlanDigest,
+    journalDirectory,
+    fetcher = fetch,
+    signal,
+    prepareOnly = false,
+  } = {},
 ) {
   const plan = buildC01(input);
   const digest = digestOf(plan);
-  if (approvedPlanDigest !== digest) fail('EXPLICIT_APPROVAL_REQUIRED');
+  if (prepareOnly !== true && approvedPlanDigest !== digest)
+    fail('EXPLICIT_APPROVAL_REQUIRED');
   if (
     typeof token !== 'string' ||
     !token ||
@@ -329,6 +337,7 @@ export async function executeC01(
     } catch {
       fail('INVALID_RESPONSE');
     }
+    if (Array.isArray(body?.itens)) summaries.at(-1).count = body.itens.length;
     const remaining = response.headers.get('x-ratelimit-remaining');
     if (
       method === 'GET' &&
@@ -343,12 +352,71 @@ export async function executeC01(
   try {
     if (!sameDocument((await request('/info'))?.cpfCnpj, plan.accountDocument))
       fail('ACCOUNT_MISMATCH');
-    exactOne(
-      list(await request(buyerList)),
-      (v) =>
-        v.id === plan.buyer.id && sameDocument(v.cpfCnpj, plan.buyer.document),
+    const buyerDetail = await request('/contatos/' + plan.buyer.id);
+    const detailSummary = summaries.at(-1);
+    detailSummary.idMatches = buyerDetail?.id === plan.buyer.id ? 1 : 0;
+    detailSummary.documentMatches = sameDocument(
+      buyerDetail?.cpfCnpj,
+      plan.buyer.document,
+    )
+      ? 1
+      : 0;
+    detailSummary.activeBuyerWithoutSystemAccess =
+      buyerDetail?.situacao === 'B';
+    detailSummary.existingBuyerActive = ['A', 'B'].includes(
+      buyerDetail?.situacao,
     );
-    checkBuyer(await request('/contatos/' + plan.buyer.id), plan);
+    detailSummary.buyerSituation = ['A', 'B', 'I', 'E'].includes(
+      buyerDetail?.situacao,
+    )
+      ? buyerDetail.situacao
+      : 'unknown';
+    detailSummary.requiredFieldsPresent =
+      ['nome', 'inscricaoEstadual'].every(
+        (k) => typeof buyerDetail?.[k] === 'string' && buyerDetail[k].trim(),
+      ) &&
+      ['endereco', 'numero', 'bairro', 'municipio', 'uf', 'cep'].every(
+        (k) =>
+          typeof buyerDetail?.endereco?.[k] === 'string' &&
+          buyerDetail.endereco[k].trim(),
+      );
+    checkBuyer(buyerDetail, plan);
+    const explicitBuyerList = buyerList + '&situacao=' + buyerDetail.situacao;
+    allowed.add(explicitBuyerList);
+    let buyers = list(await request(explicitBuyerList));
+    summaries.at(-1).filterSituation = buyerDetail.situacao;
+    summaries.at(-1).documentFormat = 'normalized';
+    if (buyers.length === 0) {
+      const formatted = plan.buyer.document.replace(
+        /^(.{2})(.{3})(.{3})(.{4})(.{2})$/u,
+        '$1.$2.$3/$4-$5',
+      );
+      const formattedBuyerList =
+        '/contatos?cpfCnpj=' +
+        encodeURIComponent(formatted) +
+        '&limit=100&offset=0&situacao=' +
+        buyerDetail.situacao;
+      allowed.add(formattedBuyerList);
+      buyers = list(await request(formattedBuyerList));
+      summaries.at(-1).filterSituation = buyerDetail.situacao;
+      summaries.at(-1).documentFormat = 'formatted';
+    }
+    const buyerSummary = summaries.at(-1);
+    buyerSummary.documentMatches = buyers.filter((v) =>
+      sameDocument(v.cpfCnpj, plan.buyer.document),
+    ).length;
+    buyerSummary.idMatches = buyers.filter(
+      (v) => v.id === plan.buyer.id,
+    ).length;
+    if (buyers.length !== 1)
+      fail(
+        buyers.length === 0 ? 'BUYER_LOOKUP_EMPTY' : 'BUYER_LOOKUP_AMBIGUOUS',
+      );
+    if (!sameDocument(buyers[0].cpfCnpj, plan.buyer.document))
+      fail('BUYER_DOCUMENT_MISMATCH');
+    if (buyers[0].id !== plan.buyer.id) fail('BUYER_ID_MISMATCH');
+    if (buyers[0].situacao !== buyerDetail.situacao)
+      fail('BUYER_STATUS_MISMATCH');
     const parent = await request('/produtos/' + plan.parentId);
     checkParent(parent, plan);
     for (let i = 0; i < 2; i++) {
@@ -367,6 +435,17 @@ export async function executeC01(
     if (list(await request(referenceList)).length)
       fail('REFERENCE_ALREADY_PRESENT');
     if (signal?.aborted) fail('PROBE_STOPPED');
+    if (prepareOnly === true)
+      return {
+        state: 'ready_for_approval',
+        planDigest: digest,
+        erpPostAttempts: 0,
+        getCount,
+        queries: summaries,
+        automaticRetry: false,
+        uiLineProofRequired: true,
+        f1GatePassed: false,
+      };
     await mkdir(directory, { recursive: true, mode: 0o700 });
     try {
       await appendJournal(
@@ -411,7 +490,7 @@ export async function executeC01(
     };
   } catch (error) {
     const code =
-      /^(?:INVALID_PLAN|IDENTITY_MISMATCH|INCOMPLETE_LOOKUP|BUYER_NOT_CONFIRMED|PRODUCT_NOT_CONFIRMED|PRODUCT_FISCAL_MISSING|ACCOUNT_MISMATCH|REFERENCE_ALREADY_PRESENT|RESERVATION_UNAVAILABLE|HTTP_\d{3}|HTTP_OUTCOME_UNKNOWN|INVALID_RESPONSE|BODY_TOO_LARGE|QUOTA_LOW|PROBE_STOPPED|REQUEST_NOT_ALLOWED|SUCCESS_WITHOUT_ID|READBACK_DIVERGENT)$/u.test(
+      /^(?:INVALID_PLAN|BUYER_LOOKUP_EMPTY|BUYER_LOOKUP_AMBIGUOUS|BUYER_DOCUMENT_MISMATCH|BUYER_ID_MISMATCH|BUYER_STATUS_MISMATCH|IDENTITY_MISMATCH|INCOMPLETE_LOOKUP|BUYER_NOT_CONFIRMED|PRODUCT_NOT_CONFIRMED|PRODUCT_FISCAL_MISSING|ACCOUNT_MISMATCH|REFERENCE_ALREADY_PRESENT|RESERVATION_UNAVAILABLE|HTTP_\d{3}|HTTP_OUTCOME_UNKNOWN|INVALID_RESPONSE|BODY_TOO_LARGE|QUOTA_LOW|PROBE_STOPPED|REQUEST_NOT_ALLOWED|SUCCESS_WITHOUT_ID|READBACK_DIVERGENT)$/u.test(
         error?.message ?? '',
       )
         ? error.message

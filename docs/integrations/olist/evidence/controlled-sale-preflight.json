@@ -1,0 +1,197 @@
+{
+  "task": "OLIST-T02",
+  "case": "C01",
+  "observedOn": "2026-11-04",
+  "environment": "current-operational-account",
+  "authorization": {
+    "readApplicationPreviouslyApproved": true,
+    "existingBuyerConfirmedByUser": true,
+    "buyerConfirmation": "Confirmo o cadastro SILMER encontrado",
+    "businessWriteApproved": false,
+    "accessExpansionApproved": false
+  },
+  "status": "ready-for-specific-write-approval",
+  "privatePlanDigestBound": true,
+  "actualApiGetCount": 16,
+  "businessPostAttempts": 0,
+  "collectorStopped": true,
+  "tokensPersisted": false,
+  "reservationCreated": false,
+  "observations": [
+    "Account identity matched /info before dependent reads.",
+    "Known buyer ID and normalized fiscal document matched GET detail; required fields were present.",
+    "Existing buyer situation is A. Reuse does not create a person, grant employee access or overwrite this record.",
+    "Normalized-document lookup returned zero; formatted-document lookup with explicit situation A returned exactly the confirmed buyer.",
+    "Product parent, two child IDs, exact SKUs, Tamanho M/G, active state and fiscal/unit field presence matched API detail.",
+    "Proposed order reference returned zero; this is not a uniqueness or remote idempotency guarantee."
+  ],
+  "corrections": [
+    "An initial guard wrongly applied the no-system-access requirement for new contacts to reuse of an existing active A contact. The tool now allows reuse of existing A/B contacts without any contact mutation.",
+    "Zero normalized-document lookup was not treated as absence; one bounded formatted lookup was added."
+  ],
+  "runs": [
+    {
+      "state": "blocked_before_write",
+      "code": "IDENTITY_MISMATCH",
+      "erpPostAttempts": 0,
+      "automaticRetry": false,
+      "getCount": 2,
+      "queries": [
+        {
+          "path": "/info",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "path": "/contatos",
+          "method": "GET",
+          "status": 200
+        }
+      ],
+      "uiLineProofRequired": true,
+      "f1GatePassed": false,
+      "attempt": 1,
+      "capturedAt": "2026-11-04T23:56:39.622089+00:00"
+    },
+    {
+      "state": "blocked_before_write",
+      "code": "BUYER_LOOKUP_EMPTY",
+      "erpPostAttempts": 0,
+      "automaticRetry": false,
+      "getCount": 2,
+      "queries": [
+        {
+          "path": "/info",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "path": "/contatos",
+          "method": "GET",
+          "status": 200,
+          "count": 0,
+          "documentMatches": 0,
+          "idMatches": 0
+        }
+      ],
+      "uiLineProofRequired": true,
+      "f1GatePassed": false,
+      "attempt": 2,
+      "capturedAt": "2026-11-04T23:59:14.990063+00:00"
+    },
+    {
+      "state": "blocked_before_write",
+      "code": "BUYER_NOT_CONFIRMED",
+      "erpPostAttempts": 0,
+      "automaticRetry": false,
+      "getCount": 2,
+      "queries": [
+        {
+          "path": "/info",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "path": "/contatos/{id}",
+          "method": "GET",
+          "status": 200,
+          "idMatches": 1,
+          "documentMatches": 1,
+          "activeBuyerWithoutSystemAccess": false,
+          "requiredFieldsPresent": true
+        }
+      ],
+      "uiLineProofRequired": true,
+      "f1GatePassed": false,
+      "attempt": 3,
+      "capturedAt": "2026-11-05T00:03:08.067275+00:00"
+    },
+    {
+      "state": "ready_for_approval",
+      "erpPostAttempts": 0,
+      "getCount": 10,
+      "queries": [
+        {
+          "path": "/info",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "path": "/contatos/{id}",
+          "method": "GET",
+          "status": 200,
+          "idMatches": 1,
+          "documentMatches": 1,
+          "activeBuyerWithoutSystemAccess": false,
+          "existingBuyerActive": true,
+          "buyerSituation": "A",
+          "requiredFieldsPresent": true
+        },
+        {
+          "path": "/contatos",
+          "method": "GET",
+          "status": 200,
+          "count": 0,
+          "filterSituation": "A",
+          "documentFormat": "normalized"
+        },
+        {
+          "path": "/contatos",
+          "method": "GET",
+          "status": 200,
+          "count": 1,
+          "filterSituation": "A",
+          "documentFormat": "formatted",
+          "documentMatches": 1,
+          "idMatches": 1
+        },
+        {
+          "path": "/produtos/{id}",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "path": "/produtos",
+          "method": "GET",
+          "status": 200,
+          "count": 1
+        },
+        {
+          "path": "/produtos/{id}",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "path": "/produtos",
+          "method": "GET",
+          "status": 200,
+          "count": 1
+        },
+        {
+          "path": "/produtos/{id}",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "path": "/pedidos",
+          "method": "GET",
+          "status": 200,
+          "count": 0
+        }
+      ],
+      "automaticRetry": false,
+      "uiLineProofRequired": true,
+      "f1GatePassed": false,
+      "attempt": 4,
+      "capturedAt": "2026-11-05T00:06:50.708807+00:00"
+    }
+  ],
+  "remaining": [
+    "Specific permission expansion and one-order C01 approval",
+    "C01 creation and independent UI line subtotal proof",
+    "New customer, composed parent/children and additional variation creation",
+    "Precision, rejection and recovery proofs required for full F1"
+  ],
+  "privacy": "No raw responses, documents, names, record IDs, SKUs, tokens, credentials, private plan digest or authorization code/state.",
+  "f1GatePassed": false
+}

@@ -689,6 +689,12 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       permanece somente leitura. Zero cadastros/vendas criados. Fiscal, criação
       automática, precisão/linhas, rejeições e recuperação real pendentes;
       T02/F1 continuam abertos. Coletor com 17 testes offline.
+      C01: comprador confirmado pelo PO e
+      [preparação real](../integrations/olist/evidence/controlled-sale-preflight.json)
+      concluída com dez GET na rodada final, zero POST ERP. ID/documento,
+      pai, SKUs e grade M/G conferidos; filtro com máscara necessário nesse
+      cadastro. Núcleo/transporte C01 com 25 testes sintéticos; pedido R$ 3,00
+      e ampliação de Pedidos ainda aguardam aprovação específica.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado
 fiscal inventado ou suposição de idempotência remota. Plano para ausência de

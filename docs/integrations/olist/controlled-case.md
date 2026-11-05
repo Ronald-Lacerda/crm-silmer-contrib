@@ -89,8 +89,9 @@ segredo em var/olist-phase1/, fora do Git.
 
 O PO escolheu usar a própria Silmer. A busca por fantasia encontrou um cadastro
 SILMER com CNPJ estruturalmente válido, IE e endereço preenchidos na UI. Seu
-documento **difere** da empresa configurada na conta; a confirmação do PO sobre
-qual pessoa jurídica usar permanece pendente. A busca por nome não substitui
+documento **difere** da empresa configurada na conta. O PO confirmou
+expressamente: **“Confirmo o cadastro SILMER encontrado”**. A distinção é
+intencional: comprador e empresa da conta não são a mesma pessoa jurídica. A busca por nome não substitui
 a identidade fiscal: a seleção final exige GET por documento/ID, em canal
 privado, sem atualizar o cadastro existente.
 
@@ -106,8 +107,8 @@ filtro de SKU ou fiscal aceito pela API.
 
 ## Caso C01 preparado — ainda sem autorização de escrita
 
-Usar o comprador SILMER após confirmação da pessoa jurídica pelo PO e as
-variações M/G do pai de camisa PV conferido. IDs, documentos e SKUs reais ficam
+Usar o comprador SILMER confirmado pelo PO e conferido por ID/documento
+na API, com as variações M/G do pai de camisa PV também conferidas na API. IDs, documentos e SKUs reais ficam
 somente na evidência privada. Não criar cliente/produto para viabilizar C01.
 
 | Campo / limite         | Proposta concreta                                                                                                                                                                   |
@@ -121,6 +122,7 @@ somente na evidência privada. Não criar cliente/produto para viabilizar C01.
 | Campos omitidos        | Pagamento/parcelas/pagamentosIntegrados, vendedor, depósito e naturezaOperacao, que não são required no schema; se a conta exigir, parar e revisar o campo central, sem inventar ID |
 | Valores omitidos       | Frete, desconto e outras despesas, sem ajustes para compensar diferença; conferir tributos calculados                                                                               |
 | Limite                 | Até 1 POST /pedidos e até 30 GET delimitados por conta/documento/IDs/códigos/referência; sem retry automático                                                                       |
+| Nome do aplicativo     | CRM Silmer - prova F1 - controlada, somente após aprovação da ampliação; reutilizar as mesmas credenciais/callback                                                                  |
 | Permissão necessária   | Ampliar somente Pedidos para Incluir e editar, que a UI agrupa; Excluir e demais escritas continuam desmarcados. O executor deve recusar PUT/PATCH/DELETE e POST fora do caso       |
 | Efeitos reais          | Consome número sequencial, cria histórico, pode aparecer em relatórios e receber marcador de primeira venda; registro permanece no ERP                                              |
 | Operações fora do caso | Nota fiscal, estoque/balanço, contas/baixa/estorno, cobrança, expedição, publicação, mensagens, atualização de cadastros e cancelamento/exclusão                                    |
@@ -128,7 +130,7 @@ somente na evidência privada. Não criar cliente/produto para viabilizar C01.
 
 A autorização de leitura não libera C01 nem a ampliação de Pedidos. A próxima
 aprovação precisa abranger expressamente a permissão agrupada e esse POST único,
-depois de confirmar o comprador. O aplicativo deve receber nome que reflita a
+com o comprador agora confirmado. O aplicativo deve receber nome que reflita a
 permissão ampliada; não manter somente leitura no nome após conceder escrita.
 
 Antes de executar, conferir conta/identidades/ausência da referência por API,
@@ -147,21 +149,24 @@ sem alterar parâmetros globais nem cancelar como limpeza.
 ## Núcleo de execução preparado — somente validação offline
 
 [controlled-sale.mjs](controlled-sale.mjs) prepara exclusivamente C01 e não
-executa nada ao importar. Não tem CLI, servidor ou fluxo OAuth próprio; não foi
-conectado à conta. A sessão autorizada de leitura permanece encerrada. O
-transporte temporário para usar esse núcleo ainda precisa ser integrado e
-verificado antes de qualquer prova real de escrita.
+executa nada ao importar. O [transporte temporário](controlled-session.mjs)
+foi integrado e testado. Por padrão, executa somente a preparação de leitura;
+o modo create exige digest específico e autorização humana externa ao código.
+Reutiliza o aplicativo de leitura, sem gerar novas credenciais. O transporte
+não foi executado em create contra a conta.
 
 O núcleo constrói o payload fixo, liga identidades/data/seleções a um SHA-256
-de revisão e exige esse digest antes da rede. **Digest coincidente não comprova
+de revisão e exige esse digest antes do modo de escrita. A preparação de leitura termina
+antes da reserva e do POST, sem exigir aprovação de escrita. **Digest coincidente não comprova
 aprovação humana**; o operador precisa obter a aprovação explícita real antes
 de fornecer uma sessão com acesso de escrita.
 
-São nove GET de preflight: conta; lista/detalhe do comprador; pai;
-lista/detalhe de cada SKU; ausência da referência. Exige página completa e
+São até dez GET de preflight: conta; detalhe do comprador e busca com situação
+explícita; uma consulta adicional de documento formatado somente se a busca
+normalizada retornar zero; pai; lista/detalhe de cada SKU; ausência da referência. Exige página completa e
 identidade exata; presença de campos fiscais não equivale a validação de
 cadastro tributário. Nenhum dado ausente é preenchido. Depois, no máximo um
-POST pedido e dois GET de retorno por ID/referência: onze GET no sucesso,
+POST pedido e dois GET de retorno por ID/referência: até doze GET,
 dentro do teto de 30. Não existe caminho de PUT/PATCH/DELETE, cancelamento,
 estoque, financeiro ou criação de cliente/produto nesse núcleo.
 
@@ -181,12 +186,53 @@ IDs nas rotas e não expõe dados privados. Mesmo com API coincidente, devolve
 uiLineProofRequired verdadeiro e f1GatePassed falso: falta comprovar cada
 subtotal na UI e os demais casos de T02.
 
-[19 testes sintéticos](controlled-sale.test.mjs), Node 24.20.0, passaram.
+[21 testes do núcleo](controlled-sale.test.mjs) e
+[quatro do transporte](controlled-session.test.mjs), Node 24.20.0, passaram.
 Incluem perda de resposta, sucesso sem ID, respostas inválidas/limitadas,
 concorrência, quota/expiração, identidade/página incompleta, surpresa fiscal/
 pagamento e unidades trocadas com total igual. Não há rede externa nem dados
 fiscais reais nessa suíte.
 [Resultado e hashes](evidence/controlled-sale-offline-result.json).
+
+## Preparação real concluída — ainda sem pedido criado
+
+[Evidência sanitizada](evidence/controlled-sale-preflight.json): dez GET
+retornaram 200 na preparação final; comprador por ID/documento, pai,
+variações M/G, SKUs e grade conferidos. A referência C01 retornou zero.
+O PO confirmou o comprador antes dessa conferência. Houve três rodadas
+anteriores de diagnóstico com dois GET cada; dezesseis GET ao todo, zero
+POST ERP, zero reserva de criação e nenhuma ampliação de permissão.
+Todas as sessões foram encerradas sem persistir tokens.
+
+Nesse comprador, o filtro com CNPJ normalizado retornou zero mesmo com a
+situação A explícita; o mesmo documento com máscara recuperou exatamente
+o registro confirmado. Não usar zero de um único formato como ausência.
+A API informa situação A no registro existente. A checagem inicial do núcleo
+aplicava indevidamente a regra de não criar acesso de sistema a um contato
+já existente. Foi corrigida para permitir reutilização de A/B ativos, sem
+alterar pessoa/permissão/cadastro. Novos contatos continuam planejados com
+situação B, sem conta de funcionário.
+
+Presença de IE/endereço/NCM/origem/unidade não certifica cadastro tributário,
+regra fiscal ou dinheiro. O pedido ainda não foi criado. Falta a aprovação
+específica para conceder Incluir e editar somente em Pedidos e executar o
+POST C01 de R$ 3,00; demais inclusões permanecem fora dessa aprovação.
+
+### Execução temporária
+
+Sem argumentos, controlled-session.mjs inicia apenas preparação, em loopback
+127.0.0.1:8765 por até 30 minutos. Importa dois envelopes RSA-OAEP/SHA-256:
+credenciais e caso privado. Os envelopes são consumidos/apagados; documentos,
+IDs e segredos não entram em linha de comando ou resultado público.
+O resultado técnico com hash da prévia permanece somente em var privado.
+
+O modo --create mais o digest da prévia só poderá ser usado após aprovação
+específica do PO e conferência/salvamento das permissões autorizadas. O digest
+não é aprovação humana. A execução repete a conferência de identidade e
+referência antes da reserva. Não remover a reserva para repetir o teste.
+Após o retorno, conferir cada subtotal na UI e os efeitos observáveis antes
+de concluir o caso. O aplicativo deverá ter nome compatível com a permissão
+ampliada; não manter somente leitura no nome se Pedidos permitir escrita.
 
 ## Provas adicionais necessárias para fechar F1
 

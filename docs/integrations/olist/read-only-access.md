@@ -155,3 +155,14 @@ completude de F1. Não houve mudança em API/worker/UI/migrações do CRM; este
 utilitário fica isolado em docs/integrations/olist. A próxima etapa exige caso
 controlado revisável e autorização específica antes de ampliar acesso/criar
 registros. Não repetir automaticamente as consultas por este documento.
+
+## Consultas posteriores do caso C01
+
+Após o PO confirmar o cadastro SILMER encontrado, o mesmo aplicativo foi
+reutilizado no transporte C01 somente para preparação. Foram dezesseis GET
+em quatro rodadas (três diagnósticos de dois e a preparação final de dez),
+sem POST ERP ou ampliação de acesso. Comprador, pai e M/G foram conferidos.
+[Evidência C01](evidence/controlled-sale-preflight.json) ·
+[caso e próxima aprovação específica](controlled-case.md).
+O coletor original continua restrito aos oito GET; o transporte C01 tem
+modo de preparação separado e padrão sem escrita. As sessões foram encerradas.

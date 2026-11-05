@@ -2,11 +2,11 @@
   "task": "OLIST-T02",
   "observedOn": "2026-11-04",
   "environment": "current-operational-account",
-  "authorization": "User explicitly approved creating and connecting the named private read-only app for eight fixed GETs; business-record creation and access expansion remain unapproved.",
-  "method": "Authenticated Chrome UI plus eight fixed API-v3 GETs through the temporary loopback OAuth probe.",
+  "authorization": "User approved the named private read-only app for the initial eight GETs, then confirmed the specific existing SILMER buyer for read preflight. Business creation and permission expansion remain unapproved.",
+  "method": "Authenticated Chrome UI, initial eight fixed API-v3 GETs, and sixteen C01 diagnostic/preflight GETs.",
   "erpMutations": 2,
   "createdCredentials": 1,
-  "authenticatedApiV3Calls": 8,
+  "authenticatedApiV3Calls": 24,
   "privacy": "No company identifiers, user identifiers, client records, secrets, private URLs or raw screenshots in this artifact.",
   "observations": [
     {
@@ -305,10 +305,9 @@
     }
   ],
   "pending": [
-    "Confirm the exact authorized buyer: SILMER contact found by trade name has a different CNPJ from the account company; never conflate the two.",
-    "Confirm selected product variations and central/default fields by API before any proposed POST.",
-    "Prepare final controlled payload/effects and obtain specific business-write and permission-expansion approval.",
-    "Prove customer/product/variation creation, monetary precision per line, rejections and recovery; F1 remains open."
+    "Specific Pedidos include/edit permission expansion and the single R$3 C01 creation approval; case and identities are now prepared.",
+    "C01 creation, independent UI line subtotals and observable effects.",
+    "New customer/parent/variation, monetary precision, rejection and recovery proofs required for full F1."
   ],
   "session": "Restored by user; read-only UI inspection resumed successfully.",
   "f1GatePassed": false,
@@ -360,6 +359,22 @@
         "apiIdentityNotYetVerified": true
       },
       "businessRecordWrites": 0
+    },
+    {
+      "action": "confirm-existing-buyer-and-preflight-c01",
+      "userConfirmation": "Confirmo o cadastro SILMER encontrado",
+      "businessWriteApproved": false,
+      "accessExpansionApproved": false,
+      "apiGetCount": 16,
+      "finalRunGetCount": 10,
+      "finalRunAllStatus": 200,
+      "businessRecordWrites": 0,
+      "privateIdentityBound": true,
+      "normalizedDocumentLookupCount": 0,
+      "formattedDocumentLookupCount": 1,
+      "existingBuyerSituation": "A",
+      "collectorStopped": true,
+      "evidence": "controlled-sale-preflight.json"
     }
   ],
   "applicationConfigurationsSaved": 1,

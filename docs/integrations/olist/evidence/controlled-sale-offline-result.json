@@ -1,29 +1,35 @@
 {
   "task": "OLIST-T02",
   "case": "C01",
-  "capturedAt": "2026-11-04T23:18:59.994384+00:00",
-  "status": "offline-core-only",
+  "capturedAt": "2026-11-05T00:11:27.468897+00:00",
+  "status": "offline-core-and-oauth-transport",
   "nodeVersion": "24.20.0",
-  "command": "fnm exec --using 24.20.0 -- node --test docs/integrations/olist/controlled-sale.test.mjs",
+  "command": "fnm exec --using 24.20.0 -- node --test --test-concurrency=1 docs/integrations/olist/controlled-sale.test.mjs docs/integrations/olist/controlled-session.test.mjs",
   "tests": {
-    "total": 19,
-    "passed": 19,
-    "failed": 0
+    "total": 25,
+    "passed": 25,
+    "failed": 0,
+    "core": 21,
+    "transport": 4
   },
   "sourceSha256": {
-    "controlled-sale.mjs": "0acdeb9d67987a420cc3f62a5e4ec8b544a94a89b6f1f37793b074f63596805b",
-    "controlled-sale.test.mjs": "aada08af0ae65022195e44a1ad73404b0a44f31cf8abe2db27d39a1361e13039"
+    "controlled-sale.mjs": "55503a38a5981f2d57804e6736ca723c87444a29c061374ca4a00e61aed712c6",
+    "controlled-sale.test.mjs": "709e2da3e1cdbdf3901e6bb6a86e1895e42b55fcbb2b3a7fc6171cb79229d112",
+    "controlled-session.mjs": "e86de85787ece9f1b9338a1285545fc26312756a2c9193c177739d8d2f8b2861",
+    "controlled-session.test.mjs": "ae7fc8d9efb22e519d0061a1f1bf85670620aef4e788cc865a342edd64a7afb9"
   },
   "network": "All provider responses mocked; no external connection",
   "realBusinessWrites": 0,
   "realAccessExpansion": false,
-  "oauthTransportIntegrated": false,
+  "oauthTransportIntegrated": true,
   "successPath": {
-    "getCount": 11,
     "maximumPostCount": 1,
     "fixedReference": "CRM-F1-20261104-C01",
     "expectedProductsAndOrderTotalCents": 300,
-    "uiLineProofStillRequired": true
+    "uiLineProofStillRequired": true,
+    "getCountWithoutFormatFallback": 11,
+    "maximumGetCount": 12,
+    "maximumPreparationGetCount": 10
   },
   "guards": [
     "matching review digest before network; actual human authorization required separately",
@@ -33,14 +39,15 @@
     "journal returned ID before readback",
     "equal total with mismatched line units is divergent",
     "no correction, cancel, delete, fiscal, stock, charge or shipping commands",
-    "sanitized errors and route IDs; bounded body, timeout, no redirect"
+    "sanitized errors and route IDs; bounded body, timeout, no redirect",
+    "prepareOnly explicitly returns before reservation and business POST; default OAuth session uses prepare mode"
   ],
   "limits": [
     "No real order, permission, provider rejection, monetary precision, fiscal sufficiency or idempotency proven",
     "Digest is local integrity checking, not an authorization record",
     "Local reservation assumes canonical private directory and retained marker; not a production cross-account reservation",
-    "Runtime OAuth transport and private identity binding are still pending",
-    "Full phase-1 gate remains open"
+    "Full phase-1 gate remains open",
+    "Live read preflight is recorded separately; this artifact certifies only simulated execution and no real business creation."
   ],
   "f1GatePassed": false
 }
