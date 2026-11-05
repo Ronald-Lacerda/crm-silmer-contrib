@@ -2,9 +2,9 @@
   "task": "OLIST-T02",
   "observedOn": "2026-11-04",
   "environment": "current-operational-account",
-  "authorization": "User approved the private app, one C01 order, and one dedicated CRM origin. Exact order-flow options are pending after automatic approval review rejected saving them; no further business creation approved.",
+  "authorization": "User approved private app, one C01 order, one dedicated CRM origin and exact tracking/payment parameters. Origin setup completed; no further business creation approved.",
   "method": "Authenticated Chrome UI, initial eight fixed API-v3 GETs, and sixteen C01 diagnostic/preflight GETs.",
-  "erpMutations": 5,
+  "erpMutations": 6,
   "createdCredentials": 1,
   "authenticatedApiV3Calls": 37,
   "privacy": "No company identifiers, user identifiers, client records, secrets, private URLs or raw screenshots in this artifact.",
@@ -305,8 +305,7 @@
     }
   ],
   "pending": [
-    "Explicit approval to save tracking off and integrated-payment mismatch N only on the new CRM origin; these changes are prepared but unsaved.",
-    "Inspect fiscal settings, finish origin setup and prove API-v3 ecommerce reference roundtrip with a separately approved case.",
+    "Prove API-v3 ecommerce reference roundtrip with a separately approved case.",
     "New customer/parent/variation and remaining precision/rejection/recovery proofs for full F1."
   ],
   "session": "Restored by user; read-only UI inspection resumed successfully.",
@@ -408,12 +407,39 @@
       "extraOrders": 0,
       "c01Mutations": 0,
       "evidence": "crm-origin-setup.json"
+    },
+    {
+      "action": "dedicated-crm-origin-setup-completed",
+      "userApproval": "Autorizar esses parâmetros",
+      "savedAutomaticTracking": false,
+      "savedIntegratedPaymentMismatchPolicy": "N",
+      "freshReadbackConfirmed": true,
+      "fiscalNatureDefaultPreserved": true,
+      "nfeDataSendingOptionOffered": false,
+      "externalNotificationUrlsEmpty": true,
+      "automaticEmails": false,
+      "shippingMethods": [],
+      "uiCompletionConfirmed": true,
+      "extraOrders": 0,
+      "c01Mutations": 0,
+      "oauthScopeChanges": 0,
+      "newCredentialGenerationInvoked": false,
+      "evidence": "crm-origin-setup.json"
     }
   ],
   "applicationConfigurationsSaved": 2,
   "liveApiEvidence": "read-only-live-result.json",
   "observationsScope": "The observations array preserves the initial UI inspection before app creation. Later state changes are recorded in events and read-only-live-result.json.",
   "originRecordsCreated": 1,
-  "originSetupStagesCompleted": ["stock", "pricing"],
-  "globalCommercialSettingsSaved": 0
+  "originSetupStagesCompleted": [
+    "connection",
+    "stock",
+    "pricing",
+    "orders",
+    "fiscal",
+    "notifications",
+    "mappings"
+  ],
+  "globalCommercialSettingsSaved": 0,
+  "mutationCountingMethod": "High-level approved configuration/business checkpoints, not HTTP requests or individual setup saves."
 }

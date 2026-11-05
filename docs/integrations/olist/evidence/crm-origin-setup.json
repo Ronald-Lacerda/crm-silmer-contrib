@@ -1,7 +1,7 @@
 {
   "task": "OLIST-T02",
   "observedOn": "2026-11-04",
-  "capturedAt": "2026-11-05T01:01:32.857177+00:00",
+  "capturedAt": "2026-11-05T01:43:01.927133+00:00",
   "environment": "current-operational-account",
   "userApproval": "Autorizar origem exclusiva do CRM",
   "approvedScope": "One CRM Silmer - prova F1 origin through API do ERP; no existing marketplace binding, external endpoint, new credential generation, additional order or C01 mutation.",
@@ -12,12 +12,14 @@
     "existingOriginNamesUnchanged": ["Shopee", "TikTok Shop"],
     "identifierStoredPrivately": true,
     "apiV3EcommerceIdRoundtripProven": false,
-    "setupComplete": false
+    "setupComplete": true
   },
   "savedReadback": {
     "name": "CRM Silmer - prova F1",
     "stockSync": "Não atualizar",
-    "stockExit": "Manual"
+    "stockExit": "Manual",
+    "automaticTracking": false,
+    "integratedPaymentMismatchPolicy": "Consider payment Not integrated (N)"
   },
   "pricingStage": {
     "default": "Preço fixo",
@@ -26,24 +28,14 @@
     "stageCompleted": true,
     "catalogSyncCommandIssued": false
   },
-  "pendingOrderOptions": {
-    "automaticTracking": {
-      "saved": true,
-      "prepared": false
-    },
-    "integratedPaymentMismatchPolicy": {
-      "saved": "Use integrated payment amount from channel (I)",
-      "prepared": "Consider payment Not integrated (N)"
-    },
-    "saved": false
-  },
-  "fiscalStageInspected": false,
+  "fiscalStageInspected": true,
   "security": {
     "newCredentialGenerationInvoked": false,
-    "existingAccountTokenValueRead": false,
     "existingAccountTokenCopied": false,
     "externalEndpointProvided": false,
-    "oauthScopeChanged": false
+    "oauthScopeChanged": false,
+    "credentialModalAutomaticallyDisplayedAtCompletion": true,
+    "existingAccountTokenPersistedInArtifacts": false
   },
   "effects": {
     "newOrders": 0,
@@ -63,12 +55,40 @@
     },
     {
       "action": "Save order-flow options",
-      "result": "rejected",
+      "result": "resolved-after-explicit-approval",
       "reason": "Authorization did not explicitly specify tracking and integrated-payment-mismatch parameters.",
-      "resolution": "No alternate save or workaround; values remain prepared but unsaved. A fresh readback confirmed original saved defaults."
+      "resolution": "No workaround; user approved the exact parameters with Autorizar esses parâmetros. The same save then succeeded and a fresh origin readback confirmed false/N."
     }
   ],
-  "requiredDecision": "Explicit approval of tracking off and divergent integrated payments Not integrated only on the new origin; conditional Manual NF-e data delivery if offered in the next fiscal screen. Fiscal screen has not been inspected.",
+  "requiredDecision": "A separately approved case is still required to prove API-v3 origin/reference roundtrip and remaining new-record and monetary capabilities.",
   "privacy": "No integrator ID, account token, credential, raw private URL, fiscal document or personal data.",
-  "f1GatePassed": false
+  "f1GatePassed": false,
+  "parameterApproval": "Autorizar esses parâmetros",
+  "orderOptions": {
+    "previousAutomaticTracking": true,
+    "previousIntegratedPaymentMismatchPolicy": "I",
+    "saved": true,
+    "freshReadbackConfirmed": true
+  },
+  "fiscalStage": {
+    "operationNature": "Venda de mercadorias",
+    "operationNatureChanged": false,
+    "differentNatureForIcmsTaxpayer": false,
+    "nfeDataSendingOptionOffered": false,
+    "conditionalManualSettingApplied": false
+  },
+  "notifications": {
+    "allSixExternalUrlsEmpty": true,
+    "trackingEmail": false,
+    "deliveryEmail": false,
+    "freshReadbackConfirmed": true
+  },
+  "shippingMapping": {
+    "carriers": [],
+    "continuedWithoutShippingMethod": true
+  },
+  "completion": {
+    "uiMessage": "Sua integração está configurada",
+    "allFiveStagesChecked": true
+  }
 }

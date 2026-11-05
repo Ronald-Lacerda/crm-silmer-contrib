@@ -260,47 +260,48 @@ e ecommerce.id zero. A referência também não apareceu na UI. A consulta de
 referência após essa divergência não foi executada; não alegar roundtrip
 pesquisável. O ID confirmado permite preservar este vínculo sem recriar.
 
-## Origem exclusiva criada — configuração ainda pendente
+## Origem exclusiva configurada
 
-O PO aprovou **“Autorizar origem exclusiva do CRM”** com os limites da
-pergunta: uma origem própria, sem ligar Shopee/TikTok, sem endpoint externo,
-sem geração de nova credencial ou nova permissão, sem outro pedido ou mudança
-de C01. O cadastro **CRM Silmer - prova F1** aparece uma única vez na lista,
-ao lado das duas integrações anteriores.
+O PO aprovou **“Autorizar origem exclusiva do CRM”**: uma origem própria,
+sem ligar Shopee/TikTok, endpoint externo, geração de nova credencial ou
+permissão, outro pedido ou mudança de C01. **CRM Silmer - prova F1** aparece
+uma única vez na lista ao lado das duas integrações anteriores.
 [Evidência da configuração](evidence/crm-origin-setup.json).
 
-O formulário informa que Token é o identificador único da conta. A extensão
-Token API já estava instalada. Não foi acionada geração de token; seu valor
-não foi lido, copiado ou enviado a equipe/terceiro. Não houve cobrança ou pedido de nova
-permissão. O campo Identificador do integrador foi capturado privadamente;
-a correspondência desse ID com ecommerce.id v3 ainda precisa de prova.
-Nenhum endpoint externo foi informado.
+Estoque salvo como Não atualizar/saída Manual; preços mantidos no padrão
+Preço fixo, sem digitar preço ou ajuste nem sincronizar catálogo.
+O salvamento de preços foi inicialmente recusado pela revisão automática;
+a leitura do padrão inalterado permitiu o mesmo salvamento.
 
-Etapas já concluídas: estoque com Não atualizar e saída Manual, ambos
-conferidos em uma leitura nova; preços mantidos no padrão Preço fixo, sem
-digitar valor, desconto/acréscimo ou executar sincronização de catálogo.
-O salvamento da etapa de preços foi inicialmente rejeitado pela revisão
-automática por não dispor dos valores verificados. Após leitura do padrão
-inalterado, o mesmo salvamento foi aceito. Não houve mudança de regra de preço.
+Pedidos inicialmente exibia rastreamento ligado e divergência de pagamento I.
+A revisão automática recusou o salvamento dos valores escolhidos porque a
+aprovação anterior não os especificava. Não houve contorno. Após a resposta
+**“Autorizar esses parâmetros”**, foram salvos rastreamento desativado e
+Considerar pagamento como Não integrado (N). Uma reabertura da origem pela
+lista confirmou os dois valores persistidos.
 
-A etapa de Pedidos exibiu rastreamento automático ligado e política de
-divergência nota/pagamento em Utilizar valor integrado do canal (I).
-Foram preparados rastreamento desativado e Considerar pagamento como
-Não integrado (N), mas **não foram salvos**: a revisão automática recusou
-o salvamento porque a autorização anterior não especificava esses parâmetros.
-Não houve salvamento por outro controle. Uma consulta nova confirmou os
-valores anteriores persistidos; o formulário original ficou preparado para
-aprovação. A etapa fiscal posterior ainda não foi inspecionada.
-A próxima solicitação propõe aprovar os dois valores preparados e, caso a
-etapa seguinte exponha envio de dados de NF-e, mantê-lo Manual, sem emissão
-ou autorização de nota. Essa última opção é condicional, ainda não observada
-nesta origem; não será apresentada como já configurada.
+A etapa fiscal manteve Venda de mercadorias e natureza alternativa para
+contribuinte ICMS desmarcada. Não ofereceu opção de envio de dados de NF-e:
+a autorização condicional para Manual não corresponde a uma opção aplicada.
+As seis URLs de notificações ficaram vazias; e-mails de rastreamento/entrega
+desativados, confirmados em nova leitura. Nenhuma transportadora foi
+vinculada; o aviso de ausência de frete foi aceito para concluir sem vínculo.
+A UI confirmou **Sua integração está configurada**, com as cinco etapas
+marcadas.
 
-A política N é apenas o tratamento de divergência de valores de pagamento
-integrado; não equivale a desativar todas as funções financeiras do ERP.
-Nenhum pagamento foi enviado/criado/alterado. Não modificar configurações
-globais ou canais existentes. A origem não está pronta para a próxima prova
-enquanto esses limites e os dados fiscais não forem conferidos.
+O formulário informa que Token é identificador único da conta; a extensão
+legada já estava instalada. Não foi acionada geração de credencial. Ao
+concluir, a UI abriu automaticamente um modal com credenciais existentes,
+fechado sem copiar, usar ou persistir seus valores nos artefatos.
+Não houve cobrança nem ampliação de escopos. O identificador do integrador
+permanece privado e sua correspondência com ecommerce.id v3 está **não
+comprovada**. Nenhum endpoint externo foi informado.
+
+A política N trata somente divergências de pagamento integrado; não desativa
+todas as funções financeiras do ERP. Não houve pagamento, nota, conta, estoque,
+mensagem, mudança global ou de outro canal. Nenhum novo pedido foi criado e
+C01 permaneceu intacto. O próximo POST exige aprovação de um novo caso;
+concluir a origem não comprova preservação de referência na API v3.
 
 ### Reconciliação somente leitura
 

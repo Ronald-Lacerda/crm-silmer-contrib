@@ -267,9 +267,10 @@ foi enviado sem ecommerce.id e retornou vazio, com ID de e-commerce zero.
 Os demais checks e subtotais da UI coincidiram. Isso é um resultado da conta,
 não prova de uma regra universal ou de que qualquer ID resolverá. API do ERP
 foi encontrado no catálogo e o PO autorizou criar uma origem exclusiva.
-CRM Silmer - prova F1 já foi cadastrada; estoque Não atualizar/Manual salvo,
-preço fixo padrão mantido. A configuração de Pedidos ficou pendente de
-aprovação explícita após rejeição da revisão automática; etapa fiscal não
-inspecionada. [Estado da origem](evidence/crm-origin-setup.json).
+CRM Silmer - prova F1 foi configurada; estoque Não atualizar/Manual e preço
+fixo padrão mantidos. Após aprovação explícita dos parâmetros, foram salvos e
+relidos rastreamento desativado e divergência de pagamento N. Natureza fiscal
+padrão preservada, URLs vazias, e-mails desativados e nenhum frete vinculado.
+A UI confirmou a conclusão; não ofereceu opção de envio de NF-e. [Estado da origem](evidence/crm-origin-setup.json).
 Nenhuma nova venda foi autorizada ou criada nesta configuração.
 Não usar número de ordem de compra como remendo nem repetir C01.

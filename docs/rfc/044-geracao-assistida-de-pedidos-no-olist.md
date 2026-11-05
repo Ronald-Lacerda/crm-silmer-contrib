@@ -700,10 +700,11 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       sem repetir/editar/cancelar. Núcleo/transporte com 29 testes sintéticos.
       PO autorizou uma origem própria API do ERP: CRM Silmer - prova F1 foi
       cadastrada, estoque Não atualizar/Manual salvo e preço fixo padrão
-      preservado. [Configuração parcial](../integrations/olist/evidence/crm-origin-setup.json):
-      rastreamento/política de divergência de pagamentos aguardam aprovação
-      explícita após rejeição da revisão automática; etapa fiscal não
-      inspecionada. Nenhum novo pedido/C01 alterado. Referência, cadastros
+      preservado. Após aprovação explícita dos parâmetros, a
+      [origem foi concluída](../integrations/olist/evidence/crm-origin-setup.json):
+      rastreamento desativado/política N salvos e relidos, natureza fiscal
+      padrão preservada, URLs vazias/e-mails desativados/sem frete vinculado.
+      Nenhum novo pedido/C01 alterado. Referência, cadastros
       automáticos e precisão restante mantêm F1 aberto.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado
