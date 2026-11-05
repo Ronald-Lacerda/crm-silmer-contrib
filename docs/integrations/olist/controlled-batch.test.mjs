@@ -166,3 +166,68 @@ test('reconciliation of rejected customer uses thirteen GETs and never frees res
     await fs.rmdir(dir);
   }
 });
+
+async function diagnosticRun(rejectCustomer) {
+  const previous = await run({ rejectCustomer: true });
+  const { diagnoseCustomerOnce } = await import('./controlled-batch.mjs');
+  const fs = await import('node:fs/promises'),
+    dir = await mkdtemp(join(tmpdir(), 'olist-diagnostic-once-'));
+  const original = join(dir, BATCH_NAME + '.jsonl'),
+    diagnostic = join(dir, 'CUSTOMER-DIAG01.jsonl');
+  await fs.writeFile(original, previous.journal);
+  const mock = provider(await loadBatchPlan(), { rejectCustomer });
+  try {
+    const options = {
+      token: 'MOCK',
+      approvedDigest: previous.bound.digest,
+      journalDirectory: dir,
+      fetcher: mock.fetch,
+      pause: async () => {},
+    };
+    const result = await diagnoseCustomerOnce(previous.bound, options);
+    assert.equal(await fs.readFile(original, 'utf8'), previous.journal);
+    const callsBefore = mock.calls.length;
+    await assert.rejects(
+      diagnoseCustomerOnce(previous.bound, options),
+      /DIAGNOSTIC_ALREADY_RESERVED/,
+    );
+    assert.equal(mock.calls.length, callsBefore);
+    return {
+      result,
+      journal: await fs.readFile(diagnostic, 'utf8'),
+      calls: mock.calls,
+    };
+  } finally {
+    for (const p of [original, diagnostic]) {
+      try {
+        await fs.unlink(p);
+      } catch (e) {
+        if (e.code !== 'ENOENT') throw e;
+      }
+    }
+    await fs.rmdir(dir);
+  }
+}
+test('explicit diagnostic rejection sends exactly the original customer once, records safe fields, leaves both reservations', async () => {
+  const { result, journal, calls } = await diagnosticRun(true);
+  assert.equal(result.code, 'HTTP_400');
+  assert.equal(result.gets, 14);
+  assert.equal(result.erpPostAttempts, 1);
+  assert.deepEqual(result.calls.at(-1).validationFields, ['cpfCnpj']);
+  assert.equal(calls.filter((c) => c.method === 'POST').length, 1);
+  assert.ok(!journal.includes('"event":"created"'));
+  assert.equal(result.dependentPosts, 0);
+});
+test('successful diagnostic preserves confirmed ID and reconciles fiscal identity without creating dependents', async () => {
+  const { result, journal } = await diagnosticRun(false);
+  assert.equal(
+    result.state,
+    'diagnostic_customer_created_and_reconciled',
+    JSON.stringify(result),
+  );
+  assert.equal(result.gets, 17);
+  assert.equal(result.erpPostAttempts, 1);
+  assert.equal(result.dependentPosts, 0);
+  assert.ok(journal.includes('"event":"api-reconciled"'));
+  assert.equal(result.identicalOriginalPayload, true);
+});

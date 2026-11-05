@@ -712,6 +712,11 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       cadastro e não liberam retry. Causa específica não retida na tentativa;
       coletor corrigido/testado (12 mocks). [Resultado do lote](../integrations/olist/evidence/controlled-batch-live-result.json).
       Cadastro, pai/variações, nova referência e precisão continuam abertos.
+      Uma tentativa adicional idêntica foi depois aprovada: mais 14 GETs e
+      um POST /contatos retornaram 400, campo codigo, categoria tamanho/limite.
+      [Diagnóstico](../integrations/olist/evidence/customer-diagnostic-live-result.json);
+      UI indica código opcional, mas omissão ainda não foi aprovada/provada
+      na API. Nenhum dependente foi enviado; reservas preservadas.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado
 fiscal inventado ou suposição de idempotência remota. Plano para ausência de

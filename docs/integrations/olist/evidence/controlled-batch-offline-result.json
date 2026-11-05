@@ -1,15 +1,15 @@
 {
   "task": "OLIST-T02",
   "runtime": "Node 24.20.0",
-  "tests": 12,
-  "passed": 12,
+  "tests": 14,
+  "passed": 14,
   "failed": 0,
   "externalCallsDuringTests": 0,
   "sourceSha256": {
-    "controlled-batch.mjs": "1427dd286c452993d2153aa4d740642ef491b5cb7f9f65832d5cfa95a0ee7e98",
-    "controlled-batch.test.mjs": "8c03c4de266e2a7d657a8c98966038b6a2c242aae3ccbe7b2e3c11e4c4332aa0",
-    "controlled-batch.fixtures.mjs": "02690595ba16a0edd2b435e7417edc3a89ac65062451f129dd230ee60531b2f2",
-    "batch-session.mjs": "1a831962a444ecc08da254ed76903c832c3a2e6487610df4a6f52b69c95d4340",
+    "controlled-batch.mjs": "d6f04654d989415219676bfd9b54b4fc191cecf92236fa7ad4a256fc234e44df",
+    "controlled-batch.test.mjs": "7fc3a0b026b5ee75153e3e1c8c6827a103e8279cf9ffb79f5f38a556a949ac2c",
+    "controlled-batch.fixtures.mjs": "f53905dedeb950e094f48e1fdd2af32f038504f96fb7bd143b02b3ddac1f4398",
+    "batch-session.mjs": "4972b66c26f2bddd7a8474da2307a155e8af668d849a73a7dbaf83b5ac637ed8",
     "batch-session.test.mjs": "738f76de902fc8beab7405663d039c6e94496d7341d2954d0d390a3a2227597a"
   },
   "cases": [
@@ -24,7 +24,9 @@
     "private selection digest/date guard",
     "loopback OAuth callback is single use, removes code from URL and persists neither credentials nor tokens",
     "HTTP400 preserves allowed field/category diagnostics without provider values",
-    "rejected-customer reconciliation uses thirteen GETs and never releases the original reservation"
+    "rejected-customer reconciliation uses thirteen GETs and never releases the original reservation",
+    "explicit identical diagnostic rejection posts exactly once and preserves both reservations",
+    "successful diagnostic reconciles fiscal/type/situation and stores confirmed ID without dependents"
   ],
   "proofLimit": "Mock execution validates local guards, not remote API behavior or F1 completion."
 }

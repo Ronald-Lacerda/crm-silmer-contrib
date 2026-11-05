@@ -1,0 +1,37 @@
+{
+  "task": "OLIST-T02",
+  "case": "CUSTOMER-CORRECTED01",
+  "approval": false,
+  "sendable": false,
+  "observedError": {
+    "field": "codigo",
+    "category": "length-or-limit",
+    "exactMaximumKnown": false
+  },
+  "uiEvidence": {
+    "field": "codigo",
+    "placeholder": "Opcional",
+    "maxLengthAttributeAbsent": true,
+    "noFormSaved": true
+  },
+  "proposedChange": "Omit only the codigo property from the same approved customer payload. Preserve every fiscal/address/type/situation value. API acceptance of omission remains unproved.",
+  "identityAndRecovery": "Reconcile by exact fiscal document and confirmed remote ID; retain any ERP-assigned code without editing it. Preserve both previous reservations.",
+  "limits": {
+    "maximumAdditionalCustomerPostAttempts": 1,
+    "maximumTotalBatchPostAttempts": 8,
+    "authenticatedGetsAlreadyUsed": 54,
+    "proposedMaximumTotalAuthenticatedGets": 120,
+    "unauthenticatedGetsAlreadyUsed": 1,
+    "additionalUnauthenticatedGets": 0,
+    "newOrderBudgetCents": 1000
+  },
+  "beforePost": [
+    "Confirm same account and exact company identity.",
+    "Recheck both document formats and previous stable code across A/B/I/E; reuse/reconcile any exact existing match rather than creating again.",
+    "Require the restored original payload hash to match the original customer reservation, then delete only codigo.",
+    "Reserve the corrected attempt once under its own immutable journal before dispatch."
+  ],
+  "onRejectionOrUncertainty": "Capture safe field/category diagnostics, stop without correction/retry or any dependent POST.",
+  "onSuccess": "Persist/reconcile ID, exact fiscal fields, address, situation B and Cliente type; resume the five still-unexecuted dependent POSTs already approved, with unchanged cases/payloads/financial cap and side-effect prohibitions.",
+  "notAuthorizedYet": "No corrected POST or dependent creation executed by this proposal."
+}

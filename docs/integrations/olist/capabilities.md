@@ -288,3 +288,13 @@ GET não autenticado (401) e um POST rejeitado. C01 intacto.
 [12 testes do executor corrigido](evidence/controlled-batch-offline-result.json).
 Nova tentativa do cliente exige aprovação explícita; não inventar correção
 ou considerar o schema suficiente para a validação fiscal real. F1 aberto.
+
+### Diagnóstico adicional autorizado
+
+Um POST adicional idêntico foi aprovado e executado após mais 14 GETs.
+Retornou 400 com campo **codigo** e categoria **tamanho ou limite**; nenhum
+dependente foi enviado e ambas as reservas permanecem. A UI trata Código como
+opcional, sem revelar limite. [Diagnóstico real](evidence/customer-diagnostic-live-result.json).
+Omitir somente codigo é uma proposta ainda não aprovada/testada na API, sem
+alterar dados fiscais. Total do lote: 54 GETs autenticados, um não autenticado,
+dois POSTs rejeitados e nenhum ID novo confirmado. T02/F1 abertos.

@@ -22,6 +22,7 @@ import {
   bindBatch,
   executeBatch,
   reconcileRejectedCustomer,
+  diagnoseCustomerOnce,
 } from './controlled-batch.mjs';
 const ROOT = resolve('C:/Users/sutil/dev/Pessoal/crm-silmer/var/olist-phase1');
 const LOCAL = 'http://127.0.0.1:8765';
@@ -39,7 +40,8 @@ export async function startBatchSession(
   root = ROOT,
   { approvedDigest, fetcher = fetch, pause, mode = 'execute' } = {},
 ) {
-  if (!['execute', 'reconcile'].includes(mode)) throw new Error('INVALID_MODE');
+  if (!['execute', 'reconcile', 'diagnostic'].includes(mode))
+    throw new Error('INVALID_MODE');
   const input = JSON.parse(
     await readFile(join(root, 'f1-next-cases-private.json'), 'utf8'),
   );
@@ -110,7 +112,9 @@ export async function startBatchSession(
         200,
         (mode === 'reconcile'
           ? '<p>Somente treze GETs de reconciliacao, zero POST ERP. A reserva anterior permanece.</p><a href="'
-          : '<p>Ate seis POSTs, oitenta GETs autenticados e um GET sem autenticacao. Lote aprovado pelo PO; os registros permanecerao no ERP.</p><a href="') +
+          : mode === 'diagnostic'
+            ? '<p>Uma tentativa adicional identica do cliente aprovada pelo PO, ate dezessete GETs. Sem produtos ou pedidos neste modo.</p><a href="'
+            : '<p>Ate seis POSTs, oitenta GETs autenticados e um GET sem autenticacao. Lote aprovado pelo PO; os registros permanecerao no ERP.</p><a href="') +
           esc(authorizationUrl(credentials.clientId, state)) +
           '">Conectar Olist para lote F1</a>',
       );
@@ -143,7 +147,11 @@ export async function startBatchSession(
       )
         throw new Error('TOKEN_MISSING');
       result = await (
-        mode === 'reconcile' ? reconcileRejectedCustomer : executeBatch
+        mode === 'reconcile'
+          ? reconcileRejectedCustomer
+          : mode === 'diagnostic'
+            ? diagnoseCustomerOnce
+            : executeBatch
       )(bound, {
         token: response.body.access_token,
         approvedDigest,
@@ -263,9 +271,10 @@ export async function startBatchSession(
       encryptedEnvelopeFile: envelope,
       publicKeySha256: createHash('sha256').update(pem).digest('hex'),
       mode,
-      maximumPosts: mode === 'reconcile' ? 0 : 6,
-      maximumAuthenticatedGets: mode === 'reconcile' ? 13 : 80,
-      maximumUnauthenticatedGets: mode === 'reconcile' ? 0 : 1,
+      maximumPosts: mode === 'reconcile' ? 0 : mode === 'diagnostic' ? 1 : 6,
+      maximumAuthenticatedGets:
+        mode === 'reconcile' ? 13 : mode === 'diagnostic' ? 17 : 80,
+      maximumUnauthenticatedGets: mode === 'execute' ? 1 : 0,
       lifetimeMinutes: 30,
     }) + '\n',
   );
@@ -278,7 +287,7 @@ if (
   const a = process.argv.slice(2);
   if (
     a.length !== 2 ||
-    !['--approved', '--reconcile'].includes(a[0]) ||
+    !['--approved', '--reconcile', '--diagnostic'].includes(a[0]) ||
     !/^[a-f0-9]{64}$/.test(a[1])
   ) {
     process.stderr.write(
@@ -288,7 +297,12 @@ if (
   } else
     startBatchSession(undefined, {
       approvedDigest: a[1],
-      mode: a[0] === '--reconcile' ? 'reconcile' : 'execute',
+      mode:
+        a[0] === '--reconcile'
+          ? 'reconcile'
+          : a[0] === '--diagnostic'
+            ? 'diagnostic'
+            : 'execute',
     }).catch((e) => {
       process.stderr.write(
         /^[A-Z][A-Z_0-9]+$/.test(e.message)

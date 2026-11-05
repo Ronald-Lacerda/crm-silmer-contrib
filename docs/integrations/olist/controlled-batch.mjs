@@ -924,3 +924,280 @@ export async function reconcileRejectedCustomer(
     f1GatePassed: false,
   };
 }
+
+/** Exactly one explicitly approved additional POST, identical to the rejected payload. */
+export async function diagnoseCustomerOnce(
+  bound,
+  {
+    token,
+    approvedDigest,
+    journalDirectory,
+    fetcher = fetch,
+    signal,
+    pause = delay,
+    onProgress = () => {},
+  } = {},
+) {
+  if (approvedDigest !== bound.digest) fail('EXPLICIT_APPROVAL_REQUIRED');
+  const originalPath = join(journalDirectory, BATCH_NAME + '.jsonl');
+  const events = (await readFile(originalPath, 'utf8'))
+    .trim()
+    .split('\n')
+    .map(JSON.parse);
+  const original = events.find(
+    (e) => e.event === 'reserved' && e.resource === 'customer',
+  );
+  if (
+    events[0]?.planHash !== bound.digest ||
+    !original ||
+    events.some((e) => e.event === 'created')
+  )
+    fail('DIAGNOSTIC_STATE_NOT_ALLOWED');
+  const journal = join(journalDirectory, 'CUSTOMER-DIAG01.jsonl');
+  try {
+    await readFile(journal);
+    fail('DIAGNOSTIC_ALREADY_RESERVED');
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+  let gets = 0,
+    posts = 0,
+    reserved = false,
+    last = 0;
+  const calls = [];
+  const countedFetch = async (url, init) => {
+    if (init.method === 'GET') {
+      if (++gets > 17) fail('REQUEST_NOT_ALLOWED');
+    } else if (init.method === 'POST') {
+      if (!reserved || posts || url !== API + '/contatos')
+        fail('REQUEST_NOT_ALLOWED');
+      posts++;
+    } else fail('REQUEST_NOT_ALLOWED');
+    let response;
+    try {
+      response = await fetcher(url, init);
+    } catch {
+      fail('HTTP_OUTCOME_UNKNOWN');
+    }
+    calls.push({
+      method: init.method,
+      path: new URL(url).pathname
+        .replace('/public-api/v3', '')
+        .replace(/\/\d+(?=\/|$)/g, '/{id}'),
+      status: response.status,
+    });
+    onProgress({ gets, posts, last: calls.at(-1) });
+    return response;
+  };
+  async function request(path, method = 'GET', payload) {
+    if (last)
+      await pause(Math.max(0, 2600 - (Date.now() - last)), undefined, {
+        signal,
+      });
+    last = Date.now();
+    const response = await countedFetch(API + path, {
+      method,
+      redirect: 'error',
+      headers: {
+        Accept: 'application/json',
+        Authorization: 'Bearer ' + token,
+        ...(method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...(method === 'POST' ? { body: JSON.stringify(payload) } : {}),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(20000)])
+        : AbortSignal.timeout(20000),
+    });
+    const reader = response.body?.getReader();
+    if (!reader) fail('INVALID_RESPONSE');
+    const chunks = [];
+    let bytes = 0;
+    try {
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        bytes += part.value.byteLength;
+        if (bytes > 131072) {
+          await reader.cancel();
+          fail('BODY_TOO_LARGE');
+        }
+        chunks.push(part.value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    let body;
+    try {
+      body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    } catch {
+      fail('INVALID_RESPONSE');
+    }
+    if (response.status < 200 || response.status >= 300) {
+      const fields = new Set([
+        'nome',
+        'codigo',
+        'cpfCnpj',
+        'tipoPessoa',
+        'situacao',
+        'tipos',
+        'regimeTributario',
+        'inscricaoEstadual',
+        'endereco',
+        'endereco.cep',
+        'endereco.pais',
+        'endereco.uf',
+        'endereco.numero',
+        'endereco.municipio',
+        'endereco.bairro',
+        'endereco.complemento',
+        'cep',
+        'pais',
+        'uf',
+        'municipio',
+        'telefone',
+        'celular',
+        'email',
+        'vendedor',
+        'fantasia',
+        'contatos',
+      ]);
+      const details = Array.isArray(body?.detalhes) ? body.detalhes : [];
+      calls.at(-1).validationFields = [
+        ...new Set(
+          details.map((x) => (fields.has(x?.campo) ? x.campo : 'other')),
+        ),
+      ];
+      calls.at(-1).validationCategories = [
+        ...new Set(
+          details.map((x) => {
+            const m = canonical(x?.mensagem);
+            return /OBRIGAT|REQUIRED/.test(m)
+              ? 'required'
+              : /CARACT|TAMANHO|LIMITE|MAXIM|MÁXIM/.test(m)
+                ? 'length-or-limit'
+                : /EXIST|DUPLIC/.test(m)
+                  ? 'already-exists'
+                  : /INV.LID|VALID/.test(m)
+                    ? 'invalid'
+                    : 'unspecified';
+          }),
+        ),
+      ];
+      fail('HTTP_' + response.status);
+    }
+    if (!response.headers.get('content-type')?.includes('application/json'))
+      fail('INVALID_RESPONSE');
+    return body;
+  }
+  try {
+    const reconciliation = await reconcileRejectedCustomer(bound, {
+      token,
+      journalDirectory,
+      fetcher: countedFetch,
+      signal,
+      pause,
+    });
+    if (!reconciliation.allQueriesEmpty) fail('CUSTOMER_POSSIBLY_EXISTS');
+    // The next request waits after the final reconciliation GET too.
+    last = Date.now();
+    const source = await request('/contatos/' + bound.input.existingBuyer.id);
+    if (
+      source.id !== bound.input.existingBuyer.id ||
+      !sameDoc(source.cpfCnpj, bound.input.existingBuyer.document)
+    )
+      fail('CUSTOMER_TYPE_SOURCE_MISMATCH');
+    const clientTypes = (source.tipos ?? []).filter(
+      (t) => canonical(t.descricao) === 'CLIENTE',
+    );
+    if (clientTypes.length !== 1 || !positive(clientTypes[0].id))
+      fail('CUSTOMER_TYPE_UNPROVEN');
+    const payload = { ...bound.input.customer, tipos: [clientTypes[0].id] };
+    if (hash(JSON.stringify(payload)) !== original.payloadHash)
+      fail('ORIGINAL_PAYLOAD_CHANGED');
+    await append(
+      journal,
+      {
+        event: 'diagnostic-reserved',
+        originalBatch: BATCH_NAME,
+        originalPayloadHash: original.payloadHash,
+        explicitAdditionalAttempt: true,
+        maximumPosts: 1,
+      },
+      true,
+    );
+    reserved = true;
+    const created = await request('/contatos', 'POST', payload);
+    if (!positive(created?.id)) fail('CREATED_ID_MISSING');
+    await append(journal, {
+      event: 'created',
+      resource: 'customer',
+      id: created.id,
+    });
+    const customer = await request('/contatos/' + created.id);
+    customerCheck(customer, bound.input.customer, created.id, true);
+    if (
+      Number(customer.regimeTributario) !==
+        bound.input.customer.regimeTributario ||
+      !Array.isArray(customer.tipos) ||
+      customer.tipos.length !== 1 ||
+      customer.tipos[0].id !== clientTypes[0].id
+    )
+      fail('CUSTOMER_FISCAL_OR_TYPE_DIVERGENT');
+    const byDocument = page(
+      await request(
+        query('/contatos', {
+          cpfCnpj: bound.input.customer.cpfCnpj,
+          situacao: 'B',
+        }),
+      ),
+    );
+    const byCode = page(
+      await request(
+        query('/contatos', {
+          codigo: bound.input.customer.codigo,
+          situacao: 'B',
+        }),
+      ),
+    );
+    if (
+      byDocument.length !== 1 ||
+      byDocument[0].id !== created.id ||
+      byCode.length !== 1 ||
+      byCode[0].id !== created.id
+    )
+      fail('CUSTOMER_LOOKUP_DIVERGENT');
+    await append(journal, {
+      event: 'api-reconciled',
+      resource: 'customer',
+      id: created.id,
+    });
+    return {
+      task: 'OLIST-T02',
+      state: 'diagnostic_customer_created_and_reconciled',
+      gets,
+      erpPostAttempts: posts,
+      calls,
+      identicalOriginalPayload: true,
+      confirmedIdStoredPrivately: true,
+      originalJournalPreserved: true,
+      dependentPosts: 0,
+      resumeOriginallyApprovedDependentsAllowed: true,
+      f1GatePassed: false,
+    };
+  } catch (e) {
+    return {
+      task: 'OLIST-T02',
+      state: 'diagnostic_stopped_preserve_reservations',
+      code: /^[A-Z][A-Z_0-9]+$/.test(e?.message ?? '')
+        ? e.message
+        : 'DIAGNOSTIC_STOPPED',
+      gets,
+      erpPostAttempts: posts,
+      calls,
+      originalJournalPreserved: true,
+      dependentPosts: 0,
+      automaticRetry: false,
+      f1GatePassed: false,
+    };
+  }
+}

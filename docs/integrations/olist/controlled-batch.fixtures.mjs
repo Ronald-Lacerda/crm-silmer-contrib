@@ -197,7 +197,11 @@ export function provider(plan, options = {}) {
           );
         assert.deepEqual(b.tipos, [5]);
         assert.equal(b.situacao, 'B');
-        customer = { ...b, id: 100 };
+        customer = {
+          ...b,
+          tipos: b.tipos.map((id) => ({ id, descricao: 'Cliente' })),
+          id: 100,
+        };
         return response({ id: 100 }, 201);
       }
       if (p === '/produtos') {

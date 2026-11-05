@@ -399,6 +399,37 @@ do cliente. Nenhuma tentativa adicional foi executada. Nenhum novo POST, correç
 será usado para contornar o resultado. As provas de cadastro e dinheiro
 continuam abertas; T02/F1 não estão concluídos.
 
+## Tentativa diagnóstica adicional — restrição no código
+
+O PO aprovou **“Autorizar uma tentativa adicional”**: um POST de cliente
+idêntico, com hash igual ao da reserva original, teto total de sete POSTs.
+A execução repetiu por leitura conta/ausência/tipo Cliente antes do envio.
+Foram 14 GETs e um POST; retornou novamente **HTTP 400**, agora com diagnóstico
+seguro **campo codigo / categoria tamanho ou limite**.
+[Resultado](evidence/customer-diagnostic-live-result.json).
+
+Nenhum ID novo foi confirmado, nenhum dependente foi enviado e C01 permaneceu
+intacto. As duas reservas persistem, sem liberação, exclusão ou retry. O lote
+acumula 54 GETs autenticados, um não autenticado e dois POSTs rejeitados.
+O coletor foi encerrado. O executor/transporte corrigido passou em 14 testes
+offline (13 núcleo e um OAuth local), sem chamadas externas nesses testes.
+
+A inspeção de um formulário novo, sem preencher dados fiscais nem salvar,
+mostrou Código com placeholder **Opcional**, sem maxlength/pattern.
+Isso não estabelece o limite exato da API nem comprova que omiti-lo será aceito.
+Não foi atribuído erro ao CNPJ, IE, endereço ou regime; a ausência desses campos
+no diagnóstico não garante que passariam em nova tentativa.
+
+A [correção proposta](customer-corrected-proposal.json), **não autorizada nem
+executada**, omite somente codigo do mesmo payload fiscal/tipo/situação B.
+Reconciliação por documento exato/ID já integra o contrato; não substitui
+cadastro automático por manual. A proposta mantém as reservas anteriores e
+precisa de uma nova autorização: um POST adicional corrigido elevaria o teto
+total a oito tentativas. O teto de GETs proposto passa de 80 para 120 para
+reconferir ausência/cadastros e concluir os dependentes. Os cinco POSTs
+dependentes, três casos monetários, teto de R$ 10,00 e proibições não mudam.
+Nova rejeição/incerteza encerra o avanço, sem correções automáticas.
+
 ## CPF gerado e limites da prova fiscal
 
 O PO sugeriu comprador fictício com CPF gerado e depois escolheu a própria

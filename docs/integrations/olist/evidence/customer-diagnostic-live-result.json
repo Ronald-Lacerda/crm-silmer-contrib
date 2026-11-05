@@ -1,0 +1,134 @@
+{
+  "task": "OLIST-T02",
+  "observedOn": "2026-11-04",
+  "capturedAt": "2026-11-05T02:32:28.489471+00:00",
+  "environment": "current-operational-account",
+  "userApproval": "Autorizar uma tentativa adicional",
+  "scope": "One additional identical customer POST; if rejected, safe field/category only and stop. Total batch POST ceiling seven.",
+  "execution": {
+    "task": "OLIST-T02",
+    "state": "diagnostic_stopped_preserve_reservations",
+    "code": "HTTP_400",
+    "gets": 14,
+    "erpPostAttempts": 1,
+    "calls": [
+      {
+        "method": "GET",
+        "path": "/info",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200
+      },
+      {
+        "method": "GET",
+        "path": "/contatos/{id}",
+        "status": 200
+      },
+      {
+        "method": "POST",
+        "path": "/contatos",
+        "status": 400,
+        "validationFields": ["codigo"],
+        "validationCategories": ["length-or-limit"]
+      }
+    ],
+    "originalJournalPreserved": true,
+    "dependentPosts": 0,
+    "automaticRetry": false,
+    "f1GatePassed": false
+  },
+  "executedSourceSha256": {
+    "controlled-batch.mjs": "d6f04654d989415219676bfd9b54b4fc191cecf92236fa7ad4a256fc234e44df",
+    "controlled-batch.test.mjs": "7fc3a0b026b5ee75153e3e1c8c6827a103e8279cf9ffb79f5f38a556a949ac2c",
+    "controlled-batch.fixtures.mjs": "f53905dedeb950e094f48e1fdd2af32f038504f96fb7bd143b02b3ddac1f4398",
+    "batch-session.mjs": "4972b66c26f2bddd7a8474da2307a155e8af668d849a73a7dbaf83b5ac637ed8",
+    "batch-session.test.mjs": "738f76de902fc8beab7405663d039c6e94496d7341d2954d0d390a3a2227597a"
+  },
+  "identity": {
+    "originalPayloadHashMatched": true,
+    "freshDocumentAndOriginalCodeLookupsAllEmptyBeforePost": true,
+    "sameConfirmedClienteTypeId": true
+  },
+  "results": {
+    "newCustomerIdConfirmed": false,
+    "dependentPosts": 0,
+    "c01Mutations": 0,
+    "originalReservationPreserved": true,
+    "diagnosticReservationPreserved": true
+  },
+  "uiInspection": {
+    "codeFieldPlaceholder": "Opcional",
+    "codeFieldMaxLength": null,
+    "codeFieldPattern": null,
+    "draftHadNoFiscalDataEntered": true,
+    "draftSaved": false
+  },
+  "interpretation": "The runtime rejection identifies codigo and a length/limit category. Exact numeric/format limit and API acceptance of omitting codigo remain unproved. No fiscal-field error was reported; that is not proof all fiscal fields would pass.",
+  "cumulativeBatch": {
+    "authenticatedGets": 54,
+    "unauthenticatedGets": 1,
+    "customerPostAttempts": 2,
+    "confirmedNewRecords": 0
+  },
+  "nextDecision": "Approve one corrected customer POST omitting only codigo, with total batch maximum eight POST attempts and 120 authenticated GETs, if desired.",
+  "f1GatePassed": false,
+  "privacy": "No private documents, addresses, IDs, raw provider error message or credential values."
+}
