@@ -7,10 +7,12 @@ Base aprovada: c46a661e, F1/T02 concluída para exact-cent-v1.
 [ADR 062](../../adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) ·
 [Operação e rollback](../../runbooks/olist-phase2.md).
 
-A confirmação do PO libera esta fase. O RFC e o checkpoint da Fase 1
-permaneceram sem alteração nesta entrega, conforme a divisão de responsabilidade
-informada no chat. Este relatório registra a implementação da Fase 2 e não
-substitui aquele histórico nem declara implantação ou piloto.
+A confirmação do PO liberou esta fase. O RFC e o checkpoint permaneceram sem
+alteração no commit de implementação, conforme a divisão de responsabilidade
+informada no chat. A pedido posterior do PO, foram atualizados para registrar
+o encerramento de T03/T04/T19/T05 e o
+[checkpoint atual](../../../.specs/features/crm-mvp/tasks.md#olist-f2--fase-2-concluída-05112026).
+Este relatório não substitui o histórico da Fase 1 nem declara implantação ou piloto.
 
 ## Escopo implementado
 
@@ -84,8 +86,9 @@ passou isoladamente e na repetição integral, sem mudar sua implementação.
 
 ## Publicação, operação e limites
 
-Branch codex/olist-phase2. O commit da entrega é identificado por OLIST-F2
-no histórico e pelo handoff do chat. O worktree principal e as mudanças dos
+Branch `codex/olist-phase2`, commit/push de implementação
+[6a79cc8a](https://github.com/romulosutil/crm-silmer/commit/6a79cc8aecc3111dbfad5b8b14220f3b3df860aa).
+O worktree principal e as mudanças dos
 outros agentes foram preservados; grafo não foi gerado nem versionado.
 
 Zero chamadas autenticadas ao ERP, zero efeitos remotos e zero deploy nesta

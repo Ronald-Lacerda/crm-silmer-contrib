@@ -139,6 +139,33 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
       localmente, com limitação registrada no runbook. Integração e implantação
       acompanhadas na [PR 309](https://github.com/romulosutil/crm-silmer/pull/309).
 
+## OLIST-F2 — Fase 2 concluída (05/11/2026)
+
+- [x] OLIST-T03: migrações expand 0063/0064, vínculos/snapshots cifrados,
+      reservas duráveis e outbox transacional, preservando jobs de cobrança.
+- [x] OLIST-T04: OAuth por sessão, conta esperada, refresh reservado/fencing,
+      parâmetros centrais versionados e disconnect; criação desligada.
+- [x] OLIST-T19: checkbox ortogonal, CAS/auditoria/revogação e entrada Olist
+      com projeção mínima entre donos/perfis, incluindo Financeiro habilitado.
+- [x] OLIST-T05: consultas oficiais fechadas, limites de corpo/paginação/tempo,
+      quota compartilhada por conta e métodos de criação bloqueados.
+- [x] Gate F2 local: conexão/ACL protegidas e geração desativada.
+
+[RFC 050 — Fase 2](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md#fase-2-dados-habilitação-e-conexão),
+[evidências/handoff](../../../docs/integrations/olist/phase2-implementation.md) e
+[operação/rollback](../../../docs/runbooks/olist-phase2.md).
+Implementação no [commit 6a79cc8a](https://github.com/romulosutil/crm-silmer/commit/6a79cc8aecc3111dbfad5b8b14220f3b3df860aa),
+com push confirmado em `codex/olist-phase2`. `npm run validate` aprovado:
+1.779 testes/15 skips explícitos; SQL Olist 36/36 sem skips; E2E completo
+485 aprovados/7 skips previstos; auditoria sem altas/críticas.
+
+Sem deploy, chamadas autenticadas ao ERP ou habilitação de conta real.
+Homologação da conexão/proxy/imagem e piloto continuam nos gates posteriores.
+Próxima fronteira: Fase 3, começando por T20/T21 e suas integrações de
+persistência, legado/loja e completude; o núcleo T20a/T21a não fecha essas tarefas.
+Este é o checkpoint atual de implementação; os registros datados abaixo
+preservam o estado observado em cada entrega anterior.
+
 ## OLIST-T02/T06a — Escopo de centavos exatos (05/11/2026)
 
 - [x] Registrar redução de escopo aprovada na [ADR 062](../../../docs/adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) / [RFC 046](../../../docs/rfc/046-olist-escopo-inicial-de-centavos-exatos.md).
