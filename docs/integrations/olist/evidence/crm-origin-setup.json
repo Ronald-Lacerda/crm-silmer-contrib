@@ -1,0 +1,74 @@
+{
+  "task": "OLIST-T02",
+  "observedOn": "2026-11-04",
+  "capturedAt": "2026-11-05T01:01:32.857177+00:00",
+  "environment": "current-operational-account",
+  "userApproval": "Autorizar origem exclusiva do CRM",
+  "approvedScope": "One CRM Silmer - prova F1 origin through API do ERP; no existing marketplace binding, external endpoint, new credential generation, additional order or C01 mutation.",
+  "origin": {
+    "name": "CRM Silmer - prova F1",
+    "providerCatalogItem": "API do ERP",
+    "createdCount": 1,
+    "existingOriginNamesUnchanged": ["Shopee", "TikTok Shop"],
+    "identifierStoredPrivately": true,
+    "apiV3EcommerceIdRoundtripProven": false,
+    "setupComplete": false
+  },
+  "savedReadback": {
+    "name": "CRM Silmer - prova F1",
+    "stockSync": "Não atualizar",
+    "stockExit": "Manual"
+  },
+  "pricingStage": {
+    "default": "Preço fixo",
+    "pricingChoiceChanged": false,
+    "discountOrMarkupEntered": false,
+    "stageCompleted": true,
+    "catalogSyncCommandIssued": false
+  },
+  "pendingOrderOptions": {
+    "automaticTracking": {
+      "saved": true,
+      "prepared": false
+    },
+    "integratedPaymentMismatchPolicy": {
+      "saved": "Use integrated payment amount from channel (I)",
+      "prepared": "Consider payment Not integrated (N)"
+    },
+    "saved": false
+  },
+  "fiscalStageInspected": false,
+  "security": {
+    "newCredentialGenerationInvoked": false,
+    "existingAccountTokenValueRead": false,
+    "existingAccountTokenCopied": false,
+    "externalEndpointProvided": false,
+    "oauthScopeChanged": false
+  },
+  "effects": {
+    "newOrders": 0,
+    "c01Edits": 0,
+    "c01Cancellations": 0,
+    "catalogOrStockCommands": 0,
+    "financialCommands": 0,
+    "messagesSent": 0,
+    "globalSettingsChanged": 0
+  },
+  "approvalReview": [
+    {
+      "action": "Save default pricing stage",
+      "initialResult": "rejected",
+      "reason": "Authorization did not specify pricing choice and verified values were unavailable.",
+      "resolution": "Read-only checks established Preço fixo (0) was already selected, with no price field or adjustment changed; same save then accepted."
+    },
+    {
+      "action": "Save order-flow options",
+      "result": "rejected",
+      "reason": "Authorization did not explicitly specify tracking and integrated-payment-mismatch parameters.",
+      "resolution": "No alternate save or workaround; values remain prepared but unsaved. A fresh readback confirmed original saved defaults."
+    }
+  ],
+  "requiredDecision": "Explicit approval of tracking off and divergent integrated payments Not integrated only on the new origin; conditional Manual NF-e data delivery if offered in the next fiscal screen. Fiscal screen has not been inspected.",
+  "privacy": "No integrator ID, account token, credential, raw private URL, fiscal document or personal data.",
+  "f1GatePassed": false
+}

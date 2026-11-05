@@ -698,8 +698,13 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       R$ 3,00 conferidos na UI; referência voltou vazia, ecommerce.id zero.
       [Venda e reconciliação por ID](../integrations/olist/evidence/controlled-sale-live-result.json),
       sem repetir/editar/cancelar. Núcleo/transporte com 29 testes sintéticos.
-      Origem própria API do ERP é candidata ainda não instalada; prova de
-      referência, cadastros automáticos e precisão restante mantêm F1 aberto.
+      PO autorizou uma origem própria API do ERP: CRM Silmer - prova F1 foi
+      cadastrada, estoque Não atualizar/Manual salvo e preço fixo padrão
+      preservado. [Configuração parcial](../integrations/olist/evidence/crm-origin-setup.json):
+      rastreamento/política de divergência de pagamentos aguardam aprovação
+      explícita após rejeição da revisão automática; etapa fiscal não
+      inspecionada. Nenhum novo pedido/C01 alterado. Referência, cadastros
+      automáticos e precisão restante mantêm F1 aberto.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado
 fiscal inventado ou suposição de idempotência remota. Plano para ausência de

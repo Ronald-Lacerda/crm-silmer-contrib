@@ -183,7 +183,8 @@ A preferência inicial por conta dedicada foi revista pelo PO em 04/11/2026:
 para aprovação antes de qualquer criação**. Posteriormente aprovou explicitamente criar e
 conectar o aplicativo somente leitura. Depois houve aprovação específica da
 ampliação somente de Pedidos e da venda C01 de R$ 3,00, já executadas.
-Demais cadastros/vendas e nova origem não foram autorizados; parâmetros
+Demais cadastros/vendas não foram autorizados; a origem própria foi aprovada
+separadamente e está em configuração. Parâmetros
 comerciais globais não foram alterados. A conta de testes não foi criada. O plano abaixo é a matriz original; o escopo atual menor,
 gatilhos observados e pendências estão no [caso controlado](controlled-case.md).
 
@@ -265,6 +266,10 @@ solicitar aprovação. Nenhum orçamento da matriz original autoriza execução.
 foi enviado sem ecommerce.id e retornou vazio, com ID de e-commerce zero.
 Os demais checks e subtotais da UI coincidiram. Isso é um resultado da conta,
 não prova de uma regra universal ou de que qualquer ID resolverá. API do ERP
-foi encontrado no catálogo como candidato a origem exclusiva; não instalado.
-A próxima configuração e qualquer nova venda dependem de casos aprovados.
+foi encontrado no catálogo e o PO autorizou criar uma origem exclusiva.
+CRM Silmer - prova F1 já foi cadastrada; estoque Não atualizar/Manual salvo,
+preço fixo padrão mantido. A configuração de Pedidos ficou pendente de
+aprovação explícita após rejeição da revisão automática; etapa fiscal não
+inspecionada. [Estado da origem](evidence/crm-origin-setup.json).
+Nenhuma nova venda foi autorizada ou criada nesta configuração.
 Não usar número de ordem de compra como remendo nem repetir C01.
