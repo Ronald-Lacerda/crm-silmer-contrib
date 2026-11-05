@@ -1,0 +1,422 @@
+{
+  "name": "Silmer | Checkpoint diário dos sócios",
+  "active": false,
+  "nodes": [
+    {
+      "id": "checkpoint-schedule",
+      "name": "Checkpoint - Diariamente às 08h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 8 * * *" }]
+        }
+      }
+    },
+    {
+      "id": "checkpoint-1",
+      "name": "CRM - Preparar checkpoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [240, 0],
+      "retryOnFail": false,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.DAILY_CHECKPOINT_CRM_URL + '/api/v1/integrations/n8n/dashboard/checkpoint/prepare' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "options": {
+          "timeout": 20000,
+          "redirect": { "redirect": { "followRedirects": false } },
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "CONFIGURE_CRM_AUTOMATION_BASIC",
+          "name": "Configure CRM automation Basic"
+        }
+      }
+    },
+    {
+      "id": "checkpoint-2",
+      "name": "Checkpoint - Separar destinatários",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 0],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const report=$input.first().json;if(typeof report.checkpointId!=='string'||!Array.isArray(report.recipients))throw new Error('CHECKPOINT_PREPARE_INVALID');return report.recipients.map(recipient=>({json:{checkpointId:report.checkpointId,recipientId:recipient.id},pairedItem:{item:0}}));"
+      }
+    },
+    {
+      "id": "checkpoint-3",
+      "name": "CRM - Reservar destinatário",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 0],
+      "retryOnFail": false,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.DAILY_CHECKPOINT_CRM_URL + '/api/v1/integrations/n8n/dashboard/checkpoint/reserve' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { checkpointId: $json.checkpointId, recipientId: $json.recipientId } }}",
+        "options": {
+          "timeout": 20000,
+          "redirect": { "redirect": { "followRedirects": false } },
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "CONFIGURE_CRM_AUTOMATION_BASIC",
+          "name": "Configure CRM automation Basic"
+        }
+      }
+    },
+    {
+      "id": "checkpoint-4",
+      "name": "Checkpoint - Reserva autorizada?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [960, 0],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "condition-4",
+              "leftValue": "={{ $json.authorized === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "checkpoint-5",
+      "name": "Evolution - Consultar destinatário",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 0],
+      "retryOnFail": false,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.DAILY_CHECKPOINT_EVOLUTION_URL + '/chat/whatsappNumbers/' + encodeURIComponent($vars.DAILY_CHECKPOINT_EVOLUTION_INSTANCE) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { numbers: [String($('CRM - Reservar destinatário').item.json.phone).replace(/^\\+/, '')] } }}",
+        "options": {
+          "timeout": 15000,
+          "redirect": { "redirect": { "followRedirects": false } },
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURE_EVOLUTION_API_HEADER",
+          "name": "Configure Evolution API header"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "checkpoint-6",
+      "name": "Checkpoint - Validar destinatário",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 0],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const evolutionRecipientRegistered=function evolutionRecipientRegistered(response, requested) {\n  if (\n    !/^\\d{8,15}$/u.test(requested) ||\n    !Array.isArray(response) ||\n    response.length !== 1\n  )\n    throw new Error('EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE');\n  const record = response[0];\n  if (\n    !record ||\n    record.number !== requested ||\n    typeof record.exists !== 'boolean' ||\n    !/^(?:\\d{8,15}@s\\.whatsapp\\.net|\\d{1,30}@lid)$/u.test(\n      String(record.jid ?? ''),\n    )\n  )\n    throw new Error('EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE');\n  return record.exists;\n};const classify=function classifyCheckpointLookup(response, requested) {\n  try {\n    if (response?.statusCode !== 200) throw new Error('LOOKUP_UNAVAILABLE');\n    return evolutionRecipientRegistered(response.body, requested)\n      ? { registered: true }\n      : { registered: false, status: 'failed', code: 'RECIPIENT_UNREGISTERED' };\n  } catch {\n    return {\n      registered: false,\n      status: 'failed',\n      code: 'RECIPIENT_LOOKUP_UNAVAILABLE',\n    };\n  }\n};return {json:classify($json,String($('CRM - Reservar destinatário').item.json.phone).replace(/^\\+/, ''))};"
+      }
+    },
+    {
+      "id": "checkpoint-7",
+      "name": "Checkpoint - Destinatário registrado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1680, 0],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "condition-7",
+              "leftValue": "={{ $json.registered === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "checkpoint-8",
+      "name": "Evolution - Enviar checkpoint",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 0],
+      "retryOnFail": false,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.DAILY_CHECKPOINT_EVOLUTION_URL + '/message/sendText/' + encodeURIComponent($vars.DAILY_CHECKPOINT_EVOLUTION_INSTANCE) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { number: String($('CRM - Reservar destinatário').item.json.phone).replace(/^\\+/, ''), text: $('CRM - Reservar destinatário').item.json.text, linkPreview: false } }}",
+        "options": {
+          "timeout": 15000,
+          "redirect": { "redirect": { "followRedirects": false } },
+          "response": {
+            "response": {
+              "responseFormat": "json",
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURE_EVOLUTION_API_HEADER",
+          "name": "Configure Evolution API header"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "checkpoint-9",
+      "name": "Checkpoint - Classificar envio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 0],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const getEvolutionMessageId=function getEvolutionMessageId(response) {\n  if (\n    response?.key?.fromMe !== true ||\n    !/^\\d{8,15}@s\\.whatsapp\\.net$/.test(String(response.key.remoteJid ?? '')) ||\n    typeof response.key.id !== 'string' ||\n    !/^[A-Za-z0-9_-]{1,512}$/.test(response.key.id) ||\n    response.status === 'ERROR'\n  )\n    throw new Error('EVOLUTION_SEND_OUTCOME_UNKNOWN');\n  return response.key.id;\n};const classify=function classifyCheckpointSend(response, requested) {\n  try {\n    if (\n      response?.statusCode < 200 ||\n      response?.statusCode >= 300 ||\n      !Number.isInteger(response?.statusCode)\n    )\n      throw new Error('SEND_UNKNOWN');\n    const providerMessageId = getEvolutionMessageId(response.body);\n    if (response.body.key.remoteJid !== requested + '@s.whatsapp.net')\n      throw new Error('SEND_UNKNOWN');\n    return { status: 'sent', code: 'PROVIDER_ACCEPTED', providerMessageId };\n  } catch {\n    return { status: 'outcome_unknown', code: 'PROVIDER_OUTCOME_UNKNOWN' };\n  }\n};return {json:classify($json,String($('CRM - Reservar destinatário').item.json.phone).replace(/^\\+/, ''))};"
+      }
+    },
+    {
+      "id": "checkpoint-10",
+      "name": "Checkpoint - Falha de consulta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1440, 300],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {json:{status:'failed',code:'RECIPIENT_LOOKUP_UNAVAILABLE'}};"
+      }
+    },
+    {
+      "id": "checkpoint-11",
+      "name": "Checkpoint - Resultado desconhecido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 300],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return {json:{status:'outcome_unknown',code:'PROVIDER_OUTCOME_UNKNOWN'}};"
+      }
+    },
+    {
+      "id": "checkpoint-12",
+      "name": "CRM - Registrar resultado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2400, 0],
+      "retryOnFail": false,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.DAILY_CHECKPOINT_CRM_URL + '/api/v1/integrations/n8n/dashboard/checkpoint/complete' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { checkpointId: $('CRM - Reservar destinatário').item.json.checkpointId, recipientId: $('CRM - Reservar destinatário').item.json.recipientId, reservationId: $('CRM - Reservar destinatário').item.json.reservationId, status: $json.status, code: $json.code, ...($json.providerMessageId ? { providerMessageId: $json.providerMessageId } : {}) } }}",
+        "options": {
+          "timeout": 20000,
+          "redirect": { "redirect": { "followRedirects": false } },
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "CONFIGURE_CRM_AUTOMATION_BASIC",
+          "name": "Configure CRM automation Basic"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Checkpoint - Diariamente às 08h": {
+      "main": [
+        [{ "node": "CRM - Preparar checkpoint", "type": "main", "index": 0 }]
+      ]
+    },
+    "CRM - Preparar checkpoint": {
+      "main": [
+        [
+          {
+            "node": "Checkpoint - Separar destinatários",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checkpoint - Separar destinatários": {
+      "main": [
+        [{ "node": "CRM - Reservar destinatário", "type": "main", "index": 0 }]
+      ]
+    },
+    "CRM - Reservar destinatário": {
+      "main": [
+        [
+          {
+            "node": "Checkpoint - Reserva autorizada?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checkpoint - Reserva autorizada?": {
+      "main": [
+        [
+          {
+            "node": "Evolution - Consultar destinatário",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Evolution - Consultar destinatário": {
+      "main": [
+        [
+          {
+            "node": "Checkpoint - Validar destinatário",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Checkpoint - Falha de consulta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checkpoint - Validar destinatário": {
+      "main": [
+        [
+          {
+            "node": "Checkpoint - Destinatário registrado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checkpoint - Destinatário registrado?": {
+      "main": [
+        [
+          {
+            "node": "Evolution - Enviar checkpoint",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [{ "node": "CRM - Registrar resultado", "type": "main", "index": 0 }]
+      ]
+    },
+    "Evolution - Enviar checkpoint": {
+      "main": [
+        [
+          {
+            "node": "Checkpoint - Classificar envio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Checkpoint - Resultado desconhecido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checkpoint - Classificar envio": {
+      "main": [
+        [{ "node": "CRM - Registrar resultado", "type": "main", "index": 0 }]
+      ]
+    },
+    "Checkpoint - Falha de consulta": {
+      "main": [
+        [{ "node": "CRM - Registrar resultado", "type": "main", "index": 0 }]
+      ]
+    },
+    "Checkpoint - Resultado desconhecido": {
+      "main": [
+        [{ "node": "CRM - Registrar resultado", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none"
+  }
+}

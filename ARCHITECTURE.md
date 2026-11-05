@@ -178,11 +178,25 @@ Conversa; vários assuntos e pendentes na mesma Conversa exigem alvo explícito
 e implantação posterior do contrato por Assunto.
 
 No Pedido manual sem conversa, Primeiro contato recebe o instante de criação;
-legados sem a data recebem `created_at`. Só pagamento é digitável. Os afazeres
-do Dashboard são uma leitura dos pedidos manuais confirmados, sem entrega e
-sem marca de teste, do próprio responsável. Confirmar entrega é um comando
-autorizado, versionado e auditado que grava o dia de São Paulo; não cria outro
-status nem reutiliza tarefas de Negócio (ADR 039).
+legados sem a data recebem `created_at`. Só pagamento é digitável nesse
+contrato (ADR 039). A [ADR 059](docs/adr/059-central-de-acoes-e-performance-comercial.md)
+evolui o Dashboard para uma fila pessoal de conversas e pedidos, com detalhe
+por seleção, sem reutilizar tarefas de Negócio. A confirmação de entrega passa
+a alcançar pedidos de atendimento confirmados, não teste, com ou sem conversa,
+do responsável ou administrador; grava o dia de São Paulo sem alterar a
+quitação, o status ou o snapshot. A confirmação de pagamento exige declaração
+explícita de recebimento integral e preserva a entrega.
+
+[ACT-01–12, PERF-01–08 e CHK-01–08](.specs/features/dashboard-actions/spec.md)
+(ACT-T01) definem lembretes pessoais com versão/revisão, sugestão de retomada
+após 48h de saída humana enviada e navegação para a Inbox real. Não há envio
+pelo Dashboard ou retorno ao bot. Atribuição comercial é congelada para o
+responsável na confirmação, separada do executor; legado sem evidência fica
+sem atribuição. A mesma consulta apura desempenho e checkpoint diário das 08h,
+referente ao dia anterior em São Paulo. n8n agenda e transporta com capacidade
+técnica dedicada, snapshot cifrado imutável e reserva única por destino privado.
+Replay ou resultado incerto não autorizam novo envio. A flag fica desativada
+até configuração e homologação operacional (ACT-T02).
 
 O responsável ou administrador encerra explicitamente um ciclo de Conversa
 como `concluido` ou `sem_pedido`; a hora e o autor ficam registrados. Pedido

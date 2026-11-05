@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { mockDashboardRead } from './support/painel-mock.js';
 
 test('renders the semantic foundation without critical accessibility violations', async ({
   page,
@@ -253,6 +254,7 @@ test('submits login, restores and closes a session by keyboard without browser s
       return;
     }
 
+    if (await mockDashboardRead(route)) return;
     if (path === '/api/v1/orders/delivery-tasks') {
       await route.fulfill({
         contentType: 'application/json',

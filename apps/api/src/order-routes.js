@@ -489,6 +489,41 @@ export function registerOrderRoutes(
   );
 
   api.post(
+    '/api/v1/orders/:orderId/payment-confirmation',
+    async (request, reply) =>
+      respond(reply, async () => {
+        const orderId = requireIdentifier(
+          requireObject(request.params).orderId,
+          'ORDER_ID',
+        );
+        const body = requireObject(request.body);
+        rejectUnknownKeys(body, [
+          'expectedVersion',
+          'paidOn',
+          'receivedInFull',
+        ]);
+        if (typeof body.paidOn !== 'string' || body.receivedInFull !== true) {
+          throw new OrderRequestError(400, 'INVALID_REQUEST');
+        }
+        const command = await authorizeCommand(
+          request,
+          orders,
+          contextFor,
+          'order.milestones',
+        );
+        return reply.code(200).send({
+          order: await orders.confirmPayment({
+            ...command,
+            orderId,
+            expectedVersion: requireVersion(body.expectedVersion),
+            paidOn: body.paidOn,
+            receivedInFull: true,
+          }),
+        });
+      }),
+  );
+
+  api.post(
     '/api/v1/orders/:orderId/delivery-confirmation',
     async (request, reply) =>
       respond(reply, async () => {

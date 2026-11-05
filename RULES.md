@@ -81,12 +81,22 @@ recebimento integral; salvar entrega não o libera (FINQ-17–19).
 13. Gerar exige os pontos principais de cada item: Tipo de roupa, Cor, Quantidade calculada, Técnica, Tecido, Tamanhos e Gola; também exige origem da arte, entrega prometida, valor final e condição (ADR 020).
 14. Rascunho pode ser salvo incompleto. Pendências bloqueiam gerar, sem impor colunas ou avanço linear. Adicionais e nome do pedido não bloqueiam.
 15. Arte pertence ao pedido: cliente envia, Silmer cria ou sem estampa. “Sem estampa” exclui as duas outras opções. O bot só projeta resposta inequívoca e não substitui escolha humana.
-16. Vendas e valor vendido contam apenas pedidos confirmados; recebimentos e saldo a receber ficam fora do MVP. As datas de pagamento e entrega não mudam status. No Pedido manual sem conversa, só “Pago em” é digitável; “Entregue em” recebe o dia de São Paulo quando uma pessoa autorizada confirma a entrega nos afazeres (ADR 039). Pedidos de conversa preservam o registro manual das duas datas.
+16. Vendas e valor vendido contam apenas pedidos confirmados; recebimentos e saldo a receber ficam fora do MVP. As datas de pagamento e entrega não mudam status. Na central, a quitação exige declaração explícita de recebimento integral e data válida; a entrega grava o dia de São Paulo no servidor, sem alterar pagamento, status ou snapshot. São comandos humanos independentes para pedidos de atendimento confirmados, não teste, com ou sem conversa, do responsável ou administrador (ADR 059, ACT-04), supersedendo a restrição a manuais da ADR 039. Os demais contratos de datas do detalhe do pedido permanecem vigentes.
 17. Rômulo Sutil Corrêa é o Responsável de Privacidade; a política do piloto foi aprovada após consulta jurídica. Aprovações externas de IA e recovery permanecem gates independentes.
 18. A nova mídia enviada pelo vendedor no chat é preservada no RustFS até nova decisão de retenção, sem expurgo por sete dias ou fim da jornada (ADR 029; implementação existente, homologação e ativação em INBOX-MEDIA-1). Cleanup automático alcança somente rascunhos sem vínculo com mais de 24h, sob guardas de writer e remoção confirmada antes de liberar quota. O runtime legado de mídia de canal não promovida continua transitório até sua migração: remover bytes no fim da jornada ou em sete dias, o que ocorrer primeiro. Pedido, ficha, documentos comerciais válidos e auditoria seguem retenção própria.
 19. Handoff e tomada humana são definitivos para o atendimento: a conversa segue com pessoa até encerrar e não volta ao bot (ADR 015).
 20. Handoff nasce sem responsável e tem papel-alvo Vendedor (ADR 009). A reivindicação é atômica e exige pessoa ativa e elegível; editar, gerar ou reabrir pedido exige dono da conversa ou administrador, ou, para Pedido manual sem conversa, seu vendedor responsável ou administrador (ADR 032).
 21. Pedido da loja do site (ADRs 027 e 028) é a única exceção às regras 5, 9, 10 e 16 quanto à confirmação humana e ao dia do pagamento digitado: nasce `confirmado`, sem conversa nem Contato, registrado pelo n8n (`AUTOMATION_EXECUTOR`, ação `store.order.record`) só depois de a InfinitePay confirmar o Pix, em nome da `system:loja-do-site`, ao preço do catálogo do CRM e com o dia do pagamento confirmado pelo gateway; fica travado (sem edição, reabertura, lastro ou arquivos) e conta como venda, salvo pedido de teste. A primeira impressão HTML ou geração bem-sucedida do PDF da ficha registra quem e quando e tira o pedido do aviso do Dashboard, sem mudar o status (ADRs 031 e 037).
+
+A [ADR 059](docs/adr/059-central-de-acoes-e-performance-comercial.md) rege a
+central de ações ([ACT-01–12, PERF-01–08 e CHK-01–08](.specs/features/dashboard-actions/spec.md),
+ACT-T01). Lembretes são pessoais, versionados e auditados; adiar não resolve
+pendência, sugestão não comprova promessa e nenhuma ação envia mensagem ou
+retoma o bot. O crédito comercial é capturado para o responsável na confirmação,
+separado do executor, e não é reconstruído com a posse atual. O checkpoint
+diário das 08h usa o dia anterior em São Paulo e a apuração oficial; destinos
+privados, snapshot cifrado imutável e reserva única por destinatário impedem
+reenvio cego. Ativação e entrega real exigem o gate operacional ACT-T02.
 
 ## Regras técnicas já impostas
 

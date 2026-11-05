@@ -16,6 +16,7 @@ export const AUTOMATION_EXECUTOR_ACTIONS = Object.freeze([
   'integration.n8n.attachment.create',
   'integration.n8n.event.create',
   'integration.n8n.command.media.read',
+  'dashboard.checkpoint.execute',
   'conversation.convert',
   'deal.fields.patch',
   'deal.transition',

@@ -672,3 +672,26 @@ temas, layout e a única ação primária por região.
   foco ao campo. A busca em visão de entrega avisa que muda para todos.
 - **Compositor:** cada conversa mantém seu próprio rascunho temporário; o
   término de um envio não muda o contexto que o vendedor está operando.
+
+## 18. Central de ações — ACT-01–12 (05/11/2026)
+
+Protótipo refinado aprovado, RFC 044 / ADR 059. O vendedor abre uma fila
+compacta de objetos reais, com filtros por intenção e detalhe por seleção.
+No celular, fila e detalhe ocupam momentos separados, com volta e foco
+previsíveis. Usar os tokens existentes, seleção neutra e cor de atenção
+apenas quando a ação exigir; sem composer ou chat paralelo.
+
+Conferências perguntam se o pedido foi pago integralmente ou entregue;
+silêncio do cliente gera sugestão, nunca diagnóstico. Formulário captura
+versão e valor ao abrir, preserva rascunho na falha e exige nova revisão
+explícita diante de conflito. Lembrete não comprova quitação/entrega.
+
+O orçamento do vendedor na primeira tela, com fixture de cinco objetos,
+passa a 9 controles em 390×844 e 14 em 1366×768: inclui quatro filtros e
+cinco objetos selecionáveis. Gestor preserva 11/12. Filtros têm quatro
+controles e a tarefa tem no máximo três ações no contexto. Substitui apenas
+o orçamento anterior do Dashboard informacional do vendedor.
+
+Performance e checkpoint apresentam estados de erro e cobertura explícitos.
+Prévia do checkpoint não equivale a envio; aceito pelo provedor não equivale
+a entregue. Sem indicadores artificiais de conversão entre coortes distintas.

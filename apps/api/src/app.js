@@ -19,6 +19,8 @@ import { registerChatMediaStatusRoutes } from './chat-media-status-routes.js';
 import { registerChatMediaContentRoutes } from './chat-media-content-routes.js';
 import { registerIdentityRoutes } from './identity-routes.js';
 import { registerFinanceRoutes } from './finance-routes.js';
+import { registerDashboardRoutes } from './dashboard-routes.js';
+import { registerDashboardCheckpointRoutes } from './dashboard-checkpoint-routes.js';
 import { registerShippingRoutes } from './shipping-routes.js';
 import { registerN8nRoutes } from './n8n-routes.js';
 import { registerN8nCommandMediaRoutes } from './n8n-command-media-routes.js';
@@ -58,6 +60,8 @@ export const WEBHOOK_REQUESTS_PER_SECOND = 20;
  *   orders?: any,
  *   orderAssistance?: any,
  *   finance?: any,
+ *   dashboard?: any,
+ *   dashboardCheckpoint?: any,
  *   shipping?: any,
  *   orderPdfRenderer?: (html: string) => Promise<Buffer>,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime
@@ -317,6 +321,29 @@ export function createApi(options = {}, runtime = {}) {
       registerShippingRoutes(shippingScope, runtime.shipping, (request) => ({
         correlationId:
           requests.get(request)?.correlationId ?? 'shipping-request',
+      }));
+    });
+  }
+  if (runtime.dashboardCheckpoint) {
+    api.register(async (checkpointScope) => {
+      await checkpointScope.register(rateLimit, { global: false });
+      registerDashboardCheckpointRoutes(
+        checkpointScope,
+        runtime.dashboardCheckpoint,
+        (request) => ({
+          correlationId:
+            requests.get(request)?.correlationId ??
+            'dashboard-checkpoint-request',
+        }),
+      );
+    });
+  }
+  if (runtime.dashboard) {
+    api.register(async (dashboardScope) => {
+      await dashboardScope.register(rateLimit, { global: false });
+      registerDashboardRoutes(dashboardScope, runtime.dashboard, (request) => ({
+        correlationId:
+          requests.get(request)?.correlationId ?? 'dashboard-request',
       }));
     });
   }

@@ -10,7 +10,9 @@ import {
 } from 'vue';
 import { RouterLink } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
-import DeliveryTasks from '../components/DeliveryTasks.vue';
+import DashboardActions from '../components/DashboardActions.vue';
+import DashboardPerformance from '../components/DashboardPerformance.vue';
+import DashboardCheckpoint from '../components/DashboardCheckpoint.vue';
 import { request } from '../lib/api-client.js';
 import {
   PERIODS,
@@ -54,6 +56,7 @@ const error = ref('');
 const queueError = ref('');
 const period = ref('hoje');
 const periodAnnouncement = ref('');
+const dashboardRevision = ref(0);
 /** @type {import('vue').Ref<Record<string, any>>} */
 const summary = ref({});
 /** @type {import('vue').Ref<Record<string, any>|null>} */
@@ -278,6 +281,11 @@ function scheduleLiveRefresh() {
   }, 250);
 }
 
+function dashboardChanged() {
+  dashboardRevision.value += 1;
+  void loadDashboard();
+}
+
 watch(liveEvent, (event) => {
   if (
     event?.reset ||
@@ -338,40 +346,28 @@ onBeforeUnmount(() => {
       </RouterLink>
     </div>
 
-    <div
-      v-if="loading && !hasLoaded && !error"
-      class="loading-state"
-      role="status"
-    >
-      Carregando indicadores…
-    </div>
-    <div v-else-if="error && !hasLoaded" class="empty-state" role="alert">
-      <h2>Dashboard indisponível</h2>
-      <p>{{ error }}</p>
-      <button
-        ref="ordersRetry"
-        type="button"
-        :aria-disabled="loading ? 'true' : undefined"
-        @click="retryOrders()"
-      >
-        {{ loading ? 'Consultando…' : 'Tentar novamente' }}
-      </button>
-    </div>
-    <template v-else>
-      <!-- PNL-01: one next step for the role, no heading of its own (the
-           section titles stay the page outline); one link at most. -->
-      <section class="next-step" aria-labelledby="dashboard-next-step-label">
-        <p id="dashboard-next-step-label" class="next-step-label">
-          Próximo passo
-        </p>
-        <RouterLink v-if="step.to" class="next-step-link" :to="step.to">
-          {{ step.label }}
-          <AppIcon name="chevron" class="next-step-go" />
-        </RouterLink>
-        <p v-else class="next-step-text">{{ step.label }}</p>
-      </section>
+    <DashboardActions v-if="!isManager" @changed="dashboardChanged">
+      <template #summary>
+        <DashboardPerformance compact :revision="dashboardRevision" />
+      </template>
+    </DashboardActions>
+    <DashboardPerformance v-else manager :revision="dashboardRevision" />
+    <DashboardCheckpoint v-if="isManager" />
 
-      <div v-if="error" class="audit-note" role="alert">
+    <component
+      :is="isManager ? 'div' : 'details'"
+      class="dashboard-secondary-sources"
+    >
+      <summary v-if="!isManager">Outras filas e entregas</summary>
+      <div
+        v-if="loading && !hasLoaded && !error"
+        class="loading-state"
+        role="status"
+      >
+        Carregando indicadores…
+      </div>
+      <div v-else-if="error && !hasLoaded" class="empty-state" role="alert">
+        <h2>Dashboard indisponível</h2>
         <p>{{ error }}</p>
         <button
           ref="ordersRetry"
@@ -382,92 +378,125 @@ onBeforeUnmount(() => {
           {{ loading ? 'Consultando…' : 'Tentar novamente' }}
         </button>
       </div>
-      <p v-if="periodAnnouncement" class="sr-only" role="status">
-        {{ periodAnnouncement }}
-      </p>
+      <template v-else>
+        <!-- PNL-01: one next step for the role, no heading of its own (the
+           section titles stay the page outline); one link at most. -->
+        <section class="next-step" aria-labelledby="dashboard-next-step-label">
+          <p id="dashboard-next-step-label" class="next-step-label">
+            Próximo passo
+          </p>
+          <RouterLink v-if="step.to" class="next-step-link" :to="step.to">
+            {{ step.label }}
+            <AppIcon name="chevron" class="next-step-go" />
+          </RouterLink>
+          <p v-else class="next-step-text">{{ step.label }}</p>
+        </section>
 
-      <section
-        v-for="section in sections"
-        :key="section.id"
-        class="dashboard-section"
-        :aria-labelledby="`dashboard-${section.id}-title`"
-      >
-        <div class="dashboard-section-head">
-          <h2
-            :id="`dashboard-${section.id}-title`"
-            :ref="section.queue ? setQueueHeading : undefined"
-            :tabindex="section.queue ? -1 : undefined"
-          >
-            {{ section.title }}
-          </h2>
-          <!-- PNL-02: the period only changes "Vendido"; the legend says so. -->
-          <div v-if="section.period" class="dashboard-period">
-            <p id="dashboard-period-scope" class="dashboard-period-scope">
-              Vale para Vendido
-            </p>
-            <div
-              class="segmented-options"
-              role="group"
-              aria-label="Período das vendas"
-              aria-describedby="dashboard-period-scope"
-            >
-              <button
-                v-for="option in PERIODS"
-                :key="option.key"
-                type="button"
-                :aria-pressed="period === option.key"
-                @click="choosePeriod(option.key)"
-              >
-                {{ option.label }}
-              </button>
-            </div>
-          </div>
-        </div>
-        <!-- PNL-03: the section never disappears when the queue fails. -->
-        <div v-if="section.queue && queueError" class="audit-note" role="alert">
-          <p>{{ queueError }}</p>
+        <div v-if="error" class="audit-note" role="alert">
+          <p>{{ error }}</p>
           <button
+            ref="ordersRetry"
             type="button"
             :aria-disabled="loading ? 'true' : undefined"
-            @click="retryQueue()"
+            @click="retryOrders()"
           >
             {{ loading ? 'Consultando…' : 'Tentar novamente' }}
           </button>
         </div>
-        <ul class="metric-grid" role="list">
-          <li v-for="key in section.cards" :key="key">
-            <RouterLink
-              class="metric-card"
-              :to="cards[key].to"
-              :data-tone="cards[key].tone || undefined"
+        <p v-if="periodAnnouncement" class="sr-only" role="status">
+          {{ periodAnnouncement }}
+        </p>
+
+        <section
+          v-for="section in sections"
+          :key="section.id"
+          class="dashboard-section"
+          :aria-labelledby="`dashboard-${section.id}-title`"
+        >
+          <div class="dashboard-section-head">
+            <h2
+              :id="`dashboard-${section.id}-title`"
+              :ref="section.queue ? setQueueHeading : undefined"
+              :tabindex="section.queue ? -1 : undefined"
             >
-              <span class="metric-head">
-                <span class="metric-label">{{ cards[key].label }}</span>
-                <AppIcon name="chevron" class="metric-go" />
-              </span>
-              <span class="metric-value">{{ cards[key].value }}</span>
-              <span class="metric-detail">
-                <span
-                  v-if="cards[key].badge"
-                  class="badge"
-                  :data-tone="cards[key].tone"
-                  >{{ cards[key].badge }}</span
+              {{ section.title }}
+            </h2>
+            <!-- PNL-02: the period only changes "Vendido"; the legend says so. -->
+            <div v-if="section.period" class="dashboard-period">
+              <p id="dashboard-period-scope" class="dashboard-period-scope">
+                Vale para Vendido
+              </p>
+              <div
+                class="segmented-options"
+                role="group"
+                aria-label="Período das vendas"
+                aria-describedby="dashboard-period-scope"
+              >
+                <button
+                  v-for="option in PERIODS"
+                  :key="option.key"
+                  type="button"
+                  :aria-pressed="period === option.key"
+                  @click="choosePeriod(option.key)"
                 >
-                {{ cards[key].detail }}
-              </span>
-            </RouterLink>
-            <!-- AGENTE-OBS-01: the agent's numbers over days, next to its
-                 card; a link of its own, never nested in the card's link. -->
-            <RouterLink
-              v-if="key === 'assistant'"
-              class="metric-more"
-              to="/dashboard/agente"
-              >{{ performanceLinkLabel }}</RouterLink
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <!-- PNL-03: the section never disappears when the queue fails. -->
+          <div
+            v-if="section.queue && queueError"
+            class="audit-note"
+            role="alert"
+          >
+            <p>{{ queueError }}</p>
+            <button
+              type="button"
+              :aria-disabled="loading ? 'true' : undefined"
+              @click="retryQueue()"
             >
-          </li>
-        </ul>
-      </section>
-    </template>
-    <DeliveryTasks @confirmed="loadDashboard()" />
+              {{ loading ? 'Consultando…' : 'Tentar novamente' }}
+            </button>
+          </div>
+          <ul class="metric-grid" role="list">
+            <li v-for="key in section.cards" :key="key">
+              <RouterLink
+                class="metric-card"
+                :to="cards[key].to"
+                :data-tone="cards[key].tone || undefined"
+              >
+                <span class="metric-head">
+                  <span class="metric-label">{{ cards[key].label }}</span>
+                  <AppIcon name="chevron" class="metric-go" />
+                </span>
+                <span class="metric-value">{{ cards[key].value }}</span>
+                <span class="metric-detail">
+                  <span
+                    v-if="cards[key].badge"
+                    class="badge"
+                    :data-tone="cards[key].tone"
+                    >{{ cards[key].badge }}</span
+                  >
+                  {{ cards[key].detail }}
+                </span>
+              </RouterLink>
+              <!-- AGENTE-OBS-01: the agent's numbers over days, next to its
+                 card; a link of its own, never nested in the card's link. -->
+              <RouterLink
+                v-if="key === 'assistant'"
+                class="metric-more"
+                to="/dashboard/agente"
+                >{{ performanceLinkLabel }}</RouterLink
+              >
+            </li>
+          </ul>
+        </section>
+      </template>
+    </component>
+    <details v-if="isManager" class="dashboard-secondary-sources">
+      <summary>Minhas providências</summary>
+      <DashboardActions @changed="dashboardChanged" />
+    </details>
   </div>
 </template>

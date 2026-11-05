@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { performanceSummary } from './support/painel-mock.js';
 
 const QUEUE_SUMMARY = Object.freeze({
   assistant: {
@@ -59,6 +60,28 @@ async function mockDashboard(page, options = {}) {
       }
       return json(QUEUE_SUMMARY);
     }
+    if (path === '/api/v1/dashboard/performance')
+      return json(performanceSummary(true));
+    if (path === '/api/v1/dashboard/actions')
+      return json({
+        generatedAt: QUEUE_SUMMARY.generatedAt,
+        today: '2026-10-15',
+        items: [],
+        hasMore: false,
+      });
+    if (path === '/api/v1/dashboard/checkpoint')
+      return json({
+        day: '2026-10-14',
+        timezone: 'America/Sao_Paulo',
+        scheduledAt: '08:00',
+        enabled: false,
+        configured: false,
+        snapshot: false,
+        generatedAt: QUEUE_SUMMARY.generatedAt,
+        previewText: 'Resumo sintético.',
+        recipients: [],
+        totals: { soldAmountCents: 0, confirmedCount: 0 },
+      });
     if (path === '/api/v1/orders/delivery-tasks') return json({ items: [] });
     if (path === '/api/v1/orders/summary') {
       summaryReads += 1;
@@ -189,7 +212,7 @@ test('keeps the queue visible without inventing sales when orders fail and recov
     'Os pedidos não responderam',
   );
   await expect(page.locator('.next-step a')).toHaveCount(0);
-  await expect(page.getByText('R$ 0,00')).toHaveCount(0);
+  await expect(orders.getByText('R$ 0,00')).toHaveCount(0);
   await page.getByRole('button', { name: 'Tentar novamente' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.getByText('R$ 2.500,00')).toBeVisible();

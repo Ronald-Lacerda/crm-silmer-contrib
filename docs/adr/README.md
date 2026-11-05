@@ -1,5 +1,11 @@
 # Architecture Decision Records
 
+## Decisão de 05/11/2026
+
+- [059 — Central de ações e performance comercial](059-central-de-acoes-e-performance-comercial.md),
+  RFC 044 / ACT-T01: fila pessoal, conferências independentes, crédito congelado
+  e checkpoint diário com snapshot e reserva por destinatário; ativação ACT-T02.
+
 ## Decisão de 03/11/2026
 
 - [056 — Abertura de pedido com confirmação humana](056-abertura-de-pedido-com-confirmacao-humana.md),

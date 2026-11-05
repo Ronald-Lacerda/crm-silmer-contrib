@@ -21,6 +21,8 @@ import { createConversationHandoffRuntime } from './conversation-handoff-runtime
 import { createConversationApiRuntime } from './conversation-runtime.js';
 import { createIdentityApiRuntime } from './identity-runtime.js';
 import { createFinanceApiRuntime } from './finance-runtime.js';
+import { createDashboardApiRuntime } from './dashboard-runtime.js';
+import { createDashboardCheckpointRuntime } from './dashboard-checkpoint-runtime.js';
 import { createHealthErrorsRuntime } from './health-errors-runtime.js';
 import { registerHealthErrorsRoutes } from './health-errors-routes.js';
 import { createShippingApiRuntime } from './shipping-runtime.js';
@@ -62,6 +64,8 @@ import { createSafeLogger, SERVICES } from '@crm-silmer/shared';
  *   orders?: ReturnType<typeof createOrderApiRuntime>,
  *   orderAssistance?: ReturnType<typeof createOrderAssistanceRuntime>,
  *   finance?: ReturnType<typeof createFinanceApiRuntime>,
+ *   dashboard?: ReturnType<typeof createDashboardApiRuntime>,
+ *   dashboardCheckpoint?: ReturnType<typeof createDashboardCheckpointRuntime>,
  *   healthErrors?: ReturnType<typeof createHealthErrorsRuntime>,
  *   shipping?: ReturnType<typeof createShippingApiRuntime>,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime,
@@ -258,6 +262,22 @@ export function createServerApi(runtime = {}) {
           retained: chatMedia,
         })
       : undefined);
+  const dashboardCheckpoint =
+    runtime.dashboardCheckpoint ??
+    (runtime.database && operations
+      ? createDashboardCheckpointRuntime(runtime.database, {
+          access: operations,
+          environment,
+        })
+      : undefined);
+  const dashboard =
+    runtime.dashboard ??
+    (runtime.database && operations && orders
+      ? createDashboardApiRuntime(runtime.database, {
+          access: operations,
+          environment,
+        })
+      : undefined);
   const finance =
     runtime.finance ??
     (runtime.database && operations && orders
@@ -279,6 +299,8 @@ export function createServerApi(runtime = {}) {
     {
       ...runtime,
       finance,
+      dashboard,
+      dashboardCheckpoint,
       shipping,
       automationAuth,
       commercial,

@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { mockDashboardRead } from './support/painel-mock.js';
 
 /** @param {import('@playwright/test').Page} page @param {{access?: string, conflict?: boolean, listError?: boolean, financeOnEvent?: boolean}} [options] */
 async function mockFinance(page, options = {}) {
@@ -95,6 +96,13 @@ async function mockFinance(page, options = {}) {
     }
     if (url.pathname === '/api/v1/events')
       return route.fulfill({ status: 204 });
+    if (
+      await mockDashboardRead(
+        route,
+        viewer.capabilities.includes('COMMERCIAL_ADMIN'),
+      )
+    )
+      return;
     if (url.pathname === '/api/v1/orders/summary')
       return json({ storeNewCount: 0 });
     if (url.pathname === '/api/v1/finance/orders') {

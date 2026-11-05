@@ -7,6 +7,7 @@ export {
   N8nValidationError,
 } from './errors.js';
 export { createN8nIntegrationService } from './service.js';
+export { encryptJson, decryptJson } from './crypto.js';
 export {
   AUTOMATION_MESSAGE_CAP,
   PostgresN8nIntegrationRepository,

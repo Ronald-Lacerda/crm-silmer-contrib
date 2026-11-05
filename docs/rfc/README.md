@@ -1,5 +1,10 @@
 # Request for Comments
 
+## Decisão de 05/11/2026
+
+- [044 — Performance comercial, checkpoint e central de ações](044-performance-comercial-e-central-de-acoes.md),
+  protótipo refinado aprovado e recorte registrado na ADR 059 / ACT-T01.
+
 ## Decisão de 03/11/2026
 
 - [043 — Abertura assistida de pedidos](043-abertura-assistida-de-pedidos.md),

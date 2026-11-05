@@ -130,10 +130,34 @@ permite escolher o WhatsApp manualmente (ADR 037). A entrega automática à
 operação continua sujeita a homologação separada.
 Pagamento e entrega não mudam status automaticamente. No Pedido manual sem
 conversa, Primeiro contato recebe a criação do pedido e só “Pago em” é
-digitável. O Dashboard pergunta ao responsável se cada pedido manual
-confirmado já foi entregue; marcar registra automaticamente o dia de São
-Paulo em “Entregue em” e encerra o afazer. Pedidos de teste ficam fora da
-lista. Pedidos de conversa preservam as duas datas manuais (ADR 039).
+digitável nesse contrato (ADR 039). A central do Dashboard pergunta se o
+pedido de atendimento confirmado foi pago integralmente e se o cliente já o
+recebeu, com ou sem conversa. A quitação exige declaração explícita e data
+válida; a entrega registra o dia de São Paulo no servidor. São decisões
+independentes, autorizadas, versionadas e auditadas, que preservam o status,
+o snapshot e a outra data. Pedidos de teste e da loja ficam fora desses
+comandos. A ampliação da entrega supersede a restrição a manuais da ADR 039
+([ADR 059](docs/adr/059-central-de-acoes-e-performance-comercial.md), ACT-04);
+os contratos de datas do detalhe do pedido permanecem vigentes.
+
+A fila pessoal reúne conversas a responder, handoffs disponíveis, pedidos a
+completar e conferências de pagamento/entrega. Adiar só altera o lembrete;
+sugestão após 48h sem resposta à última saída humana enviada não inventa
+compromisso. Retorno agendado depende de decisão humana. A Inbox real continua
+sendo o local de responder e assumir, sem envio pela central ou retorno ao bot.
+Desempenho distingue valor vendido, pedidos, atendimentos, tomadas,
+encerramentos e conversas com venda. O responsável recebe o crédito capturado
+na confirmação, mesmo quando o administrador executa a ação; histórico sem
+prova permanece sem atribuição, e pagamento/entrega não criam nova venda.
+
+O checkpoint dos sócios é agendado no n8n às 08h todos os dias, no horário de
+São Paulo, com o total e os valores por vendedor do dia civil anterior, mais
+loja e sem atribuição. Usa a mesma apuração oficial, snapshot cifrado imutável
+e reserva por destino privado, sem retry cego após resultado desconhecido.
+Configuração e entrega real são homologadas separadamente; a implementação
+começa desativada. Requisitos e fronteiras em
+[ACT-01–12, PERF-01–08 e CHK-01–08](.specs/features/dashboard-actions/spec.md),
+tarefa ACT-T01 e gate operacional ACT-T02.
 Receber arquivo não confirma pagamento.
 
 A ficha impressa usa `ficha-canonical-v6` (ADR 025, público por item e Modelo de malha), paginação com cabeçalho e campos

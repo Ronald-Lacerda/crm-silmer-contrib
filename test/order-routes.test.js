@@ -170,7 +170,7 @@ function orderHarness(options = {}) {
 }
 
 let seedSequence = 0;
-/** @param {Record<string, unknown>} input */
+/** @param {Record<string, unknown>} input @returns {any} */
 function seed(input) {
   seedSequence += 1;
   return {
@@ -1886,4 +1886,104 @@ test('manual delivery tasks require session and another seller cannot confirm', 
     url: '/api/v1/orders/delivery-tasks',
   });
   assert.equal(denied.statusCode, 403);
+});
+
+test('ACT: payment and delivery confirmations preserve each other on conversation orders', async (t) => {
+  const { api, runtime } = orderHarness({ readActor: SELLER });
+  t.after(() => api.close());
+  const confirmed = await createConfirmed(runtime, 'conversation-1');
+  const delivered = await api.inject({
+    method: 'POST',
+    headers: { ...writeHeaders, 'idempotency-key': 'dashboard-delivery' },
+    url: `/api/v1/orders/${confirmed.id}/delivery-confirmation`,
+    payload: { expectedVersion: confirmed.version },
+  });
+  assert.equal(delivered.statusCode, 200);
+  assert.equal(delivered.json().order.deliveredOn, '2026-09-12');
+  const request = {
+    method: /** @type {const} */ ('POST'),
+    headers: { ...writeHeaders, 'idempotency-key': 'dashboard-payment' },
+    url: `/api/v1/orders/${confirmed.id}/payment-confirmation`,
+    payload: {
+      expectedVersion: delivered.json().order.version,
+      paidOn: '2026-09-11',
+      receivedInFull: true,
+    },
+  };
+  const paid = await api.inject(request);
+  assert.equal(paid.statusCode, 200);
+  assert.equal(paid.json().order.paidOn, '2026-09-11');
+  assert.equal(paid.json().order.deliveredOn, '2026-09-12');
+  assert.equal(paid.json().order.paymentReviewRequired, false);
+  assert.equal(paid.json().order.status, 'confirmado');
+  assert.deepEqual((await api.inject(request)).json(), paid.json());
+  assert.equal(
+    (
+      await api.inject({
+        ...request,
+        headers: {
+          ...writeHeaders,
+          'idempotency-key': 'dashboard-payment-stale',
+        },
+      })
+    ).statusCode,
+    409,
+  );
+  for (const payload of [
+    {
+      expectedVersion: paid.json().order.version,
+      paidOn: '2026-09-11',
+      receivedInFull: false,
+    },
+    {
+      expectedVersion: paid.json().order.version,
+      paidOn: '2026-09-11',
+      receivedInFull: true,
+      deliveredOn: null,
+    },
+  ])
+    assert.equal((await api.inject({ ...request, payload })).statusCode, 400);
+});
+
+test('ACT: competing payment and delivery commands have one version winner without losing a date', async (t) => {
+  const { api, runtime } = orderHarness();
+  t.after(() => api.close());
+  const order = await createConfirmed(runtime, 'conversation-1');
+  const settled = await Promise.allSettled([
+    runtime.confirmPayment(
+      seed({
+        orderId: order.id,
+        expectedVersion: order.version,
+        paidOn: '2026-09-11',
+        receivedInFull: true,
+      }),
+    ),
+    runtime.confirmDelivery(
+      seed({ orderId: order.id, expectedVersion: order.version }),
+    ),
+  ]);
+  assert.equal(
+    settled.filter((result) => result.status === 'fulfilled').length,
+    1,
+  );
+  const rejected = settled.find((result) => result.status === 'rejected');
+  assert.equal(
+    /** @type {PromiseRejectedResult} */ (rejected).reason.code,
+    'VERSION_CONFLICT',
+  );
+  const current = (await runtime.get(order.id)).order;
+  const completed = current.paidOn
+    ? await runtime.confirmDelivery(
+        seed({ orderId: order.id, expectedVersion: current.version }),
+      )
+    : await runtime.confirmPayment(
+        seed({
+          orderId: order.id,
+          expectedVersion: current.version,
+          paidOn: '2026-09-11',
+          receivedInFull: true,
+        }),
+      );
+  assert.equal(completed.paidOn, '2026-09-11');
+  assert.equal(completed.deliveredOn, '2026-09-12');
 });

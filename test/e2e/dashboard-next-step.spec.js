@@ -1,254 +1,200 @@
-import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { actionItems, mockPainel } from './support/painel-mock.js';
 
-import { QUEUE, mockPainel, ordersSummary } from './support/painel-mock.js';
-
-// RFC 024, proposta D (PNL-01 a PNL-03): o Painel diz o próximo passo do
-// papel, o período declara que vale para Vendido e a falha da fila aparece
-// com "—" e "Tentar novamente", sem esconder a seção. Dados sintéticos.
-
-/** @param {import('@playwright/test').Page} page */
-function nextStepRegion(page) {
-  return page.getByRole('region', { name: 'Próximo passo' });
-}
-
-/** @param {import('@playwright/test').Page} page */
-function sectionTitles(page) {
-  return page.locator('#main-content').getByRole('heading', { level: 2 });
-}
-
-/** @param {import('@playwright/test').Page} page */
-async function expectNoAxeViolations(page) {
-  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-}
-
-/** @param {import('@playwright/test').Page} page */
-function visibleControls(page) {
-  return page.locator('#main-content').locator('a:visible, button:visible');
-}
-
-/**
- * The queue answers 500 until `recover()` is called. Registered after
- * `mockPainel`, so it wins over the mock's own answer.
- *
- * @param {import('@playwright/test').Page} page
- */
-async function failQueue(page) {
-  let failing = true;
-  let reads = 0;
-  await page.route(
-    (url) => url.pathname === '/api/v1/inbox/summary',
-    (route) => {
-      reads += 1;
-      return route.fulfill({
-        body: JSON.stringify(failing ? { error: { code: 'INTERNAL' } } : QUEUE),
-        contentType: 'application/json',
-        status: failing ? 500 : 200,
-      });
-    },
-  );
-  return {
-    reads: () => reads,
-    recover() {
-      failing = false;
-    },
-  };
-}
-
-test('the seller sees one next step on the phone and opens it by keyboard', async ({
+test('the manager keeps a single next step and the sales selector names its scope', async ({
   page,
 }) => {
-  await page.setViewportSize({ height: 844, width: 390 });
-  const mock = await mockPainel(page, { manager: false });
-  await page.goto('/dashboard');
-
-  const region = nextStepRegion(page);
-  await expect(region.getByRole('link')).toHaveCount(1);
-  const step = region.getByRole('link', { name: 'Responder 2 conversas' });
-  await expect(step).toHaveAttribute('href', '/inbox?fila=minhas');
-  // No heading of its own: the outline stays the two sections.
-  await expect(region.getByRole('heading')).toHaveCount(0);
-  await expect(sectionTitles(page)).toHaveText([
-    'Minha fila',
-    'Entregas',
-    'Meus afazeres de entrega',
-  ]);
-  // One link more than the five indicators of the seller.
-  await expect(visibleControls(page)).toHaveCount(6);
-  expect((await step.boundingBox())?.height).toBeGreaterThanOrEqual(44);
-  const overflow = await page.evaluate(
-    () =>
-      globalThis.document.documentElement.scrollWidth -
-      globalThis.document.documentElement.clientWidth,
-  );
-  expect(overflow).toBeLessThanOrEqual(0);
-  await expectNoAxeViolations(page);
-
-  await step.focus();
-  await page.keyboard.press('Enter');
-  await expect(page).toHaveURL('/inbox?fila=minhas');
-  await expect
-    .poll(() => mock.inboxLists.at(-1)?.get('assignedUserId') ?? null)
-    .toBe('seller-1');
-});
-
-test('the manager starts from the SLA and the period says it is for Vendido', async ({
-  page,
-}) => {
-  await page.setViewportSize({ height: 768, width: 1366 });
   await mockPainel(page);
   await page.goto('/dashboard');
-
-  const region = nextStepRegion(page);
-  await expect(region.getByRole('link')).toHaveCount(1);
-  const step = region.getByRole('link', {
-    name: 'Atender 1 conversa fora do prazo',
-  });
-  await expect(step).toHaveAttribute('href', '/inbox?situacao=aguardando');
-  expect((await step.boundingBox())?.height).toBeGreaterThanOrEqual(44);
-  await expect(sectionTitles(page)).toHaveText([
-    'Vendas e entregas',
-    'Atendimento',
-    'Meus afazeres de entrega',
-  ]);
-  // Three period buttons and seven indicators, plus the next step and the
-  // way into the agent's performance (AGENTE-OBS-01).
-  await expect(visibleControls(page)).toHaveCount(12);
-
-  const periodGroup = page.getByRole('group', { name: 'Período das vendas' });
-  await expect(periodGroup).toHaveAccessibleDescription('Vale para Vendido');
-  await expect(page.getByText('Vale para Vendido')).toBeVisible();
-  await expectNoAxeViolations(page);
-
-  await step.click();
-  await expect(page).toHaveURL('/inbox?situacao=aguardando');
+  const step = page.getByRole('region', { name: 'Próximo passo' });
+  await expect(step.getByRole('link')).toHaveCount(1);
+  await expect(step.getByRole('link')).toHaveAttribute(
+    'href',
+    '/inbox?situacao=aguardando',
+  );
+  const period = page.getByRole('group', { name: 'Período das vendas' });
+  await expect(period).toHaveAccessibleDescription('Vale para Vendido');
+  await period.getByRole('button', { name: 'Mês', exact: true }).click();
+  await expect(
+    page.getByRole('link', { name: /^Vendido no mês/u }),
+  ).toContainText('R$ 24.800,00');
+  const team = page.getByRole('region', { name: 'Desempenho da equipe' });
+  await expect(
+    team.getByRole('combobox', { name: 'Período do desempenho' }),
+  ).toHaveValue('7');
+  await expect(team).toContainText('R$ 16.400,00');
 });
 
-test('with nothing pending the next step is calm text, without a link', async ({
+test('unavailable actions are unknown, never an empty queue or zero, while own performance remains readable', async ({
   page,
 }) => {
   await mockPainel(page, { manager: false });
-  await page.route(
-    (url) => url.pathname === '/api/v1/inbox/summary',
-    (route) =>
-      route.fulfill({
-        body: JSON.stringify({
-          ...QUEUE,
-          mine: { awaitingReplyCount: 0, count: 1, pendingOrderCount: 0 },
-          waitingHandoff: { count: 0, oldestSince: null, overdueCount: 0 },
-        }),
-        contentType: 'application/json',
-      }),
-  );
-  await page.route(
-    (url) => url.pathname === '/api/v1/orders/summary',
-    (route) => {
-      const summary = ordersSummary('hoje');
-      return route.fulfill({
-        body: JSON.stringify({
-          ...summary,
-          deliveries: { ...summary.deliveries, overdueCount: 0 },
-        }),
-        contentType: 'application/json',
-      });
-    },
-  );
-  await page.goto('/dashboard');
-
-  const region = nextStepRegion(page);
-  await expect(region).toContainText('Nada urgente agora.');
-  await expect(region.getByRole('link')).toHaveCount(0);
-  await expectNoAxeViolations(page);
-});
-
-test('a failing queue keeps Atendimento with dashes and retries by keyboard', async ({
-  page,
-}) => {
-  await page.setViewportSize({ height: 844, width: 390 });
-  await mockPainel(page);
-  const queue = await failQueue(page);
-  await page.goto('/dashboard');
-
-  const attendance = page.getByRole('region', { name: 'Atendimento' });
-  await expect(attendance).toBeVisible();
-  await expect(attendance.getByRole('alert')).toContainText(
-    'Não foi possível consultar a fila agora.',
-  );
-  const cards = attendance.locator('.metric-card');
-  await expect(cards).toHaveCount(3);
-  for (const value of await cards.locator('.metric-value').allTextContents()) {
-    expect(value.trim()).toBe('—');
-  }
-  await expect(
-    page.getByRole('link', { name: /^Esperando vendedor —/u }),
-  ).toBeVisible();
-  // The step skips the queue rules: the next one comes from the deliveries.
-  await expect(
-    nextStepRegion(page).getByRole('link', {
-      name: 'Conferir 2 entregas atrasadas',
+  let failing = true;
+  await page.route('**/api/v1/dashboard/actions', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      status: failing ? 503 : 200,
+      body: JSON.stringify(
+        failing
+          ? { code: 'UNAVAILABLE' }
+          : {
+              today: '2026-10-15',
+              generatedAt: '2026-10-15T15:00:00Z',
+              items: actionItems(),
+              hasMore: false,
+            },
+      ),
     }),
+  );
+  await page.goto('/dashboard');
+  const actions = page.getByRole('region', { name: 'O que precisa de você' });
+  await expect(actions.getByRole('alert')).toContainText(
+    'Não foi possível consultar suas providências agora.',
+  );
+  await expect(
+    actions.getByRole('button', { name: 'Tudo —', exact: true }),
   ).toBeVisible();
-  const retry = attendance.getByRole('button', { name: 'Tentar novamente' });
-  expect((await retry.boundingBox())?.height).toBeGreaterThanOrEqual(44);
-  await expectNoAxeViolations(page);
-
-  // A second failure keeps the dashes and the focus on the retry.
-  const readsBefore = queue.reads();
-  await retry.focus();
-  await page.keyboard.press('Enter');
-  await expect.poll(() => queue.reads()).toBeGreaterThan(readsBefore);
-  await expect(retry).toBeFocused();
-  await expect(cards.first().locator('.metric-value')).toHaveText('—');
-
-  queue.recover();
-  await page.keyboard.press('Enter');
-  await expect(attendance.getByRole('alert')).toHaveCount(0);
   await expect(
-    page.getByRole('link', { name: /^Esperando vendedor 3/u }),
-  ).toContainText('1 fora do prazo');
+    actions.getByText('Nenhuma providência nesta visão', { exact: true }),
+  ).toHaveCount(0);
   await expect(
-    page.getByRole('heading', { level: 2, name: 'Atendimento' }),
+    page.getByRole('region', { name: 'Seu resultado' }),
+  ).toContainText('R$ 8.400,00');
+  failing = false;
+  await actions
+    .getByRole('button', { name: 'Atualizar providências', exact: true })
+    .focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    actions.getByRole('heading', {
+      name: 'O que precisa de você',
+      exact: true,
+    }),
   ).toBeFocused();
   await expect(
-    nextStepRegion(page).getByRole('link', {
-      name: 'Atender 1 conversa fora do prazo',
-    }),
+    actions.getByRole('button', { name: 'Tudo 5', exact: true }),
   ).toBeVisible();
 });
 
-test('the seller queue failure says the step could not be read', async ({
+test('an event preserves a payment draft and its original version until explicit review', async ({
+  page,
+}) => {
+  const mock = await mockPainel(page, { manager: false });
+  let releaseEvent = () => {};
+  const gate = new Promise((resolve) => {
+    releaseEvent = () => resolve(null);
+  });
+  await page.route('**/api/v1/events?**', async (route) => {
+    await gate;
+    return route.fulfill({
+      contentType: 'text/event-stream',
+      body: 'retry: 60000\n\nevent: inbox.order.changed\nid: action-update\ndata: {"orderId":"manual-12"}\n\n',
+    });
+  });
+  await page.goto('/dashboard');
+  const actions = page.getByRole('region', { name: 'O que precisa de você' });
+  await actions
+    .getByRole('button', { name: 'Abrir Equipe Sintética', exact: true })
+    .click();
+  await actions
+    .getByRole('button', { name: 'Registrar pagamento', exact: true })
+    .click();
+  await actions.getByLabel('Data do recebimento integral').fill('2026-10-14');
+  const check = actions.getByRole('checkbox', {
+    name: 'Confirmo que o valor integral foi recebido.',
+  });
+  await check.check();
+  const rows = actionItems();
+  rows[1].targetVersion = 5;
+  rows[1].order.finalAmountCents = 200000;
+  rows[1].order.version = 5;
+  mock.setActions(rows);
+  const readsBefore = mock.actionReads();
+  releaseEvent();
+  await expect(
+    actions.getByText(
+      'Há uma atualização pendente. Seus dados digitados foram preservados.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  expect(mock.actionReads()).toBe(readsBefore);
+  await expect(actions.getByLabel('Data do recebimento integral')).toHaveValue(
+    '2026-10-14',
+  );
+  await expect(check).toBeChecked();
+  await expect(actions).toContainText('R$ 1.280,00');
+  await actions
+    .getByRole('button', { name: 'Confirmar pagamento', exact: true })
+    .click();
+  await expect(actions.getByRole('alert')).toContainText(
+    'A providência mudou.',
+  );
+  expect(mock.writes[0].body.expectedVersion).toBe(4);
+  await expect(check).toBeChecked();
+});
+
+test('a partial queue labels its loaded counts and links to complete work lists', async ({
   page,
 }) => {
   await mockPainel(page, { manager: false });
-  await failQueue(page);
-  await page.route(
-    (url) => url.pathname === '/api/v1/orders/summary',
-    (route) => {
-      const summary = ordersSummary('hoje');
-      return route.fulfill({
-        body: JSON.stringify({
-          ...summary,
-          deliveries: { ...summary.deliveries, overdueCount: 0 },
-        }),
-        contentType: 'application/json',
-      });
-    },
+  await page.route('**/api/v1/dashboard/actions', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        today: '2026-10-15',
+        generatedAt: '2026-10-15T15:00:00Z',
+        items: actionItems().slice(0, 2),
+        hasMore: true,
+      }),
+    }),
   );
   await page.goto('/dashboard');
-
-  await expect(sectionTitles(page)).toHaveText([
-    'Minha fila',
-    'Entregas',
-    'Meus afazeres de entrega',
-  ]);
-  const region = nextStepRegion(page);
-  await expect(region).toContainText(
-    'A fila não respondeu; tente de novo mais abaixo.',
+  const actions = page.getByRole('region', { name: 'O que precisa de você' });
+  await expect(actions).toContainText(
+    'Mostrando 2 itens; há mais na lista completa.',
   );
-  await expect(region).not.toContainText('Nada urgente');
-  await expect(region.getByRole('link')).toHaveCount(0);
+  await expect(actions).toContainText(
+    'Os contadores consideram apenas os itens carregados.',
+  );
   await expect(
-    page.getByRole('link', { name: /^Responder agora —/u }),
+    actions.getByRole('button', { name: 'Tudo 2', exact: true }),
   ).toBeVisible();
-  await expectNoAxeViolations(page);
+  await expect(
+    actions.getByRole('link', { name: 'Ver todas as minhas conversas' }),
+  ).toHaveAttribute('href', '/inbox?fila=minhas');
+  await expect(
+    actions.getByText('Nada urgente agora.', { exact: true }),
+  ).toHaveCount(0);
+});
+
+test('failed or unknown sends ask for verification, never imply a silent customer', async ({
+  page,
+}) => {
+  await mockPainel(page, { manager: false });
+  const rows = actionItems();
+  rows[0].reason = 'send_unknown';
+  rows[0].subtitle = 'Resultado do envio desconhecido; confira sem reenviar';
+  await page.route('**/api/v1/dashboard/actions', (route) =>
+    route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        today: '2026-10-15',
+        generatedAt: '2026-10-15T15:00:00Z',
+        items: rows,
+        hasMore: false,
+      }),
+    }),
+  );
+  await page.goto('/dashboard');
+  const actions = page.getByRole('region', { name: 'O que precisa de você' });
+  await actions
+    .getByRole('button', { name: 'Abrir Cliente Sintético', exact: true })
+    .click();
+  await expect(
+    actions.getByRole('link', { name: 'Verificar envio na conversa' }),
+  ).toHaveAttribute('href', '/inbox/reply-1');
+  await expect(
+    actions.getByRole('link', { name: 'Abrir conversa para responder' }),
+  ).toHaveCount(0);
+  await expect(actions).toContainText('não reenvie sem conferir');
 });

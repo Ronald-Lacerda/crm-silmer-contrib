@@ -321,13 +321,43 @@ confirmados, não teste, sem entrega e do responsável autenticado, ordenados
 por prazo e número; não depende de scheduler nem das tabelas de tarefas legadas.
 `POST /api/v1/orders/:orderId/delivery-confirmation`, com `expectedVersion` e
 Idempotency-Key, exige responsável ou administrador humano, grava o dia de
-São Paulo e preserva pagamento/status/snapshot. O PATCH de milestones aceita
-somente `paidOn` para manuais; pedidos por conversa mantêm o contrato anterior.
+São Paulo e preserva pagamento/status/snapshot. A ADR 059 / ACT-04 amplia esse
+comando para pedidos de atendimento confirmados e não teste com ou sem
+conversa; a leitura legada `delivery-tasks` continua restrita aos manuais.
+`POST /api/v1/orders/:orderId/payment-confirmation` exige versão, idempotência,
+data válida até hoje em São Paulo e `receivedInFull: true`; preserva entrega e
+só libera revisão legada mediante declaração explícita de quitação integral.
+O PATCH de milestones aceita somente `paidOn` para manuais; pedidos por
+conversa mantêm o contrato anterior.
 Rollback de aplicação exige compatibilizar esse PATCH antes de voltar o
 frontend; não apaga datas nem auditoria. O backfill não exige reversão.
 A identidade do canal permanece ausente até correlação verificável. O fluxo
 legado n8n continua restrito a um pendente por Conversa até Assuntos e alvo
 explícito serem implantados em CRM e workflow.
+
+A [ADR 059](docs/adr/059-central-de-acoes-e-performance-comercial.md),
+[ACT-01–12, PERF-01–08 e CHK-01–08](.specs/features/dashboard-actions/spec.md)
+e ACT-T01 acrescentam `GET /api/v1/dashboard/actions`, decisões pessoais em
+`POST /api/v1/dashboard/actions/:actionId/decision` e desempenho em
+`GET /api/v1/dashboard/performance?days=7|30`. A API revalida pessoa ativa,
+função e capacidades na transação; decisões conferem posse, versão do alvo,
+revisão da mensagem e versão própria, com recibo idempotente cifrado e auditoria.
+O formulário captura versão/valor sem substituição silenciosa por SSE.
+`0056_dashboard_actions` guarda decisões e captura o responsável comercial na
+confirmação, separado do executor; não preenche atribuição histórica sem
+prova. Loja e sem atribuição reconciliam separadamente com o total.
+
+`0057_dashboard_checkpoints` guarda snapshot cifrado imutável do relatório e
+estado mínimo por destinatário. O preview/status humano exige administrador;
+os comandos `prepare`, `reserve` e `complete` sob
+`/api/v1/integrations/n8n/dashboard/checkpoint/` exigem a capacidade técnica
+`dashboard.checkpoint.execute`. n8n agenda às 08h em São Paulo, para o dia
+civil anterior, e transporta somente após reserva exclusiva; replay nunca
+relibera envio. Telefones vêm de configuração privada, não do browser nem do
+Git. Resultado incerto exige reconciliação, e aceitação do provider não prova
+entrega. A flag é desativada por padrão; ACT-T02 e o
+[runbook](docs/runbooks/dashboard-central.md) separam configuração, publicação
+e homologação real da evidência local.
 
 O contrato `subject-v1` (CP-T04) devolve os Assuntos e seus briefings cifrados
 por Assunto no inbound. Toda alteração posterior à abertura leva

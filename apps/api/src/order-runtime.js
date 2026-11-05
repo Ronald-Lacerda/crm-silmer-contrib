@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { PostgresAuditTrail } from '@crm-silmer/audit-privacy';
-import { CAPABILITIES } from '@crm-silmer/identity-access';
+import { authorize, CAPABILITIES } from '@crm-silmer/identity-access';
 import {
   createIdempotentCommandExecutor,
   PostgresIdempotencyRecordStore,
@@ -67,6 +67,7 @@ import {
  *   phoneDigestsFor?: (query: string) => string[],
  *   clock?: () => Date,
  *   idFactory?: () => string,
+ *   withMilestoneTransaction?: (method:'confirmPayment'|'confirmDelivery',input:any)=>Promise<any>,
  * }} options
  */
 export function createOrderRuntime(options) {
@@ -487,8 +488,29 @@ export function createOrderRuntime(options) {
       return { items: await present(await service.deliveryTasks(input)) };
     },
 
+    /** @param {OrderCommand & {orderId:string,paidOn:unknown,receivedInFull:unknown,expectedVersion:number}} input */
+    async confirmPayment(input) {
+      if (options.withMilestoneTransaction)
+        return options.withMilestoneTransaction('confirmPayment', input);
+      return run(
+        input,
+        {
+          action: 'order.payment.confirm',
+          command: {
+            paidOn: input.paidOn,
+            receivedInFull: input.receivedInFull,
+          },
+          expectedVersion: input.expectedVersion,
+          target: { id: input.orderId, type: 'order' },
+        },
+        async () => presentOne(await service.confirmPayment(input)),
+      );
+    },
+
     /** @param {OrderCommand & {orderId: string, expectedVersion: number}} input */
     async confirmDelivery(input) {
+      if (options.withMilestoneTransaction)
+        return options.withMilestoneTransaction('confirmDelivery', input);
       return run(
         input,
         {
@@ -645,7 +667,7 @@ function requireVersion(value) {
  * order routes share the Inbox read (session) and write (session + CSRF) rules.
  *
  * @param {any} database
- * @param {{access: OrderAccess, environment?: Record<string, string|undefined>, storage?: any, phoneDigestsFor?: (query: string) => string[]}} options
+ * @param {{access: OrderAccess, environment?: Record<string, string|undefined>, storage?: any, phoneDigestsFor?: (query: string) => string[], milestoneTransactions?:boolean}} options
  */
 export function createOrderApiRuntime(database, options) {
   const environment = options.environment ?? process.env;
@@ -654,6 +676,87 @@ export function createOrderApiRuntime(database, options) {
     'N8N_INTEGRATION_ENVELOPE_KEY',
   );
   return createOrderRuntime({
+    // ACT-12: these declarations and their encrypted receipts share one
+    // transaction. Replays revalidate live access before opening the receipt.
+    withMilestoneTransaction:
+      options.milestoneTransactions === false
+        ? undefined
+        : (method, input) =>
+            database.transaction(async (/** @type {any} */ client) => {
+              if (input.actor?.kind !== 'human' || !input.actor.id)
+                throw new OrderForbiddenError();
+              const principal = (
+                await client.query(
+                  `SELECT u.id,f.function_name FROM crm.users u JOIN crm.user_functions f ON f.user_id=u.id WHERE u.id=$1 AND u.disabled_at IS NULL FOR SHARE OF u,f`,
+                  [input.actor.id],
+                )
+              ).rows[0];
+              if (!principal) throw new OrderForbiddenError();
+              const grants = await client.query(
+                'SELECT capability FROM crm.user_capabilities WHERE user_id=$1 FOR SHARE',
+                [input.actor.id],
+              );
+              const actor = {
+                id: input.actor.id,
+                kind: /** @type {const} */ ('human'),
+                functionName: principal.function_name,
+                capabilities: grants.rows.map(
+                  (/** @type {any} */ row) => row.capability,
+                ),
+              };
+              authorize(actor, 'order.milestones');
+              const reference = (
+                await client.query(
+                  'SELECT conversation_id FROM crm.orders WHERE id=$1',
+                  [input.orderId],
+                )
+              ).rows[0];
+              if (!reference) throw new OrderNotFoundError();
+              let conversation;
+              if (reference.conversation_id)
+                conversation = (
+                  await client.query(
+                    'SELECT assigned_user_id FROM crm.conversations WHERE id=$1 FOR UPDATE',
+                    [reference.conversation_id],
+                  )
+                ).rows[0];
+              const current = (
+                await client.query(
+                  'SELECT conversation_id,manual_owner_id,origin,is_test,status FROM crm.orders WHERE id=$1 FOR UPDATE',
+                  [input.orderId],
+                )
+              ).rows[0];
+              if (
+                !current ||
+                current.conversation_id !== reference.conversation_id
+              )
+                throw new OrderNotFoundError();
+              const owner = current.conversation_id
+                ? conversation?.assigned_user_id
+                : current.manual_owner_id;
+              if (
+                owner !== actor.id &&
+                !actor.capabilities.includes(CAPABILITIES.COMMERCIAL_ADMIN)
+              )
+                throw new OrderForbiddenError();
+              if (
+                current.origin !== 'atendimento' ||
+                current.is_test ||
+                current.status !== 'confirmado'
+              )
+                throw new OrderConflictError(
+                  'Only confirmed attendance orders support declarations',
+                  'ORDER_STATUS_CONFLICT',
+                );
+              const bound = {
+                query: client.query.bind(client),
+                transaction: async (/** @type {any} */ work) => work(client),
+              };
+              return createOrderApiRuntime(bound, {
+                ...options,
+                milestoneTransactions: false,
+              })[method]({ ...input, actor });
+            }),
     access: options.access,
     auditTrail: new PostgresAuditTrail(database),
     conversations: new PostgresOrderConversationPort({

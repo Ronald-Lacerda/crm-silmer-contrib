@@ -64,7 +64,8 @@ const SCREENS = [
       conversaCabecalho: 4,
       conversaDepois: 12, // (7)
       editar: 1, // (1)
-      painel: { gestor: 11, vendedor: 7 }, // (10 e 6)
+      // ACT-01: four filters + five interactive queue objects, no inline commands.
+      painel: { gestor: 11, vendedor: 9 },
       pedidoPrimeiraTela: 12, // (5; documento com 1.646 px)
       pedidosPrimeiraTela: 12, // (7)
     },
@@ -79,7 +80,8 @@ const SCREENS = [
       conversaCabecalho: 4,
       conversaDepois: 24, // (17)
       editar: 5, // (5)
-      painel: { gestor: 12, vendedor: 7 }, // (11 e 6)
+      // ACT-01: queue 9 + selected detail 3 + performance period/expander 2.
+      painel: { gestor: 12, vendedor: 14 },
       pedidoPrimeiraTela: 16, // (6)
       pedidosPrimeiraTela: 19, // (10)
     },
@@ -298,22 +300,42 @@ for (const screen of SCREENS) {
     });
 
     for (const manager of [false, true]) {
-      test(`PNL-01: o Próximo passo do ${manager ? 'gestor' : 'vendedor'} tem um link no máximo`, async ({
+      test(`ACT-01/PNL-01: a central do ${manager ? 'gestor' : 'vendedor'} mantém ações sob demanda`, async ({
         page,
       }) => {
         await page.clock.setFixedTime(QUEUE_TIME);
         await mockPainel(page, { manager });
         await page.goto('/dashboard');
-        const region = page.getByRole('region', { name: 'Próximo passo' });
-        await expect(region).toBeVisible();
-        await expect(page.locator('.metric-card').first()).toBeVisible();
-
-        await budget(
-          page,
-          'Painel: Próximo passo',
-          { selector: '.next-step' },
-          1,
-        );
+        if (manager) {
+          await expect(
+            page.getByRole('region', { name: 'Desempenho da equipe' }),
+          ).toBeVisible();
+          await budget(
+            page,
+            'Painel: Próximo passo',
+            { selector: '.next-step' },
+            1,
+          );
+        } else {
+          const actions = page.getByRole('region', {
+            name: 'O que precisa de você',
+          });
+          await expect(
+            actions.getByRole('button', { name: 'Tudo 5', exact: true }),
+          ).toBeVisible();
+          await expect(
+            actions.getByRole('button', {
+              name: 'Registrar pagamento',
+              exact: true,
+            }),
+          ).toHaveCount(0);
+          await budget(
+            page,
+            'Painel: filtros da central',
+            { selector: '.dashboard-action-filters' },
+            4,
+          );
+        }
         await budget(
           page,
           'Painel: primeira tela',

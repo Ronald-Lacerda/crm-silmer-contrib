@@ -465,11 +465,16 @@ fato entregamos, na ficha digital e na impressa.
     SHALL incluir pedidos sem prazo e com prazo futuro, ordenados por prazo e
     número, sem criar tarefas no domínio legado. Lista vazia e falha de leitura
     SHALL ser estados distintos; eventos de pedido SHALL atualizar a lista.
+    Desde ACT-01/04 (ADR 059), a central substitui essa composição por fila e
+    detalhe e inclui pedidos confirmados de atendimento com conversa, além
+    dos manuais. O endpoint legado de delivery-tasks mantém seu recorte.
 11. **PLA-11** WHEN o vendedor marca a entrega THEN a API SHALL exigir pessoa
     humana responsável ou administrador e versão atual, registrar o dia de São
     Paulo no servidor e retirar o afazer. Pagamento, status, número e snapshot
-    SHALL permanecer inalterados. Pedido pendente, teste, loja ou de conversa
-    SHALL ser recusado nesse comando. A entrega SHALL ser auditada e
+    SHALL permanecer inalterados. Pedido pendente, teste ou loja
+    SHALL ser recusado nesse comando. Desde ACT-04 / ADR 059, pedido de
+    atendimento com conversa é elegível ao responsável atual/admin, com
+    autorização revalidada na transação. A entrega SHALL ser auditada e
     idempotente; repetição não SHALL mudar a data já registrada.
 12. **PLA-12** A confirmação SHALL operar por teclado, indicar andamento,
     anunciar sucesso/erro e mover foco ao próximo afazer ou ao título da seção

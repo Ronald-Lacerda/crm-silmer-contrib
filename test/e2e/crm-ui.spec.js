@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { mockDashboardRead } from './support/painel-mock.js';
 
 const session = {
   user: {
@@ -306,6 +307,13 @@ async function mockCrm(page, options = {}) {
       });
       return;
     }
+    if (
+      await mockDashboardRead(
+        route,
+        activeSession.user.capabilities.includes('COMMERCIAL_ADMIN'),
+      )
+    )
+      return;
     if (path === '/api/v1/orders/delivery-tasks') {
       await route.fulfill({
         contentType: 'application/json',

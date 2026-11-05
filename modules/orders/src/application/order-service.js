@@ -872,18 +872,47 @@ export function createOrderService(options) {
       return readAll(orders);
     },
 
-    /** PLA-11: the server records today's São Paulo day after human confirmation.
+    /** ACT-04: a payment declaration changes only payment, never delivery.
+     * @param {{orderId:string,paidOn:unknown,receivedInFull:unknown,expectedVersion:number,actor:OrderActor,correlationId:string}} input
+     */
+    async confirmPayment(input) {
+      const order = await loadForCommand(input);
+      if (order.status !== 'confirmado' || order.isTest) {
+        throw new OrderConflictError(
+          'Only confirmed attendance orders can be paid',
+          'ORDER_STATUS_CONFLICT',
+        );
+      }
+      if (input.receivedInFull !== true || !input.paidOn) {
+        throw new OrderInputError('Full payment and its day are required', [
+          'paidOn',
+        ]);
+      }
+      return readOne(
+        await repository.saveMilestones(
+          recordMilestones(order, {
+            paidOn: input.paidOn,
+            deliveredOn: order.deliveredOn,
+            now: clock(),
+          }),
+          {
+            actor: input.actor,
+            correlationId: input.correlationId,
+            expectedVersion: order.version,
+            paymentReviewed: true,
+          },
+        ),
+      );
+    },
+
+    /** ACT-04 / PLA-11: today's São Paulo day after human confirmation.
      * @param {{orderId: string, expectedVersion: number, actor: OrderActor, correlationId: string}} input
      */
     async confirmDelivery(input) {
       const order = await loadForCommand(input);
-      if (
-        order.conversationId !== null ||
-        order.status !== 'confirmado' ||
-        order.isTest
-      ) {
+      if (order.status !== 'confirmado' || order.isTest) {
         throw new OrderConflictError(
-          'Only confirmed manual orders can be delivered',
+          'Only confirmed attendance orders can be delivered',
           'ORDER_STATUS_CONFLICT',
         );
       }
