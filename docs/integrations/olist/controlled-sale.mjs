@@ -5,7 +5,7 @@
  * local payload-integrity check, never proof of human authorization.
  */
 import { createHash } from 'node:crypto';
-import { mkdir, open } from 'node:fs/promises';
+import { mkdir, open, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { normalizeDocument } from './read-only-probe.mjs';
 
@@ -507,6 +507,181 @@ export async function executeC01(
       getCount,
       queries: summaries,
       uiLineProofRequired: true,
+      f1GatePassed: false,
+    };
+  }
+}
+
+/** Read-only reconciliation by the previously journaled ID; never retries creation. */
+export async function reconcileC01(
+  input,
+  { token, journalDirectory, fetcher = fetch, signal } = {},
+) {
+  const plan = buildC01(input),
+    queries = [];
+  if (
+    typeof token !== 'string' ||
+    !token ||
+    typeof journalDirectory !== 'string' ||
+    !journalDirectory
+  )
+    fail('PRIVATE_SESSION_REQUIRED');
+  async function get(path) {
+    if (signal?.aborted) fail('PROBE_STOPPED');
+    let response;
+    try {
+      response = await fetcher(API + path, {
+        method: 'GET',
+        redirect: 'error',
+        headers: {
+          Accept: 'application/json',
+          Authorization: 'Bearer ' + token,
+        },
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
+          : AbortSignal.timeout(15000),
+      });
+    } catch {
+      fail('HTTP_OUTCOME_UNKNOWN');
+    }
+    queries.push({
+      path: path.replace(/\/\d+(?=\/|$)/gu, '/{id}'),
+      method: 'GET',
+      status: response.status,
+    });
+    if (response.status < 200 || response.status >= 300)
+      fail('HTTP_' + response.status);
+    if (!response.headers.get('content-type')?.includes('application/json'))
+      fail('INVALID_RESPONSE');
+    const reader = response.body?.getReader();
+    if (!reader) fail('INVALID_RESPONSE');
+    const chunks = [];
+    let length = 0;
+    try {
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        length += part.value.byteLength;
+        if (length > 131072) {
+          await reader.cancel();
+          fail('BODY_TOO_LARGE');
+        }
+        chunks.push(part.value);
+      }
+    } catch (error) {
+      if (error.message === 'BODY_TOO_LARGE') throw error;
+      fail('INVALID_RESPONSE');
+    } finally {
+      reader.releaseLock();
+    }
+    try {
+      return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    } catch {
+      fail('INVALID_RESPONSE');
+    }
+  }
+  try {
+    const raw = await readFile(
+      join(resolve(journalDirectory), C01_REFERENCE + '.jsonl'),
+      'utf8',
+    );
+    const events = raw.trim().split('\n').map(JSON.parse);
+    const expectedHash = createHash('sha256')
+      .update(JSON.stringify(plan.payload))
+      .digest('hex');
+    if (events[0]?.payloadSha256 !== expectedHash)
+      fail('CASE_JOURNAL_MISMATCH');
+    const created = events.find((e) => e.phase === 'created');
+    if (!Number.isSafeInteger(created?.id) || created.id < 1)
+      fail('NO_CONFIRMED_ORDER_ID');
+    if (!sameDocument((await get('/info'))?.cpfCnpj, plan.accountDocument))
+      fail('ACCOUNT_MISMATCH');
+    const body = await get('/pedidos/' + created.id);
+    const checks = {
+      id: body.id === created.id,
+      situation: body.situacao === 0,
+      date: body.data === plan.payload.data,
+      buyer:
+        body.cliente?.id === plan.buyer.id &&
+        sameDocument(body.cliente?.cpfCnpj, plan.buyer.document),
+      reference: body.ecommerce?.numeroPedidoEcommerce === C01_REFERENCE,
+      ecommerceUnlinked: [null, undefined, 0].includes(body.ecommerce?.id),
+      productsTotal: body.valorTotalProdutos === 3,
+      orderTotal: body.valorTotalPedido === 3,
+      noFiscalId: [null, undefined, 0].includes(body.idNotaFiscal),
+      noFiscalObject:
+        !body.notaFiscal || Object.keys(body.notaFiscal).length === 0,
+      noIntegratedPayments: (body.pagamentosIntegrados?.length ?? 0) === 0,
+      noInstallments: (body.pagamento?.parcelas?.length ?? 0) === 0,
+      noGlobalAdjustment: [
+        'valorDesconto',
+        'valorFrete',
+        'valorOutrasDespesas',
+      ].every((k) => [null, undefined, 0].includes(body[k])),
+      lineValues:
+        Array.isArray(body.itens) &&
+        body.itens.length === 2 &&
+        plan.payload.itens.every((expected) => {
+          const matches = body.itens.filter(
+            (line) => line.produto?.id === expected.produto.id,
+          );
+          return (
+            matches.length === 1 &&
+            matches[0].quantidade === expected.quantidade &&
+            matches[0].valorUnitario === expected.valorUnitario
+          );
+        }),
+    };
+    return {
+      state: 'read_only_reconciled',
+      erpPostAttempts: 0,
+      getCount: queries.length,
+      queries,
+      checks,
+      failedChecks: Object.entries(checks)
+        .filter(([, ok]) => !ok)
+        .map(([key]) => key),
+      diagnostics: {
+        referencePresent:
+          typeof body.ecommerce?.numeroPedidoEcommerce === 'string' &&
+          !!body.ecommerce.numeroPedidoEcommerce,
+        ecommerceObjectPresent: !!body.ecommerce,
+        ecommerceIdState:
+          body.ecommerce?.id == null
+            ? 'empty'
+            : body.ecommerce.id === 0
+              ? 'zero'
+              : 'nonzero',
+        dateOnlyMatches:
+          typeof body.data === 'string' &&
+          body.data.slice(0, 10) === plan.payload.data,
+        fiscalObjectAllValuesEmpty:
+          !!body.notaFiscal &&
+          Object.values(body.notaFiscal).every(
+            (v) => v === null || v === undefined || v === 0 || v === '',
+          ),
+        fiscalObjectHasPositiveId: Number(body.notaFiscal?.id) > 0,
+        integratedPaymentCount: body.pagamentosIntegrados?.length ?? 0,
+        installmentCount: body.pagamento?.parcelas?.length ?? 0,
+      },
+      automaticRetry: false,
+      uiLineProofRequired: true,
+      f1GatePassed: false,
+    };
+  } catch (error) {
+    const code =
+      /^(?:CASE_JOURNAL_MISMATCH|NO_CONFIRMED_ORDER_ID|ACCOUNT_MISMATCH|HTTP_\d{3}|HTTP_OUTCOME_UNKNOWN|INVALID_RESPONSE|BODY_TOO_LARGE|PROBE_STOPPED)$/u.test(
+        error?.message ?? '',
+      )
+        ? error.message
+        : 'RECONCILIATION_STOPPED';
+    return {
+      state: 'reconciliation_stopped',
+      code,
+      erpPostAttempts: 0,
+      getCount: queries.length,
+      queries,
+      automaticRetry: false,
       f1GatePassed: false,
     };
   }

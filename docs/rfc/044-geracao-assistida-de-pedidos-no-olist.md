@@ -693,8 +693,13 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       [preparação real](../integrations/olist/evidence/controlled-sale-preflight.json)
       concluída com dez GET na rodada final, zero POST ERP. ID/documento,
       pai, SKUs e grade M/G conferidos; filtro com máscara necessário nesse
-      cadastro. Núcleo/transporte C01 com 25 testes sintéticos; pedido R$ 3,00
-      e ampliação de Pedidos ainda aguardam aprovação específica.
+      cadastro. Após aprovação específica, somente Pedidos recebeu Incluir/
+      editar e um POST C01 retornou 201. Subtotais R$ 1,00/R$ 2,00 e total
+      R$ 3,00 conferidos na UI; referência voltou vazia, ecommerce.id zero.
+      [Venda e reconciliação por ID](../integrations/olist/evidence/controlled-sale-live-result.json),
+      sem repetir/editar/cancelar. Núcleo/transporte com 29 testes sintéticos.
+      Origem própria API do ERP é candidata ainda não instalada; prova de
+      referência, cadastros automáticos e precisão restante mantêm F1 aberto.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado
 fiscal inventado ou suposição de idempotência remota. Plano para ausência de

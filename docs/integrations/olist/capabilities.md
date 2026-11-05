@@ -8,8 +8,11 @@ coordenado pelo Tech Lead (Codex nesta execução). Consulta em 04/11/2026.
 **Situação: contrato/offline e primeira prova autenticada de leitura entregues;
 T02 e gate F1 abertos.** O PO aprovou o aplicativo privado somente leitura e
 a conexão temporária. Os oito GET retornaram 200 e a conta coincidiu; callback
-local aceito e limite de leitura observado de 30/minuto. Nenhum cadastro/venda
-foi criado e nenhum parâmetro comercial foi alterado.
+local aceito e limite de leitura observado de 30/minuto. Depois, o PO aprovou
+o caso C01: um POST retornou 201 e a UI comprovou R$ 1,00/R$ 2,00 por linha,
+total R$ 3,00. A referência não foi preservada; o caso foi reconciliado por ID,
+sem repetição ou edição. Nenhum parâmetro comercial global foi alterado.
+[Evidência da venda e reconciliação](evidence/controlled-sale-live-result.json).
 [Evidência real](evidence/read-only-live-result.json) ·
 [Configuração e encerramento do coletor](read-only-access.md) ·
 [Gatilhos e caso controlado](controlled-case.md).
@@ -178,9 +181,10 @@ isola validade de notas, sem comprovar isolamento de cadastros/pedidos/contas.
 A preferência inicial por conta dedicada foi revista pelo PO em 04/11/2026:
 **usar a conta operacional atual para consultas e preparar o caso controlado
 para aprovação antes de qualquer criação**. Posteriormente aprovou explicitamente criar e
-conectar o aplicativo somente leitura. Essa configuração foi executada; nenhuma
-criação de cadastro/venda ou alteração de parâmetros comerciais foi autorizada.
-A conta de testes não foi criada. O plano abaixo é a matriz original; o escopo atual menor,
+conectar o aplicativo somente leitura. Depois houve aprovação específica da
+ampliação somente de Pedidos e da venda C01 de R$ 3,00, já executadas.
+Demais cadastros/vendas e nova origem não foram autorizados; parâmetros
+comerciais globais não foram alterados. A conta de testes não foi criada. O plano abaixo é a matriz original; o escopo atual menor,
 gatilhos observados e pendências estão no [caso controlado](controlled-case.md).
 
 Preparação mínima do alvo, sem segredo/documento real no repositório:
@@ -239,16 +243,28 @@ solicitar aprovação. Nenhum orçamento da matriz original autoriza execução.
   um depósito e dez itens em cada primeira página de pagamento/recebimento.
 - Cadastro fiscal aceito, criação automática de cliente/pai/variações,
   referências em roundtrip, escala/arredondamento por linha, rejeições e
-  recuperação continuam pendentes. Nenhum cadastro/venda criado; F1 aberto.
+  recuperação continuam pendentes. C01 criou uma venda; demais cadastros não criados e F1 aberto.
 - C01: comprador confirmado pelo PO e preparação real concluída com dez GET
   na rodada final. ID/documento, pai, SKUs, grade M/G e referência conferidos.
   [Evidência real e diagnósticos](evidence/controlled-sale-preflight.json).
   Consulta com CNPJ normalizado retornou zero; formato com máscara encontrou
   o registro. Contato existente A reutilizável sem criar acesso; novos usam B.
-- Núcleo/transporte C01 com 25 testes sintéticos, modo padrão sem escrita;
+- Núcleo/transporte C01 com 29 testes sintéticos, modo padrão sem escrita;
   [evidência offline](evidence/controlled-sale-offline-result.json).
-  Ainda sem POST ERP ou ampliação de acesso; falta aprovação específica do
-  caso R$ 3,00. Não certifica criação, precisão ou recuperação no provedor.
+  Após aprovação específica, app renomeado e Pedidos Incluir/editar habilitado.
+  Um POST real retornou 201; dinheiro exato e recuperação por ID comprovados.
+  Referência vazia com ecommerce.id zero exige prova de uma origem própria;
+  não houve novo envio/alteração. Escala e demais cadastros continuam abertos.
 - Nenhuma migração, runtime, deploy, habilitação de operadora ou piloto.
   T03 depende da prova real T02 e do gate F1; aprovação de leitura não libera
   ampliação de permissões ou escrita controlada.
+
+## Limitação observada em C01
+
+[ecommerce.numeroPedidoEcommerce](evidence/controlled-sale-live-result.json)
+foi enviado sem ecommerce.id e retornou vazio, com ID de e-commerce zero.
+Os demais checks e subtotais da UI coincidiram. Isso é um resultado da conta,
+não prova de uma regra universal ou de que qualquer ID resolverá. API do ERP
+foi encontrado no catálogo como candidato a origem exclusiva; não instalado.
+A próxima configuração e qualquer nova venda dependem de casos aprovados.
+Não usar número de ordem de compra como remendo nem repetir C01.

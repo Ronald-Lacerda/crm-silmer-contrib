@@ -1,9 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, unlink, rmdir } from 'node:fs/promises';
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  writeFile,
+  unlink,
+  rmdir,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { publicEncrypt, constants } from 'node:crypto';
+import { publicEncrypt, constants, createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startC01Session } from './controlled-session.mjs';
 import { buildC01, c01Digest, C01_REFERENCE } from './controlled-sale.mjs';
@@ -137,7 +144,7 @@ async function session(t, options = {}) {
     await rmdir(run.directory);
     await rmdir(root);
   });
-  return run;
+  return { ...run, privateRoot: root };
 }
 async function importEnvelopes(run, selection = input()) {
   const publicKey = await readFile(join(run.directory, 'public-key.pem'));
@@ -277,4 +284,35 @@ test('account/case envelope mismatch and changed approved input stop before OAut
     // The next session can bind once the old server has stopped.
     await delay(20);
   }
+});
+
+test('reconcile OAuth mode performs exactly two GETs and no sale POST', async (t) => {
+  const mock = remote(),
+    run = await session(t, { fetcher: mock.fetcher, mode: 'reconcile' });
+  await mkdir(join(run.privateRoot, 'controlled'));
+  await writeFile(
+    join(run.privateRoot, 'controlled', C01_REFERENCE + '.jsonl'),
+    JSON.stringify({
+      phase: 'reserved',
+      payloadSha256: createHash('sha256')
+        .update(JSON.stringify(buildC01(input()).payload))
+        .digest('hex'),
+    }) +
+      '\n' +
+      JSON.stringify({ phase: 'created', id: 301 }) +
+      '\n',
+  );
+  await importEnvelopes(run);
+  const page = await waitPage((p) => p.includes('Conectar Olist'));
+  assert.ok(page.includes('Somente dois GET'));
+  await authorize();
+  await waitPage((p) => p.includes('read_only_reconciled'));
+  const result = JSON.parse(
+    await readFile(join(run.directory, 'result.json'), 'utf8'),
+  );
+  assert.equal(result.getCount, 2);
+  assert.equal(result.erpPostAttempts, 0);
+  assert.deepEqual(result.failedChecks, []);
+  assert.equal(mock.calls.filter((c) => c.method === 'POST').length, 1); // OAuth only.
+  assert.equal(mock.calls.filter((c) => c.method === 'GET').length, 2);
 });

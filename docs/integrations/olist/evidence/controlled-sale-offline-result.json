@@ -1,22 +1,22 @@
 {
   "task": "OLIST-T02",
   "case": "C01",
-  "capturedAt": "2026-11-05T00:11:27.468897+00:00",
+  "capturedAt": "2026-11-05T00:38:55.785223+00:00",
   "status": "offline-core-and-oauth-transport",
   "nodeVersion": "24.20.0",
   "command": "fnm exec --using 24.20.0 -- node --test --test-concurrency=1 docs/integrations/olist/controlled-sale.test.mjs docs/integrations/olist/controlled-session.test.mjs",
   "tests": {
-    "total": 25,
-    "passed": 25,
+    "total": 29,
+    "passed": 29,
     "failed": 0,
-    "core": 21,
-    "transport": 4
+    "core": 24,
+    "transport": 5
   },
   "sourceSha256": {
-    "controlled-sale.mjs": "55503a38a5981f2d57804e6736ca723c87444a29c061374ca4a00e61aed712c6",
-    "controlled-sale.test.mjs": "709e2da3e1cdbdf3901e6bb6a86e1895e42b55fcbb2b3a7fc6171cb79229d112",
-    "controlled-session.mjs": "e86de85787ece9f1b9338a1285545fc26312756a2c9193c177739d8d2f8b2861",
-    "controlled-session.test.mjs": "ae7fc8d9efb22e519d0061a1f1bf85670620aef4e788cc865a342edd64a7afb9"
+    "controlled-sale.mjs": "ecc0a35e762a1e25b8f48b37a8475313e485d9354d4196d210b887407bb8079e",
+    "controlled-sale.test.mjs": "b8f8c6478f935b272f1f70ed4a207daba848da05c048a03604686c695a2b6b29",
+    "controlled-session.mjs": "ac15ffcf4046464f28f0268c275568a7b48a299fc889ab9c7aa3f9f6b1c98a87",
+    "controlled-session.test.mjs": "3e595b5fa957aaf50611400b0578ae8a0c23444596b13bb2688631527a4be425"
   },
   "network": "All provider responses mocked; no external connection",
   "realBusinessWrites": 0,
@@ -49,5 +49,10 @@
     "Full phase-1 gate remains open",
     "Live read preflight is recorded separately; this artifact certifies only simulated execution and no real business creation."
   ],
-  "f1GatePassed": false
+  "f1GatePassed": false,
+  "reconciliationMode": {
+    "apiGetLimit": 2,
+    "businessPostLimit": 0,
+    "source": "Previously journaled order ID bound to the C01 payload hash; no ID inference or creation."
+  }
 }

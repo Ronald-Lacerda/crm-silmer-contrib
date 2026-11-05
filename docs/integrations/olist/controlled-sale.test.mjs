@@ -7,6 +7,7 @@ import {
   buildC01,
   c01Digest,
   executeC01,
+  reconcileC01,
   C01_REFERENCE,
 } from './controlled-sale.mjs';
 
@@ -554,4 +555,79 @@ test('one bounded formatted-document read is permitted only after normalized loo
     f.calls.every((c) => c.method === 'GET'),
     true,
   );
+});
+
+test('reconciliation reads only the journaled order and identifies a missing reference without another POST', async (t) => {
+  const directory = await temporary(t),
+    original = fixture();
+  await executeC01(input(), options(directory, original.fetcher));
+  const body = sale();
+  body.ecommerce = null;
+  const readOnly = fixture(({ path }) =>
+    path === '/pedidos/301' ? json(body) : undefined,
+  );
+  const r = await reconcileC01(input(), {
+    token: 'synthetic',
+    journalDirectory: directory,
+    fetcher: readOnly.fetcher,
+  });
+  assert.equal(r.state, 'read_only_reconciled');
+  assert.equal(r.getCount, 2);
+  assert.deepEqual(r.failedChecks, ['reference']);
+  assert.equal(r.checks.lineValues, true);
+  assert.equal(r.checks.orderTotal, true);
+  assert.equal(r.erpPostAttempts, 0);
+  assert.equal(
+    readOnly.calls.every((c) => c.method === 'GET'),
+    true,
+  );
+  for (const value of ['11111111111111', '/301', '/101'])
+    assert.equal(JSON.stringify(r).includes(value), false);
+});
+test('reconciliation verifies the account before reading the order', async (t) => {
+  const directory = await temporary(t),
+    original = fixture();
+  await executeC01(input(), options(directory, original.fetcher));
+  const readOnly = fixture(({ path }) =>
+    path === '/info' ? json({ cpfCnpj: '22222222222222' }) : undefined,
+  );
+  const r = await reconcileC01(input(), {
+    token: 'synthetic',
+    journalDirectory: directory,
+    fetcher: readOnly.fetcher,
+  });
+  assert.equal(r.code, 'ACCOUNT_MISMATCH');
+  assert.equal(r.getCount, 1);
+  assert.equal(
+    readOnly.calls.every((c) => c.method === 'GET'),
+    true,
+  );
+});
+test('unknown ID or a changed case never causes reconciliation to create or infer an order', async (t) => {
+  const directory = await temporary(t),
+    uncertain = fixture(({ options }) => {
+      if (options.method === 'POST') throw new Error('synthetic');
+    });
+  await executeC01(input(), options(directory, uncertain.fetcher));
+  let calls = 0;
+  const r = await reconcileC01(input(), {
+    token: 'synthetic',
+    journalDirectory: directory,
+    fetcher: async () => {
+      calls++;
+    },
+  });
+  assert.equal(r.code, 'NO_CONFIRMED_ORDER_ID');
+  assert.equal(calls, 0);
+  const changed = input();
+  changed.buyer.id = 102;
+  const other = await reconcileC01(changed, {
+    token: 'synthetic',
+    journalDirectory: directory,
+    fetcher: async () => {
+      calls++;
+    },
+  });
+  assert.equal(other.code, 'CASE_JOURNAL_MISMATCH');
+  assert.equal(calls, 0);
 });

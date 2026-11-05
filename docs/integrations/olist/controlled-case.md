@@ -8,13 +8,13 @@ Dono: Tech Lead/Integrações (Codex nesta execução).
 
 ## Autorização e resultado
 
-O PO confirmou que a conta aberta no Chrome é operacional e decidiu usá-la
-para consultas, conferência de gatilhos e preparação de caso controlado.
-Qualquer criação depende de aprovação posterior. A preferência anterior por
-conta dedicada não é mais a condição de ambiente. Posteriormente o PO aprovou explicitamente criar e conectar o aplicativo
-privado somente leitura. Essa aprovação foi executada; não abrange cliente,
-produto, variação, pedido, ampliação de acesso, parâmetros comerciais, serviço
-pago, documento ou mensagem.
+O PO confirmou a conta operacional para consultas e preparo de caso controlado,
+com aprovação antes de cada criação. Depois aprovou o aplicativo de leitura e,
+expressamente, a ampliação somente de Pedidos e o único pedido C01 de R$ 3,00.
+Ambos foram executados; C01 retornou 201 e foi conferido sem edição posterior.
+Não há autorização para novos clientes/produtos/variações/pedidos, nova
+integração/origem, cobrança, documento ou mensagem. A preferência anterior por
+conta dedicada foi substituída pelo plano operacional controlado.
 
 A inspeção inicial abaixo foi feita pela interface, sem chamar a API v3,
 salvar parâmetros ou alterar registros ERP. Depois, o aplicativo autorizado
@@ -80,7 +80,7 @@ de cada forma de pagamento/recebimento. A quota de leitura observada foi de
 30/minuto. Contagens de página não são totais; zero não prova unicidade nem
 autoriza repetir POST incerto. O OAuth aceitou o callback HTTP de loopback.
 
-O coletor foi encerrado, sem persistir tokens. O aplicativo permanece cadastrado
+O coletor foi encerrado, sem persistir tokens. Naquele checkpoint, o aplicativo permaneceu cadastrado
 somente leitura; o segredo foi ocultado novamente na UI. Capturas locais sem
 segredo em var/olist-phase1/, fora do Git.
 [Configuração e limites da prova](read-only-access.md).
@@ -105,13 +105,13 @@ valores ficam na conferência privada. M/G são candidatas para a primeira venda
 sem editar preço, cadastro ou saldo. Essa leitura não prova ainda o vínculo,
 filtro de SKU ou fiscal aceito pela API.
 
-## Caso C01 preparado — ainda sem autorização de escrita
+## Caso C01 executado — referência não preservada
 
 Usar o comprador SILMER confirmado pelo PO e conferido por ID/documento
 na API, com as variações M/G do pai de camisa PV também conferidas na API. IDs, documentos e SKUs reais ficam
 somente na evidência privada. Não criar cliente/produto para viabilizar C01.
 
-| Campo / limite         | Proposta concreta                                                                                                                                                                   |
+| Campo / limite         | Configuração autorizada                                                                                                                                                             |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Referência             | CRM-F1-20261104-C01; consultar novamente antes da escrita; não tratar a referência como chave única                                                                                 |
 | Comprador              | Cadastro existente confirmado pelo PO e conferido por documento/ID; nunca por nome sozinho                                                                                          |
@@ -128,10 +128,17 @@ somente na evidência privada. Não criar cliente/produto para viabilizar C01.
 | Operações fora do caso | Nota fiscal, estoque/balanço, contas/baixa/estorno, cobrança, expedição, publicação, mensagens, atualização de cadastros e cancelamento/exclusão                                    |
 | Falha ou divergência   | Parar; preservar IDs/resposta privada; consultar para reconciliar; zero resultados não libera segundo POST                                                                          |
 
-A autorização de leitura não libera C01 nem a ampliação de Pedidos. A próxima
-aprovação precisa abranger expressamente a permissão agrupada e esse POST único,
-com o comprador agora confirmado. O aplicativo deve receber nome que reflita a
-permissão ampliada; não manter somente leitura no nome após conceder escrita.
+O PO aprovou expressamente a ampliação e o pedido: **“Autorizo a permissão e
+o pedido”**. O nome e a permissão foram salvos e conferidos: somente Pedidos
+permite Incluir e editar; exclusões e demais escritas continuam desmarcadas.
+As credenciais são as mesmas do aplicativo anterior.
+
+Foi executado um único POST, com HTTP 201 e ID preservado no journal privado.
+A leitura posterior encontrou divergência de referência; o executor parou,
+sem segundo POST. A reconciliação só leu /info e o pedido por ID. A UI
+comprovou cada subtotal e o total de R$ 3,00. O pedido permanece em aberto,
+sem edição posterior, cancelamento ou exclusão.
+[Evidência real completa](evidence/controlled-sale-live-result.json).
 
 Antes de executar, conferir conta/identidades/ausência da referência por API,
 quota atual e correspondência do payload com a aprovação. Se houver cobrança,
@@ -146,14 +153,14 @@ autorizar NF. Expedição está ativa ao salvar NF. Isso não é garantia absolu
 de ausência de toda integração externa. Se surgir efeito não previsto, parar,
 sem alterar parâmetros globais nem cancelar como limpeza.
 
-## Núcleo de execução preparado — somente validação offline
+## Núcleo, transporte e validação
 
 [controlled-sale.mjs](controlled-sale.mjs) prepara exclusivamente C01 e não
 executa nada ao importar. O [transporte temporário](controlled-session.mjs)
 foi integrado e testado. Por padrão, executa somente a preparação de leitura;
 o modo create exige digest específico e autorização humana externa ao código.
 Reutiliza o aplicativo de leitura, sem gerar novas credenciais. O transporte
-não foi executado em create contra a conta.
+foi executado uma vez em create, com a aprovação específica acima.
 
 O núcleo constrói o payload fixo, liga identidades/data/seleções a um SHA-256
 de revisão e exige esse digest antes do modo de escrita. A preparação de leitura termina
@@ -186,15 +193,15 @@ IDs nas rotas e não expõe dados privados. Mesmo com API coincidente, devolve
 uiLineProofRequired verdadeiro e f1GatePassed falso: falta comprovar cada
 subtotal na UI e os demais casos de T02.
 
-[21 testes do núcleo](controlled-sale.test.mjs) e
-[quatro do transporte](controlled-session.test.mjs), Node 24.20.0, passaram.
+[24 testes do núcleo](controlled-sale.test.mjs) e
+[cinco do transporte](controlled-session.test.mjs), Node 24.20.0, passaram.
 Incluem perda de resposta, sucesso sem ID, respostas inválidas/limitadas,
 concorrência, quota/expiração, identidade/página incompleta, surpresa fiscal/
 pagamento e unidades trocadas com total igual. Não há rede externa nem dados
 fiscais reais nessa suíte.
 [Resultado e hashes](evidence/controlled-sale-offline-result.json).
 
-## Preparação real concluída — ainda sem pedido criado
+## Preparação anterior à inclusão
 
 [Evidência sanitizada](evidence/controlled-sale-preflight.json): dez GET
 retornaram 200 na preparação final; comprador por ID/documento, pai,
@@ -214,9 +221,8 @@ alterar pessoa/permissão/cadastro. Novos contatos continuam planejados com
 situação B, sem conta de funcionário.
 
 Presença de IE/endereço/NCM/origem/unidade não certifica cadastro tributário,
-regra fiscal ou dinheiro. O pedido ainda não foi criado. Falta a aprovação
-específica para conceder Incluir e editar somente em Pedidos e executar o
-POST C01 de R$ 3,00; demais inclusões permanecem fora dessa aprovação.
+regra fiscal ou dinheiro. Essa preparação foi seguida pela aprovação e inclusão C01 descritas acima.
+Demais inclusões continuam fora da autorização específica recebida.
 
 ### Execução temporária
 
@@ -233,6 +239,46 @@ referência antes da reserva. Não remover a reserva para repetir o teste.
 Após o retorno, conferir cada subtotal na UI e os efeitos observáveis antes
 de concluir o caso. O aplicativo deverá ter nome compatível com a permissão
 ampliada; não manter somente leitura no nome se Pedidos permitir escrita.
+
+## Resultado e limitação de referência
+
+A API e a UI confirmaram situação aberta, comprador e data, duas linhas
+distintas com quantidades 1/1, unitários/subtotais R$ 1,00 e R$ 2,00, e totais
+de produtos/venda R$ 3,00. Frete, desconto global, despesas e tributos visíveis
+ficaram em zero. Não há nota vinculada, pagamentos integrados ou parcelas no
+readback. Não foram executados comandos fiscais, financeiros, de estoque,
+cobrança, expedição ou mensagem.
+
+Os saldos M/G foram observados em zero antes e depois; os preços de catálogo
+continuaram R$ 34,90. Dois snapshots não provam ausência de toda movimentação
+ou atividade concorrente. O aviso de preço abaixo da lista é do ERP;
+não foi enviado desconto artificial para compensar a diferença.
+
+A **única checagem divergente** na reconciliação foi a referência: o POST
+enviou ecommerce.numeroPedidoEcommerce, mas a leitura retornou o campo vazio
+e ecommerce.id zero. A referência também não apareceu na UI. A consulta de
+referência após essa divergência não foi executada; não alegar roundtrip
+pesquisável. O ID confirmado permite preservar este vínculo sem recriar.
+
+O catálogo da conta oferece **API do ERP** como Outra Integração. A hipótese
+a provar é uma origem própria **CRM Silmer - prova F1**, sem reutilizar IDs de
+Shopee/TikTok. Nenhuma instalação foi feita. Criar/configurar essa origem exige
+aprovação específica, conferência de custo/permissões/gatilhos e não autoriza
+outro pedido nem edição de C01. Não gerar ou distribuir credencial legada
+sem necessidade/autorizações concretas; o aplicativo OAuth atual já existe.
+
+### Reconciliação somente leitura
+
+O modo --reconcile lê o journal canônico, confere o hash do payload e exige
+ID de criação previamente confirmado. Faz somente dois GET: /info e pedido
+por ID. Expõe booleans de identidade/campos e motivos de divergência, sem
+documentos/IDs/segredos. Não reserva efeito, não cria, não altera ou cancela.
+É distinto da execução única: foram onze GET na inclusão, dentro do teto de
+doze, e dois GET posteriores na investigação só de leitura.
+
+C01 prova dinheiro exato nesta quantidade, criação de venda e recuperação
+por ID; não prova escala/arredondamento, criação automática dos cadastros
+ou reconciliação por referência após perda do ID. F1 permanece aberto.
 
 ## Provas adicionais necessárias para fechar F1
 

@@ -2,11 +2,11 @@
   "task": "OLIST-T02",
   "observedOn": "2026-11-04",
   "environment": "current-operational-account",
-  "authorization": "User approved the named private read-only app for the initial eight GETs, then confirmed the specific existing SILMER buyer for read preflight. Business creation and permission expansion remain unapproved.",
+  "authorization": "User approved the named private app, then explicitly approved renaming it, expanding only Pedidos include/edit and the single R$3 C01 order. No further business creation, integration creation or scope expansion approved.",
   "method": "Authenticated Chrome UI, initial eight fixed API-v3 GETs, and sixteen C01 diagnostic/preflight GETs.",
-  "erpMutations": 2,
+  "erpMutations": 4,
   "createdCredentials": 1,
-  "authenticatedApiV3Calls": 24,
+  "authenticatedApiV3Calls": 37,
   "privacy": "No company identifiers, user identifiers, client records, secrets, private URLs or raw screenshots in this artifact.",
   "observations": [
     {
@@ -305,14 +305,13 @@
     }
   ],
   "pending": [
-    "Specific Pedidos include/edit permission expansion and the single R$3 C01 creation approval; case and identities are now prepared.",
-    "C01 creation, independent UI line subtotals and observable effects.",
-    "New customer/parent/variation, monetary precision, rejection and recovery proofs required for full F1."
+    "Approve and inspect a dedicated CRM origin candidate through API do ERP; reference roundtrip failed without an origin ID.",
+    "New customer/parent/variation and additional monetary precision/rejection/recovery proofs; no other business creation approved."
   ],
   "session": "Restored by user; read-only UI inspection resumed successfully.",
   "f1GatePassed": false,
   "extensionInstallations": 1,
-  "businessRecordWrites": 0,
+  "businessRecordWrites": 1,
   "events": [
     {
       "action": "install-extension",
@@ -375,9 +374,28 @@
       "existingBuyerSituation": "A",
       "collectorStopped": true,
       "evidence": "controlled-sale-preflight.json"
+    },
+    {
+      "action": "approved-c01-order-and-read-only-reconciliation",
+      "userApproval": "Autorizo a permissão e o pedido",
+      "applicationName": "CRM Silmer - prova F1 - controlada",
+      "newIncludeEditModules": ["Pedidos"],
+      "newDeleteModules": [],
+      "businessPostAttempts": 1,
+      "creationStatus": 201,
+      "creationGetCount": 11,
+      "followUpReadOnlyGetCount": 2,
+      "uiLineSubtotalsCents": [100, 200],
+      "uiTotalCents": 300,
+      "failedReadbackChecks": ["reference"],
+      "remoteIdStoredPrivately": true,
+      "postCreationMutation": false,
+      "catalogApiErpFound": true,
+      "catalogApiErpInstalled": false,
+      "evidence": "controlled-sale-live-result.json"
     }
   ],
-  "applicationConfigurationsSaved": 1,
+  "applicationConfigurationsSaved": 2,
   "commercialSettingsSaved": 0,
   "liveApiEvidence": "read-only-live-result.json",
   "observationsScope": "The observations array preserves the initial UI inspection before app creation. Later state changes are recorded in events and read-only-live-result.json."

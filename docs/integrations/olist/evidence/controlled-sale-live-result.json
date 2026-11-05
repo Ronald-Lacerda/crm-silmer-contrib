@@ -1,0 +1,219 @@
+{
+  "task": "OLIST-T02",
+  "case": "C01",
+  "observedOn": "2026-11-04",
+  "environment": "current-operational-account",
+  "capturedAt": "2026-11-05T00:38:55.783647+00:00",
+  "userApproval": "Autorizo a permissão e o pedido",
+  "application": {
+    "name": "CRM Silmer - prova F1 - controlada",
+    "sameApplicationAndCredentials": true,
+    "includeEditModules": ["Pedidos"],
+    "deleteModules": [],
+    "otherWriteModules": []
+  },
+  "businessPostAttempts": 1,
+  "orderCreated": true,
+  "creationHttpStatus": 201,
+  "creationGetCount": 11,
+  "followUpReconciliationGetCount": 2,
+  "durableReservationPreserved": true,
+  "remoteIdJournaledPrivately": true,
+  "postCreationEdits": 0,
+  "cancellations": 0,
+  "deletions": 0,
+  "execution": {
+    "state": "created_requires_reconciliation",
+    "code": "READBACK_DIVERGENT",
+    "erpPostAttempts": 1,
+    "automaticRetry": false,
+    "getCount": 11,
+    "queries": [
+      {
+        "path": "/info",
+        "method": "GET",
+        "status": 200
+      },
+      {
+        "path": "/contatos/{id}",
+        "method": "GET",
+        "status": 200,
+        "idMatches": 1,
+        "documentMatches": 1,
+        "activeBuyerWithoutSystemAccess": false,
+        "existingBuyerActive": true,
+        "buyerSituation": "A",
+        "requiredFieldsPresent": true
+      },
+      {
+        "path": "/contatos",
+        "method": "GET",
+        "status": 200,
+        "count": 0,
+        "filterSituation": "A",
+        "documentFormat": "normalized"
+      },
+      {
+        "path": "/contatos",
+        "method": "GET",
+        "status": 200,
+        "count": 1,
+        "filterSituation": "A",
+        "documentFormat": "formatted",
+        "documentMatches": 1,
+        "idMatches": 1
+      },
+      {
+        "path": "/produtos/{id}",
+        "method": "GET",
+        "status": 200
+      },
+      {
+        "path": "/produtos",
+        "method": "GET",
+        "status": 200,
+        "count": 1
+      },
+      {
+        "path": "/produtos/{id}",
+        "method": "GET",
+        "status": 200
+      },
+      {
+        "path": "/produtos",
+        "method": "GET",
+        "status": 200,
+        "count": 1
+      },
+      {
+        "path": "/produtos/{id}",
+        "method": "GET",
+        "status": 200
+      },
+      {
+        "path": "/pedidos",
+        "method": "GET",
+        "status": 200,
+        "count": 0
+      },
+      {
+        "path": "/pedidos",
+        "method": "POST",
+        "status": 201
+      },
+      {
+        "path": "/pedidos/{id}",
+        "method": "GET",
+        "status": 200,
+        "count": 2
+      }
+    ],
+    "uiLineProofRequired": true,
+    "f1GatePassed": false
+  },
+  "readOnlyReconciliation": {
+    "state": "read_only_reconciled",
+    "erpPostAttempts": 0,
+    "getCount": 2,
+    "queries": [
+      {
+        "path": "/info",
+        "method": "GET",
+        "status": 200
+      },
+      {
+        "path": "/pedidos/{id}",
+        "method": "GET",
+        "status": 200
+      }
+    ],
+    "checks": {
+      "id": true,
+      "situation": true,
+      "date": true,
+      "buyer": true,
+      "reference": false,
+      "ecommerceUnlinked": true,
+      "productsTotal": true,
+      "orderTotal": true,
+      "noFiscalId": true,
+      "noFiscalObject": true,
+      "noIntegratedPayments": true,
+      "noInstallments": true,
+      "noGlobalAdjustment": true,
+      "lineValues": true
+    },
+    "failedChecks": ["reference"],
+    "diagnostics": {
+      "referencePresent": false,
+      "ecommerceObjectPresent": true,
+      "ecommerceIdState": "zero",
+      "dateOnlyMatches": true,
+      "fiscalObjectAllValuesEmpty": false,
+      "fiscalObjectHasPositiveId": false,
+      "integratedPaymentCount": 0,
+      "installmentCount": 0
+    },
+    "automaticRetry": false,
+    "uiLineProofRequired": true,
+    "f1GatePassed": false
+  },
+  "nativeUiMoney": {
+    "case": "C01",
+    "observedOn": "2026-11-04",
+    "situation": "Em aberto",
+    "buyerConfirmed": true,
+    "lines": [
+      {
+        "size": "M",
+        "quantity": 1,
+        "unitCents": 100,
+        "subtotalCents": 100
+      },
+      {
+        "size": "G",
+        "quantity": 1,
+        "unitCents": 200,
+        "subtotalCents": 200
+      }
+    ],
+    "totalProductsCents": 300,
+    "totalSaleCents": 300,
+    "globalDiscountCents": 0,
+    "freightCents": 0,
+    "otherExpensesCents": 0,
+    "visibleTaxesCents": 0,
+    "referenceVisible": false,
+    "orderEditedAfterCreation": false
+  },
+  "nativeUiStock": {
+    "case": "C01",
+    "observedOn": "2026-11-04",
+    "method": "authenticated native UI",
+    "before": {
+      "M": "0,00Un",
+      "G": "0,00Un"
+    },
+    "after": {
+      "M": "0,00Un",
+      "G": "0,00Un"
+    },
+    "stockCommandIssued": false,
+    "limitation": "Balances at two times do not rule out all stock events or unrelated concurrent activity.",
+    "catalogPriceBeforeCents": {
+      "M": 3490,
+      "G": 3490
+    },
+    "catalogPriceAfter": {
+      "M": "R$34,90",
+      "G": "R$34,90"
+    }
+  },
+  "catalogItemFound": "API do ERP",
+  "catalogItemInstalled": false,
+  "status": "created-money-proven-reference-roundtrip-failed",
+  "knownLimit": "The submitted ecommerce.numeroPedidoEcommerce was empty on readback and ecommerce.id was zero. All other C01 API checks matched. No second POST or compensating edit was issued.",
+  "nextDecision": "Review/approve a dedicated CRM origin through the API do ERP catalog item; no reuse of Shopee/TikTok and no new order authorized by that decision alone.",
+  "privacy": "No fiscal document, raw response, names, SKU, order number, remote ID, token, credential, private digest or callback code/state.",
+  "f1GatePassed": false
+}

@@ -5,6 +5,16 @@ Dono: Tech Lead/Integrações (Codex nesta execução). 04/11/2026.
 [RFC 044](../../rfc/044-geracao-assistida-de-pedidos-no-olist.md) ·
 [Consultas e caso controlado](controlled-case.md).
 
+## Estado atual após C01
+
+O histórico abaixo registra o checkpoint inicial de leitura. Posteriormente,
+o PO autorizou expressamente o caso C01 e a ampliação somente de Pedidos:
+o mesmo aplicativo agora se chama **CRM Silmer - prova F1 - controlada** e
+mantém Incluir e editar somente em Pedidos. Exclusões e demais escritas
+continuam desmarcadas. Um pedido de R$ 3,00 foi criado, sem segundo POST.
+[Evidência atual](evidence/controlled-sale-live-result.json). Tokens continuam
+sem persistência; credenciais permanecem no ERP. Nenhum novo aplicativo criado.
+
 ## Entrega e autorização
 
 O PO aprovou instalar a extensão gratuita Gestão de Aplicativos e, depois,
@@ -22,12 +32,12 @@ contagem total da conta.
 
 O coletor foi encerrado após a prova. Tokens não foram persistidos; o envelope
 cifrado de entrada foi consumido/apagado e as chaves ficaram somente em memória
-durante a execução. O aplicativo e suas credenciais continuam cadastrados no
+durante a execução. Naquele checkpoint, o aplicativo e suas credenciais permaneceram cadastrados no
 ERP, **somente leitura**; não foram revogados, rotacionados ou ampliados.
 O Client Secret foi ocultado novamente na interface. Capturas sem segredo
 ficam em var/olist-phase1/ no checkout principal, fora do Git.
 
-Nenhum cliente, produto, variação ou pedido foi criado. A autorização cobre
+Naquela etapa, nenhum cliente, produto, variação ou pedido foi criado. Aquela autorização cobria
 somente esse acesso de leitura, sem ampliar permissões ou liberar o caso
 controlado de escrita. T02 e o gate F1 permanecem abertos.
 

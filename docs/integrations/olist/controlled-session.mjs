@@ -21,7 +21,12 @@ import {
   boundedJson,
   normalizeDocument,
 } from './read-only-probe.mjs';
-import { buildC01, c01Digest, executeC01 } from './controlled-sale.mjs';
+import {
+  buildC01,
+  c01Digest,
+  executeC01,
+  reconcileC01,
+} from './controlled-sale.mjs';
 const ORIGIN = 'http://127.0.0.1:8765';
 const TOKEN =
   'https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/token';
@@ -43,7 +48,7 @@ export async function startC01Session(
   { fetcher = fetch, mode = 'prepare', approvedPlanDigest } = {},
 ) {
   if (
-    !['prepare', 'create'].includes(mode) ||
+    !['prepare', 'create', 'reconcile'].includes(mode) ||
     (mode === 'create' && !/^[a-f0-9]{64}$/u.test(approvedPlanDigest ?? ''))
   )
     fail('EXPLICIT_APPROVAL_REQUIRED');
@@ -105,7 +110,7 @@ export async function startC01Session(
         );
       return send(
         200,
-        `<p>${mode === 'prepare' ? 'Até dez GET de preparação, zero criação ERP.' : 'Caso C01 aprovado: até um POST e doze GET.'} Faça a autorização no Olist.</p><a href="${htmlEscape(authorizationUrl(credentials.clientId, state))}">Conectar Olist para C01</a>`,
+        `<p>${mode === 'create' ? 'Caso C01 aprovado: até um POST e doze GET.' : mode === 'reconcile' ? 'Somente dois GET de reconciliação, zero POST ERP.' : 'Até dez GET de preparação, zero criação ERP.'} Faça a autorização no Olist.</p><a href="${htmlEscape(authorizationUrl(credentials.clientId, state))}">Conectar Olist para C01</a>`,
       );
     }
     if (path !== '/olist/callback' || !credentials || busy)
@@ -137,14 +142,22 @@ export async function startC01Session(
       )
         fail('TOKEN_MISSING');
       // No refresh is issued or persisted. All private response data stays in memory.
-      result = await executeC01(selection, {
-        token: response.body.access_token,
-        approvedPlanDigest,
-        journalDirectory: join(privateRoot, 'controlled'),
-        fetcher,
-        signal: lifecycle.signal,
-        prepareOnly: mode === 'prepare',
-      });
+      result =
+        mode === 'reconcile'
+          ? await reconcileC01(selection, {
+              token: response.body.access_token,
+              journalDirectory: join(privateRoot, 'controlled'),
+              fetcher,
+              signal: lifecycle.signal,
+            })
+          : await executeC01(selection, {
+              token: response.body.access_token,
+              approvedPlanDigest,
+              journalDirectory: join(privateRoot, 'controlled'),
+              fetcher,
+              signal: lifecycle.signal,
+              prepareOnly: mode === 'prepare',
+            });
       await writeFile(
         join(directory, 'result.json'),
         JSON.stringify(result, null, 2) + '\n',
@@ -163,11 +176,11 @@ export async function startC01Session(
           : 'PROBE_STOPPED';
       result = {
         code,
-        erpPostAttempts: mode === 'prepare' ? 0 : null,
+        erpPostAttempts: mode === 'create' ? null : 0,
         state:
-          mode === 'prepare'
-            ? 'blocked_before_write'
-            : 'outcome_not_established',
+          mode === 'create'
+            ? 'outcome_not_established'
+            : 'blocked_before_write',
         automaticRetry: false,
         f1GatePassed: false,
       };
@@ -300,8 +313,8 @@ export async function startC01Session(
       mode,
       publicKeySha256: createHash('sha256').update(pem).digest('hex'),
       lifetimeMinutes: 30,
-      maximumApiGet: mode === 'prepare' ? 10 : 12,
-      maximumApiPost: mode === 'prepare' ? 0 : 1,
+      maximumApiGet: mode === 'create' ? 12 : mode === 'reconcile' ? 2 : 10,
+      maximumApiPost: mode === 'create' ? 1 : 0,
     }) + '\n',
   );
   process.once('SIGINT', close);
@@ -316,6 +329,7 @@ if (
   const args = process.argv.slice(2);
   const valid =
     args.length === 0 ||
+    (args.length === 1 && args[0] === '--reconcile') ||
     (args.length === 2 &&
       args[0] === '--create' &&
       /^[a-f0-9]{64}$/u.test(args[1]));
@@ -326,7 +340,12 @@ if (
     process.exitCode = 1;
   } else {
     startC01Session(undefined, {
-      mode: args.length ? 'create' : 'prepare',
+      mode:
+        args[0] === '--create'
+          ? 'create'
+          : args[0] === '--reconcile'
+            ? 'reconcile'
+            : 'prepare',
       approvedPlanDigest: args[1],
     }).catch(() => {
       process.stderr.write('Nao foi possivel iniciar a sessao C01.\n');
