@@ -45,6 +45,22 @@ enviar ao cliente.
 
 [Diagnóstico, limites e rollback](../../../docs/runbooks/inbox-delivery-feedback.md#timeout-durante-preparação-de-mídia--05112026).
 
+## OPS-INBOX-SEND-09V — Recuperação autorizada e conferência (05/11/2026)
+
+MSG-02/03, ORC-08, PRV-01 e OPS-ERR-03/06/08/10.
+
+- [x] Preservar os originais e criar operações separadas, auditadas e com
+      chaves novas; upload/validação normais da mídia; restaurar responsáveis.
+- [x] Confirmar release com a correção, migration 0054, readiness, jobs
+      concluídos e painel ativo sem ocorrências.
+- [x] Registrar imagem recuperada lida e texto enviado, ainda sem recibo de
+      entrega na última consulta; não repetir o texto enquanto aguarda.
+- [x] Registrar a falha da deduplicação: a foto já tinha chegado sem legenda;
+      exigir imagem+legenda iguais permitiu repeti-la. Atualizar o
+      [runbook](../../../docs/runbooks/inbox-delivery-feedback.md) para bloquear
+      mídia já entregue independentemente da legenda e tratar variantes do
+      provedor de forma conservadora. Sem nova mudança de aplicação.
+
 ## INBOX-UX-06 — Filtros no topo e paridade local/produção (05/11/2026)
 
 PCX-18a–d, PCX-14/15/17 e UX-FUNC-01. Autorização explícita do proprietário:

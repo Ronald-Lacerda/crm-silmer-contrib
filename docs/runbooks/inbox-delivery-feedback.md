@@ -56,6 +56,51 @@ Rollback restaura a aplicação anterior e mantém a função expand protegida,
 preservando mensagens, eventos, auditoria e tentativas. O caminho de entrega
 real continua dependendo de um envio natural; testes não enviam a clientes.
 
+### Recuperação autorizada e limite da deduplicação — OPS-INBOX-SEND-09V
+
+Em 05/11, o proprietário autorizou reenviar os conteúdos após conferir a
+chegada aos clientes. As duas operações originais permaneceram falhas e sem
+retry. A recuperação criou comandos novos pelo serviço de Inbox, como a conta
+administradora ativa, com auditoria e restauração do responsável pela
+transferência normal na mesma transação. A mídia foi lida pelo runtime de
+conteúdo, admitida como novo anexo e processada pelo worker; SHA dos bytes
+canônicos, tamanho e MIME foram preservados. Nenhum estado `ready` foi forjado.
+
+A conferência do texto comparou o conteúdo completo no CRM e no histórico
+persistido do transporte para a mesma instância/destino: nenhum substituto.
+O novo envio das 12:00 (Brasília) tem comando `sent`, job `completed` e recibo
+autenticado `message.sent`; a última consulta ainda não tinha confirmação de
+entrega. Não repetir enquanto aguarda `delivered`/`read`.
+
+**Falha da conferência de mídia:** exigir igualdade conjunta de imagem e
+legenda deixou passar uma foto idêntica que já tinha sido enviada às 10:48,
+sem a legenda. O reenvio das 11:59 repetiu essa foto e acrescentou a legenda;
+recebeu entrega e leitura confirmadas. A investigação deve registrar essa
+repetição, sem afirmar que não houve duplicata. Os originais, o envio
+intermediário e a recuperação permanecem no histórico.
+
+Nas próximas recuperações, procurar separadamente equivalência da mídia e da
+legenda. Se os mesmos bytes/imagem já chegaram, bloquear o reenvio da mídia,
+mesmo com legenda ausente ou diferente. Avaliar apenas o conteúdo ainda
+faltante, sem reenviar o anexo. Se houver saída equivalente ainda `sent`,
+`PENDING` ou incerta, aguardar evidência; ausência de entrega não autoriza
+duplicar. Comparar todos os ciclos da identidade/conta e saídas do provedor,
+incluindo envios pelo celular. Não usar nome, miniatura ou ID de upload como
+prova de equivalência. O provedor pode transformar a imagem e serializar seu
+`fileSha256` em hexadecimal: não comparar cegamente esse valor com o hash dos
+bytes canônicos do CRM nem decodificá-lo sempre como base64. Cruzar IDs externos
+e a variante conhecida; dúvida bloqueia o reenvio.
+
+A release ativa de API, worker e edge na conferência era
+`5bc36118f6e0d1a96a6e04301484ab778fcf61b8`, descendente da correção
+`582c96b96c63ed7f05c64085c2e711de22eec46e` da
+[PR 292](https://github.com/romulosutil/crm-silmer/pull/292). Migration 0054
+conferida no ledger pelo checksum aprovado; readiness verdadeiro. Ambos os
+novos jobs concluíram sem erro, e Ativas/Todos estava vazio após os envios.
+O caminho real da mídia chegou à leitura; isso complementa os testes da janela
+tardia, sem provar ausência futura de falhas externas. O conflito legítimo de
+revisão do texto continua protegido pelo fence e pode ocorrer em concorrência.
+
 ## Encerramento das pendências e reserva obsoleta da IA — 04/11/2026
 
 OPS-INBOX-SEND-08 / MSG-02/03, ORC-08, PRV-01 e OPS-ERR-03/06/08/10/11.
