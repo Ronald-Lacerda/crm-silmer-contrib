@@ -1,0 +1,30 @@
+{
+  "task": "OLIST-T02",
+  "runtime": "Node 24.20.0",
+  "tests": 12,
+  "passed": 12,
+  "failed": 0,
+  "externalCallsDuringTests": 0,
+  "sourceSha256": {
+    "controlled-batch.mjs": "1427dd286c452993d2153aa4d740642ef491b5cb7f9f65832d5cfa95a0ee7e98",
+    "controlled-batch.test.mjs": "8c03c4de266e2a7d657a8c98966038b6a2c242aae3ccbe7b2e3c11e4c4332aa0",
+    "controlled-batch.fixtures.mjs": "02690595ba16a0edd2b435e7417edc3a89ac65062451f129dd230ee60531b2f2",
+    "batch-session.mjs": "1a831962a444ecc08da254ed76903c832c3a2e6487610df4a6f52b69c95d4340",
+    "batch-session.test.mjs": "738f76de902fc8beab7405663d039c6e94496d7341d2954d0d390a3a2227597a"
+  },
+  "cases": [
+    "exact six-POST mocked batch",
+    "decimal source lexemes including trailing zeros",
+    "C02 lost reference stops all following orders",
+    "unknown parent outcome preserves reservation and blocks dependents",
+    "success without ID stops dependents",
+    "ambiguous fiscal identity prevents every POST",
+    "existing test SKU prevents every POST",
+    "durable reservation blocks repeated execution before any network request",
+    "private selection digest/date guard",
+    "loopback OAuth callback is single use, removes code from URL and persists neither credentials nor tokens",
+    "HTTP400 preserves allowed field/category diagnostics without provider values",
+    "rejected-customer reconciliation uses thirteen GETs and never releases the original reservation"
+  ],
+  "proofLimit": "Mock execution validates local guards, not remote API behavior or F1 completion."
+}

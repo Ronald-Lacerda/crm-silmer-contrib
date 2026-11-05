@@ -355,6 +355,50 @@ produto operacional de catálogo maior; os unitários menores ficam nos novos
 produtos com catálogo zero, se aprovados. Todos os registros permaneceriam na
 conta operacional e as quantidades poderiam aparecer em relatórios.
 
+## Lote aprovado — inclusão do cliente rejeitada, dependentes interrompidos
+
+O PO respondeu **“Autorizar este lote controlado”** ao plano acima. Contatos
+e Produtos receberam Incluir e editar no aplicativo existente, sem exclusão
+ou geração de credenciais; uma reabertura confirmou os escopos persistidos.
+[Execução e reconciliação](evidence/controlled-batch-live-result.json).
+
+Foram 27 GETs autenticados antes da tentativa: conta e modelo M confirmados;
+tipo Cliente lido do comprador existente confirmado, sem inventar seu ID;
+documento do novo comprador consultado normalizado/com máscara nas situações
+A/B/I/E, todos vazios; quatro SKUs consultados em A/I/E e três referências de
+pedido ausentes. Um GET de /info sem autenticação retornou 401.
+
+O único POST foi /contatos, com os dados fiscais aprovados e o tipo Cliente
+obtido nessa leitura. Retornou **HTTP 400**. A reserva durável foi preservada
+e nenhum POST dependente foi enviado. Produto, M/G, GG e C02/C03/C04 **não
+foram executados**. C01 não foi alterado; nenhum ID novo foi confirmado.
+
+O coletor original descartou o corpo do HTTP 400: a causa específica é
+desconhecida. Não atribuir a rejeição a CNPJ da própria conta, CPF/CNPJ,
+endereço, regime, código ou permissão sem evidência. O schema local aceitou
+o payload, o que não comprova as validações de negócio do provedor.
+A [documentação de criação](https://api-docs.erp.olist.com/api-reference/contatos/criar-contato)
+expõe erro de validação com mensagem/detalhes; não informa qual erro ocorreu
+nesta tentativa. O coletor foi corrigido depois: registra somente nomes de
+campos permitidos/categorias de validação, nunca texto bruto com dados.
+
+Uma nova sessão **somente leitura** executou 13 GETs: /info e consultas por
+documento em dois formatos e por código, em A/B/I/E. Todas as consultas
+retornaram vazias, sem liberar o POST original ou remover a reserva.
+O lote consumiu **40 GETs autenticados, um não autenticado e um POST**.
+Ambos os coletores foram encerrados, sem persistir tokens/credenciais.
+
+O núcleo/transporte tem [12 testes com mocks](evidence/controlled-batch-offline-result.json),
+incluindo erro 400 sem vazamento e reconciliação que não libera repetição.
+Para obter a causa original, uma tentativa adicional idêntica precisaria de
+aprovação própria. A [proposta diagnóstica](customer-diagnostic-proposal.json)
+limita a exceção a um POST /contatos, exigindo o mesmo hash do payload original.
+O teto total de tentativas passaria de seis para sete; dinheiro/permissões e
+os cinco POSTs dependentes permanecem os mesmos, condicionados à confirmação
+do cliente. Nenhuma tentativa adicional foi executada. Nenhum novo POST, correção automática ou inclusão manual
+será usado para contornar o resultado. As provas de cadastro e dinheiro
+continuam abertas; T02/F1 não estão concluídos.
+
 ## CPF gerado e limites da prova fiscal
 
 O PO sugeriu comprador fictício com CPF gerado e depois escolheu a própria

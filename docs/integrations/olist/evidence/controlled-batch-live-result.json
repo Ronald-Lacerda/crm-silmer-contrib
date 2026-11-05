@@ -1,0 +1,385 @@
+{
+  "task": "OLIST-T02",
+  "observedOn": "2026-11-04",
+  "capturedAt": "2026-11-05T02:18:10.329290+00:00",
+  "environment": "current-operational-account",
+  "userApproval": "Autorizar este lote controlado",
+  "approvedPlanFile": "../next-controlled-cases.json",
+  "approvedPlanSha256": "7093d23b393e3a242bd8f615ceafd025b7de6753eca2ce60e3a244b88a3be745",
+  "application": {
+    "newIncludeEditModules": ["Contatos", "Produtos"],
+    "retainedIncludeEditModules": ["Pedidos"],
+    "deleteModules": [],
+    "freshReadbackConfirmed": true,
+    "newCredentialsGenerated": false
+  },
+  "executedSourceSha256": {
+    "controlled-batch.mjs": "6ab10b0e94e4c993c3e93d7f91e220ac74dd0a22f9a07850524d87163f1c4b89",
+    "controlled-batch.test.mjs": "4e9548728cde411a34d0350f66907d15bd18b3111f3c444e6ac2d818a853e23d",
+    "controlled-batch.fixtures.mjs": "61478ada512c8f4baeddc6aaf573f92137f2ec4a362903ef609fda11995a5e41",
+    "batch-session.mjs": "1a2e2904b5c01c18073c7b9d07baeadc873dc12e351d7902b19b0f54b442267a",
+    "batch-session.test.mjs": "738f76de902fc8beab7405663d039c6e94496d7341d2954d0d390a3a2227597a"
+  },
+  "execution": {
+    "task": "OLIST-T02",
+    "state": "stopped_preserve_confirmed_ids",
+    "code": "HTTP_400",
+    "gets": 27,
+    "anonymousGets": 1,
+    "erpPostAttempts": 1,
+    "calls": [
+      {
+        "method": "GET",
+        "path": "/info",
+        "status": 200,
+        "authenticated": true
+      },
+      {
+        "method": "GET",
+        "path": "/info",
+        "status": 401,
+        "authenticated": false
+      },
+      {
+        "method": "GET",
+        "path": "/produtos/{id}",
+        "status": 200,
+        "authenticated": true
+      },
+      {
+        "method": "GET",
+        "path": "/produtos/{id}",
+        "status": 200,
+        "authenticated": true
+      },
+      {
+        "method": "GET",
+        "path": "/contatos/{id}",
+        "status": 200,
+        "authenticated": true
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/contatos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/produtos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/produtos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/produtos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/produtos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/produtos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/produtos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/produtos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/produtos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/produtos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/produtos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/produtos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/produtos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/pedidos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/pedidos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "GET",
+        "path": "/pedidos",
+        "status": 200,
+        "authenticated": true,
+        "count": 0
+      },
+      {
+        "method": "POST",
+        "path": "/contatos",
+        "status": 400,
+        "authenticated": true
+      }
+    ],
+    "outcomes": [],
+    "automaticRetry": false,
+    "f1GatePassed": false
+  },
+  "readOnlyReconciliation": {
+    "task": "OLIST-T02",
+    "state": "no_matching_customer_observed_after_rejection",
+    "gets": 13,
+    "erpPostAttempts": 0,
+    "allQueriesEmpty": true,
+    "calls": [
+      {
+        "path": "/info",
+        "status": 200
+      },
+      {
+        "path": "/contatos",
+        "status": 200,
+        "filter": "document",
+        "situation": "A",
+        "count": 0,
+        "exactDocumentMatches": 0
+      },
+      {
+        "path": "/contatos",
+        "status": 200,
+        "filter": "document",
+        "situation": "B",
+        "count": 0,
+        "exactDocumentMatches": 0
+      },
+      {
+        "path": "/contatos",
+        "status": 200,
+        "filter": "document",
+        "situation": "I",
+        "count": 0,
+        "exactDocumentMatches": 0
+      },
+      {
+        "path": "/contatos",
+        "status": 200,
+        "filter": "document",
+        "situation": "E",
+        "count": 0,
+        "exactDocumentMatches": 0
+      },
+      {
+        "path": "/contatos",
+        "status": 200,
+        "filter": "document",
+        "situation": "A",
+        "count": 0,
+        "exactDocumentMatches": 0
+      },
+      {
+        "path": "/contatos",
+        "status": 200,
+        "filter": "document",
+        "situation": "B",
+        "count": 0,
+        "exactDocumentMatches": 0
+      },
+      {
+        "path": "/contatos",
+        "status": 200,
+        "filter": "document",
+        "situation": "I",
+        "count": 0,
+        "exactDocumentMatches": 0
+      },
+      {
+        "path": "/contatos",
+        "status": 200,
+        "filter": "document",
+        "situation": "E",
+        "count": 0,
+        "exactDocumentMatches": 0
+      },
+      {
+        "path": "/contatos",
+        "status": 200,
+        "filter": "stable-code",
+        "situation": "A",
+        "count": 0,
+        "exactDocumentMatches": 0
+      },
+      {
+        "path": "/contatos",
+        "status": 200,
+        "filter": "stable-code",
+        "situation": "B",
+        "count": 0,
+        "exactDocumentMatches": 0
+      },
+      {
+        "path": "/contatos",
+        "status": 200,
+        "filter": "stable-code",
+        "situation": "I",
+        "count": 0,
+        "exactDocumentMatches": 0
+      },
+      {
+        "path": "/contatos",
+        "status": 200,
+        "filter": "stable-code",
+        "situation": "E",
+        "count": 0,
+        "exactDocumentMatches": 0
+      }
+    ],
+    "zeroDoesNotAuthorizeRetry": true,
+    "originalJournalPreserved": true,
+    "f1GatePassed": false
+  },
+  "totals": {
+    "authenticatedGets": 40,
+    "unauthenticatedGets": 1,
+    "businessPostAttempts": 1,
+    "confirmedCreatedCustomers": 0,
+    "confirmedCreatedProducts": 0,
+    "newOrderPostAttempts": 0,
+    "c01Mutations": 0
+  },
+  "validationDiagnostic": {
+    "originalResponseBodyRetained": false,
+    "originalErrorFieldsKnown": false,
+    "rootCause": "unknown",
+    "collectorFixedAfterward": true,
+    "newBehavior": "Persist only allowlisted field names and coarse validation categories; never raw error messages or fiscal values."
+  },
+  "identityProof": {
+    "accountMatched": true,
+    "sourceExistingParentAndMConfirmed": true,
+    "clientTypeIdReadFromConfirmedExistingBuyer": true,
+    "documentLookupBeforePostEmptyInBothFormatsAndAllSituations": true,
+    "allFourNewSkusAbsentInAllSituations": true,
+    "allThreeNewOrderReferencesAbsent": true
+  },
+  "recovery": {
+    "durableBatchAndCustomerReservationsPreserved": true,
+    "postRepeated": false,
+    "dependentPostsDispatched": false,
+    "zeroLookupAuthorizesRetry": false
+  },
+  "unexecuted": [
+    "parent with initial M/G",
+    "extra GG",
+    "C02 origin/reference and thirds",
+    "C03 ties/repeated product/distinct M groups",
+    "C04 six decimals/high quantity"
+  ],
+  "decisionRequired": "One additional, explicitly approved identical customer POST could recover safe validation diagnostics. No payload correction or further POST is authorized by empty reconciliation alone.",
+  "f1GatePassed": false,
+  "privacy": "No private fiscal documents, contact/product/integrator IDs, addresses, secrets or raw provider error bodies."
+}

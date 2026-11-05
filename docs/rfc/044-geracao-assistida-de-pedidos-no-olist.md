@@ -706,6 +706,12 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       padrão preservada, URLs vazias/e-mails desativados/sem frete vinculado.
       Nenhum novo pedido/C01 alterado. Referência, cadastros
       automáticos e precisão restante mantêm F1 aberto.
+      Lote adicional aprovado: escopos Contatos/Produtos ampliados sem exclusão;
+      27 GETs precederam um POST /contatos, rejeitado com 400. Nenhum
+      dependente foi enviado. Treze GETs de reconciliação não encontraram
+      cadastro e não liberam retry. Causa específica não retida na tentativa;
+      coletor corrigido/testado (12 mocks). [Resultado do lote](../integrations/olist/evidence/controlled-batch-live-result.json).
+      Cadastro, pai/variações, nova referência e precisão continuam abertos.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado
 fiscal inventado ou suposição de idempotência remota. Plano para ausência de

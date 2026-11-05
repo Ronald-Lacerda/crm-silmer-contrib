@@ -1,0 +1,37 @@
+{
+  "task": "OLIST-T02",
+  "case": "CUSTOMER-DIAG01",
+  "approval": false,
+  "sendable": false,
+  "purpose": "Obtain safe validation diagnostics for the rejected customer creation without changing its payload.",
+  "preconditions": [
+    "Read-only reconciliation found no matching customer by both document formats or stable code in A/B/I/E.",
+    "Original batch and customer reservations remain immutable.",
+    "Rebuild payload from the same private approved company data and existing Cliente type ID; require its hash to equal the original reserved customer payload hash.",
+    "Recheck account and absence within the original remaining GET budget."
+  ],
+  "proposedAdditionalPost": {
+    "maximumAttempts": 1,
+    "method": "POST",
+    "path": "/contatos",
+    "payload": "Exactly the original reserved customer payload; no normalization, correction, replacement buyer or extra fields."
+  },
+  "limits": {
+    "originalMaximumPostAttempts": 6,
+    "proposedTotalMaximumPostAttemptsIncludingThisException": 7,
+    "maximumDiagnosticAuthenticatedGets": 17,
+    "authenticatedGetsAlreadyUsed": 40,
+    "originalMaximumAuthenticatedGets": 80,
+    "newOrderBudgetCents": 1000
+  },
+  "effects": "The additional POST can create one real customer with the same approved fiscal data and situation B. It does not itself create product, variation or order.",
+  "onSuccess": "Persist confirmed customer ID, reconcile exact fiscal fields, type, situation and code. Only then resume the five still-unexecuted dependent POSTs already approved, preserving their exact payloads and original safeguards.",
+  "onRejectionOrUncertainty": "Capture only allowlisted validation field names and coarse categories; preserve the new reservation; no further retry, correction or dependent POST.",
+  "unchanged": [
+    "C01",
+    "existing customer/product records",
+    "app scopes",
+    "origin/global/channel settings",
+    "all fiscal/stock/financial/shipping/message command prohibitions"
+  ]
+}

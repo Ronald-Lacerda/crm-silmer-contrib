@@ -274,3 +274,17 @@ padrão preservada, URLs vazias, e-mails desativados e nenhum frete vinculado.
 A UI confirmou a conclusão; não ofereceu opção de envio de NF-e. [Estado da origem](evidence/crm-origin-setup.json).
 Nenhuma nova venda foi autorizada ou criada nesta configuração.
 Não usar número de ordem de compra como remendo nem repetir C01.
+
+## Resultado do lote adicional aprovado
+
+O PO aprovou o plano de até seis POSTs. Contatos/Produtos receberam Incluir
+e editar, sem exclusão. Após 27 GETs autenticados de identidade/ausência,
+o primeiro POST /contatos retornou 400; nenhum dependente foi enviado.
+A causa não foi retida pelo coletor original e permanece desconhecida.
+Treze GETs posteriores por documento/código não encontraram cadastro; a
+reserva segue bloqueada, sem retry. Total novo: 40 GETs autenticados, um
+GET não autenticado (401) e um POST rejeitado. C01 intacto.
+[Resultado real](evidence/controlled-batch-live-result.json);
+[12 testes do executor corrigido](evidence/controlled-batch-offline-result.json).
+Nova tentativa do cliente exige aprovação explícita; não inventar correção
+ou considerar o schema suficiente para a validação fiscal real. F1 aberto.

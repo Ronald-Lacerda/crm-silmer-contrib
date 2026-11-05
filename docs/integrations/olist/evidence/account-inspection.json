@@ -2,11 +2,11 @@
   "task": "OLIST-T02",
   "observedOn": "2026-11-04",
   "environment": "current-operational-account",
-  "authorization": "User approved private app, one C01 order, one dedicated CRM origin and exact tracking/payment parameters. Origin setup completed; no further business creation approved.",
+  "authorization": "Private app and dedicated origin approved/configured. Approved six-POST batch stopped at its first contact POST (HTTP400); no retry, payload correction or dependent creation authorized after empty read-only reconciliation.",
   "method": "Authenticated Chrome UI, initial eight fixed API-v3 GETs, and sixteen C01 diagnostic/preflight GETs.",
-  "erpMutations": 6,
+  "erpMutations": 7,
   "createdCredentials": 1,
-  "authenticatedApiV3Calls": 37,
+  "authenticatedApiV3Calls": 79,
   "privacy": "No company identifiers, user identifiers, client records, secrets, private URLs or raw screenshots in this artifact.",
   "observations": [
     {
@@ -305,8 +305,8 @@
     }
   ],
   "pending": [
-    "Prove API-v3 ecommerce reference roundtrip with a separately approved case.",
-    "New customer/parent/variation and remaining precision/rejection/recovery proofs for full F1."
+    "Decide whether to authorize one additional identical customer POST to obtain validation diagnostics; original HTTP400 body was discarded.",
+    "Customer creation, parent/variation, new-origin/reference and precision probes remain unexecuted after the safe batch stop."
   ],
   "session": "Restored by user; read-only UI inspection resumed successfully.",
   "f1GatePassed": false,
@@ -425,9 +425,29 @@
       "oauthScopeChanges": 0,
       "newCredentialGenerationInvoked": false,
       "evidence": "crm-origin-setup.json"
+    },
+    {
+      "action": "approved-batch-stopped-and-reconciled",
+      "userApproval": "Autorizar este lote controlado",
+      "newIncludeEditModules": ["Contatos", "Produtos"],
+      "newDeleteModules": [],
+      "authenticatedGetCount": 40,
+      "unauthenticatedGetCount": 1,
+      "unauthenticatedStatus": 401,
+      "businessPostAttempts": 1,
+      "postResource": "contatos",
+      "postStatus": 400,
+      "errorBodyRetained": false,
+      "confirmedNewRecords": 0,
+      "dependentPosts": 0,
+      "c01Mutations": 0,
+      "postRetried": false,
+      "durableReservationsPreserved": true,
+      "reconciliationQueriesEmpty": true,
+      "evidence": "controlled-batch-live-result.json"
     }
   ],
-  "applicationConfigurationsSaved": 2,
+  "applicationConfigurationsSaved": 3,
   "liveApiEvidence": "read-only-live-result.json",
   "observationsScope": "The observations array preserves the initial UI inspection before app creation. Later state changes are recorded in events and read-only-live-result.json.",
   "originRecordsCreated": 1,
@@ -441,5 +461,9 @@
     "mappings"
   ],
   "globalCommercialSettingsSaved": 0,
-  "mutationCountingMethod": "High-level approved configuration/business checkpoints, not HTTP requests or individual setup saves."
+  "mutationCountingMethod": "High-level approved configuration/business checkpoints, not HTTP requests or individual setup saves.",
+  "authenticatedApiV3GetCalls": 77,
+  "authenticatedApiV3PostAttempts": 2,
+  "unauthenticatedApiV3GetCalls": 1,
+  "apiCallCountingMethod": "GET and POST attempts counted separately and summed into authenticatedApiV3Calls; prior checkpoint 37 represented authenticated GETs and omitted the successful C01 POST."
 }
