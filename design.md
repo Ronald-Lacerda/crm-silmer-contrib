@@ -286,18 +286,21 @@ acionador usa só ícone, nome acessível, dica e estado. Ampliar conversa liber
 a coluna da lista sem remontar histórico nem perder rascunho. Demais telas
 preservam seus tamanhos de shell.
 
-A lista concentra busca, Todas/Atender/Fechar pedidos e filtros. Todas é a
+INBOX-UX-06 (05/11/2026, PCX-18) substitui a disposição lateral e a aplicação
+imediata dos filtros de PCX-16a: Atender / Fechar pedidos / Todas formam uma
+barra horizontal acima do workspace no desktop, seguida pelo botão textual
+Filtros. A busca permanece na lista. Todas é a
 entrada padrão sem filtro explícito (INBOX-UX-05, PCX-17); mostra o universo
 não arquivado, com outros vendedores, agente e encerradas, por urgência
 calculada na API. Filtros refinam a lista sem restrições implícitas. Ver mais
 conversas percorre as páginas oficiais sem trocar a seleção ou o rascunho;
 a busca informa seu alcance nas conversas carregadas. Os atalhos têm rótulos
 estáveis, contagens alinhadas e seleção por peso, superfície e marca; o botão
-Filtros sinaliza abertura ou filtro aplicado. Em celular, Todas ocupa a linha
-principal e os dois refinamentos ficam abaixo, com alvos de toque legíveis.
-Filtros abre
-um painel ancorado com selects Situação/Responsável de aplicação imediata;
-Escape fecha mantendo a seleção e devolve foco. Mais ações também é ancorado
+Filtros sinaliza abertura ou filtro aplicado. Em celular, a barra pertence à
+lista e se adapta à largura, com alvos de toque legíveis; não ocupa a tela da
+conversa. Filtros abre a folha modal existente com Situação/Responsável:
+Ver resultados aplica o rascunho, Limpar prepara a remoção e Escape ou fechar
+descartam edições não aplicadas, devolvendo foco ao botão. Mais ações é ancorado
 nas larguras móvel e desktop, sem alterar capacidades ou confirmações.
 Sugestões ficam fora das mensagens, abertas quando pendentes e recolhíveis;
 histórico/omissão/bloqueios ficam em Atendimento, com uma única instância

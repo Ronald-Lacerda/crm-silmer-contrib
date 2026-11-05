@@ -558,12 +558,17 @@ test('INBOX-UX-03: another seller can read media but cannot send, close or attac
   ).toHaveCount(0);
 });
 
-test('INBOX-UX-04: expanding preserves the live thread and draft, and phone navigation recovers after resize', async ({
+test('INBOX-UX-06: expanding preserves filters, the live thread and draft, and phone navigation recovers after resize', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1366, height: 657 });
   await setupInbox(page);
   await page.goto('/inbox/conversation-compact');
+  const attention = page
+    .getByRole('group', { name: 'Atalhos da Caixa' })
+    .getByRole('button', { name: /^Atender/u });
+  await attention.click();
+  await expect(attention).toHaveAttribute('aria-pressed', 'true');
   const reply = page.getByRole('textbox', { name: 'Responder', exact: true });
   await reply.fill('Rascunho sintético que deve permanecer.');
   const thread = await page.locator('.thread').elementHandle();
@@ -582,6 +587,7 @@ test('INBOX-UX-04: expanding preserves the live thread and draft, and phone navi
   });
   await expect(restore).toBeFocused();
   await expect(page.locator('.inbox-list-pane')).toBeHidden();
+  await expect(page.locator('.inbox-toolbar')).toBeHidden();
   const after = await page.locator('.inbox-conversation').boundingBox();
   expect(after?.width).toBeGreaterThan(before?.width ?? 0);
   expect(await thread.evaluate((element) => element.isConnected)).toBe(true);
@@ -590,6 +596,8 @@ test('INBOX-UX-04: expanding preserves the live thread and draft, and phone navi
   await page.keyboard.press('Enter');
   await expect(expand).toBeFocused();
   await expect(page.locator('.inbox-list-pane')).toBeVisible();
+  await expect(page.locator('.inbox-toolbar')).toBeVisible();
+  await expect(attention).toHaveAttribute('aria-pressed', 'true');
   await expand.click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(expand).toBeHidden();
@@ -598,6 +606,8 @@ test('INBOX-UX-04: expanding preserves the live thread and draft, and phone navi
   await expect(reply).toBeInViewport({ ratio: 1 });
   await page.getByRole('link', { name: 'Conversas', exact: true }).click();
   await expect(page.locator('.inbox-list-pane')).toBeVisible();
+  await expect(page.locator('.inbox-toolbar')).toBeVisible();
+  await expect(attention).toHaveAttribute('aria-pressed', 'true');
   await expect(page).toHaveURL('/inbox');
   await page.setViewportSize({ width: 1366, height: 657 });
   await expect(page.locator('.inbox-list-pane')).toBeVisible();

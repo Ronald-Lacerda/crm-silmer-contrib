@@ -110,13 +110,15 @@ async function selectInboxFilters(page, situation, owner) {
   await page.getByRole('button', { name: /^Filtros/u }).click();
   const sheet = page.getByRole('dialog', { name: 'Filtrar conversas' });
   await sheet
-    .getByLabel('Situação', { exact: true })
-    .selectOption({ label: situation });
+    .getByRole('group', { name: 'Situação', exact: true })
+    .getByRole('radio', { name: situation, exact: true })
+    .check();
   if (owner)
     await sheet
-      .getByLabel('Responsável', { exact: true })
-      .selectOption({ label: owner });
-  await page.keyboard.press('Escape');
+      .getByRole('group', { name: 'Responsável', exact: true })
+      .getByRole('radio', { name: owner, exact: true })
+      .check();
+  await sheet.getByRole('button', { name: 'Ver resultados' }).click();
 }
 
 /**
@@ -2162,7 +2164,7 @@ function firstScreenControls(page) {
   });
 }
 
-test('INBOX-UX-04 / PCX-14: anchored filters apply immediately and preserve official queries and totals', async ({
+test('INBOX-UX-06 / PCX-14: top filters apply drafts and preserve official queries and totals', async ({
   page,
 }) => {
   const inboxQueries = /** @type {Array<Record<string, string>>} */ ([]);
@@ -2180,18 +2182,18 @@ test('INBOX-UX-04 / PCX-14: anchored filters apply immediately and preserve offi
     shortcuts.getByRole('button', { name: new RegExp(`^${name}`, 'u') });
   const filters = page.getByRole('button', { name: 'Filtros', exact: true });
   await expect(shortcuts.getByRole('button')).toHaveText([
-    /^Todas\s*1$/u,
     /^Atender\s*1$/u,
     /^Fechar pedidos\s*0$/u,
+    /^Todas\s*1$/u,
   ]);
   await expect(
     page
-      .locator('.inbox-list-pane')
+      .locator('.inbox-page > .inbox-toolbar')
       .getByRole('group', { name: 'Atalhos da Caixa' }),
   ).toBeVisible();
   await expect(
     page
-      .locator('.inbox-list-pane')
+      .locator('.inbox-page > .inbox-toolbar')
       .getByRole('button', { name: 'Filtros', exact: true }),
   ).toBeVisible();
   await expect(page.locator('#inbox-search')).toBeVisible();
@@ -2225,15 +2227,18 @@ test('INBOX-UX-04 / PCX-14: anchored filters apply immediately and preserve offi
   expect(inboxQueries.at(-1)?.assignedUserId).toBeUndefined();
   await filters.focus();
   await page.keyboard.press('Enter');
-  const popover = page.getByRole('dialog', { name: 'Filtrar conversas' });
-  const situation = popover.getByLabel('Situação', { exact: true });
-  const owner = popover.getByLabel('Responsável', { exact: true });
-  await expect(popover).toBeVisible();
+  const sheet = page.getByRole('dialog', { name: 'Filtrar conversas' });
+  const situation = sheet.getByRole('group', { name: 'Situação', exact: true });
+  const owner = sheet.getByRole('group', { name: 'Responsável', exact: true });
+  await expect(sheet).toBeVisible();
   await expect(filters).toHaveAttribute('aria-expanded', 'true');
-  await expect(popover).not.toHaveAttribute('aria-modal', 'true');
-  await expect(situation).toBeFocused();
-  await expect(situation).toHaveValue('waiting');
-  await expect(situation.locator('option')).toHaveText([
+  expect(await sheet.evaluate((element) => element.matches(':modal'))).toBe(
+    true,
+  );
+  await expect(
+    situation.getByRole('radio', { name: 'Aguardando vendedor', exact: true }),
+  ).toBeFocused();
+  await expect(situation.locator('label')).toHaveText([
     'Todas',
     'Atender',
     'Fechar pedidos',
@@ -2242,22 +2247,20 @@ test('INBOX-UX-04 / PCX-14: anchored filters apply immediately and preserve offi
     'Com vendedor',
     'Arquivadas',
   ]);
-  await expect(owner.locator('option')).toHaveText([
+  await expect(owner.locator('label')).toHaveText([
     'Todas',
     'Minhas',
     'Sem responsável',
   ]);
-  await expect(
-    popover.getByRole('button', { name: 'Ver resultados' }),
-  ).toHaveCount(0);
-  await situation.selectOption({ label: 'Com o agente' });
-  await expect
-    .poll(() => inboxQueries.at(-1))
-    .toMatchObject({ automationState: 'assistant', pendingHandoff: 'false' });
-  await expect(situation).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(owner).toBeFocused();
-  await owner.selectOption({ label: 'Sem responsável' });
+  const beforeDraft = inboxQueries.length;
+  await situation
+    .getByRole('radio', { name: 'Com o agente', exact: true })
+    .check();
+  await owner
+    .getByRole('radio', { name: 'Sem responsável', exact: true })
+    .check();
+  expect(inboxQueries).toHaveLength(beforeDraft);
+  await sheet.getByRole('button', { name: 'Ver resultados' }).click();
   await expect
     .poll(() => inboxQueries.at(-1))
     .toMatchObject({
@@ -2265,10 +2268,7 @@ test('INBOX-UX-04 / PCX-14: anchored filters apply immediately and preserve offi
       pendingHandoff: 'false',
       unassignedHumanHandoff: 'true',
     });
-  await expect(owner).toBeFocused();
-  await expect(popover).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(popover).toBeHidden();
+  await expect(sheet).toBeHidden();
   await expect(filters).toBeFocused();
   await expect(filters).toHaveAttribute('aria-expanded', 'false');
   expect(inboxQueries.at(-1)?.assignedUserId).toBeUndefined();
@@ -2284,15 +2284,27 @@ test('INBOX-UX-04 / PCX-14: anchored filters apply immediately and preserve offi
   // Escape keeps an applied selection; reopening reflects it, without a new read.
   const before = inboxQueries.length;
   await filters.click();
-  await expect(situation).toHaveValue('assistant');
-  await expect(owner).toHaveValue('unassignedHumanHandoff');
+  await expect(
+    situation.getByRole('radio', { name: 'Com o agente', exact: true }),
+  ).toBeChecked();
+  await expect(
+    owner.getByRole('radio', { name: 'Sem responsável', exact: true }),
+  ).toBeChecked();
+  await situation.getByRole('radio', { name: 'Todas', exact: true }).check();
+  await owner.getByRole('radio', { name: 'Todas', exact: true }).check();
   await page.keyboard.press('Escape');
   expect(inboxQueries).toHaveLength(before);
-  // An outside click closes the non-modal popover and reaches its real target.
+  // Dismissed draft changes do not leak into the next opening or the list.
   await filters.click();
-  await page.locator('#inbox-search').click();
-  await expect(popover).toBeHidden();
-  await expect(page.locator('#inbox-search')).toBeFocused();
+  await expect(
+    situation.getByRole('radio', { name: 'Com o agente', exact: true }),
+  ).toBeChecked();
+  await expect(
+    owner.getByRole('radio', { name: 'Sem responsável', exact: true }),
+  ).toBeChecked();
+  await sheet.getByRole('button', { name: 'Fechar', exact: true }).click();
+  await expect(sheet).toBeHidden();
+  await expect(filters).toBeFocused();
   await selectInboxFilters(page, 'Com vendedor');
   await expect
     .poll(() => inboxQueries.at(-1))
@@ -2334,20 +2346,28 @@ test('INBOX-UX-04 / PCX-14: anchored filters apply immediately and preserve offi
     });
   await filters.click();
   const beforeClear = inboxQueries.length;
-  await popover
+  await sheet
     .getByRole('button', { name: 'Limpar filtros', exact: true })
     .click();
+  expect(inboxQueries).toHaveLength(beforeClear);
+  await expect(
+    situation.getByRole('radio', { name: 'Todas', exact: true }),
+  ).toBeChecked();
+  await expect(
+    owner.getByRole('radio', { name: 'Todas', exact: true }),
+  ).toBeChecked();
+  await sheet.getByRole('button', { name: 'Ver resultados' }).click();
   await expect.poll(() => inboxQueries.length).toBeGreaterThan(beforeClear);
   await expect
     .poll(() => inboxQueries.at(-1))
     .toEqual({ archived: 'false', limit: '100', sort: 'urgency' });
   expect(inboxQueries.at(-1)?.assignedUserId).toBeUndefined();
   expect(inboxQueries.at(-1)?.automationState).toBeUndefined();
-  if (await popover.isVisible()) await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
-test('INBOX-UX-04 / PCX-14: phone filters fit, apply directly and keep the control budget', async ({
+test('INBOX-UX-06 / PCX-14: phone filter sheets fit, apply explicitly and keep the control budget', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -2366,19 +2386,25 @@ test('INBOX-UX-04 / PCX-14: phone filters fit, apply directly and keep the contr
   expect(await firstScreenControls(page)).toBeLessThanOrEqual(15);
   await filters.focus();
   await page.keyboard.press('Enter');
-  const popover = page.getByRole('dialog', { name: 'Filtrar conversas' });
-  const situation = popover.getByLabel('Situação', { exact: true });
-  await expect(situation).toBeFocused();
-  for (const control of [
-    ...(await popover.getByRole('combobox').all()),
-    ...(await popover.getByRole('button').all()),
-  ]) {
+  const sheet = page.getByRole('dialog', { name: 'Filtrar conversas' });
+  const situation = sheet.getByRole('group', { name: 'Situação', exact: true });
+  await expect(
+    situation.getByRole('radio', { name: 'Todas', exact: true }),
+  ).toBeFocused();
+  for (const option of await sheet.locator('.filter-sheet-option').all()) {
+    await option.scrollIntoViewIfNeeded();
+    await expect(option).toBeInViewport({ ratio: 1 });
+    expect((await option.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+  }
+  for (const control of await sheet.getByRole('button').all()) {
     await expect(control).toBeInViewport({ ratio: 1 });
     expect((await control.boundingBox())?.height).toBeGreaterThanOrEqual(44);
   }
-  await situation.selectOption({ label: 'Fechar pedidos' });
-  await page.keyboard.press('Escape');
-  await expect(popover).toBeHidden();
+  await situation
+    .getByRole('radio', { name: 'Fechar pedidos', exact: true })
+    .check();
+  await sheet.getByRole('button', { name: 'Ver resultados' }).click();
+  await expect(sheet).toBeHidden();
   await expect(filters).toBeFocused();
   await expect(
     shortcuts.getByRole('button', { name: /^Fechar pedidos/u }),
@@ -2423,9 +2449,9 @@ test.describe('on a touch tablet', () => {
     ).toBe(true);
     const shortcuts = page.getByRole('group', { name: 'Atalhos da Caixa' });
     await expect(shortcuts.getByRole('button')).toHaveText([
-      /^Todas\s*1$/u,
       /^Atender\s*1$/u,
       /^Fechar pedidos\s*0$/u,
+      /^Todas\s*1$/u,
     ]);
     const buttons = await shortcuts.getByRole('button').all();
     const filters = page.getByRole('button', { name: /^Filtros/u });
@@ -2524,9 +2550,9 @@ test('PCX-14: an empty filter is not an empty Inbox and offers "Limpar filtros"'
   const list = page.getByRole('list', { name: 'Conversas' });
   // The count is the API's answer: 0 waiting, not a hidden number.
   await expect(shortcuts.getByRole('button')).toHaveText([
-    /^Todas\s*1$/u,
     /^Atender\s*1$/u,
     /^Fechar pedidos\s*0$/u,
+    /^Todas\s*1$/u,
   ]);
 
   await selectInboxFilters(page, 'Aguardando vendedor');
@@ -2566,9 +2592,9 @@ test('PCX-14: a total that fails to load is left out, never guessed', async ({
   await page.goto('/inbox');
   const shortcuts = page.getByRole('group', { name: 'Atalhos da Caixa' });
   await expect(shortcuts.getByRole('button')).toHaveText([
-    /^Todas\s*1$/u,
     /^Atender\s*1$/u,
     /^Fechar pedidos\s*$/u,
+    /^Todas\s*1$/u,
   ]);
   await expect(
     page.locator('.inbox-list').getByRole('button', { name: /Studio Malu/ }),

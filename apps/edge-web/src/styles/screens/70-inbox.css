@@ -1209,21 +1209,23 @@
     white-space: normal;
   }
 
-  /* Title and "Filtros" share the first line; the shortcuts fill the line
-     below, and only scroll when the totals grow too wide for it. */
+  /* Shortcuts keep their DOM order above the explicit filter action. */
   .inbox-filters-button {
-    margin-inline-start: auto;
+    margin-inline-start: 0;
   }
 
   .inbox-tabs {
     flex: 1 1 100%;
     flex-wrap: wrap;
     gap: var(--space-2);
-    order: 1;
+    order: 0;
   }
 
   .inbox-tabs .inbox-tab {
-    flex: 1 0 auto;
+    flex: 1 1 0;
+    gap: var(--space-1);
+    min-inline-size: 0;
+    padding-inline: var(--space-1);
     white-space: normal;
   }
 
@@ -1258,7 +1260,7 @@
     white-space: nowrap;
   }
 
-  .inbox-page[data-view='conversation'] .inbox-toolbar > :not(.inbox-title),
+  .inbox-page[data-view='conversation'] > .inbox-toolbar,
   .inbox-page[data-view='conversation'] .inbox-list-pane,
   .inbox-page[data-view='conversation'] > .inbox-notice {
     display: none;
@@ -1740,75 +1742,26 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
-.inbox-page .inbox-toolbar {
-  gap: var(--space-2);
-  padding: 0 var(--space-2) var(--space-2);
+.inbox-page > .inbox-toolbar {
+  flex: none;
+  padding: var(--space-1) var(--space-2) var(--space-3);
 }
-.inbox-page .inbox-tabs {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  inline-size: 100%;
-  gap: var(--space-1);
-  padding: 0;
-  overflow: visible;
-  background: transparent;
-  border: 0;
-}
-.inbox-page .inbox-tabs .inbox-tab {
-  display: grid;
-  grid-template-columns: var(--space-4) minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-2);
-  min-block-size: var(--control-height);
-  padding: var(--space-1) var(--space-2);
-  color: var(--color-text);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  text-align: start;
-  white-space: normal;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  box-shadow: none;
-}
-.inbox-page .inbox-tabs .inbox-tab:hover:not(:disabled) {
-  background: var(--color-surface-active);
-  border-color: var(--color-border);
-}
-.inbox-page .inbox-tabs .inbox-tab[aria-pressed='true'] {
-  color: var(--color-text);
-  font-weight: 600;
-  background: var(--color-selected);
-  border-color: var(--color-border-strong);
-  box-shadow: none;
+@media (min-width: 769px) {
+  /* The top toolbar reduces the conversation's percentage-based budget.
+     Keep the ordinary suggestion's decisions visible without taking more
+     than its content needs; expanded/mobile conversations keep their budget. */
+  .inbox-page:not([data-expanded='true'])
+    .inbox-conversation
+    > .order-assistance {
+    max-block-size: calc(30% + var(--space-4));
+  }
 }
 .inbox-tab-label {
   min-inline-size: 0;
-  overflow-wrap: anywhere;
-}
-.inbox-tab-mark {
-  inline-size: var(--space-4);
-  block-size: var(--space-4);
-  visibility: hidden;
-}
-.inbox-tab[aria-pressed='true'] .inbox-tab-mark {
-  visibility: visible;
-}
-.inbox-page .inbox-tabs .inbox-tab-count {
-  min-inline-size: var(--space-6);
-  padding: 0 var(--space-1);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  background: var(--color-surface-active);
-  border-radius: var(--radius-sm);
-}
-.inbox-page .inbox-tab[aria-pressed='true'] .inbox-tab-count {
-  color: var(--color-text);
-  background: var(--color-surface);
 }
 .inbox-page .inbox-search {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-2);
   border-block-end: 0;
 }
@@ -1817,62 +1770,12 @@
   min-inline-size: 0;
 }
 .inbox-filters-button {
-  min-inline-size: var(--control-height);
   min-block-size: var(--control-height);
-  padding-inline: var(--space-2);
 }
-.inbox-page .inbox-filters-button {
-  color: var(--color-text);
-  background: var(--color-surface);
-  border-color: var(--color-border);
-  box-shadow: none;
-}
-.inbox-page .inbox-filters-button:hover:not(:disabled) {
-  background: var(--color-surface-active);
-  border-color: var(--color-border-strong);
-}
-.inbox-page .inbox-filters-button[aria-expanded='true'],
-.inbox-page .inbox-filters-button[data-active='true'] {
+.inbox-page .inbox-filters-button[aria-expanded='true'] {
   color: var(--color-text);
   background: var(--color-selected);
-  border-color: var(--color-border-strong);
-}
-.inbox-filter-popover {
-  padding: var(--space-4);
-}
-.inbox-filter-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  margin-block-end: var(--space-2);
-}
-.inbox-filter-head h2 {
-  margin: 0;
-  font-size: var(--text-sm);
-}
-.inbox-filter-head button {
-  min-inline-size: var(--target-min);
-  min-block-size: var(--target-min);
-  padding: var(--space-2);
-}
-.inbox-filter-field {
-  display: grid;
-  gap: var(--space-2);
-  margin-block: 0 var(--space-3);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-}
-.inbox-filter-field select {
-  min-inline-size: 0;
-  inline-size: 100%;
-  min-block-size: var(--target-min);
-  color: var(--color-text);
-}
-.inbox-filter-result {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
+  border-color: var(--color-focus);
 }
 .anchored-popover.conv-more-panel {
   position: fixed;
@@ -1930,6 +1833,7 @@
 .inbox-page[data-expanded='true'] .inbox-workspace {
   grid-template-columns: minmax(0, 1fr);
 }
+.inbox-page[data-expanded='true'] > .inbox-toolbar,
 .inbox-page[data-expanded='true'] .inbox-list-pane {
   display: none;
 }
@@ -2019,25 +1923,8 @@
     max-inline-size: 100%;
     flex-wrap: wrap;
   }
-  .inbox-page .inbox-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    flex-basis: 100%;
-    gap: var(--space-2);
-  }
-  .inbox-page .inbox-tabs .inbox-tab:first-child {
-    grid-column: 1 / -1;
-  }
-  .inbox-page .inbox-tabs .inbox-tab:not(:first-child) {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .inbox-page .inbox-tabs .inbox-tab:not(:first-child) .inbox-tab-mark {
-    display: none;
-  }
+  .inbox-page .inbox-tabs .inbox-tab,
   .inbox-page .inbox-filters-button {
-    min-inline-size: var(--target-min);
-    min-block-size: var(--target-min);
-  }
-  .inbox-page .inbox-tabs .inbox-tab {
     min-block-size: var(--target-min);
   }
   .inbox-page .inbox-list-pane {

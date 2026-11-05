@@ -24,6 +24,38 @@ enviar ao cliente.
 
 [Diagnóstico, limites e rollback](../../../docs/runbooks/inbox-delivery-feedback.md#timeout-durante-preparação-de-mídia--05112026).
 
+## INBOX-UX-06 — Filtros no topo e paridade local/produção (05/11/2026)
+
+PCX-18a–d, PCX-14/15/17 e UX-FUNC-01. Autorização explícita do proprietário:
+publicar os filtros preferidos do local sobre a versão atual de produção e,
+ao final, alinhar o local. Sem API, migration, dependência ou infraestrutura nova.
+
+- [x] Preservar alterações locais anteriores em stash identificado e partir
+      de `origin/master`, mantendo a branch anterior recuperável.
+- [x] Repor barra horizontal Atender / Fechar pedidos / Todas, botão textual
+      Filtros e folha com aplicação consciente, descarte e retorno do foco.
+- [x] Preservar Todas padrão, urgência, cursores/paginação, busca, expansão,
+      rascunhos e correções atuais de produção.
+- [x] Executar gates completos, E2E/axe, revisão visual e QA independente.
+- [ ] Commit/push atômico, CI, publicação e conferência do build público.
+- [ ] Alinhar checkout/build local à revisão publicada, conferir servidor e
+      registrar separadamente as limitações de dados/integrações locais.
+
+Contrato e operação: [inbox-prioridades](../../../docs/runbooks/inbox-prioridades.md).
+
+Evidência pré-publicação: Node 24.20.0/npm 11.19.0; `npm run validate` com
+1.717 aprovados/12 ignorados e build. E2E completo: 497 aprovados/7 ignorados,
+um timeout de áudio Firefox e uma decisão de sugestão parcialmente recortada
+após mover a barra. O orçamento vertical foi corrigido sem relaxar o teste;
+42 regressões posteriores passaram, incluindo os dois cenários. Inspeção
+visual em 320/390/1366 px claro/escuro, sem overflow, e axe dos filtros
+aprovados; detector sem achados e QA independente sem P1/P2. Auditoria:
+zero alta/crítica, uma baixa e cinco moderadas preexistentes. O primeiro CI da
+PR 293 passou integralmente: PostgreSQL, 499 E2E/7 ignorados e as duas imagens.
+Uma integração concorrente de OPS-INBOX-SEND-09 exigiu rebase, preservando as
+duas tarefas neste arquivo. O CI da revisão integrada, publicação e paridade
+dos assets devem ser conferidos no fechamento da PR.
+
 ## OPS-INBOX-SEND-08 — Encerrar pendências sem duplicar envios (04/11/2026)
 
 MSG-02/03, ORC-08, PRV-01 e OPS-ERR-03/06/08/10/11. Autorização do

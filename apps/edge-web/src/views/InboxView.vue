@@ -13,6 +13,7 @@ import { brand } from '../brand/index.js';
 import AppIcon from '../components/AppIcon.vue';
 import AppHint from '../components/AppHint.vue';
 import FilterChip from '../components/FilterChip.vue';
+import FilterSheet from '../components/FilterSheet.vue';
 import AnchoredPopover from '../components/AnchoredPopover.vue';
 import AssistantTakeoverContext from '../components/inbox/AssistantTakeoverContext.vue';
 import AudioRecorder from '../components/inbox/AudioRecorder.vue';
@@ -100,7 +101,6 @@ const QUEUE_FILTERS = Object.freeze([
  * summary under the toolbar.
  */
 const SHORTCUTS = Object.freeze([
-  Object.freeze({ label: 'Todas', queue: 'all', tab: 'all', value: 'all' }),
   Object.freeze({
     label: 'Atender',
     queue: 'all',
@@ -113,6 +113,7 @@ const SHORTCUTS = Object.freeze([
     tab: 'closing',
     value: 'closing',
   }),
+  Object.freeze({ label: 'Todas', queue: 'all', tab: 'all', value: 'all' }),
 ]);
 const LIST_TIME = new Intl.DateTimeFormat('pt-BR', {
   hour: '2-digit',
@@ -203,7 +204,10 @@ const stateTab = ref(
 );
 const queueFilter = ref(ROUTE_QUEUE[String(route.query.fila ?? '')] ?? 'all');
 const filtersButton = ref(null);
+const filterSheet = ref(null);
 const filtersOpen = ref(false);
+const draftTab = ref('all');
+const draftQueue = ref('all');
 /**
  * Totals of the shortcuts, by shortcut value; a failed one is absent.
  *
@@ -662,7 +666,7 @@ watch(isPhone, async (phone) => {
   if (!phone) return;
   conversationExpanded.value = false;
   if (filtersOpen.value && props.conversationId) {
-    filtersOpen.value = false;
+    /** @type {any} */ (filterSheet.value)?.close();
     await nextTick();
     conversationHeading.value?.focus();
   }
@@ -759,14 +763,24 @@ function selectShortcut(shortcut) {
   queueFilter.value = shortcut.queue;
 }
 
-/** INBOX-UX-04: filters apply to the same official read model immediately. */
-function openFilters() {
-  filtersOpen.value = !filtersOpen.value;
+/** PCX-18: filters are a draft until the sheet's explicit apply action. @param {Event} event */
+function openFilters(event) {
+  draftTab.value = stateTab.value;
+  draftQueue.value = queueFilter.value;
+  filtersOpen.value = true;
+  /** @type {any} */ (filterSheet.value)?.open(
+    /** @type {HTMLElement} */ (event.currentTarget),
+  );
 }
 
-function clearPopoverFilters() {
-  stateTab.value = 'all';
-  queueFilter.value = 'all';
+function applySheetFilters() {
+  stateTab.value = draftTab.value;
+  queueFilter.value = draftQueue.value;
+}
+
+function clearSheetDraft() {
+  draftTab.value = 'all';
+  draftQueue.value = 'all';
 }
 
 async function toggleConversationWidth() {
@@ -2253,6 +2267,7 @@ onMounted(() => {
   }, 30_000);
 });
 onBeforeUnmount(() => {
+  /** @type {any} */ (filterSheet.value)?.close();
   contextDialog.value?.close();
   contactDialog.value?.close();
   contactController?.abort();
@@ -2277,6 +2292,75 @@ onBeforeUnmount(() => {
     :data-expanded="conversationExpanded || undefined"
   >
     <h1 ref="heading" class="inbox-title" tabindex="-1">Caixa de Entrada</h1>
+    <div class="inbox-toolbar">
+      <!-- PCX-18: horizontal shortcuts; official queues and urgency are preserved. -->
+      <div class="inbox-tabs" role="group" aria-label="Atalhos da Caixa">
+        <button
+          v-for="shortcut in SHORTCUTS"
+          :key="shortcut.value"
+          type="button"
+          class="inbox-tab"
+          :aria-pressed="activeShortcut === shortcut.value"
+          @click="selectShortcut(shortcut)"
+        >
+          <span class="inbox-tab-label">{{ shortcut.label }}</span>
+          <span
+            v-if="shortcutCount(shortcut.value) !== null"
+            class="inbox-tab-count"
+            :data-tone="
+              shortcut.value === 'waiting' && shortcutCount(shortcut.value) > 0
+                ? 'attention'
+                : undefined
+            "
+            >{{ shortcutCount(shortcut.value) }}</span
+          >
+        </button>
+      </div>
+
+      <button
+        ref="filtersButton"
+        type="button"
+        class="soft inbox-filters-button"
+        aria-haspopup="dialog"
+        aria-label="Filtros"
+        title="Filtrar conversas"
+        :aria-expanded="filtersOpen"
+        :data-active="activeFilters.length ? 'true' : undefined"
+        @click="openFilters"
+      >
+        Filtros
+        <span v-if="activeFilters.length" class="inbox-tab-count"
+          >{{ activeFilters.length
+          }}<span class="sr-only">
+            {{ activeFilters.length === 1 ? 'ativo' : 'ativos' }}</span
+          ></span
+        >
+      </button>
+
+      <div
+        v-if="activeFilters.length"
+        class="inbox-active-filter"
+        role="group"
+        aria-labelledby="inbox-active-filter-label"
+      >
+        <span id="inbox-active-filter-label">Filtro:</span>
+        <FilterChip
+          v-for="filter in activeFilters"
+          :key="filter.key"
+          :label="filter.label"
+          :remove-label="`Remover filtro ${filter.label}`"
+          @remove="removeFilter(filter.key)"
+        />
+        <button
+          v-if="activeFilters.length > 1"
+          type="button"
+          class="quiet"
+          @click="clearFilters"
+        >
+          Limpar filtros
+        </button>
+      </div>
+    </div>
     <Teleport to="#inbox-view-tools" defer>
       <button
         v-if="active && !isPhone"
@@ -2299,50 +2383,46 @@ onBeforeUnmount(() => {
         <AppIcon :name="conversationExpanded ? 'minimize' : 'maximize'" />
       </button>
     </Teleport>
-    <AnchoredPopover
-      v-model:open="filtersOpen"
-      :anchor="filtersButton"
-      id="inbox-filter-popover"
-      class="inbox-filter-popover"
-      label="Filtrar conversas"
-      align="start"
+    <FilterSheet
+      ref="filterSheet"
+      title="Filtrar conversas"
+      @apply="applySheetFilters"
+      @clear="clearSheetDraft"
+      @close="filtersOpen = false"
     >
-      <div class="inbox-filter-head">
-        <h2>Filtrar conversas</h2>
-        <button
-          type="button"
-          class="quiet"
-          aria-label="Limpar filtros"
-          title="Limpar filtros"
-          @click="clearPopoverFilters"
+      <fieldset class="filter-sheet-group">
+        <legend>Situação</legend>
+        <label
+          v-for="tab in STATE_TABS"
+          :key="tab.value"
+          class="filter-sheet-option"
         >
-          <AppIcon name="reset" />
-        </button>
-      </div>
-      <div class="inbox-filter-field">
-        <label for="inbox-situation">Situação</label>
-        <select id="inbox-situation" v-model="stateTab">
-          <option v-for="tab in STATE_TABS" :key="tab.value" :value="tab.value">
-            {{ tab.label }}
-          </option>
-        </select>
-      </div>
-      <div class="inbox-filter-field">
-        <label for="inbox-responsible">Responsável</label>
-        <select id="inbox-responsible" v-model="queueFilter">
-          <option
-            v-for="queue in QUEUE_FILTERS"
-            :key="queue.value"
+          <input
+            v-model="draftTab"
+            type="radio"
+            name="inbox-situacao"
+            :value="tab.value"
+          />
+          {{ tab.label }}
+        </label>
+      </fieldset>
+      <fieldset class="filter-sheet-group">
+        <legend>Responsável</legend>
+        <label
+          v-for="queue in QUEUE_FILTERS"
+          :key="queue.value"
+          class="filter-sheet-option"
+        >
+          <input
+            v-model="draftQueue"
+            type="radio"
+            name="inbox-responsavel"
             :value="queue.value"
-          >
-            {{ queue.label }}
-          </option>
-        </select>
-      </div>
-      <p class="inbox-filter-result" role="status">
-        {{ loading ? 'Carregando conversas…' : visibleConversationLabel }}
-      </p>
-    </AnchoredPopover>
+          />
+          {{ queue.label }}
+        </label>
+      </fieldset>
+    </FilterSheet>
 
     <div v-if="liveStatusMessage" class="inbox-notice inbox-live-notice">
       <p role="status">{{ liveStatusMessage }}</p>
@@ -2392,81 +2472,11 @@ onBeforeUnmount(() => {
               Limpar
             </button>
           </div>
-          <button
-            ref="filtersButton"
-            type="button"
-            class="soft inbox-filters-button"
-            aria-haspopup="dialog"
-            aria-label="Filtros"
-            aria-controls="inbox-filter-popover"
-            title="Filtrar conversas"
-            :aria-expanded="filtersOpen"
-            :data-active="activeFilters.length ? 'true' : undefined"
-            @click="openFilters"
-          >
-            <AppIcon name="filters" /><span class="sr-only">Filtros</span>
-            <span v-if="activeFilters.length" class="inbox-tab-count"
-              >{{ activeFilters.length
-              }}<span class="sr-only">
-                {{ activeFilters.length === 1 ? 'ativo' : 'ativos' }}</span
-              ></span
-            >
-          </button>
+
           <AppHint id="inbox-search-help" class="inbox-search-hint"
             >Busca apenas nas conversas carregadas, por contato, telefone ou
             última mensagem.</AppHint
           >
-        </div>
-        <div class="inbox-toolbar">
-          <!-- PCX-14 (RFC 024): search, three shortcuts and "Filtros". -->
-          <div class="inbox-tabs" role="group" aria-label="Atalhos da Caixa">
-            <button
-              v-for="shortcut in SHORTCUTS"
-              :key="shortcut.value"
-              type="button"
-              class="inbox-tab"
-              :aria-pressed="activeShortcut === shortcut.value"
-              @click="selectShortcut(shortcut)"
-            >
-              <AppIcon name="check" class="inbox-tab-mark" />
-              <span class="inbox-tab-label">{{ shortcut.label }}</span>
-              <span
-                v-if="shortcutCount(shortcut.value) !== null"
-                class="inbox-tab-count"
-                :data-tone="
-                  shortcut.value === 'waiting' &&
-                  shortcutCount(shortcut.value) > 0
-                    ? 'attention'
-                    : undefined
-                "
-                >{{ shortcutCount(shortcut.value) }}</span
-              >
-            </button>
-          </div>
-
-          <div
-            v-if="activeFilters.length"
-            class="inbox-active-filter"
-            role="group"
-            aria-labelledby="inbox-active-filter-label"
-          >
-            <span id="inbox-active-filter-label">Filtro:</span>
-            <FilterChip
-              v-for="filter in activeFilters"
-              :key="filter.key"
-              :label="filter.label"
-              :remove-label="`Remover filtro ${filter.label}`"
-              @remove="removeFilter(filter.key)"
-            />
-            <button
-              v-if="activeFilters.length > 1"
-              type="button"
-              class="quiet"
-              @click="clearFilters"
-            >
-              Limpar filtros
-            </button>
-          </div>
         </div>
 
         <p

@@ -1,5 +1,31 @@
 # CRM Silmer MVP — Requisitos Rastreáveis
 
+## Filtros horizontais da Inbox — PCX-18 (05/11/2026)
+
+Tarefa INBOX-UX-06, autorizada pelo proprietário no chat com a captura local
+como referência. Emenda PCX-16a e a ordem visual de PCX-17f; preserva o
+restante de PCX-15/16/17 e UX-FUNC-01.
+
+- **PCX-18a:** Atender / Fechar pedidos / Todas SHALL aparecer nessa ordem,
+  em grupo horizontal acima da lista e da conversa no desktop, com contagens
+  oficiais e botão textual Filtros. A busca SHALL permanecer na lista.
+  Todas continua a entrada padrão sem filtro explícito, por urgência oficial;
+  posição visual SHALL NOT modificar consulta, paginação ou permissões.
+- **PCX-18b:** Filtros SHALL abrir a folha modal existente com Situação e
+  Responsável. Seleções editam um rascunho; Ver resultados aplica, Limpar
+  prepara a remoção e Escape/fechar descartam mudanças não aplicadas.
+  O foco SHALL ficar contido e voltar ao acionador no fechamento. Critérios
+  aplicados continuam removíveis pelos chips e Limpar filtros.
+- **PCX-18c:** claro/escuro, teclado, toque e larguras desde 320 px SHALL
+  preservar controles legíveis, sem rolagem horizontal da página. No celular,
+  a barra pertence à lista; abrir uma conversa preserva o espaço do histórico
+  e compositor. Ampliar a conversa no desktop preserva filtros e rascunhos.
+- **PCX-18d:** a entrega SHALL partir da versão atual de produção, publicar
+  somente esta fatia e alinhar o checkout/build local à revisão publicada.
+  Trabalho local anterior SHALL ser preservado separadamente. Igualdade de
+  código SHALL NOT copiar dados, credenciais ou integrações de produção para
+  desenvolvimento, nem executar mensagens/comandos comerciais para validar UI.
+
 ## UX-FUNC-01 — Componentes com função explícita (04/11/2026)
 
 Implementação autorizada pelo proprietário no chat. Complementa PCX-13/14/15,

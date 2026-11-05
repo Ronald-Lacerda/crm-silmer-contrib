@@ -473,7 +473,7 @@ test('INBOX-UX-05: defaults to Todas in official urgency order, retaining other 
   });
   await page.goto('/inbox');
   const shortcuts = page.getByRole('group', { name: 'Atalhos da Caixa' });
-  await expect(shortcuts.getByRole('button').first()).toHaveText(/^Todas/u);
+  await expect(shortcuts.getByRole('button').first()).toHaveText(/^Atender/u);
   await expect(
     shortcuts.getByRole('button', { name: /^Todas/u }),
   ).toHaveAttribute('aria-pressed', 'true');
@@ -693,69 +693,155 @@ test('INBOX-UX-02: legacy data does not invent an elapsed wait or an unread sign
   await expect(row(page, 'legacy')).not.toContainText(/não lid[ao]|atrasad/iu);
 });
 
-test('INBOX-UX-04: anchored filters expose situation and owner and restore focus', async ({
+test('INBOX-UX-06: the horizontal shortcuts precede the workspace and preserve official selection', async ({
   page,
 }) => {
-  await setup(page);
+  await page.setViewportSize({ width: 1366, height: 768 });
+  const { writes } = await setup(page);
   await page.goto('/inbox');
+  const shortcuts = page.getByRole('group', { name: 'Atalhos da Caixa' });
+  await expect(shortcuts.getByRole('button')).toHaveText([
+    /^Atender/u,
+    /^Fechar pedidos/u,
+    /^Todas/u,
+  ]);
+  const controls = await shortcuts.getByRole('button').all();
+  controls.push(page.getByRole('button', { name: /^Filtros/u }));
+  const workspace = await page.locator('.inbox-workspace').boundingBox();
+  if (!workspace) throw new Error('Workspace must be visible');
+  let previousRight = 0;
+  let firstTop = null;
+  for (const control of controls) {
+    await expect(control).toBeInViewport({ ratio: 1 });
+    const box = await control.boundingBox();
+    if (!box) throw new Error('Filter controls must be visible');
+    expect(box.y + box.height).toBeLessThanOrEqual(workspace.y);
+    expect(box.x).toBeGreaterThanOrEqual(previousRight);
+    firstTop ??= box.y;
+    expect(Math.abs(box.y - firstTop)).toBeLessThanOrEqual(4);
+    previousRight = box.x + box.width;
+  }
+  await expect(
+    shortcuts.getByRole('button', { name: /^Todas/u }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  expect(writes).toEqual([]);
+});
+
+test('INBOX-UX-06: sheet drafts apply explicitly, discard with Escape and restore focus', async ({
+  page,
+}) => {
+  const { queries, writes } = await setup(page);
+  await page.goto('/inbox');
+  await expect(row(page, 'other')).toBeVisible();
   const filters = page.getByRole('button', { name: /^Filtros/u });
   await filters.focus();
   await page.keyboard.press('Enter');
   const sheet = page.getByRole('dialog', { name: 'Filtrar conversas' });
+  const situation = sheet.getByRole('group', { name: 'Situação', exact: true });
+  const owner = sheet.getByRole('group', { name: 'Responsável', exact: true });
   await expect(sheet).toBeVisible();
-  await expect(sheet.getByLabel('Situação', { exact: true })).toBeVisible();
-  await expect(sheet.getByLabel('Responsável', { exact: true })).toBeVisible();
-  await expect(sheet).not.toHaveAttribute('aria-modal', 'true');
+  await expect(
+    situation.getByRole('radio', { name: 'Todas', exact: true }),
+  ).toBeFocused();
+  const before = queries.filter((query) => query.limit !== '1').length;
+  await owner.getByRole('radio', { name: 'Minhas', exact: true }).check();
+  expect(queries.filter((query) => query.limit !== '1')).toHaveLength(before);
+  await expect(row(page, 'other')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
   await expect(filters).toBeFocused();
+  await filters.press('Enter');
+  await expect(
+    owner.getByRole('radio', { name: 'Todas', exact: true }),
+  ).toBeChecked();
+  await owner.getByRole('radio', { name: 'Minhas', exact: true }).check();
+  await sheet
+    .getByRole('button', { name: 'Ver resultados', exact: true })
+    .click();
+  await expect(sheet).toBeHidden();
+  await expect(filters).toBeFocused();
+  await expect
+    .poll(() => queries.filter((query) => query.limit !== '1').at(-1))
+    .toMatchObject({
+      archived: 'false',
+      sort: 'urgency',
+      assignedUserId: OWNER,
+    });
+  await expect(row(page, 'other')).toHaveCount(0);
+  await filters.press('Enter');
+  const beforeClear = queries.filter((query) => query.limit !== '1').length;
+  await sheet
+    .getByRole('button', { name: 'Limpar filtros', exact: true })
+    .click();
+  await expect(
+    owner.getByRole('radio', { name: 'Todas', exact: true }),
+  ).toBeChecked();
+  expect(queries.filter((query) => query.limit !== '1')).toHaveLength(
+    beforeClear,
+  );
+  await sheet
+    .getByRole('button', { name: 'Ver resultados', exact: true })
+    .click();
+  await expect
+    .poll(() => queries.filter((query) => query.limit !== '1').at(-1))
+    .toEqual({
+      archived: 'false',
+      sort: 'urgency',
+      limit: '100',
+    });
+  await expect(row(page, 'other')).toBeVisible();
+  expect(writes).toEqual([]);
 });
 
 for (const theme of ['light', 'dark']) {
-  test(`INBOX-UX-02: 320px keyboard triage and ${theme} accessibility`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 320, height: 740 });
-    await page.addInitScript((appearance) => {
-      globalThis.localStorage.setItem('silmer-theme', appearance);
-    }, theme);
-    await setup(page);
-    await page.goto('/inbox');
-    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-    await expect(row(page, 'unsupported')).toBeVisible();
-    expect(
-      await page.evaluate(
-        () =>
-          globalThis.document.documentElement.scrollWidth <=
-          globalThis.innerWidth,
-      ),
-    ).toBe(true);
-    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-    await row(page, 'unsupported').focus();
-    await page.keyboard.press('Enter');
-    await expect(
-      page.getByRole('heading', {
-        level: 2,
-        name: 'Cliente sintético unsupported',
-      }),
-    ).toBeFocused();
-    await expect(
-      page
-        .locator('.conv-head')
-        .getByRole('button', { name: 'Assumir atendimento', exact: true }),
-    ).toBeVisible();
-    expect(
-      await page.evaluate(
-        () =>
-          globalThis.document.documentElement.scrollWidth <=
-          globalThis.innerWidth,
-      ),
-    ).toBe(true);
-    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  });
+  for (const width of [320, 390]) {
+    test(`INBOX-UX-06: ${width}px keyboard triage and ${theme} accessibility`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.addInitScript((appearance) => {
+        globalThis.localStorage.setItem('silmer-theme', appearance);
+      }, theme);
+      await setup(page);
+      await page.goto('/inbox');
+      await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+      await expect(row(page, 'unsupported')).toBeVisible();
+      await expect(page.locator('.inbox-toolbar')).toBeVisible();
+      expect(
+        await page.evaluate(
+          () =>
+            globalThis.document.documentElement.scrollWidth <=
+            globalThis.innerWidth,
+        ),
+      ).toBe(true);
+      expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+      await row(page, 'unsupported').focus();
+      await page.keyboard.press('Enter');
+      await expect(page.locator('.inbox-toolbar')).toBeHidden();
+      await expect(
+        page.getByRole('heading', {
+          level: 2,
+          name: 'Cliente sintético unsupported',
+        }),
+      ).toBeFocused();
+      await expect(
+        page
+          .locator('.conv-head')
+          .getByRole('button', { name: 'Assumir atendimento', exact: true }),
+      ).toBeVisible();
+      expect(
+        await page.evaluate(
+          () =>
+            globalThis.document.documentElement.scrollWidth <=
+            globalThis.innerWidth,
+        ),
+      ).toBe(true);
+      expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    });
+  }
 }
 
-test('INBOX-UX-04: an immediate filter keeps focus while its official list is loading', async ({
+test('INBOX-UX-06: applying a draft returns focus while its official list is loading', async ({
   page,
 }) => {
   const { writes } = await setup(page);
@@ -772,8 +858,8 @@ test('INBOX-UX-04: an immediate filter keeps focus while its official list is lo
   await page.goto('/inbox');
   const filters = page.getByRole('button', { name: 'Filtros', exact: true });
   await filters.click();
-  const popover = page.getByRole('dialog', { name: 'Filtrar conversas' });
-  const situation = popover.getByLabel('Situação', { exact: true });
+  const sheet = page.getByRole('dialog', { name: 'Filtrar conversas' });
+  const situation = sheet.getByRole('group', { name: 'Situação', exact: true });
   try {
     const requested = page.waitForRequest((request) => {
       const url = new URL(request.url());
@@ -783,12 +869,14 @@ test('INBOX-UX-04: an immediate filter keeps focus while its official list is lo
         url.searchParams.get('limit') !== '1'
       );
     });
-    await situation.selectOption({ label: 'Fechar pedidos' });
+    await situation
+      .getByRole('radio', { name: 'Fechar pedidos', exact: true })
+      .check();
+    await sheet
+      .getByRole('button', { name: 'Ver resultados', exact: true })
+      .click();
     await requested;
-    await expect(situation).toBeFocused();
-    await expect(popover).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(popover).toBeHidden();
+    await expect(sheet).toBeHidden();
     await expect(filters).toBeFocused();
   } finally {
     release();
@@ -812,7 +900,11 @@ test('INBOX-UX-04: resizing an open filter to a phone closes it and leaves focus
   await expect(page.locator('.inbox-conversation')).toBeVisible();
   await page.getByRole('button', { name: 'Filtros', exact: true }).click();
   const filters = page.getByRole('dialog', { name: 'Filtrar conversas' });
-  await expect(filters.getByLabel('Situação', { exact: true })).toBeFocused();
+  await expect(
+    filters
+      .getByRole('group', { name: 'Situação', exact: true })
+      .getByRole('radio', { name: 'Todas', exact: true }),
+  ).toBeFocused();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.inbox-list-pane')).toBeHidden();
   await expect(filters).toBeHidden();
@@ -841,11 +933,16 @@ test('INBOX-UX-05: optional owner filters retain urgency and clearing restores u
   const filters = page.getByRole('button', { name: 'Filtros', exact: true });
   await filters.click();
   const panel = page.getByRole('dialog', { name: 'Filtrar conversas' });
-  const owner = panel.getByLabel('Responsável', { exact: true });
-  await expect(panel.getByLabel('Situação', { exact: true })).toHaveValue(
-    'all',
-  );
-  await owner.selectOption('mine');
+  const owner = panel.getByRole('group', { name: 'Responsável', exact: true });
+  await expect(
+    panel
+      .getByRole('group', { name: 'Situação', exact: true })
+      .getByRole('radio', { name: 'Todas', exact: true }),
+  ).toBeChecked();
+  await owner.getByRole('radio', { name: 'Minhas', exact: true }).check();
+  await panel
+    .getByRole('button', { name: 'Ver resultados', exact: true })
+    .click();
   await expect
     .poll(() => queries.filter((query) => query.limit !== '1').at(-1))
     .toMatchObject({
@@ -854,7 +951,13 @@ test('INBOX-UX-05: optional owner filters retain urgency and clearing restores u
       assignedUserId: OWNER,
     });
   await expect(row(page, 'other')).toHaveCount(0);
-  await owner.selectOption('unassignedHumanHandoff');
+  await filters.click();
+  await owner
+    .getByRole('radio', { name: 'Sem responsável', exact: true })
+    .check();
+  await panel
+    .getByRole('button', { name: 'Ver resultados', exact: true })
+    .click();
   await expect
     .poll(() => queries.filter((query) => query.limit !== '1').at(-1))
     .toMatchObject({
@@ -865,7 +968,6 @@ test('INBOX-UX-05: optional owner filters retain urgency and clearing restores u
   expect(
     queries.filter((query) => query.limit !== '1').at(-1)?.assignedUserId,
   ).toBeUndefined();
-  await page.keyboard.press('Escape');
   await page
     .getByRole('button', {
       name: 'Remover filtro Sem responsável',

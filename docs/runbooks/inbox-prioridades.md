@@ -5,6 +5,16 @@ em 03/11/2026: quem atender, maior espera e pedidos disponíveis para revisão f
 
 ## Comportamento
 
+INBOX-UX-06 / PCX-18 (05/11/2026): Atender / Fechar pedidos / Todas ficam
+nessa ordem em uma barra horizontal acima do workspace no desktop; a busca
+continua na lista. No celular, a barra aparece na lista, sem consumir espaço
+na conversa. Todas permanece selecionada na entrada sem query explícita.
+Filtros abre a folha modal com Situação e Responsável. Editar opções não muda
+a consulta até Ver resultados; Limpar prepara a remoção dos critérios no
+rascunho. Fechar/Escape descarta edições não aplicadas e devolve foco ao botão.
+Chips removem critérios já aplicados. A troca de apresentação não muda
+urgência, totais, cursores, ACL, rascunhos ou comandos comerciais.
+
 Todas é a entrada padrão sem filtro explícito (INBOX-UX-05 / PCX-17).
 Inclui todos os atendimentos não arquivados autorizados: próprios, de outros
 vendedores, com o agente e encerrados. Atender continua reunindo ações do
@@ -111,6 +121,38 @@ operation-read-postgres-live integra o gate serial do CI e deve passar antes
 da integração. As evidências locais não substituem esse gate.
 
 ## Publicação e rollback
+
+### Filtros no topo e ambiente de desenvolvimento — INBOX-UX-06
+
+Esta fatia muda somente apresentação/estado temporário de filtros e testes.
+Preserva o contrato REST, migrations e runtime de domínio da baseline publicada;
+uma API da baseline anterior permanece compatível. Conferir SHA do edge no
+EasyPanel e os hashes dos assets públicos contra o build local, além de health
+e readiness. O worker segue seu deploy automático existente; não habilitar
+autoDeploy nem alterar configuração da API para uma mudança de filtros.
+
+O checkout Windows anterior e suas alterações pendentes foram preservados
+em branch/stash, fora da entrega. Ao final, os checkouts Windows e `mel`
+devem apontar à revisão integrada de `master`, com o mesmo bundle do edge.
+Dados, credenciais e integrações de produção não são copiados.
+
+No `mel`, a porta 3000 pertence a outro projeto e o PostgreSQL CRM antigo
+usa 5434. O ambiente sincronizado usa `COMPOSE_PROJECT_NAME=crm-silmer-synced-dev`,
+PostgreSQL sintético em 5436, API em 3002, RustFS em 9000 e frontend em 4173,
+todos em loopback. Um override Compose ignorado em `tmp/` troca somente a porta
+do PostgreSQL; validar com `docker compose config --quiet` antes de subir apenas
+`postgres` e `rustfs`. `DATABASE_URL` explícita e
+`SEED_DEVELOPMENT_USERS=true` habilitam as contas sintéticas documentadas no
+README; `OBJECT_STORAGE_ENDPOINT` explícito impede subir o projeto padrão.
+Usar Node/npm fixados e `N8N_LOCAL_ENABLED=false`: o CRM tem API e banco reais
+de desenvolvimento, sem configurar transporte WhatsApp ou credenciais de IA.
+
+O frontend é acessado pelo túnel SSH `127.0.0.1:4173` → `mel:127.0.0.1:4173`.
+Encerrar a prévia sintética antiga libera essa porta. O proxy do frontend
+encaminha `/api/*` para a API do próprio ambiente; não aponta para produção.
+Conferir health/readiness, login sintético e SSE sem executar atendimento real.
+Rollback de desenvolvimento para o processo e o projeto dedicado, preservando
+volumes; não parar serviços, remover dados ou restaurar o banco de outros projetos.
 
 API e frontend devem corresponder ao mesmo commit. Não há migration nova nem
 ação remota de teste. O deploy segue o fluxo GitHub → EasyPanel existente.
