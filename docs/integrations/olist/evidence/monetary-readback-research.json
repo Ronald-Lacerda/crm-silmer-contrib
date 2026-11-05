@@ -1,0 +1,198 @@
+{
+  "task": "OLIST-T02",
+  "gap": "F1-G01",
+  "capturedAt": "2026-11-05T09:59:37.853360+00:00",
+  "scope": "public documentation only; zero authenticated calls and zero ERP mutations",
+  "sourceUrl": "https://erp.olist.com/public-api/v3/swagger/swagger-mintlify.json",
+  "sourceSha256": "7afecea50e94f0e331f8678bcd4b7017e90ed0f8b9a032d6110d36bf77c510ec",
+  "sourceBytes": 847141,
+  "sourceLastModified": "Wed, 04 Nov 2026 19:22:03 GMT",
+  "apiVersion": "3.1",
+  "historicalProbeSourceSha256": "107f8d039de20401097443038efb1459c9c2ff01599830fe1274cfa0d9f47216",
+  "orderReadRoutes": [
+    {
+      "method": "GET",
+      "path": "/pedidos/{idPedido}/marcadores",
+      "parameters": [
+        {
+          "name": "idPedido",
+          "in": "path"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/pedidos/{idPedido}",
+      "parameters": [
+        {
+          "name": "idPedido",
+          "in": "path"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/pedidos",
+      "parameters": [
+        {
+          "name": "numero",
+          "in": "query"
+        },
+        {
+          "name": "nomeCliente",
+          "in": "query"
+        },
+        {
+          "name": "codigoCliente",
+          "in": "query"
+        },
+        {
+          "name": "cpfCnpj",
+          "in": "query"
+        },
+        {
+          "name": "dataInicial",
+          "in": "query"
+        },
+        {
+          "name": "dataFinal",
+          "in": "query"
+        },
+        {
+          "name": "dataAtualizacao",
+          "in": "query"
+        },
+        {
+          "name": "situacao",
+          "in": "query"
+        },
+        {
+          "name": "numeroPedidoEcommerce",
+          "in": "query"
+        },
+        {
+          "name": "idVendedor",
+          "in": "query"
+        },
+        {
+          "name": "marcadores",
+          "in": "query"
+        },
+        {
+          "name": "origemPedido",
+          "in": "query"
+        },
+        {
+          "name": "orderBy",
+          "in": "query"
+        },
+        {
+          "name": "limit",
+          "in": "query"
+        },
+        {
+          "name": "offset",
+          "in": "query"
+        }
+      ]
+    }
+  ],
+  "modelReview": {
+    "ItemPedidoResponseModel": {
+      "propertyNames": [
+        "produto",
+        "quantidade",
+        "valorUnitario",
+        "infoAdicional"
+      ],
+      "addedProperties": [],
+      "removedProperties": [],
+      "changedProperties": [],
+      "properties": {
+        "produto": {
+          "$ref": "#/components/schemas/ProdutoResponseModel"
+        },
+        "quantidade": {
+          "type": "number",
+          "format": "float"
+        },
+        "valorUnitario": {
+          "type": "number",
+          "format": "float"
+        },
+        "infoAdicional": {
+          "type": "string"
+        }
+      }
+    },
+    "ObterPedidoModelResponse": {
+      "propertyNames": [
+        "id",
+        "numeroPedido",
+        "idNotaFiscal",
+        "dataFaturamento",
+        "valorTotalProdutos",
+        "valorTotalPedido",
+        "listaPreco",
+        "cliente",
+        "enderecoEntrega",
+        "ecommerce",
+        "transportador",
+        "deposito",
+        "vendedor",
+        "naturezaOperacao",
+        "intermediador",
+        "pagamento",
+        "itens",
+        "pagamentosIntegrados",
+        "situacao",
+        "data",
+        "dataEntrega",
+        "numeroOrdemCompra",
+        "valorDesconto",
+        "valorFrete",
+        "valorFretePagoEmpresa",
+        "valorOutrasDespesas",
+        "dataPrevista",
+        "dataEnvio",
+        "observacoes",
+        "observacoesInternas",
+        "origemPedido",
+        "notaFiscal",
+        "marcadores"
+      ],
+      "addedProperties": [],
+      "removedProperties": [],
+      "changedProperties": []
+    },
+    "ListagemPedidoModelResponse": {
+      "propertyNames": [
+        "id",
+        "situacao",
+        "numeroPedido",
+        "ecommerce",
+        "dataCriacao",
+        "dataPrevista",
+        "cliente",
+        "valor",
+        "vendedor",
+        "transportador",
+        "origemPedido"
+      ],
+      "addedProperties": [],
+      "removedProperties": [],
+      "changedProperties": []
+    }
+  },
+  "supportedPreciseReaderProven": false,
+  "gatePassed": false,
+  "conclusions": {
+    "noDocumentedPrecisionQueryForOrderDetail": true,
+    "noIndependentLineSubtotalInOrderItemModel": true,
+    "listingValueIsStringButHasNoLineItems": true,
+    "noOrderPrintOrOrderItemGetterInReviewedOrderGetRoutes": true,
+    "newSchemaIsNotEvidenceOfRemoteFix": true
+  },
+  "historicalEvidenceFilesPreserved": true,
+  "productOwnerDecision": "Keep F1-G01 blocked and seek reliable supported readback"
+}

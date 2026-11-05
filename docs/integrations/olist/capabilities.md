@@ -11,7 +11,7 @@ criados e reconciliados sem repetir inclusões confirmadas. Origem e referência
 comprovadas nos novos pedidos. Os subtotais nativos conferem, mas os unitários
 e totais da API perdem precisão ou divergem: C04 tem R$ 0,02 na tela e 0.01
 em `valorTotalPedido`. C03 tem R$ 1,10 na tela e 1.08 em `valorTotalProdutos`.
-[Relatório atual e decisão necessária](phase1-report.md) ·
+[Relatório atual e decisão do PO](phase1-report.md) ·
 [Resultado sanitizado](evidence/phase1-controlled-results.json).
 
 As seções de planejamento e checkpoints abaixo preservam seu escopo histórico;
@@ -239,7 +239,8 @@ pai, três variações e C01–C04 criados. Lote adicional: 120 GETs e oito POST
 sem saldo autorizado. Não reexecutar nenhuma inclusão. Todos os IDs/reservas
 estão preservados fora do Git. Os 25 testes atuais passaram.
 
-F1-G01 exige a decisão apresentada no [relatório](phase1-report.md). A UI prova
+O PO manteve F1-G01 bloqueado e pediu busca por leitura confiável.
+A [investigação pública](monetary-readback-research.md) não comprovou essa leitura. A UI prova
 cada linha da amostra, mas a API não fornece leitura monetária automática fiel.
 T02 continua desmarcada; T03/Fase 2 não liberadas. Nenhum runtime, migração,
 deploy ou piloto foi implementado. Os checkpoints seguintes são históricos.

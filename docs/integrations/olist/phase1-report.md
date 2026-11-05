@@ -95,15 +95,21 @@ expedição ou mensagem. A UI observada mostra pedidos abertos e lançamentos de
 estoque/contas não realizados; isso não certifica todos os efeitos assíncronos
 possíveis do provedor. Coletores encerrados; reservas/IDs privados preservados.
 
-## Decisão necessária
+## Decisão do PO e investigação
 
-Recomendação: manter F1-G01 aberto até comprovar um meio suportado de ler
+Em 05/11/2026, o PO escolheu **manter bloqueado e buscar leitura confiável**.
+Não foram adotadas a restrição a duas casas nem a conferência humana como
+substituto. A [investigação pública](monetary-readback-research.md) não comprovou
+um leitor monetário automático fiel. A pergunta técnica ao fornecedor está
+preparada, sem envio; nenhum novo GET autenticado ou efeito ERP foi executado.
+
+Mantém-se F1-G01 aberto até comprovar um meio suportado de ler
 subtotais e total com fidelidade. Não é necessário novo pedido para apresentar
 o problema ao fornecedor. Preparar dúvida técnica não autoriza enviá-la nem
 compartilhar credenciais, IDs ou dados fiscais. Novas consultas autenticadas
 exigem novo orçamento, pois o atual terminou.
 
-Alternativas que exigem decisão explícita do PO e registro do contrato:
+Alternativas não escolhidas, que exigiriam decisão explícita e registro do contrato:
 
 1. Restringir geração automática aos unitários derivados exatos com até duas
    casas, mantendo os demais Pedidos válidos no CRM e bloqueados para Olist.
@@ -113,7 +119,7 @@ Alternativas que exigem decisão explícita do PO e registro do contrato:
    Acrescenta fluxo operacional e estados de revisão; não equivale a conciliação
    automática nem está autorizado por este relatório.
 
-Sem uma dessas decisões ou prova nova, T02 permanece desmarcada. F1-G02 e a
+A decisão escolhida preserva T02 desmarcada até prova nova. F1-G02 e a
 parte de roundtrip de F1-G04 foram comprovados na amostra; G03 tem um conjunto
 fiscal real aceito, não uma validação fiscal universal. OAuth/refresh/PKCE,
 concorrência, quotas compartilhadas e falhas de runtime continuam nos gates

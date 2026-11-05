@@ -692,8 +692,10 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       unitários arredondados; C03 traz total de produtos 1.08 contra R$ 1,10 na
       UI, e C04 total do pedido 0.01 contra R$ 0,02 na UI. F1-G01 permanece:
       falta leitura monetária automática fiel. T02 desmarcada e T03/Fase 2 não
-      liberadas; decisão do PO necessária para reduzir o escopo ou acrescentar
-      conferência humana. Não inferir precisão máxima, idempotência remota ou
+      liberadas. Em 05/11/2026 o PO decidiu manter o bloqueio e buscar leitura
+      confiável, preservando o contrato. A [investigação pública](../integrations/olist/monetary-readback-research.md)
+      não comprovou leitor fiel; nenhuma nova consulta autenticada ou mensagem
+      externa foi executada. Não inferir precisão máxima, idempotência remota ou
       atomicidade composta. Executor atual com 25 testes locais aprovados.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado

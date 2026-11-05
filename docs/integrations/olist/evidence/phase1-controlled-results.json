@@ -137,7 +137,7 @@
     "userHandoffRequiredForCredentialChange": true,
     "legacyTokenDependenciesMustBeReviewedBeforeRotation": true
   },
-  "decisionRequired": "F1-G01: prove a reliable supported monetary reader before automatic reconciliation, or obtain an explicit product decision narrowing the contract or requiring human verification. No option approved by this artifact.",
+  "decisionRequired": "PO chose to keep F1-G01 open and seek reliable monetary readback. No contract narrowing or human-verification substitution approved. A supported precise reader and new remote proof remain required.",
   "privacy": "Only fixed aliases, public case amounts, boolean conclusions and integer counters. Resource IDs, fiscal documents, addresses, private hashes, raw errors, OAuth codes, credentials and screenshots are excluded.",
   "checkpoints": [
     {
@@ -187,5 +187,16 @@
     "controlled-batch.fixtures.mjs": "801c03cf983f12c9de780467b115aa66e64736b7abc315cf566ab41dc1e0ae4a",
     "batch-session.mjs": "b6d22e7544ef514356bf29a979606e96c1a686483d77a874f24222ea4bac7dea",
     "batch-session.test.mjs": "738f76de902fc8beab7405663d039c6e94496d7341d2954d0d390a3a2227597a"
+  },
+  "productOwnerDecision": {
+    "recordedOn": "2026-11-05",
+    "choice": "Manter bloqueado e buscar leitura confiável (recomendado)",
+    "gateRemainsOpen": true,
+    "twoDecimalRestrictionApproved": false,
+    "humanVerificationSubstitutionApproved": false,
+    "newAuthenticatedCallsApproved": false,
+    "newBusinessWritesApproved": false,
+    "externalSupportContactApproved": false,
+    "researchEvidence": "monetary-readback-research.json"
   }
 }
