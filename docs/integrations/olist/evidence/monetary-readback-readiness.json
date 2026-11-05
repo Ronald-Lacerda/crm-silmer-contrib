@@ -8,18 +8,36 @@
     "olistNamesFound": 0,
     "credentialNamesChecked": 20,
     "olistCredentialNamesFound": 0,
-    "workflowBodiesAndArchivedWorkflowsVerified": false
+    "workflowBodiesAndArchivedWorkflowsVerified": false,
+    "publishedWorkflowBodiesChecked": 3,
+    "publishedWorkflowNodesChecked": 250,
+    "olistNodeReferencesFound": 0,
+    "executeWorkflowNodesFound": 0
   },
-  "erpAccountIntegrationDependenciesVerified": false,
+  "erpAccountIntegrationDependenciesVerified": true,
   "dependencyFreeConclusionProven": false,
-  "credentialRotations": 0,
+  "credentialRotations": 2,
   "authorizedOrderReadBudget": 6,
-  "attemptedOrderReads": 0,
-  "remainingOrderReads": 6,
+  "attemptedOrderReads": 2,
+  "remainingOrderReads": 4,
   "blockers": [
-    "ERP_LOGIN_REQUIRED",
-    "LEGACY_TOKEN_DEPENDENCIES_NOT_FULLY_VERIFIED",
-    "CREDENTIAL_RENEWAL_PENDING"
+    "REMOTE_COMPARISON_INCOMPLETE",
+    "EXPLICIT_ADDITIONAL_READ_APPROVAL_REQUIRED",
+    "F1_G01_MONETARY_FIDELITY_UNPROVEN"
   ],
-  "privateValuesIncluded": false
+  "privateValuesIncluded": false,
+  "erpIntegrationLabelsChecked": [
+    "Shopee",
+    "TikTok Shop",
+    "CRM Silmer - prova F1 - controlada"
+  ],
+  "dependencyScopeConclusion": "No legacy-token consumer identified within the checked services, runtime and three published workflow bodies; external consumers and archived workflows are not proven absent.",
+  "appKeysRenewedAndSaved": true,
+  "legacyTokenRenewedAndPersisted": true,
+  "oauthSucceeded": true,
+  "completedComparisons": 1,
+  "stopCode": "INVALID_CONTENT_TYPE",
+  "continuationApprovalPending": true,
+  "proposedContinuationReads": 5,
+  "proposedMaximumTotalAttempts": 7
 }

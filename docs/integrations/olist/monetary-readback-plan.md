@@ -84,7 +84,7 @@ node docs/integrations/olist/monetary-readback-probe.mjs --live <diretorio-priva
 
 O último comando espera o JSON privado no stdin. Não iniciá-lo com valores
 antigos ou sem a sessão verificada. O plano privado foi preparado localmente;
-nenhuma reserva de leitura remota foi consumida.
+o estado atual de execução está na seção de retomada operacional abaixo.
 
 ## Verificação
 
@@ -116,25 +116,46 @@ uma ferramenta diagnóstica de T02, não a conclusão de T02 ou homologação ER
 
 ## Retomada operacional — renovação autorizada em 05/11
 
-O PO autorizou explicitamente renovar as credenciais, conferir dependências
-do token legado e executar as seis consultas. A inspeção encontrou sessão
-Olist expirada; o login foi solicitado ao usuário. Não houve renovação,
-revogação ou chamada autenticada ao ERP. O journal remoto ainda não existe:
-seis leituras permanecem disponíveis, e F1-G01/T02 continuam abertos.
+O PO renovou e salvou as chaves do aplicativo e renovou o token legado,
+que permaneceu renovado após recarregar a página. Callback e permissões foram
+preservados. A conta ERP foi conferida contra o plano privado. A auditoria
+não identificou consumidor do token legado no runtime do CRM, nos ambientes
+dos 44 serviços acessíveis nem nos corpos dos três workflows publicados do
+n8n (250 nós; sem chamadas de subworkflow). Foram conferidos 12 nomes de
+workflows não arquivados e 20 nomes de credenciais. A conta ERP lista Shopee,
+TikTok Shop e o aplicativo de prova. Isso delimita o escopo verificado;
+não comprova ausência de consumidores externos ou workflows arquivados.
+A exportação do Checkout InfinitePay foi concluída manualmente pelo PO.
 
 A [projeção sanitizada de prontidão](evidence/monetary-readback-readiness.json)
-registra os limites da revisão de dependências:
+registra a renovação, o escopo da auditoria e as duas leituras consumidas.
+A primeira autenticação usou o valor de um campo oculto, que não correspondia
+ao segredo revelado pelo controle Exibir; falhou antes de ler pedidos.
+A captura correta, seguida de Ocultar, permitiu a troca OAuth.
 
-- Nenhuma referência Olist/Tiny nas fronteiras de runtime/configuração
-  rastreadas do CRM consultadas.
-- As configurações de ambiente dos 44 serviços acessíveis foram verificadas
-  sem encontrar variável com nome/referência Olist/Tiny/API v2.
-- Na UI n8n foram observados 12 nomes de workflows não arquivados e 20 nomes
-  de credenciais sem identificação Olist/Tiny. Isso não verifica tokens
-  embutidos nos corpos dos workflows, credenciais genéricas ou fluxos arquivados.
-- As integrações da conta ERP não foram verificadas nesta retomada por falta
-  de sessão autenticada. **Ausência de dependência não está comprovada**;
-  não revogar o token legado com base apenas nessas buscas.
+O journal original registra C02/v3 comparado e C02/v2 HTTP 200 interrompido
+por `INVALID_CONTENT_TYPE`, antes de interpretar o corpo. Foram consumidas
+**duas das seis tentativas**, com quatro restantes. Não há resposta v2
+recuperável dessa tentativa. O tipo MIME exato não foi registrado pelo leitor
+anterior. O diagnóstico C02/v3 mantém 0,33 × 3 e 0,67 × 3: soma R$ 3,00,
+mas subtotais calculados R$ 0,99/R$ 2,01 divergem da UI R$ 1,00/R$ 2,00.
+
+O leitor atualizado aceita JSON v2 rotulado como `text/plain` ou `text/html`
+no endpoint PHP fixo, com parse estrito, limite de tamanho e validação de
+identidade preservados. HTML real continua rejeitado; v3 exige JSON.
+O MIME é registrado apenas como enumeração segura.
+
+A continuação está preparada, mas depende de aprovação adicional explícita:
+**cinco leituras** (C02/v2, C03/v3, C03/v2, C04/v3, C04/v2), sete tentativas
+no total. Não reinicia as seis originais. Exige `five-read-approval.json`
+privado com `approved: true`, código de aprovação específico e SHA-256 do
+journal original; valida a sequência anterior e cria exclusivamente
+`five-read-journal.jsonl`, sem sobrescrever o original ou permitir retomada
+implícita. Não alterar o arquivo de aprovação antes da resposta do PO.
+
+```text
+node docs/integrations/olist/monetary-readback-session.mjs <diretorio-privado-f1>/monetary-readback --continue-five
+```
 
 Foi acrescentada [sessão OAuth específica](monetary-readback-session.mjs),
 sem os oito GETs do coletor antigo. Ela importa um envelope RSA-OAEP/SHA-256
@@ -154,11 +175,15 @@ O envelope privado contém `clientId`, `clientSecret`, `v2Token`,
 `verifiedAccountDocument` e `credentialsRenewed: true`; a chave privada fica
 em memória. Só gerar/importar esse envelope após renovação real e revisão
 das dependências. Nunca colocar os valores em chat, argumentos de shell,
-capturas ou arquivos em claro. Não há coletor real iniciado nesta etapa.
+capturas ou arquivos em claro. Não há coletor real ativo; a sessão anterior foi encerrada após a interrupção.
 
-Validação da retomada: 31/31 testes offline aprovados em Node 24.20.0, sem
+Validação atual: 40/40 testes offline aprovados em Node 24.20.0, sem
 skips, incluindo OAuth mockado + exatamente seis consultas, callback forjado,
-credenciais não renovadas e fechamento durante importação do envelope.
+credenciais não renovadas, fechamento durante importação do envelope,
+aprovação separada da continuação e exatamente cinco leituras com OAuth mockado.
+Regressão completa dos oito arquivos Olist: **111/111**, sem skips; QA da
+continuação sem finding bloqueante. O teto de sete tentativas não é evidência
+de execução: o realizado permanece em duas até a autorização adicional.
 QA identificou uma corrida de descarte na importação; a guarda de fechamento
 e o descarte em `finally` foram incorporados antes da publicação.
 

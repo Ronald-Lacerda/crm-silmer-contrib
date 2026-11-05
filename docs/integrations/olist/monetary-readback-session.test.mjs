@@ -7,6 +7,7 @@ import {
   readdir,
   unlink,
   rmdir,
+  link,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,7 +17,10 @@ import {
   startMonetarySession,
   validateRenewedCredentials,
 } from './monetary-readback-session.mjs';
-import { READ_APPROVAL } from './monetary-readback-probe.mjs';
+import {
+  READ_APPROVAL,
+  FIVE_READ_APPROVAL,
+} from './monetary-readback-probe.mjs';
 
 const input = () => ({
   clientId: 'MOCK_CLIENT',
@@ -70,6 +74,7 @@ async function setup(t, fetcher, options = {}) {
     join(root, 'private-plan.json'),
     JSON.stringify(fixturePlan()),
   );
+  await options.beforeStart?.(root);
   const session = await startMonetarySession(root, {
     fetcher,
     pause: async () => {},
@@ -94,7 +99,11 @@ async function setup(t, fetcher, options = {}) {
       },
       Buffer.from(JSON.stringify(values)),
     );
-    await writeFile(session.encryptedInputFile, ciphertext, { flag: 'wx' });
+    const staging = session.encryptedInputFile + '.staged';
+    await writeFile(staging, ciphertext, { flag: 'wx' });
+    // Publish the complete ciphertext exclusively, never a temporarily empty file.
+    await link(staging, session.encryptedInputFile);
+    await unlink(staging);
   };
   return { root, session, envelope };
 }
@@ -289,4 +298,239 @@ test('forged callback state stops before OAuth and consumes no order budget', as
   await assert.rejects(readFile(join(root, 'six-read-journal.jsonl')), {
     code: 'ENOENT',
   });
+});
+
+for (const [label, responseFactory, code, status] of [
+  [
+    '401',
+    () => new Response('PRIVATE_PROVIDER_DETAIL', { status: 401 }),
+    'HTTP_401',
+    401,
+  ],
+  [
+    'invalid JSON',
+    () =>
+      new Response('PRIVATE_PROVIDER_DETAIL', {
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    'INVALID_RESPONSE',
+    200,
+  ],
+  [
+    'network failure',
+    () => {
+      throw new Error('PRIVATE_URL_AND_SECRET');
+    },
+    'HTTP_OUTCOME_UNKNOWN',
+    null,
+  ],
+])
+  test(
+    'OAuth ' +
+      label +
+      ' records safe stage/status and never spends order-read budget',
+    async (t) => {
+      let calls = 0;
+      const { root, session, envelope } = await setup(t, (url, init) => {
+        calls++;
+        assert.equal(
+          url,
+          'https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/token',
+        );
+
+        assert.equal(init.method, 'POST');
+        return responseFactory();
+      });
+      await envelope(input());
+      await waitUntil(() => session.phase === 'ready_oauth');
+      const html = await (await fetch('http://127.0.0.1:8765/')).text();
+      const auth = new URL(
+        html.match(/href="([^"]+)"/)[1].replaceAll('&amp;', '&'),
+      );
+      const callback = await fetch(
+        'http://127.0.0.1:8765/olist/callback?code=MOCK_CODE&state=' +
+          auth.searchParams.get('state'),
+        { redirect: 'manual' },
+      );
+      assert.equal(callback.status, 303);
+      await waitUntil(() => session.result !== null);
+      assert.equal(session.result.code, code);
+      assert.equal(session.result.stage, 'oauth_exchange');
+      assert.equal(session.result.oauthPostAttempts, 1);
+      assert.equal(session.result.oauthHttpStatus, status);
+      assert.equal(calls, 1);
+      assert.ok(!JSON.stringify(session.result).includes('PRIVATE'));
+      await assert.rejects(readFile(join(root, 'six-read-journal.jsonl')), {
+        code: 'ENOENT',
+      });
+    },
+  );
+
+test('five-read mode requires a separate explicit approval before OAuth or listening', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'olist-five-approval-'));
+  t.after(async () => {
+    for (const f of await readdir(root)) await unlink(join(root, f));
+    await rmdir(root);
+  });
+  await writeFile(
+    join(root, 'private-plan.json'),
+    JSON.stringify(fixturePlan()),
+  );
+  await writeFile(
+    join(root, 'five-read-approval.json'),
+    JSON.stringify({ approved: false, approval: FIVE_READ_APPROVAL }),
+  );
+  await assert.rejects(
+    startMonetarySession(root, {
+      mode: 'continuation-five',
+      fetcher: () => assert.fail('NO NETWORK'),
+    }),
+    /EXPLICIT_FIVE_READ_APPROVAL_REQUIRED/,
+  );
+});
+
+test('approved continuation session obtains one fresh token then exactly five fixed reads', async (t) => {
+  const calls = [];
+  let baseline;
+  const fetcher = async (url, init) => {
+    if (
+      url ===
+      'https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/token'
+    ) {
+      calls.push('oauth');
+      return new Response(JSON.stringify({ access_token: 'MOCK_ACCESS' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const version = init.method === 'GET' ? 'v3' : 'v2';
+    const orderId =
+      version === 'v3'
+        ? new URL(url).pathname.split('/').at(-1)
+        : new URLSearchParams(init.body).get('id');
+    const order = fixturePlan().plan.orders.find((o) => o.id === orderId);
+    assert.ok(order);
+    calls.push(order.alias + '-' + version);
+    const body =
+      version === 'v3'
+        ? {
+            id: Number(orderId),
+            ecommerce: {
+              id: 7,
+              numeroPedidoEcommerce: order.reference,
+            },
+            cliente: { id: 8, cpfCnpj: '00000000000000' },
+            data: '2026-11-04',
+            itens: [
+              {
+                produto: { id: 1, sku: 'MOCK-M' },
+                quantidade: 1,
+                valorUnitario: 0.01,
+              },
+            ],
+            valorTotalProdutos: 0.01,
+            valorTotalPedido: 0.01,
+          }
+        : {
+            retorno: {
+              status: 'OK',
+              pedido: {
+                id: orderId,
+                numero_ecommerce: order.reference,
+                cliente: { cpf_cnpj: '00000000000000' },
+                data_pedido: '04/11/2026',
+                itens: [
+                  {
+                    item: {
+                      id_produto: '1',
+                      codigo: 'MOCK-M',
+                      quantidade: '1',
+                      valor_unitario: '0.01',
+                    },
+                  },
+                ],
+                total_produtos: '0.01',
+                total_pedido: '0.01',
+              },
+            },
+          };
+    return new Response(JSON.stringify(body), {
+      headers: {
+        'Content-Type': version === 'v2' ? 'text/plain' : 'application/json',
+      },
+    });
+  };
+  const { root, session, envelope } = await setup(t, fetcher, {
+    mode: 'continuation-five',
+    beforeStart: async (root) => {
+      baseline =
+        [
+          {
+            event: 'six-read-budget-reserved',
+            planDigest: fixturePlan().approvedDigest,
+            maximumReads: 6,
+          },
+          {
+            event: 'read-attempt-reserved',
+            attempt: 1,
+            alias: 'C02',
+            version: 'v3',
+          },
+          { event: 'read-compared', alias: 'C02', version: 'v3' },
+          {
+            event: 'read-attempt-reserved',
+            attempt: 2,
+            alias: 'C02',
+            version: 'v2',
+          },
+          {
+            event: 'stopped',
+            code: 'INVALID_CONTENT_TYPE',
+            attemptedReads: 2,
+          },
+        ]
+          .map((x) => JSON.stringify(x))
+          .join('\n') + '\n';
+      await writeFile(join(root, 'six-read-journal.jsonl'), baseline);
+      await writeFile(
+        join(root, 'five-read-approval.json'),
+        JSON.stringify({
+          approved: true,
+          approval: FIVE_READ_APPROVAL,
+          previousJournalSha256: createHash('sha256')
+            .update(baseline)
+            .digest('hex'),
+        }),
+      );
+    },
+  });
+  await envelope(input());
+  await waitUntil(() => session.phase === 'ready_oauth');
+  const html = await (await fetch('http://127.0.0.1:8765/')).text();
+  assert.ok(html.includes('5 consultas'));
+  const auth = new URL(
+    html.match(/href="([^"]+)"/)[1].replaceAll('&amp;', '&'),
+  );
+  await fetch(
+    'http://127.0.0.1:8765/olist/callback?code=MOCK_CODE&state=' +
+      auth.searchParams.get('state'),
+    { redirect: 'manual' },
+  );
+  await waitUntil(
+    () => session.phase === 'five_read_continuation_completed_diagnostic_only',
+  );
+  assert.deepEqual(calls, [
+    'oauth',
+    'C02-v2',
+    'C03-v3',
+    'C03-v2',
+    'C04-v3',
+    'C04-v2',
+  ]);
+  assert.equal(session.result.attemptedReads, 5);
+  assert.equal(session.result.maximumTotalOrderReadAttempts, 7);
+  assert.equal(
+    await readFile(join(root, 'six-read-journal.jsonl'), 'utf8'),
+    baseline,
+  );
+  assert.equal(session.result.f1GatePassed, false);
 });

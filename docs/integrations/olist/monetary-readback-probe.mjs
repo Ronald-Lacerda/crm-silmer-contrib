@@ -1,7 +1,7 @@
-/** OLIST-T02 / F1-G01. Six order reads only. No ERP mutation, OAuth or retry. */
+/** OLIST-T02 / F1-G01. Bounded approved order reads; no ERP mutation, OAuth or retry. */
 import { createHash } from 'node:crypto';
 import { open, readFile, writeFile, mkdir } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { compareMoney, decimal } from './monetary-comparator.mjs';
@@ -9,6 +9,8 @@ import { compareMoney, decimal } from './monetary-comparator.mjs';
 const V3 = 'https://api.tiny.com.br/public-api/v3/pedidos/';
 const V2 = 'https://api.tiny.com.br/api2/pedido.obter.php';
 export const READ_APPROVAL = 'OLIST-T02-READBACK-SIX-READS';
+export const FIVE_READ_APPROVAL =
+  'OLIST-T02-C02-V2-REPLACEMENT-AND-FOUR-REMAINING';
 const aliases = ['C02', 'C03', 'C04'];
 const resourceNames = ['new-M', 'new-G', 'existing-M-from-C01'];
 class ProbeError extends Error {}
@@ -145,16 +147,27 @@ export function normalizeReadback(version, body, plan, order) {
     ),
   };
 }
-async function responseText(response) {
+function contentTypeKind(response) {
+  const type = (response.headers.get('content-type') ?? '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  return ['application/json', 'text/plain', 'text/html'].includes(type)
+    ? type
+    : 'other';
+}
+async function responseText(response, version) {
   const reject = async (code) => {
     await response.body?.cancel().catch(() => {});
     fail(code);
   };
   if (response.status !== 200) return reject('READBACK_HTTP_REJECTED');
+  const type = contentTypeKind(response);
+  // The legacy PHP route may label JSON as text. Still parse strict JSON below;
+  // HTML/challenges never become a valid order, and v3 remains JSON-only.
   if (
-    !/^application\/json(?:\s*;|$)/i.test(
-      response.headers.get('content-type') ?? '',
-    )
+    type !== 'application/json' &&
+    !(version === 'v2' && ['text/plain', 'text/html'].includes(type))
   )
     return reject('INVALID_CONTENT_TYPE');
   let size = 0;
@@ -171,6 +184,52 @@ async function responseText(response) {
   }
   return Buffer.concat(chunks).toString('utf8');
 }
+export async function verifyFiveReadContinuation(
+  plan,
+  approvedDigest,
+  continuation,
+) {
+  if (
+    continuation?.approval !== FIVE_READ_APPROVAL ||
+    typeof continuation.previousJournalPath !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(continuation.previousJournalSha256 ?? '')
+  )
+    fail('FIVE_READ_APPROVAL_REQUIRED');
+  validatePlan(plan);
+  if (digest(plan) !== approvedDigest) fail('READ_PLAN_APPROVAL_REQUIRED');
+  const raw = await readFile(continuation.previousJournalPath);
+  if (
+    createHash('sha256').update(raw).digest('hex') !==
+    continuation.previousJournalSha256
+  )
+    fail('PREVIOUS_READ_JOURNAL_CHANGED');
+  let events;
+  try {
+    events = raw.toString('utf8').trim().split('\n').map(JSON.parse);
+  } catch {
+    fail('INVALID_PREVIOUS_READ_JOURNAL');
+  }
+  const attempts = events.filter((e) => e.event === 'read-attempt-reserved');
+  const compared = events.filter((e) => e.event === 'read-compared');
+  if (
+    events[0]?.event !== 'six-read-budget-reserved' ||
+    events[0].planDigest !== approvedDigest ||
+    events[0].maximumReads !== 6 ||
+    JSON.stringify(attempts.map((e) => [e.attempt, e.alias, e.version])) !==
+      JSON.stringify([
+        [1, 'C02', 'v3'],
+        [2, 'C02', 'v2'],
+      ]) ||
+    compared.length !== 1 ||
+    compared[0].alias !== 'C02' ||
+    compared[0].version !== 'v3' ||
+    events.at(-1)?.event !== 'stopped' ||
+    events.at(-1).code !== 'INVALID_CONTENT_TYPE' ||
+    events.at(-1).attemptedReads !== 2
+  )
+    fail('CONTINUATION_BASELINE_NOT_CONFIRMED');
+  return { previousOrderReadAttempts: 2, maximumTotalOrderReadAttempts: 7 };
+}
 export async function runReadbackProbe(
   plan,
   {
@@ -180,12 +239,14 @@ export async function runReadbackProbe(
     fetcher = fetch,
     pause = delay,
     signal,
+    continuation,
   } = {},
 ) {
   validatePlan(plan);
   // Capture immutable inputs before any await, including references from caller.
   plan = JSON.parse(JSON.stringify(plan));
   credentials = { ...credentials };
+  continuation = continuation ? { ...continuation } : null;
   if (approvedDigest !== digest(plan)) fail('READ_PLAN_APPROVAL_REQUIRED');
   if (credentials.credentialsRenewed !== true)
     fail('CREDENTIAL_RENEWAL_REQUIRED');
@@ -206,6 +267,25 @@ export async function runReadbackProbe(
     fail('PRIVATE_CREDENTIALS_REQUIRED');
   if (typeof journalPath !== 'string' || !journalPath)
     fail('PRIVATE_JOURNAL_REQUIRED');
+  const carry = continuation
+    ? await verifyFiveReadContinuation(plan, approvedDigest, continuation)
+    : null;
+  if (
+    carry &&
+    resolve(journalPath) !==
+      resolve(
+        dirname(continuation.previousJournalPath),
+        'five-read-journal.jsonl',
+      )
+  )
+    fail('CONTINUATION_JOURNAL_PATH_INVALID');
+  const maximumReads = carry ? 5 : 6;
+  const schedule = plan.orders
+    .flatMap((order) => ['v3', 'v2'].map((version) => ({ order, version })))
+    .filter(
+      ({ order, version }) =>
+        !carry || order.alias !== 'C02' || version === 'v2',
+    );
   let journal;
   try {
     journal = await open(journalPath, 'wx', 0o600);
@@ -220,82 +300,100 @@ export async function runReadbackProbe(
   };
   try {
     await record({
-      event: 'six-read-budget-reserved',
+      event: carry
+        ? 'five-read-continuation-reserved'
+        : 'six-read-budget-reserved',
       planDigest: approvedDigest,
-      maximumReads: 6,
+      maximumReads,
+      ...(carry
+        ? {
+            ...carry,
+            previousJournalSha256: continuation.previousJournalSha256,
+          }
+        : {}),
     });
-    for (const order of plan.orders)
-      for (const version of ['v3', 'v2']) {
-        if (signal?.aborted) fail('READBACK_STOPPED');
-        if (attemptedReads) await pause(1500);
-        if (signal?.aborted) fail('READBACK_STOPPED');
-        // Failed requests consume their slot. A restart never gets a fresh budget.
-        await record({
-          event: 'read-attempt-reserved',
-          attempt: attemptedReads + 1,
-          alias: order.alias,
-          version,
-        });
-        attemptedReads++;
-        let response;
-        try {
-          response = await fetcher(version === 'v3' ? V3 + order.id : V2, {
-            method: version === 'v3' ? 'GET' : 'POST',
-            redirect: 'error',
-            headers:
-              version === 'v3'
-                ? {
-                    Accept: 'application/json',
-                    Authorization: 'Bearer ' + credentials.v3AccessToken,
-                  }
-                : {
-                    Accept: 'application/json',
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                  },
-            ...(version === 'v2'
+    for (const { order, version } of schedule) {
+      if (signal?.aborted) fail('READBACK_STOPPED');
+      if (attemptedReads) await pause(1500);
+      if (signal?.aborted) fail('READBACK_STOPPED');
+      // Failed requests consume their slot. A restart never gets a fresh budget.
+      await record({
+        event: 'read-attempt-reserved',
+        attempt: attemptedReads + 1,
+        alias: order.alias,
+        version,
+      });
+      attemptedReads++;
+      let response;
+      try {
+        response = await fetcher(version === 'v3' ? V3 + order.id : V2, {
+          method: version === 'v3' ? 'GET' : 'POST',
+          redirect: 'error',
+          headers:
+            version === 'v3'
               ? {
-                  body: new URLSearchParams({
-                    token: credentials.v2Token,
-                    formato: 'json',
-                    id: order.id,
-                  }).toString(),
+                  Accept: 'application/json',
+                  Authorization: 'Bearer ' + credentials.v3AccessToken,
                 }
-              : {}),
-            signal: signal
-              ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
-              : AbortSignal.timeout(15000),
-          });
-        } catch {
-          fail('READBACK_HTTP_OUTCOME_UNKNOWN');
-        }
-        const normalized = normalizeReadback(
-          version,
-          parseDecimalJson(await responseText(response)),
-          plan,
-          order,
-        );
-        const comparison = compareMoney(order.expected, normalized);
-        // Store only fixed aliases, decimal lexemes and diagnostic data, never raw PII.
-        const result = {
-          alias: order.alias,
-          version,
-          observed: normalized,
-          comparison,
-        };
-        await record({ event: 'read-compared', ...result });
-        results.push(result);
-        if (
-          response.headers.get('x-ratelimit-remaining') === '0' &&
-          attemptedReads < 6
-        )
-          fail('READBACK_RATE_LIMIT_EXHAUSTED');
+              : {
+                  Accept: 'application/json',
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+          ...(version === 'v2'
+            ? {
+                body: new URLSearchParams({
+                  token: credentials.v2Token,
+                  formato: 'json',
+                  id: order.id,
+                }).toString(),
+              }
+            : {}),
+          signal: signal
+            ? AbortSignal.any([signal, AbortSignal.timeout(15000)])
+            : AbortSignal.timeout(15000),
+        });
+      } catch {
+        fail('READBACK_HTTP_OUTCOME_UNKNOWN');
       }
+      await record({
+        event: 'read-response-received',
+        attempt: attemptedReads,
+        alias: order.alias,
+        version,
+        httpStatus: response.status,
+        contentType: contentTypeKind(response),
+      });
+      const normalized = normalizeReadback(
+        version,
+        parseDecimalJson(await responseText(response, version)),
+        plan,
+        order,
+      );
+      const comparison = compareMoney(order.expected, normalized);
+      // Store only fixed aliases, decimal lexemes and diagnostic data, never raw PII.
+      const result = {
+        alias: order.alias,
+        version,
+        observed: normalized,
+        comparison,
+      };
+      await record({ event: 'read-compared', ...result });
+      results.push(result);
+      if (
+        response.headers.get('x-ratelimit-remaining') === '0' &&
+        attemptedReads < maximumReads
+      )
+        fail('READBACK_RATE_LIMIT_EXHAUSTED');
+    }
     const result = {
-      state: 'six_reads_completed_diagnostic_only',
+      state: carry
+        ? 'five_read_continuation_completed_diagnostic_only'
+        : 'six_reads_completed_diagnostic_only',
       attemptedReads,
       erpWrites: 0,
       results,
       f1GatePassed: false,
+      ...(carry ?? {}),
     };
     await record({ event: 'finished', attemptedReads, f1GatePassed: false });
     return result;
@@ -307,6 +405,7 @@ export async function runReadbackProbe(
       erpWrites: 0,
       results,
       f1GatePassed: false,
+      ...(carry ?? {}),
     };
     await record({ event: 'stopped', code: result.code, attemptedReads }).catch(
       () => {},

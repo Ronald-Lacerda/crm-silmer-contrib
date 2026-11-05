@@ -1,4 +1,4 @@
-/** OLIST-T02: fresh OAuth in memory, then only the six approved order reads. */
+/** OLIST-T02: fresh OAuth in memory, then the approved initial or continuation schedule. */
 import { createServer } from 'node:http';
 import {
   generateKeyPairSync,
@@ -16,7 +16,11 @@ import {
   boundedJson,
   normalizeDocument,
 } from './read-only-probe.mjs';
-import { runReadbackProbe } from './monetary-readback-probe.mjs';
+import {
+  runReadbackProbe,
+  verifyFiveReadContinuation,
+  FIVE_READ_APPROVAL,
+} from './monetary-readback-probe.mjs';
 
 const LOCAL = 'http://127.0.0.1:8765';
 const TOKEN =
@@ -29,9 +33,18 @@ const safeCode = (e) =>
     'CALLBACK_ALREADY_USED',
     'INVALID_CALLBACK_STATE',
     'TOKEN_MISSING',
+    'HTTP_OUTCOME_UNKNOWN',
+    'INVALID_CONTENT_TYPE',
+    'INVALID_RESPONSE',
+    'BODY_TOO_LARGE',
+    'READ_PLAN_APPROVAL_REQUIRED',
+    'PRIVATE_CREDENTIALS_REQUIRED',
+    'READ_JOURNAL_UNAVAILABLE_OR_ALREADY_RESERVED',
   ].includes(e?.message)
     ? e.message
-    : 'MONETARY_SESSION_STOPPED';
+    : /^HTTP_[1-5]\d{2}$/.test(e?.message ?? '')
+      ? e.message
+      : 'MONETARY_SESSION_STOPPED';
 const escape = (x) =>
   String(x).replace(
     /[&<>"']/g,
@@ -76,13 +89,42 @@ export async function startMonetarySession(
     importIntervalMs = 1000,
     lifetimeMs = 30 * 60 * 1000,
     readEncryptedInput = readFile,
+    mode = 'initial',
   } = {},
 ) {
   root = resolve(root);
   const prepared = JSON.parse(
     await readFile(join(root, 'private-plan.json'), 'utf8'),
   );
-  const journalPath = join(root, 'six-read-journal.jsonl');
+  if (!['initial', 'continuation-five'].includes(mode))
+    throw new Error('INVALID_READBACK_MODE');
+  let continuation = null;
+  if (mode === 'continuation-five') {
+    const approval = JSON.parse(
+      await readFile(join(root, 'five-read-approval.json'), 'utf8'),
+    );
+    if (approval.approved !== true || approval.approval !== FIVE_READ_APPROVAL)
+      throw new Error('EXPLICIT_FIVE_READ_APPROVAL_REQUIRED');
+    continuation = {
+      approval: approval.approval,
+      previousJournalPath: join(root, 'six-read-journal.jsonl'),
+      previousJournalSha256: approval.previousJournalSha256,
+    };
+    await verifyFiveReadContinuation(
+      prepared.plan,
+      prepared.approvedDigest,
+      continuation,
+    );
+  }
+  const maximumOrderReads = continuation ? 5 : 6;
+  const journalPath = join(
+    root,
+    continuation ? 'five-read-journal.jsonl' : 'six-read-journal.jsonl',
+  );
+  const resultPath = join(
+    root,
+    continuation ? 'five-read-result.json' : 'six-read-result.json',
+  );
   try {
     await stat(journalPath);
     throw new Error('SIX_READ_BUDGET_ALREADY_RESERVED');
@@ -113,7 +155,10 @@ export async function startMonetarySession(
     phase = 'awaiting_renewed_credentials',
     importing = false,
     imported = false,
-    closing = false;
+    closing = false,
+    stage = 'credential_import',
+    oauthPostAttempts = 0,
+    oauthHttpStatus = null;
   const server = createServer(async (req, res) => {
     const send = (status, body) => {
       res.writeHead(status, {
@@ -136,9 +181,13 @@ export async function startMonetarySession(
       if (phase === 'ready_oauth')
         return send(
           200,
-          '<p>Conta conferida e credenciais renovadas importadas em memória. Até seis consultas de pedidos, sem criação ou alteração.</p><a href="' +
+          '<p>Conta conferida e credenciais renovadas importadas em memória. Até ' +
+            maximumOrderReads +
+            ' consultas de pedidos, sem criação ou alteração.</p><a href="' +
             escape(authorizationUrl(credentials.clientId, state)) +
-            '">Conectar Olist para seis consultas</a>',
+            '">Conectar Olist para ' +
+            maximumOrderReads +
+            ' consultas</a>',
         );
       return send(
         200,
@@ -154,6 +203,7 @@ export async function startMonetarySession(
     )
       return send(409, 'Fluxo indisponível.');
     try {
+      stage = 'callback_validation';
       const code = consumeCallback(req.url, req.headers.host, state, latch);
       phase = 'running';
       // Clean code/state from the address bar before any ERP request.
@@ -163,8 +213,26 @@ export async function startMonetarySession(
         'Referrer-Policy': 'no-referrer',
       });
       res.end();
+      stage = 'oauth_exchange';
       let response = await boundedJson(TOKEN, 'POST', {
-        fetcher,
+        fetcher: async (url, init) => {
+          if (
+            url !== TOKEN ||
+            init.method !== 'POST' ||
+            oauthPostAttempts !== 0
+          )
+            throw new Error('OAUTH_REQUEST_NOT_ALLOWED');
+          await writeFile(
+            join(directory, 'oauth-attempt.json'),
+            JSON.stringify({ stage: 'oauth_exchange', maximumAttempts: 1 }) +
+              '\n',
+            { flag: 'wx', mode: 0o600 },
+          );
+          oauthPostAttempts++;
+          const returned = await fetcher(url, init);
+          oauthHttpStatus = returned.status;
+          return returned;
+        },
         signal: controller.signal,
         body: new URLSearchParams({
           grant_type: 'authorization_code',
@@ -189,6 +257,7 @@ export async function startMonetarySession(
       response = null;
       credentials = null;
       try {
+        stage = 'order_readback';
         result = await runReadbackProbe(prepared.plan, {
           credentials: fresh,
           approvedDigest: prepared.approvedDigest,
@@ -196,21 +265,25 @@ export async function startMonetarySession(
           fetcher,
           signal: controller.signal,
           ...(pause ? { pause } : {}),
+          ...(continuation ? { continuation } : {}),
         });
       } finally {
         fresh.v3AccessToken = null;
         fresh.v2Token = null;
       }
-      await writeFile(
-        join(root, 'six-read-result.json'),
-        JSON.stringify(result, null, 2) + '\n',
-        { flag: 'wx', mode: 0o600 },
-      );
+      stage = 'result_persistence';
+      await writeFile(resultPath, JSON.stringify(result, null, 2) + '\n', {
+        flag: 'wx',
+        mode: 0o600,
+      });
       if (!closing) phase = result.state;
     } catch (e) {
       result = {
         state: 'session_stopped',
         code: safeCode(e),
+        stage,
+        oauthPostAttempts,
+        oauthHttpStatus,
         f1GatePassed: false,
       };
       if (!closing) phase = result.state;
@@ -300,6 +373,7 @@ export async function startMonetarySession(
     publicKeyFile,
     encryptedInputFile,
     directory,
+    maximumOrderReads,
     close,
     get phase() {
       return phase;
@@ -314,14 +388,20 @@ if (
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   try {
-    if (process.argv.length !== 3) throw new Error();
-    const session = await startMonetarySession(process.argv[2]);
+    if (
+      ![3, 4].includes(process.argv.length) ||
+      (process.argv.length === 4 && process.argv[3] !== '--continue-five')
+    )
+      throw new Error();
+    const session = await startMonetarySession(process.argv[2], {
+      mode: process.argv[3] ? 'continuation-five' : 'initial',
+    });
     process.stdout.write(
       JSON.stringify({
         localUrl: LOCAL,
         publicKeyFile: session.publicKeyFile,
         encryptedInputFile: session.encryptedInputFile,
-        maximumOrderReads: 6,
+        maximumOrderReads: session.maximumOrderReads,
         oauthErpGetCalls: 0,
         lifetimeMinutes: 30,
       }) + '\n',

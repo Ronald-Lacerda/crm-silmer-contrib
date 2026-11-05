@@ -698,9 +698,12 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       externa foi executada. Não inferir precisão máxima, idempotência remota ou
       atomicidade composta. Executor atual com 25 testes locais aprovados.
       Continuação autorizada pelo PO em 05/11: [comparador e prova dividida](../integrations/olist/monetary-readback-plan.md),
-      até seis consultas dos pedidos existentes pelas APIs v2/v3. Preparação
-      local concluída; credenciais ainda não renovadas conforme informado pelo
-      PO. Nenhuma nova chamada autenticada executada; F1-G01/T02 seguem abertos.
+      até seis consultas dos pedidos existentes pelas APIs v2/v3. O PO renovou
+      as duas credenciais após auditoria no escopo acessível. C02/v3 confirmou
+      divergência por linha; C02/v2 HTTP 200 parou no tipo de conteúdo antes do
+      parse: duas tentativas consumidas. Continuação de cinco leituras preparada
+      (uma adicional; teto sete totais), aguardando aprovação explícita.
+      F1-G01/T02 seguem abertos; 40 testes locais aprovados, QA sem bloqueio.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado
 fiscal inventado ou suposição de idempotência remota. Plano para ausência de

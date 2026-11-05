@@ -127,9 +127,12 @@ T03/T04/T08/T09/T14/T15 correspondentes; mocks não são evidência remota.
 
 Continuação em 05/11: o PO autorizou comparador local e até seis leituras v2 ×
 v3 de C02–C04. O [plano dividido](monetary-readback-plan.md) e os testes
-diagnosticam valores/identidade separadamente. A preparação local foi feita;
-o PO confirmou que as credenciais expostas ainda não foram trocadas, portanto
-a prova remota não foi executada. F1-G01/T02 permanecem abertos.
+diagnosticam valores/identidade separadamente. As duas credenciais foram renovadas pelo PO após auditoria das dependências
+no escopo acessível. A leitura C02/v3 confirmou a perda de fidelidade por
+linha; C02/v2 HTTP 200 parou no tipo de conteúdo antes do parse. Duas das
+seis consultas foram consumidas. A continuação de cinco leituras, incluindo
+uma substituição v2 adicional, aguarda autorização explícita. O journal
+original permanece preservado. F1-G01/T02 permanecem abertos.
 
 ## Verificação e segurança
 
@@ -142,10 +145,10 @@ false` e `sendable: false`; não são instrução para reexecutar os casos.
 
 Falha de mascaramento: saídas de ferramentas exibiram o segredo do aplicativo
 e o token legado da conta sem máscara. Os valores não foram incluídos nos
-arquivos versionados. Não repetir os valores. A troca/revogação não foi
-executada: requer ação do usuário, com revisão das dependências operacionais
-antes de trocar o token legado. Recomenda-se trocar o segredo do aplicativo
-antes de reutilizá-lo. Isso não modifica os registros criados.
+arquivos versionados. Não repetir os valores. O PO renovou o segredo do aplicativo e o token legado após auditoria
+das dependências acessíveis. Isso não modifica os registros criados.
+O escopo e o acompanhamento da exposição de outros serviços estão no
+[plano de retomada](monetary-readback-plan.md).
 
 A revisão automática recusou uma cópia integral de resultados privados para
 artefato público. A alternativa aceita exporta somente contagens inteiras

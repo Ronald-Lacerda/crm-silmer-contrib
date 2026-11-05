@@ -17,6 +17,7 @@ import {
   normalizeReadback,
   parseDecimalJson,
   preparePrivatePlan,
+  FIVE_READ_APPROVAL,
 } from './monetary-readback-probe.mjs';
 
 const credentials = {
@@ -385,6 +386,138 @@ test('journal cannot be replaced to reset budget through ordinary execution', as
   await writeFile(s.journalPath, 'reserved');
   await assert.rejects(s.run(), /READ_JOURNAL_UNAVAILABLE_OR_ALREADY_RESERVED/);
   assert.equal(s.calls.length, 0);
+});
+
+for (const type of ['text/plain; charset=utf-8', 'text/html; charset=UTF-8'])
+  test(
+    'v2 accepts strictly parsed JSON labelled ' +
+      type +
+      ' while v3 remains JSON-only',
+    async (t) => {
+      const s = await scenario(t, {
+        fetcher: ({ p, order, version }) =>
+          new Response(JSON.stringify(providerBody(p, order, version)), {
+            headers: {
+              'Content-Type': version === 'v2' ? type : 'application/json',
+            },
+          }),
+      });
+      const result = await s.run();
+      assert.equal(result.attemptedReads, 6);
+      assert.equal(result.state, 'six_reads_completed_diagnostic_only');
+      assert.equal(result.f1GatePassed, false);
+      const events = (await readFile(s.journalPath, 'utf8'))
+        .trim()
+        .split('\n')
+        .map(JSON.parse);
+      assert.equal(
+        events.filter(
+          (e) => e.event === 'read-response-received' && e.version === 'v2',
+        ).length,
+        3,
+      );
+    },
+  );
+test('HTML from v2 is rejected as invalid JSON instead of being interpreted or repaired', async (t) => {
+  const s = await scenario(t, {
+    fetcher: ({ p, order, version }) =>
+      version === 'v3'
+        ? response(providerBody(p, order, version))
+        : new Response('<html>PRIVATE_CHALLENGE</html>', {
+            headers: { 'Content-Type': 'text/html' },
+          }),
+  });
+  const r = await s.run();
+  assert.equal(r.attemptedReads, 2);
+  assert.equal(r.code, 'INVALID_PROVIDER_JSON');
+  assert.ok(!JSON.stringify(r).includes('PRIVATE_CHALLENGE'));
+});
+test('explicit five-read continuation is fixed, preserves the original two slots and cannot restart', async (t) => {
+  const s = await scenario(t, {
+    fetcher: ({ p, order, version }) =>
+      new Response(JSON.stringify(providerBody(p, order, version)), {
+        headers: {
+          'Content-Type':
+            version === 'v3' ? 'application/json' : 'application/octet-stream',
+        },
+      }),
+  });
+  const stopped = await s.run();
+  assert.equal(stopped.code, 'INVALID_CONTENT_TYPE');
+  assert.equal(stopped.attemptedReads, 2);
+  const previous = await readFile(s.journalPath),
+    journalPath = join(s.journalPath, '..', 'five-read-journal.jsonl');
+  const continuation = {
+    approval: FIVE_READ_APPROVAL,
+    previousJournalPath: s.journalPath,
+    previousJournalSha256: createHash('sha256').update(previous).digest('hex'),
+  };
+  const calls = [];
+  const fetcher = async (url, init) => {
+    const version = init.method === 'GET' ? 'v3' : 'v2';
+    const orderId =
+      version === 'v3'
+        ? new URL(url).pathname.split('/').at(-1)
+        : new URLSearchParams(init.body).get('id');
+    const order = s.p.orders.find((o) => o.id === orderId);
+    assert.ok(order);
+    calls.push([order.alias, version]);
+    const ledger = await readFile(journalPath, 'utf8');
+    assert.ok(ledger.includes('"attempt":' + calls.length));
+    return new Response(JSON.stringify(providerBody(s.p, order, version)), {
+      headers: {
+        'Content-Type': version === 'v2' ? 'text/plain' : 'application/json',
+      },
+    });
+  };
+  const options = { ...s.options, journalPath, continuation, fetcher };
+  try {
+    await assert.rejects(
+      runReadbackProbe(s.p, {
+        ...options,
+        continuation: { ...continuation, approval: 'NOT_APPROVED' },
+      }),
+      /FIVE_READ_APPROVAL_REQUIRED/,
+    );
+    await assert.rejects(
+      runReadbackProbe(s.p, {
+        ...options,
+        continuation: {
+          ...continuation,
+          previousJournalSha256: '0'.repeat(64),
+        },
+      }),
+      /PREVIOUS_READ_JOURNAL_CHANGED/,
+    );
+    await assert.rejects(
+      runReadbackProbe(s.p, {
+        ...options,
+        journalPath: join(s.journalPath, '..', 'alternate.jsonl'),
+      }),
+      /CONTINUATION_JOURNAL_PATH_INVALID/,
+    );
+    assert.equal(calls.length, 0);
+    const r = await runReadbackProbe(s.p, options);
+    assert.equal(r.state, 'five_read_continuation_completed_diagnostic_only');
+    assert.equal(r.attemptedReads, 5);
+    assert.equal(r.previousOrderReadAttempts, 2);
+    assert.equal(r.maximumTotalOrderReadAttempts, 7);
+    assert.deepEqual(calls, [
+      ['C02', 'v2'],
+      ['C03', 'v3'],
+      ['C03', 'v2'],
+      ['C04', 'v3'],
+      ['C04', 'v2'],
+    ]);
+    assert.deepEqual(await readFile(s.journalPath), previous);
+    await assert.rejects(
+      runReadbackProbe(s.p, options),
+      /READ_JOURNAL_UNAVAILABLE_OR_ALREADY_RESERVED/,
+    );
+    assert.equal(calls.length, 5);
+  } finally {
+    await unlink(journalPath).catch(() => {});
+  }
 });
 
 test('private preparation derives existing IDs without network or copying fiscal fields', async (t) => {
