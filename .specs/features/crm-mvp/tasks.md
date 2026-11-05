@@ -68,12 +68,20 @@ incertos antes de qualquer reenvio.
       mensagem, tomar atendimento ou enfileirar transporte; preservar rascunho.
 - [x] Separar falhas conclusivas encerradas e disposições operacionais
       auditadas da projeção ativa, preservando resultados e histórico.
-- [ ] Executar gates completos, CI PostgreSQL e revisar casos negativos.
-- [ ] Publicar e verificar versões, health, workflow e preservação dos demais.
-- [ ] Aplicar os manifestos privados revisados, sem enviar mensagens, e
+- [x] Executar gates completos, CI PostgreSQL e revisar casos negativos.
+- [x] Publicar e verificar versões, health, workflow e preservação dos demais.
+- [x] Aplicar os manifestos privados revisados, sem enviar mensagens, e
       conferir Ativas e Histórico da central.
 
 [Diagnóstico, critérios e rollback](../../../docs/runbooks/inbox-delivery-feedback.md#encerramento-das-pendências-e-reserva-obsoleta-da-ia--04112026).
+
+### OPS-INBOX-SEND-08V — Evidência operacional
+
+- [x] Registrar CI 719 e release da PR 289, serviços saudáveis, principal n8n
+      publicado com delta revisado e 42 outros workflows preservados.
+- [x] Confirmar duas reconciliações e quatro disposições auditadas sem reenvio,
+      resultados originais preservados, zero pendências ativas e quatro grupos
+      históricos resolvidos pela interface autenticada.
 
 ## OPS-INBOX-SEND-07 — Resposta humana após confirmar pedido (04/11/2026)
 

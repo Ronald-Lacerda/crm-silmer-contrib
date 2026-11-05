@@ -127,6 +127,49 @@ export privado do principal; preserva auditoria e resultados, podendo reexibir
 pendências no recorte antigo. Nunca restaurar banco ou reexecutar envios como
 primeiro recurso.
 
+### Verificação operacional — OPS-INBOX-SEND-08V
+
+A [PR 289](https://github.com/romulosutil/crm-silmer/pull/289) foi integrada por
+rebase em `e2436c2e91833bfaf29dc9bd03ad958b8fe6cddf`; a árvore coincide com
+o commit revisado e testado. O
+[CI 719](https://github.com/romulosutil/crm-silmer/actions/runs/41939947837)
+aprovou qualidade, PostgreSQL real sintético, políticas do edge, 496 cenários
+E2E/axe (sete skips), dependências e as duas imagens com scan. As regressões de
+falhas concluídas, disposição sem mudar resultado e recusa DEV/QA passaram no
+banco real. Localmente, validate teve 1.717 aprovados e 12 skips; o E2E teve
+495 aprovados, sete skips e um timeout Firefox de áudio que passou isolado com
+um worker. Auditoria sem high/critical e revisões cruzadas sem bloqueantes.
+
+O fluxo existente GitHub–EasyPanel implantou API, worker e edge a partir desse
+commit. Não foi disparado um deploy duplicado. API/worker usam a imagem
+`sha256:c9a5e52dfc9ddc8b6822c5f3f94325686032e59ba6b5d7ada847793da32937b1`;
+o edge usa
+`sha256:63e84758b48bf1666570c918d2951528476f47bf1f2ed27ccec587ec6c5b58da`.
+Os três containers ficaram saudáveis; live e readiness públicos retornaram
+HTTP 200 com `ok` e `ready`.
+
+O principal n8n foi preparado sobre o export atual, com backup privado em
+volume persistente e credenciais somente criptografadas. A importação alcançou
+um único workflow no projeto original; a publicação foi confirmada pela UI
+com o nome `OPS-INBOX-SEND-08 · Reserva obsoleta da IA`. O export posterior
+confirmou ativo, versão atual igual à publicada, 141 nós e nodes/connections/
+settings iguais ao delta revisado. Os outros 42 workflows conservaram seus
+fingerprints. Nenhuma execução antiga ou mensagem de teste foi disparada.
+
+Os planos privados exigiram operador ativo autorizado, locks, provas específicas
+e fingerprint antes da aplicação. Duas falhas conclusivas encerraram somente
+seus itens de reconciliação, com duas auditorias. As quatro disposições gravaram
+três auditorias de origem não produtiva e uma de substituição comprovada; não
+mudaram mensagens, comandos, jobs, tentativas ou o resultado dos originais.
+
+A conferência posterior preservou quatro comandos/mensagens incertos, dois
+recusados por destinatário e os dois originais já reconciliados antes da reserva.
+Não havia comando pendente/em processamento nem nova falha de workflow no
+intervalo observado após a publicação. A interface registrou a triagem dos
+quatro grupos como resolvida; Ativas/Todos estava vazia e o histórico manteve
+as ocorrências e quatro grupos resolvidos. Nenhuma mensagem foi reenviada nesta
+etapa. Os consoles administrativos foram desconectados ao concluir.
+
 ## Resposta humana após confirmar pedido — 04/11/2026
 
 OPS-INBOX-SEND-07 / MSG-02/03, ORC-08 e INT-2. Duas respostas humanas do
