@@ -673,7 +673,13 @@ export class PostgresN8nIntegrationRepository {
         )
       ).rows[0];
       const command = await selectPanelCommand(client, input.commandId);
-      await assertReservedExecution(client, command, input);
+      const lateMedia = await assertReservedExecution(
+        client,
+        command,
+        input,
+        false,
+        'read',
+      );
       if (!['image', 'audio', 'video'].includes(command.message_type))
         throw new N8nConflictError('Command has no retained media');
       const payload = decryptJson(
@@ -699,7 +705,8 @@ export class PostgresN8nIntegrationRepository {
         this.envelopeKey,
         bound,
         this.messageEnvelopeKey,
-        'sending',
+        lateMedia ? 'outcome_unknown' : 'sending',
+        lateMedia ? 'outcome_unknown' : 'processing',
       );
       return bound;
     });
@@ -2525,13 +2532,14 @@ async function resolveEventConversation(client, input) {
  * Only an authenticated recipient-check failure can resolve a worker timeout
  * before transport. Media reads and every other failure retain the active fence.
  * @param {Queryable} client @param {any} command @param {any} input
- * @param {boolean} [allowLateRecipientCheck] @returns {Promise<boolean>}
+ * @param {boolean} [allowLateRecipientCheck] @param {false|'read'|'unknown'} [allowTimedOutMedia] @returns {Promise<boolean>}
  */
 async function assertReservedExecution(
   client,
   command,
   input,
   allowLateRecipientCheck = false,
+  allowTimedOutMedia = false,
 ) {
   const lateRecipientCheck =
     allowLateRecipientCheck &&
@@ -2540,6 +2548,11 @@ async function assertReservedExecution(
     [
       'EVOLUTION_RECIPIENT_NOT_FOUND',
       'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE',
+      'MEDIA_DOWNLOAD_FAILED',
+      'MEDIA_INTEGRITY_MISMATCH',
+      'MEDIA_UPLOAD_FAILED',
+      'MEDIA_PREFLIGHT_REJECTED',
+      'MEDIA_PREFLIGHT_UNAVAILABLE',
     ].includes(input.failure.code) &&
     command?.status === 'outcome_unknown' &&
     command.message_status === 'outcome_unknown' &&
@@ -2559,23 +2572,34 @@ async function assertReservedExecution(
     input.sourceRevision !== null &&
     input.sourceRevision !== undefined &&
     Number(command.automation_epoch) === input.automationEpoch;
+  // The HTTP caller timing out does not cancel the original reserved execution.
+  // This exception never reserves again and never applies to transport uncertainty.
+  const lateMedia =
+    allowTimedOutMedia &&
+    command?.status === 'outcome_unknown' &&
+    command.last_error_code === 'N8N_COMMAND_TIMEOUT' &&
+    command.message_status === 'outcome_unknown' &&
+    command.message_delivery_status === 'outcome_unknown';
+  const late = lateRecipientCheck || lateMedia;
   if (
     !command ||
-    (!lateRecipientCheck && command.status !== 'processing') ||
-    (!lateRecipientCheck && command.message_status !== 'sending') ||
+    (!late && command.status !== 'processing') ||
+    (!late && command.message_status !== 'sending') ||
     command.message_external_id ||
     command.external_message_id ||
     command.action !== 'send_message' ||
     command.actor_kind !== 'human' ||
     command.message_author_kind !== 'human' ||
     command.message_author_id !== command.actor_id ||
-    (!lateRecipientCheck && command.message_delivery_status) ||
+    (!late && command.message_delivery_status) ||
     command.message_execution_id !== input.technical.executionId
   )
     throw new N8nConflictError('Reservation is not active');
   const receipts = (
     await client.query(
-      `SELECT workflow_key,workflow_version,execution_id,automation_epoch,source_revision FROM crm.n8n_events WHERE message_id=$1 AND conversation_id=$2 AND event_type='message.send.requested'`,
+      `SELECT workflow_key,workflow_version,execution_id,automation_epoch,source_revision,
+              processed_at > clock_timestamp() - interval '5 minutes' AS media_window_open
+       FROM crm.n8n_events WHERE message_id=$1 AND conversation_id=$2 AND event_type='message.send.requested'`,
       [command.message_id, command.conversation_id],
     )
   ).rows;
@@ -2592,7 +2616,13 @@ async function assertReservedExecution(
       Number(receipts[0].source_revision) !== input.sourceRevision)
   )
     throw new N8nConflictError('Reservation execution mismatch');
-  if (lateRecipientCheck) {
+  if (
+    lateMedia &&
+    allowTimedOutMedia === 'read' &&
+    !receipts[0].media_window_open
+  )
+    throw new N8nConflictError('Reserved media execution expired');
+  if (late) {
     const transportUnknown = await client.query(
       `SELECT 1 FROM crm.n8n_events
        WHERE message_id=$1 AND conversation_id=$2
@@ -2607,7 +2637,7 @@ async function assertReservedExecution(
     if (transportUnknown.rows.length)
       throw new N8nConflictError('Transport outcome is unknown');
   }
-  return lateRecipientCheck;
+  return late;
 }
 
 /** @param {Queryable} client @param {string} commandId */
@@ -2639,6 +2669,7 @@ function assertPanelSendFence(
   bound,
   messageKey,
   expectedStatus = 'queued',
+  expectedCommandStatus = 'processing',
 ) {
   if (
     command.action !== 'send_message' ||
@@ -2649,7 +2680,7 @@ function assertPanelSendFence(
     command.message_conversation_id !== conversation.id ||
     !command.message_id ||
     command.message_status !== expectedStatus ||
-    command.status !== 'processing' ||
+    command.status !== expectedCommandStatus ||
     Number(command.automation_epoch) !== Number(input.automationEpoch) ||
     Number(conversation.automation_epoch) !== Number(input.automationEpoch) ||
     Number(conversation.inbound_revision) !== Number(input.sourceRevision) ||
@@ -2896,18 +2927,24 @@ async function updateDeliveryStatus(client, input) {
 
 /** @param {Queryable} client @param {any} input @param {string} now */
 async function markSendUnknown(client, input, now) {
+  const command = await selectPanelCommand(client, input.commandId);
+  const late = command?.message_status === 'outcome_unknown';
+  if (late)
+    await assertReservedExecution(client, command, input, false, 'unknown');
   const message = (
     await client.query(
       `UPDATE crm.messages
        SET status = 'outcome_unknown', delivery_status = 'outcome_unknown',
            delivery_status_at = $2, delivery_failure_code = $4
-       WHERE command_id = $1 AND conversation_id = $3 AND status = 'sending'
+       WHERE command_id = $1 AND conversation_id = $3 AND status = $5
+         AND external_message_id IS NULL
        RETURNING id`,
       [
         input.commandId,
         now,
         input.conversationId,
         input.failure?.code ?? 'SEND_OUTCOME_UNKNOWN',
+        late ? 'outcome_unknown' : 'sending',
       ],
     )
   ).rows[0];
@@ -2918,7 +2955,8 @@ async function markSendUnknown(client, input, now) {
          retryable = false, retry_safe = false,
          last_error_code = 'OUTCOME_UNKNOWN', updated_at = $2,
          completed_at = $2
-     WHERE command_id = $1 AND conversation_id = $3 AND status IN ('pending', 'processing', 'failed')`,
+     WHERE command_id = $1 AND conversation_id = $3 AND status IN ('pending', 'processing', 'outcome_unknown')
+       AND external_message_id IS NULL`,
     [input.commandId, now, input.conversationId],
   );
   return { messageId: message.id };

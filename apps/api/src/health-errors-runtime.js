@@ -277,7 +277,29 @@ const CONCLUDED_SENDS_SQL = `
             AND audit.correlation_id ~ '^n8n-execution:[0-9]{1,12}$'
         ))
       OR
-      (c.last_error_code IN ('EVOLUTION_RECIPIENT_NOT_FOUND','EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE')
+      (c.last_error_code='MEDIA_PREFLIGHT_UNAVAILABLE'
+        AND m.message_type IN ('image','audio','video')
+        AND j.last_error_code=c.last_error_code AND m.delivery_failure_code=c.last_error_code
+        AND m.automation_epoch=c.automation_epoch
+        AND EXISTS (
+          SELECT 1 FROM crm.n8n_events reservation
+          JOIN crm.audit_events audit ON audit.target_id=c.command_id
+            AND audit.target_type='n8n_command'
+            AND audit.action='integration.n8n.command.reconciled'
+            AND audit.version='OPS-INBOX-SEND-09'
+            AND audit.reason='PROVEN_MEDIA_FAILURE_BEFORE_TRANSPORT'
+            AND audit.correlation_id='n8n-execution:' || reservation.execution_id
+          JOIN crm.users operator ON operator.id=audit.actor_id
+            AND operator.email='admin@crm-silmer.local'
+          WHERE reservation.message_id=m.id AND reservation.conversation_id=c.conversation_id
+            AND reservation.event_type='message.send.requested'
+            AND reservation.execution_id=m.n8n_execution_id
+            AND reservation.automation_epoch=c.automation_epoch
+        ))
+      OR
+      (c.last_error_code IN ('EVOLUTION_RECIPIENT_NOT_FOUND','EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE',
+          'MEDIA_DOWNLOAD_FAILED','MEDIA_INTEGRITY_MISMATCH','MEDIA_UPLOAD_FAILED',
+          'MEDIA_PREFLIGHT_REJECTED','MEDIA_PREFLIGHT_UNAVAILABLE')
         AND (j.last_error_code=c.last_error_code OR j.last_error_code='N8N_COMMAND_REJECTED')
         AND m.delivery_failure_code=c.last_error_code
         AND m.automation_epoch=c.automation_epoch
@@ -296,7 +318,8 @@ const CONCLUDED_SENDS_SQL = `
             AND failure.execution_id=m.n8n_execution_id
             AND failure.automation_epoch=c.automation_epoch
             AND failure.outcome->>'failureCode'=c.last_error_code
-            AND (NOT failure.outcome ? 'deliveryStatus'
+            AND ((c.last_error_code IN ('EVOLUTION_RECIPIENT_NOT_FOUND','EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE')
+                  AND NOT failure.outcome ? 'deliveryStatus')
                  OR failure.outcome->>'deliveryStatus'='failed')
         ))
     )`;

@@ -259,7 +259,9 @@ async function recoverExpired(client, commandId, now) {
      WHERE command.command_id = $1
        AND job.n8n_command_id = command.command_id
        AND job.status = 'outcome_unknown'
-       AND command.status IN ('pending', 'processing', 'failed')
+       AND (command.status IN ('pending', 'processing')
+         OR (command.status = 'failed' AND (command.retryable IS DISTINCT FROM false
+           OR command.retry_safe IS DISTINCT FROM false)))
      RETURNING command.command_id, command.conversation_id, command.message_id`,
     [commandId],
   );

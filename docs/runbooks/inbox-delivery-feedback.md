@@ -3,6 +3,59 @@
 Rastreabilidade: INBOX-DELIVERY-01, OPS-INBOX-ACK-01, MSG-02/03, ORC-08,
 INBOX-3 e INT-2. O contrato de reserva e idempotência permanece vigente.
 
+## Timeout durante preparação de mídia — 05/11/2026
+
+OPS-INBOX-SEND-09 / MSG-02/03, ORC-08, PRV-01 e OPS-ERR-03/06/08/10.
+Os dois alertas das 08:54 (Brasília) eram projeções do mesmo comando humano.
+A reserva foi aceita às 08:54:07.775; o timeout HTTP marcou comando/mensagem
+incertos às 08:54:08.976. O event bus confirma download/hash e preparação da
+mídia, preflight às 08:54:10.494 e término no registro da falha pré-envio às
+08:54:14.327. Nenhum nó de envio foi iniciado. Outros envios naturais
+posteriores receberam callbacks de envio, entrega e leitura; isso não muda
+o resultado do original.
+
+O timeout da chamada HTTP não cancela o workflow. Antes da correção, seu
+preflight exigia `processing`/`sending`, já substituídos por `outcome_unknown`;
+a conclusão da falha também recusava esse estado. Agora a leitura original
+pode continuar por até cinco minutos do processamento da reserva, somente
+com erro `N8N_COMMAND_TIMEOUT`, estados incertos concordantes, mesma execução,
+workflow/versão e reserva única, sem ID externo ou `message.send.unknown`.
+Epoch, revisão, modo humano, conversa aberta, autoria e variante/hash
+permanecem obrigatórios. A leitura não altera estado nem concede outra
+reserva. Outros erros, execução diferente e janela vencida continuam recusados.
+
+A conclusão incerta do transporte também aceita a identidade reservada após
+o timeout, sem regressão de envio/falha conclusivos. Seu recibo bloqueia novas
+leituras e a conclusão como falha pré-envio. A migration expand
+`0054_preserve_conclusive_n8n_failure.expand.sql` impede que o encerramento
+tardio do job sobrescreva uma falha conclusiva já registrada pelo callback;
+o recovery do command store aplica a mesma proteção.
+
+Falhas controladas anteriores ao transporte de mídia podem concluir o mesmo
+comando tardiamente com a identidade original. O poll reconcilia somente
+comando/mensagem falhos, retry bloqueado, ausência de IDs externos e prova
+persistida correlacionada à reserva. Mantém a tentativa de timeout, termina o
+job em `dead_letter` e resolve seu item de reconciliação. A central conserva
+histórico e retira de Ativas somente o caso conclusivo com todas essas provas.
+
+Para recuperar o incidente já ocorrido, confirmar novamente a sequência do
+event bus e ausência de nó/recibo/ID de transporte. Usar o core
+`reconcileN8nCommandOutcome` para registrar falha manual, sem retry, e concluir
+job/reconciliação na mesma transação, preservando tentativas. A auditoria da
+conta operadora usa versão `OPS-INBOX-SEND-09`, motivo controlado
+`PROVEN_MEDIA_FAILURE_BEFORE_TRANSPORT` e correlação `n8n-execution:<id>`
+igual à reserva original. A central exige essa prova humana específica,
+sem fabricar um callback autenticado ou evento de execução. Não reexecutar o workflow nem
+simular entrega; a mídia original permanece no histórico como falha. Qualquer
+novo envio exige uma operação humana separada.
+
+Rollout: gates gerais e PostgreSQL sintético, API e worker pelo fluxo GitHub →
+EasyPanel, versão/imagem e readiness, reconciliação pontual e Ativas/Histórico.
+Aplicar a migration 0054 pelo CLI antes da API/worker; não altera o workflow.
+Rollback restaura a aplicação anterior e mantém a função expand protegida,
+preservando mensagens, eventos, auditoria e tentativas. O caminho de entrega
+real continua dependendo de um envio natural; testes não enviam a clientes.
+
 ## Encerramento das pendências e reserva obsoleta da IA — 04/11/2026
 
 OPS-INBOX-SEND-08 / MSG-02/03, ORC-08, PRV-01 e OPS-ERR-03/06/08/10/11.

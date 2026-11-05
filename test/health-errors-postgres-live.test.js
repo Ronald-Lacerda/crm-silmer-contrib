@@ -948,16 +948,23 @@ test(
           external_conversation_id,cycle_number,state,automation_state,automation_epoch,version,opened_at,last_message_at)
          VALUES('concluded-conversation','concluded-identity','meta','synthetic','concluded-conversation',1,'nova','human',1,1,now(),now())`,
       );
-      /** @param {string} id @param {'manual'|'recipient'} kind @param {string} variant */
-      const seed = async (id, kind, variant) => {
+      /** @param {string} id @param {'manual'|'recipient'} kind @param {string} variant @param {string} [failureCode] @param {boolean} [manualMedia] */
+      const seed = async (
+        id,
+        kind,
+        variant,
+        failureCode,
+        manualMedia = false,
+      ) => {
         const commandId = `concluded-command-${id}`;
         const messageId = `concluded-message-${id}`;
         const jobId = `concluded-job-${id}`;
         const execution = `concluded-execution-${id}`;
         const code =
-          kind === 'manual'
+          failureCode ??
+          (kind === 'manual'
             ? 'N8N_COMMAND_RESERVATION_REJECTED'
-            : 'EVOLUTION_RECIPIENT_NOT_FOUND';
+            : 'EVOLUTION_RECIPIENT_NOT_FOUND');
         const status = variant === 'unknown' ? 'outcome_unknown' : 'failed';
         const messageStatus =
           variant === 'message-divergent' ? 'sending' : status;
@@ -969,7 +976,7 @@ test(
           `INSERT INTO crm.messages(id,conversation_id,provider,provider_account_id,command_id,direction,
             author_kind,author_id,message_type,content_envelope,key_version,status,occurred_at,created_at,
             delivery_status,delivery_status_at,external_message_id,n8n_execution_id,automation_epoch,delivery_failure_code)
-           VALUES($1,'concluded-conversation','meta','synthetic',$2,'outbound','human','concluded-admin','text',
+           VALUES($1,'concluded-conversation','meta','synthetic',$2,'outbound','human','concluded-admin',$9,
              $3::jsonb,1,$4,now(),now(),$5,now(),$6,$7,1,$8)`,
           [
             messageId,
@@ -980,6 +987,7 @@ test(
             external,
             kind === 'recipient' ? execution : null,
             kind === 'recipient' ? code : null,
+            manualMedia ? 'image' : 'text',
           ],
         );
         await pool.query(
@@ -1010,7 +1018,9 @@ test(
             jobStatus,
             variant === 'wrong-job-code'
               ? 'UNRELATED_FAILURE'
-              : kind === 'recipient' && variant !== 'late-recipient'
+              : kind === 'recipient' &&
+                  variant !== 'late-recipient' &&
+                  !manualMedia
                 ? 'N8N_COMMAND_REJECTED'
                 : code,
           ],
@@ -1081,7 +1091,23 @@ test(
         if (kind === 'recipient') {
           if (variant !== 'no-reservation')
             await event('message.send.requested', {});
-          if (variant !== 'no-proof')
+          if (manualMedia && variant !== 'no-proof')
+            await pool.query(
+              `INSERT INTO crm.audit_events(id,actor_id,action,target_type,target_id,version,reason,correlation_id,occurred_at)
+              VALUES($1,'concluded-admin','integration.n8n.command.reconciled','n8n_command',$2,'OPS-INBOX-SEND-09',$3,$4,now())`,
+              [
+                `concluded-manual-media-${id}`,
+                variant === 'wrong-audit-target' ? 'other-command' : commandId,
+                variant === 'wrong-audit-reason'
+                  ? 'OTHER_REASON'
+                  : 'PROVEN_MEDIA_FAILURE_BEFORE_TRANSPORT',
+                'n8n-execution:' +
+                  (variant === 'wrong-execution'
+                    ? 'another-execution'
+                    : execution),
+              ],
+            );
+          if (!manualMedia && variant !== 'no-proof')
             await event(
               'workflow.failed',
               {
@@ -1133,11 +1159,109 @@ test(
         return response.json();
       };
       const cases = [
+        [
+          'manual-media',
+          'recipient',
+          'late-recipient',
+          true,
+          'MEDIA_PREFLIGHT_UNAVAILABLE',
+          true,
+        ],
+        [
+          'manual-media-no-proof',
+          'recipient',
+          'no-proof',
+          false,
+          'MEDIA_PREFLIGHT_UNAVAILABLE',
+          true,
+        ],
+        [
+          'manual-media-target',
+          'recipient',
+          'wrong-audit-target',
+          false,
+          'MEDIA_PREFLIGHT_UNAVAILABLE',
+          true,
+        ],
+        [
+          'manual-media-reason',
+          'recipient',
+          'wrong-audit-reason',
+          false,
+          'MEDIA_PREFLIGHT_UNAVAILABLE',
+          true,
+        ],
+        [
+          'manual-media-execution',
+          'recipient',
+          'wrong-execution',
+          false,
+          'MEDIA_PREFLIGHT_UNAVAILABLE',
+          true,
+        ],
+        [
+          'manual-media-open',
+          'recipient',
+          'open-reconciliation',
+          false,
+          'MEDIA_PREFLIGHT_UNAVAILABLE',
+          true,
+        ],
+        [
+          'manual-media-transport',
+          'recipient',
+          'transport-unknown',
+          false,
+          'MEDIA_PREFLIGHT_UNAVAILABLE',
+          true,
+        ],
         ['manual-one', 'manual', 'good', true],
         ['manual-two', 'manual', 'good', true],
         ['recipient', 'recipient', 'good', true],
         ['late-recipient', 'recipient', 'late-recipient', true],
         ['recipient-old-outcome', 'recipient', 'without-outcome-status', true],
+        [
+          'media-preflight',
+          'recipient',
+          'late-recipient',
+          true,
+          'MEDIA_PREFLIGHT_UNAVAILABLE',
+        ],
+        [
+          'media-integrity',
+          'recipient',
+          'good',
+          true,
+          'MEDIA_INTEGRITY_MISMATCH',
+        ],
+        [
+          'media-no-outcome',
+          'recipient',
+          'without-outcome-status',
+          false,
+          'MEDIA_PREFLIGHT_UNAVAILABLE',
+        ],
+        [
+          'media-no-proof',
+          'recipient',
+          'no-proof',
+          false,
+          'MEDIA_PREFLIGHT_UNAVAILABLE',
+        ],
+        [
+          'media-transport-unknown',
+          'recipient',
+          'transport-unknown',
+          false,
+          'MEDIA_PREFLIGHT_UNAVAILABLE',
+        ],
+        [
+          'media-open',
+          'recipient',
+          'open-reconciliation',
+          false,
+          'MEDIA_PREFLIGHT_UNAVAILABLE',
+        ],
         ['no-manual-proof', 'manual', 'no-proof', false],
         ['no-recipient-proof', 'recipient', 'no-proof', false],
         ['no-reconciliation', 'manual', 'no-reconciliation', false],
@@ -1172,11 +1296,20 @@ test(
         ],
         ['wrong-job-code', 'recipient', 'wrong-job-code', false],
       ];
-      for (const [id, kind, variant, concluded] of cases) {
+      for (const [
+        id,
+        kind,
+        variant,
+        concluded,
+        failureCode,
+        manualMedia,
+      ] of cases) {
         const state = await seed(
           /** @type {string} */ (id),
           /** @type {'manual'|'recipient'} */ (kind),
           /** @type {string} */ (variant),
+          /** @type {string|undefined} */ (failureCode),
+          /** @type {boolean|undefined} */ (manualMedia),
         );
         if (!concluded) {
           const n8nCode =

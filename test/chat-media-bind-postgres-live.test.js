@@ -462,7 +462,8 @@ if (connectionString) {
     );
     assert.equal((await snapshot()).messages, 1);
   });
-  async function mediaPanelCommand(type = 'image') {
+  /** @param {string} [type] @param {Date} [reservationTime] */
+  async function mediaPanelCommand(type = 'image', reservationTime) {
     const id = await ready();
     if (['audio', 'video'].includes(type))
       await pool.query(
@@ -503,6 +504,7 @@ if (connectionString) {
     const { createN8nIntegrationService } =
       await import('../modules/n8n-integration/src/service.js');
     const integration = createN8nIntegrationService({
+      ...(reservationTime ? { clock: () => reservationTime } : {}),
       repository: new PostgresN8nIntegrationRepository({
         database,
         envelopeKey: KEY,
@@ -518,7 +520,7 @@ if (connectionString) {
       automation_epoch: payload.automation_epoch,
       source_revision: payload.source_revision,
       message: structuredClone(payload.message),
-      occurred_at: new Date().toISOString(),
+      occurred_at: (reservationTime ?? new Date()).toISOString(),
       technical: {
         actor: 'AUTOMATION_EXECUTOR',
         correlationId: `correlation-${eventId}`,
@@ -912,8 +914,9 @@ if (connectionString) {
     );
     assert.equal((await snapshot()).used, '100');
   });
-  async function sendForReconciliation(type = 'image') {
-    const fixture = await mediaPanelCommand(type);
+  /** @param {string} [type] @param {Date} [reservationTime] */
+  async function sendForReconciliation(type = 'image', reservationTime) {
+    const fixture = await mediaPanelCommand(type, reservationTime);
     const queue = new PostgresJobQueue({ database });
     const [job] = await queue.claim({
       queue: 'external_effects',
@@ -985,8 +988,9 @@ if (connectionString) {
       reservation,
     };
   }
-  async function timeoutRecipientCheck() {
-    const f = await sendForReconciliation('text');
+  /** @param {string} [type] @param {Date} [reservationTime] */
+  async function timeoutRecipientCheck(type = 'text', reservationTime) {
+    const f = await sendForReconciliation(type, reservationTime);
     const store = new PostgresN8nCommandStore({ database, envelopeKey: KEY });
     assert.equal(
       await store.markOutcomeUnknown(f.row.command_id, {
@@ -998,12 +1002,184 @@ if (connectionString) {
     assert.equal(await f.timeout(), true);
     return f;
   }
+  test('OPS-INBOX-SEND-09: original media execution survives HTTP timeout without another reservation', async () => {
+    const f = await timeoutRecipientCheck('image');
+    const { PostgresN8nIntegrationRepository } =
+      await import('../modules/n8n-integration/src/postgres-repository.js');
+    const repo = new PostgresN8nIntegrationRepository({
+      database,
+      envelopeKey: KEY,
+    });
+    const input = {
+      commandId: f.row.command_id,
+      technical: f.reservation.technical,
+    };
+    const before = await f.evidence();
+    assert.equal((await repo.readReservedMedia(input)).id, f.id);
+    assert.equal(
+      (await repo.readReservedMedia(input)).content_sha256,
+      'b'.repeat(64),
+    );
+    assert.deepEqual(await f.evidence(), before);
+    assert.equal(
+      (await f.integration.recordEvent(f.reservation)).send_authorized,
+      false,
+    );
+    for (const key of ['executionId', 'workflowKey', 'workflowVersion']) {
+      await assert.rejects(
+        repo.readReservedMedia({
+          ...input,
+          technical: { ...input.technical, [key]: 'other' },
+        }),
+        { statusCode: 409 },
+      );
+    }
+    await f.confirm();
+    await f.poll();
+    assert.equal((await f.state()).job.status, 'completed');
+    assert.equal((await f.state()).reconciliation.status, 'resolved');
+    assert.deepEqual((await f.evidence()).attempts, before.attempts);
+    await assert.rejects(repo.readReservedMedia(input), { statusCode: 409 });
+  });
+  for (const mutation of [
+    "UPDATE crm.n8n_commands SET last_error_code='META_SEND_OUTCOME_UNKNOWN'",
+    "UPDATE crm.n8n_commands SET last_error_code='COMMAND_LEASE_EXPIRED'",
+    "UPDATE crm.n8n_commands SET external_message_id='synthetic-external'",
+    "UPDATE crm.messages SET external_message_id='synthetic-external'",
+    "UPDATE crm.messages SET delivery_status='sent'",
+    'UPDATE crm.conversations SET automation_epoch=automation_epoch+1',
+    'UPDATE crm.conversations SET inbound_revision=inbound_revision+1',
+    "UPDATE crm.conversations SET terminal_at=now(),state='sem_lead'",
+    "UPDATE crm.conversations SET automation_state='assistant'",
+    "UPDATE crm.chat_media SET content_sha256=repeat('d',64)",
+  ]) {
+    test(`OPS-INBOX-SEND-09: timed-out media refuses ${mutation}`, async () => {
+      const f = await timeoutRecipientCheck('image');
+      const { PostgresN8nIntegrationRepository } =
+        await import('../modules/n8n-integration/src/postgres-repository.js');
+      const repo = new PostgresN8nIntegrationRepository({
+        database,
+        envelopeKey: KEY,
+      });
+      await pool.query(mutation);
+      const before = await f.evidence();
+      await assert.rejects(
+        repo.readReservedMedia({
+          commandId: f.row.command_id,
+          technical: f.reservation.technical,
+        }),
+        { statusCode: 409 },
+      );
+      assert.deepEqual(await f.evidence(), before);
+    });
+  }
+  test('OPS-INBOX-SEND-09: expired reservation cannot continue media after timeout', async () => {
+    const f = await timeoutRecipientCheck(
+      'image',
+      new Date(Date.now() - 360_000),
+    );
+    const { PostgresN8nIntegrationRepository } =
+      await import('../modules/n8n-integration/src/postgres-repository.js');
+    const repo = new PostgresN8nIntegrationRepository({
+      database,
+      envelopeKey: KEY,
+    });
+    await assert.rejects(
+      repo.readReservedMedia({
+        commandId: f.row.command_id,
+        technical: f.reservation.technical,
+      }),
+      { statusCode: 409 },
+    );
+  });
+  test('OPS-INBOX-SEND-09: transport uncertainty blocks media even if worker timeout overwrites its code', async () => {
+    const f = await timeoutRecipientCheck('image');
+    const unknown = f.event('transport-unknown-media', {
+      event_type: 'message.send.unknown',
+    });
+    delete unknown.message;
+    for (const key of ['executionId', 'workflowKey', 'workflowVersion']) {
+      await assert.rejects(
+        f.integration.recordEvent({
+          ...unknown,
+          technical: { ...unknown.technical, [key]: 'other' },
+        }),
+        { statusCode: 409 },
+      );
+    }
+    await f.integration.recordEvent(unknown);
+    await pool.query(
+      "UPDATE crm.n8n_commands SET last_error_code='N8N_COMMAND_TIMEOUT' WHERE command_id=$1",
+      [f.row.command_id],
+    );
+    const { PostgresN8nIntegrationRepository } =
+      await import('../modules/n8n-integration/src/postgres-repository.js');
+    const repo = new PostgresN8nIntegrationRepository({
+      database,
+      envelopeKey: KEY,
+    });
+    await assert.rejects(
+      repo.readReservedMedia({
+        commandId: f.row.command_id,
+        technical: f.reservation.technical,
+      }),
+      { statusCode: 409 },
+    );
+  });
+  for (const order of ['failure-first', 'timeout-first', 'concurrent'])
+    test(`OPS-INBOX-SEND-09: ${order} preserves the conclusive media failure`, async () => {
+      const f = await sendForReconciliation();
+      const store = new PostgresN8nCommandStore({ database, envelopeKey: KEY });
+      const failure = f.event('concurrent-media-abort', {
+        event_type: 'workflow.failed',
+        failure: {
+          phase: 'before_message_send',
+          code: 'MEDIA_PREFLIGHT_UNAVAILABLE',
+        },
+      });
+      delete failure.message;
+      const timeout = () =>
+        store.markOutcomeUnknown(f.row.command_id, {
+          attemptId: 'synthetic-delivery',
+          errorCode: 'N8N_COMMAND_TIMEOUT',
+        });
+      const fail = () => f.integration.recordEvent(failure);
+      if (order === 'failure-first') {
+        await fail();
+        await timeout();
+      } else if (order === 'timeout-first') {
+        await timeout();
+        await fail();
+      } else await Promise.all([timeout(), fail()]);
+      await f.timeout();
+      assert.equal(await store.loadForDelivery(f.row.command_id), null);
+      await f.poll();
+      const result = (
+        await pool.query(
+          'SELECT status,last_error_code FROM crm.n8n_commands WHERE command_id=$1',
+          [f.row.command_id],
+        )
+      ).rows[0];
+      assert.deepEqual(result, {
+        status: 'failed',
+        last_error_code: 'MEDIA_PREFLIGHT_UNAVAILABLE',
+      });
+      assert.equal((await f.state()).job.status, 'dead_letter');
+      assert.equal((await f.state()).reconciliation.status, 'resolved');
+    });
   for (const code of [
     'EVOLUTION_RECIPIENT_NOT_FOUND',
     'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE',
+    'MEDIA_DOWNLOAD_FAILED',
+    'MEDIA_INTEGRITY_MISMATCH',
+    'MEDIA_UPLOAD_FAILED',
+    'MEDIA_PREFLIGHT_REJECTED',
+    'MEDIA_PREFLIGHT_UNAVAILABLE',
   ]) {
     test(`OPS-INBOX-SEND-06: late ${code} resolves a worker timeout without sending or rewriting its attempt`, async () => {
-      const f = await timeoutRecipientCheck();
+      const f = await timeoutRecipientCheck(
+        code.startsWith('MEDIA_') ? 'image' : 'text',
+      );
       const failure = f.event('late-recipient-abort', {
         event_type: 'workflow.failed',
         failure: { phase: 'before_message_send', code },

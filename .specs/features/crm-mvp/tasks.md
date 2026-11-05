@@ -1,5 +1,29 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## OPS-INBOX-SEND-09 — Mídia reservada após timeout HTTP (05/11/2026)
+
+MSG-02/03, ORC-08, PRV-01 e OPS-ERR-03/06/08/10. Os dois alertas de
+08:54 eram um comando humano: o timeout HTTP antecedeu o preflight da mídia;
+o workflow não alcançou o nó de envio.
+
+- [x] Permitir leitura/preflight pela execução originalmente reservada por
+      até cinco minutos da reserva, somente após `N8N_COMMAND_TIMEOUT`, sem
+      ID externo ou recibo de transporte incerto e com todos os fences atuais.
+- [x] Aceitar falha pré-envio tardia autenticada de mídia e reconciliar fila
+      sem retry, preservando tentativas e histórico; excluir de Ativas apenas
+      falha comprovada com reconciliação encerrada.
+- [x] Preservar conclusão incerta tardia do transporte e impedir que trigger
+      ou recovery sobrescrevam falha conclusiva; migration expand 0054.
+- [x] Gates locais e revisão QA; regressões PostgreSQL sintéticas fazem parte
+      do CI obrigatório da entrega.
+
+Gate operacional de fechamento: CI PostgreSQL, migration 0054, publicação,
+reconciliação do original com prova técnica auditada, Ativas/Histórico e health.
+Evidências de execução ficam na PR da entrega; sem repetir a execução ou
+enviar ao cliente.
+
+[Diagnóstico, limites e rollback](../../../docs/runbooks/inbox-delivery-feedback.md#timeout-durante-preparação-de-mídia--05112026).
+
 ## OPS-INBOX-SEND-08 — Encerrar pendências sem duplicar envios (04/11/2026)
 
 MSG-02/03, ORC-08, PRV-01 e OPS-ERR-03/06/08/10/11. Autorização do

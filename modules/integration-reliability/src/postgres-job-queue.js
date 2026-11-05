@@ -507,7 +507,12 @@ export class PostgresJobQueue {
            AND m.delivery_failure_code = c.last_error_code
            AND c.last_error_code IN (
              'EVOLUTION_RECIPIENT_NOT_FOUND',
-             'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE'
+             'EVOLUTION_RECIPIENT_CHECK_UNAVAILABLE',
+             'MEDIA_DOWNLOAD_FAILED',
+             'MEDIA_INTEGRITY_MISMATCH',
+             'MEDIA_UPLOAD_FAILED',
+             'MEDIA_PREFLIGHT_REJECTED',
+             'MEDIA_PREFLIGHT_UNAVAILABLE'
            )
            AND EXISTS (
              SELECT 1 FROM crm.n8n_events failure
