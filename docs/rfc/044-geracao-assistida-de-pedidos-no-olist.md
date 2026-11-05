@@ -701,9 +701,12 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       até seis consultas dos pedidos existentes pelas APIs v2/v3. O PO renovou
       as duas credenciais após auditoria no escopo acessível. C02/v3 confirmou
       divergência por linha; C02/v2 HTTP 200 parou no tipo de conteúdo antes do
-      parse: duas tentativas consumidas. Continuação de cinco leituras preparada
-      (uma adicional; teto sete totais), aguardando aprovação explícita.
-      F1-G01/T02 seguem abertos; 40 testes locais aprovados, QA sem bloqueio.
+      parse. O PO autorizou a retomada de cinco leituras: [seis comparações válidas](../integrations/olist/evidence/monetary-readback-live-result.json)
+      em sete tentativas totais, zero escrita ERP e journal original preservado.
+      V2 reproduziu os mesmos problemas monetários de v3 em C02–C04; fallback
+      não resolve G01. F1-G01/T02 seguem abertos, dependentes de rota/contrato
+      fiel suportado pelo fornecedor; pergunta preparada, sem envio. Regressão
+      111/111 e QA da continuação sem bloqueio; sem liberação de T03.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado
 fiscal inventado ou suposição de idempotência remota. Plano para ausência de

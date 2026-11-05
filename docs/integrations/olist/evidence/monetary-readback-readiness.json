@@ -17,14 +17,10 @@
   "erpAccountIntegrationDependenciesVerified": true,
   "dependencyFreeConclusionProven": false,
   "credentialRotations": 2,
-  "authorizedOrderReadBudget": 6,
-  "attemptedOrderReads": 2,
-  "remainingOrderReads": 4,
-  "blockers": [
-    "REMOTE_COMPARISON_INCOMPLETE",
-    "EXPLICIT_ADDITIONAL_READ_APPROVAL_REQUIRED",
-    "F1_G01_MONETARY_FIDELITY_UNPROVEN"
-  ],
+  "authorizedOrderReadBudget": 7,
+  "attemptedOrderReads": 7,
+  "remainingOrderReads": 0,
+  "blockers": ["F1_G01_MONETARY_FIDELITY_UNPROVEN"],
   "privateValuesIncluded": false,
   "erpIntegrationLabelsChecked": [
     "Shopee",
@@ -35,9 +31,10 @@
   "appKeysRenewedAndSaved": true,
   "legacyTokenRenewedAndPersisted": true,
   "oauthSucceeded": true,
-  "completedComparisons": 1,
-  "stopCode": "INVALID_CONTENT_TYPE",
-  "continuationApprovalPending": true,
-  "proposedContinuationReads": 5,
-  "proposedMaximumTotalAttempts": 7
+  "completedComparisons": 6,
+  "continuationApprovalPending": false,
+  "continuationCompleted": true,
+  "continuationOrderReads": 5,
+  "initialStopCode": "INVALID_CONTENT_TYPE",
+  "liveResult": "monetary-readback-live-result.json"
 }

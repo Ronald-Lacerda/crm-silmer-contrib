@@ -1,0 +1,377 @@
+{
+  "task": "OLIST-T02",
+  "gap": "F1-G01",
+  "observedOn": "2026-11-05",
+  "source": "allowlisted-private-readback-projection-not-raw-responses",
+  "state": "five_read_continuation_completed_diagnostic_only",
+  "originalOrderReadAttempts": 2,
+  "continuationOrderReadAttempts": 5,
+  "totalOrderReadAttempts": 7,
+  "completedComparisons": 6,
+  "failedOrderReadAttempts": 1,
+  "initialStopCode": "INVALID_CONTENT_TYPE",
+  "initialV2BodyRecovered": false,
+  "originalJournalPreserved": true,
+  "continuationOAuthCodeExchanges": 1,
+  "continuationResponses": {
+    "http200": 5,
+    "v2JsonLabelledTextHtml": 3,
+    "v3ApplicationJson": 2
+  },
+  "erpWrites": 0,
+  "f1GatePassed": false,
+  "v2AndV3ComparisonsEquivalentForAllCases": true,
+  "results": [
+    {
+      "alias": "C02",
+      "version": "v3",
+      "observed": {
+        "lines": [
+          {
+            "resource": "new-G",
+            "quantity": "3",
+            "unit": "0.67"
+          },
+          {
+            "resource": "new-M",
+            "quantity": "3",
+            "unit": "0.33"
+          }
+        ],
+        "totalProducts": "3",
+        "totalOrder": "3"
+      },
+      "comparison": {
+        "groups": [
+          {
+            "resource": "new-G",
+            "quantity": "3",
+            "expectedSubtotalsCents": [200],
+            "diagnosticSubtotalsCents": [201],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": false,
+            "sourceLineIdentified": true
+          },
+          {
+            "resource": "new-M",
+            "quantity": "3",
+            "expectedSubtotalsCents": [100],
+            "diagnosticSubtotalsCents": [99],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": false,
+            "sourceLineIdentified": true
+          }
+        ],
+        "rounding": "positive-half-up-hypothesis-only",
+        "expectedTotalCents": 300,
+        "totalProductsMatches": true,
+        "totalOrderMatches": true,
+        "allSubtotalMultisetsMatch": false,
+        "everySourceLineIdentified": true,
+        "independentSubtotalsAvailable": false,
+        "roundingContractVerified": false,
+        "f1GatePassed": false
+      }
+    },
+    {
+      "alias": "C02",
+      "version": "v2",
+      "observed": {
+        "lines": [
+          {
+            "resource": "new-M",
+            "quantity": "3.00",
+            "unit": "0.33"
+          },
+          {
+            "resource": "new-G",
+            "quantity": "3.00",
+            "unit": "0.67"
+          }
+        ],
+        "totalProducts": "3.00",
+        "totalOrder": "3.00"
+      },
+      "comparison": {
+        "groups": [
+          {
+            "resource": "new-G",
+            "quantity": "3",
+            "expectedSubtotalsCents": [200],
+            "diagnosticSubtotalsCents": [201],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": false,
+            "sourceLineIdentified": true
+          },
+          {
+            "resource": "new-M",
+            "quantity": "3",
+            "expectedSubtotalsCents": [100],
+            "diagnosticSubtotalsCents": [99],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": false,
+            "sourceLineIdentified": true
+          }
+        ],
+        "rounding": "positive-half-up-hypothesis-only",
+        "expectedTotalCents": 300,
+        "totalProductsMatches": true,
+        "totalOrderMatches": true,
+        "allSubtotalMultisetsMatch": false,
+        "everySourceLineIdentified": true,
+        "independentSubtotalsAvailable": false,
+        "roundingContractVerified": false,
+        "f1GatePassed": false
+      }
+    },
+    {
+      "alias": "C03",
+      "version": "v3",
+      "observed": {
+        "lines": [
+          {
+            "resource": "existing-M-from-C01",
+            "quantity": "1",
+            "unit": "1.03"
+          },
+          {
+            "resource": "new-G",
+            "quantity": "1",
+            "unit": "0.04"
+          },
+          {
+            "resource": "new-M",
+            "quantity": "1",
+            "unit": "0.01"
+          },
+          {
+            "resource": "new-M",
+            "quantity": "1",
+            "unit": "0.02"
+          }
+        ],
+        "totalProducts": "1.08",
+        "totalOrder": "1.1"
+      },
+      "comparison": {
+        "groups": [
+          {
+            "resource": "existing-M-from-C01",
+            "quantity": "1",
+            "expectedSubtotalsCents": [103],
+            "diagnosticSubtotalsCents": [103],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": true,
+            "sourceLineIdentified": true
+          },
+          {
+            "resource": "new-G",
+            "quantity": "1",
+            "expectedSubtotalsCents": [4],
+            "diagnosticSubtotalsCents": [4],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": true,
+            "sourceLineIdentified": true
+          },
+          {
+            "resource": "new-M",
+            "quantity": "1",
+            "expectedSubtotalsCents": [1, 2],
+            "diagnosticSubtotalsCents": [1, 2],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": true,
+            "sourceLineIdentified": false
+          }
+        ],
+        "rounding": "positive-half-up-hypothesis-only",
+        "expectedTotalCents": 110,
+        "totalProductsMatches": false,
+        "totalOrderMatches": true,
+        "allSubtotalMultisetsMatch": true,
+        "everySourceLineIdentified": false,
+        "independentSubtotalsAvailable": false,
+        "roundingContractVerified": false,
+        "f1GatePassed": false
+      }
+    },
+    {
+      "alias": "C03",
+      "version": "v2",
+      "observed": {
+        "lines": [
+          {
+            "resource": "new-M",
+            "quantity": "1.00",
+            "unit": "0.01"
+          },
+          {
+            "resource": "new-M",
+            "quantity": "1.00",
+            "unit": "0.02"
+          },
+          {
+            "resource": "existing-M-from-C01",
+            "quantity": "1.00",
+            "unit": "1.03"
+          },
+          {
+            "resource": "new-G",
+            "quantity": "1.00",
+            "unit": "0.04"
+          }
+        ],
+        "totalProducts": "1.08",
+        "totalOrder": "1.10"
+      },
+      "comparison": {
+        "groups": [
+          {
+            "resource": "existing-M-from-C01",
+            "quantity": "1",
+            "expectedSubtotalsCents": [103],
+            "diagnosticSubtotalsCents": [103],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": true,
+            "sourceLineIdentified": true
+          },
+          {
+            "resource": "new-G",
+            "quantity": "1",
+            "expectedSubtotalsCents": [4],
+            "diagnosticSubtotalsCents": [4],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": true,
+            "sourceLineIdentified": true
+          },
+          {
+            "resource": "new-M",
+            "quantity": "1",
+            "expectedSubtotalsCents": [1, 2],
+            "diagnosticSubtotalsCents": [1, 2],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": true,
+            "sourceLineIdentified": false
+          }
+        ],
+        "rounding": "positive-half-up-hypothesis-only",
+        "expectedTotalCents": 110,
+        "totalProductsMatches": false,
+        "totalOrderMatches": true,
+        "allSubtotalMultisetsMatch": true,
+        "everySourceLineIdentified": false,
+        "independentSubtotalsAvailable": false,
+        "roundingContractVerified": false,
+        "f1GatePassed": false
+      }
+    },
+    {
+      "alias": "C04",
+      "version": "v3",
+      "observed": {
+        "lines": [
+          {
+            "resource": "new-G",
+            "quantity": "1",
+            "unit": "0.01"
+          },
+          {
+            "resource": "new-M",
+            "quantity": "1000",
+            "unit": "0"
+          }
+        ],
+        "totalProducts": "0.02",
+        "totalOrder": "0.01"
+      },
+      "comparison": {
+        "groups": [
+          {
+            "resource": "new-G",
+            "quantity": "1",
+            "expectedSubtotalsCents": [1],
+            "diagnosticSubtotalsCents": [1],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": true,
+            "sourceLineIdentified": true
+          },
+          {
+            "resource": "new-M",
+            "quantity": "1000",
+            "expectedSubtotalsCents": [1],
+            "diagnosticSubtotalsCents": [0],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": false,
+            "sourceLineIdentified": true
+          }
+        ],
+        "rounding": "positive-half-up-hypothesis-only",
+        "expectedTotalCents": 2,
+        "totalProductsMatches": true,
+        "totalOrderMatches": false,
+        "allSubtotalMultisetsMatch": false,
+        "everySourceLineIdentified": true,
+        "independentSubtotalsAvailable": false,
+        "roundingContractVerified": false,
+        "f1GatePassed": false
+      }
+    },
+    {
+      "alias": "C04",
+      "version": "v2",
+      "observed": {
+        "lines": [
+          {
+            "resource": "new-M",
+            "quantity": "1000.00",
+            "unit": "0.00"
+          },
+          {
+            "resource": "new-G",
+            "quantity": "1.00",
+            "unit": "0.01"
+          }
+        ],
+        "totalProducts": "0.02",
+        "totalOrder": "0.01"
+      },
+      "comparison": {
+        "groups": [
+          {
+            "resource": "new-G",
+            "quantity": "1",
+            "expectedSubtotalsCents": [1],
+            "diagnosticSubtotalsCents": [1],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": true,
+            "sourceLineIdentified": true
+          },
+          {
+            "resource": "new-M",
+            "quantity": "1000",
+            "expectedSubtotalsCents": [1],
+            "diagnosticSubtotalsCents": [0],
+            "lineCountMatches": true,
+            "subtotalMultisetMatches": false,
+            "sourceLineIdentified": true
+          }
+        ],
+        "rounding": "positive-half-up-hypothesis-only",
+        "expectedTotalCents": 2,
+        "totalProductsMatches": true,
+        "totalOrderMatches": false,
+        "allSubtotalMultisetsMatch": false,
+        "everySourceLineIdentified": true,
+        "independentSubtotalsAvailable": false,
+        "roundingContractVerified": false,
+        "f1GatePassed": false
+      }
+    }
+  ],
+  "remainingConditions": [
+    "Supported independent monetary readback preserving each source line, including repeated product lines.",
+    "Provider precision and rounding contract, consistent order totals and successful proof on existing cases."
+  ],
+  "privateIdentifiersOrCredentialsIncluded": false,
+  "erpWritesScope": "Probe business mutations only: orders, contacts, products, fiscal, inventory and financial actions; authorized credential rotations are separate.",
+  "credentialRotationEvents": 2
+}

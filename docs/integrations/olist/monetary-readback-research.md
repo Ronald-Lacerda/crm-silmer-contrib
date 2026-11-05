@@ -17,7 +17,7 @@ decisão arquitetural ou mudança de runtime.
 | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [GET pedido v3](https://api-docs.erp.olist.com/api-reference/pedidos/obter-pedido)                 | Item retorna produto, quantidade, valorUnitario e infoAdicional. O detalhe tem dois totais. O único parâmetro documentado é idPedido no path.       | Não oferece subtotal independente nem parâmetro de precisão. Os valores observados divergiram da UI.                                                            |
 | [Listar pedidos v3](https://api-docs.erp.olist.com/api-reference/pedidos/listar-pedidos)           | O modelo de listagem tem valor como string, sem itens.                                                                                              | Pode ser candidato para conferir um total; não prova cada linha. Não foi consultado novamente na conta.                                                         |
-| [Obter pedido v2](https://api-docs.erp.olist.com/api-v2/pedidos/obter-pedido)                      | Leitura por POST em pedido.obter.php, com token legado, formato e ID. Expõe quantidade, valor_unitario e totais; os exemplos usam strings decimais. | Não documenta subtotal do item, escala preservada ou arredondamento. Tipo decimal/string sozinho não garante fidelidade. Não foi executada nem adotada.         |
+| [Obter pedido v2](https://api-docs.erp.olist.com/api-v2/pedidos/obter-pedido)                      | Leitura por POST em pedido.obter.php, com token legado, formato e ID. Expõe quantidade, valor_unitario e totais; os exemplos usam strings decimais. | Não documenta subtotal do item, escala preservada ou arredondamento. A prova posterior executou v2 e reproduziu as divergências v3; não resolve o gate.         |
 | [Configuração de produtos](https://ajuda.olist.com/produtos/configuracoes-do-cadastro-de-produtos) | O preço pode ser exibido com duas casas enquanto o cálculo considera mais casas.                                                                    | Explica uma possível diferença de exibição, não demonstra a causa dos totais divergentes da API nem garante sua precisão. Configuração global não foi alterada. |
 | [Exportar pedidos para planilha](https://ajuda.olist.com/pedidos/pedidos-de-venda-como-utilizar)   | Há exportação XLS/CSV pela interface.                                                                                                               | A fonte não especifica aqui precisão por linha ou um endpoint público automatizável. Nenhuma exportação foi executada.                                          |
 | [Webhooks v3](https://api-docs.erp.olist.com/documentacao/webhooks/webhooks)                       | Notificam mudanças; configuração por URLs e indisponibilidade de webhook específico por aplicativo.                                                 | Essa página não promete um payload com subtotais exatos. Não fornece prova de leitura dos pedidos já existentes. Nenhum webhook foi ativado.                    |
@@ -60,8 +60,8 @@ sem incluir, editar, cancelar ou excluir. Antes de executá-la, definir a rota
 suportada, a credencial necessária e um orçamento novo de leituras: o anterior
 foi integralmente consumido. V2, caso selecionada, usa POST com semântica de
 leitura e credencial diferente; não está coberta automaticamente pelos GETs v3
-anteriores. O tratamento das credenciais expostas permanece pendente conforme
-o relatório. Não reutilizar valores obtidos de saídas de ferramentas.
+anteriores. As credenciais Olist expostas foram renovadas pelo PO antes da prova v2/v3.
+Não reutilizar valores obtidos de saídas de ferramentas.
 
 Foi preparado um [rascunho de pergunta ao fornecedor](monetary-readback-question.md),
 sem envio, IDs, documentos fiscais, dados de compradores ou credenciais.
@@ -70,12 +70,29 @@ registros atuais permanecem intactos.
 
 ## Continuação em pequenas entregas
 
-Em 05/11/2026, o PO autorizou prosseguir com comparador local e prova de até
-seis leituras v2 × v3 nos pedidos existentes. O [plano dividido](monetary-readback-plan.md)
-registra a implementação offline e o executor limitado. O PO informou que as
-credenciais expostas ainda não foram trocadas; a execução remota não ocorreu.
-O gate permanece aberto, inclusive se um candidato apenas reproduzir valores
-sob hipótese de arredondamento sem identificar as linhas repetidas.
+Em 05/11/2026, o PO autorizou comparador, renovação de credenciais e a
+retomada de cinco leituras, sete tentativas totais. A [evidência remota](evidence/monetary-readback-live-result.json)
+contém os seis resultados dos três pedidos existentes nas duas versões.
+O [plano dividido](monetary-readback-plan.md) registra as guardas e a auditoria.
+V2 não recuperou escala nem corrigiu os totais: C02 continua sem subtotais
+fiéis derivados do unitário; C03 retorna produtos 1,08 e pedido 1,10 com linhas
+repetidas sem identidade inequívoca; C04 retorna unitário zero para mil
+unidades e total pedido 0,01 contra 0,02 na UI. Nenhuma escrita ERP.
+
+As páginas oficiais de obter pedido v2/v3 e configuração de casas decimais
+foram reconferidas após a coleta. Não documentam, nesse recorte, um campo
+independente de subtotal ou parâmetro de precisão que resolva a prova.
+A configuração de casas decimais é candidata a esclarecimento do fornecedor,
+não uma correção comprovada; não foi alterada. Listagem de pedidos pode
+ajudar com total, mas não identifica nem comprova cada linha e não resolve
+sozinha o critério. Não repetir leituras idênticas sem hipótese nova.
+
+O gate permanece aberto. A [pergunta técnica](monetary-readback-question.md)
+agora inclui a reprodução v2/v3 e está pronta para envio sem identificadores,
+compradores ou credenciais. Enviar mensagem ao suporte depende de autorização
+específica; a autorização de investigação não foi interpretada como envio.
+Uma resposta deve indicar rota/campos e contrato de precisão/arredondamento;
+a validação posterior reutiliza C02–C04 e terá orçamento explícito próprio.
 
 ## Verificação da investigação pública original
 

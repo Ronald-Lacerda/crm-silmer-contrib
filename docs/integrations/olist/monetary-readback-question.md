@@ -1,4 +1,4 @@
-# Rascunho — precisão de leitura dos pedidos na API v3
+# Rascunho — precisão de leitura dos pedidos nas APIs v2 e v3
 
 OLIST-T02 / F1-G01. Preparado em 05/11/2026. **Não enviado.**
 Somente dados dos casos sintéticos aprovados; sem identificadores da conta,
@@ -8,18 +8,27 @@ Assunto: leitura por linha e totais de pedidos com unitário fracionário
 
 Precisamos conferir automaticamente cada subtotal e o total de pedidos abertos,
 sem gerar nota fiscal, movimentar estoque/financeiro ou editar a venda.
-Após inclusão via API v3, observamos:
+Após inclusão via API v3, consultamos os mesmos pedidos nas APIs v3 e v2
+(`pedido.obter.php`, `formato=json`). Ambas retornaram os mesmos problemas:
 
-| Caso | Quantidades e unitários enviados    | Subtotais na UI         | Totais na UI | valorTotalProdutos / valorTotalPedido no GET v3   |
+| Caso | Quantidades e unitários enviados    | Subtotais na UI         | Totais na UI | Produtos / total do pedido em v3 e v2             |
 | ---- | ----------------------------------- | ----------------------- | ------------ | ------------------------------------------------- |
 | A    | 3×0.3333 e 3×0.6667                 | 1.00 e 2.00             | 3.00         | 3 / 3, mas unitários retornados 0.33 e 0.67       |
 | B    | 1×0.005, 1×0.015, 1×1.025 e 1×0.035 | 0.01, 0.02, 1.03 e 0.04 | 1.10         | 1.08 / 1.1                                        |
 | C    | 1000×0.000010 e 1×0.01              | 0.01 e 0.01             | 0.02         | 0.02 / 0.01, com primeiro unitário retornado zero |
 
-Os valores acima são lexemas das respostas, sem formatação monetária local.
+Os valores da tabela preservam os números observados, com zeros finais
+normalizados apenas para comparação. V2 retornou strings como `3.00`,
+`1.08`/`1.10` e `0.02`/`0.01`; v3 retornou `3`, `1.08`/`1.1` e `0.02`/`0.01`.
+As três respostas v2 eram JSON válido rotulado como `text/html`.
+Foram seis resultados válidos em sete tentativas; uma tentativa v2 inicial
+foi descartada antes do parse por tipo de conteúdo.
 No caso B há duas linhas do mesmo produto com preços distintos e uma linha de
 outro produto com o mesmo tamanho. A UI mantém as quatro linhas; o GET as
 reordena. Não houve desconto, frete ou outras despesas nos casos.
+
+O fallback v2 não recuperou a precisão. Precisamos de orientação técnica
+para os pontos abaixo, antes de adotar outra leitura ou alterar o processo:
 
 1. Qual rota pública suportada retorna subtotal independente e identidade por
    linha, preservando linhas repetidas, além do total efetivo mostrado na UI?
@@ -29,7 +38,7 @@ reordena. Não houve desconto, frete ou outras despesas nos casos.
    arredondamento por linha/total, inclusive empates e quantidades altas?
 4. A configuração de casas decimais afeta a leitura API ou somente entrada/
    exibição? Existe parâmetro de leitura que dispense mudar configurações globais?
-5. Se a solução for API v2 ou exportação, quais campos, precisão, autenticação,
+5. Se houver rota v2 alternativa, correção ou exportação suportada, quais campos, precisão, autenticação,
    limites e garantias de suporte permitem essa conferência automática?
 
 Há pedidos existentes para a validação de uma solução; não precisamos criar

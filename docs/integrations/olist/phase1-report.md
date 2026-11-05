@@ -78,7 +78,7 @@ produtos; não foi declarada fidelidade automática. Uma reconferência anterior
 usou dois GETs e parou sem POST. C04 foi criado uma única vez, com o payload
 original, após essa investigação somente leitura.
 
-Lote adicional: **120 GETs autenticados, oito tentativas de POST (duas
+Checkpoint anterior à comparação v2 × v3 — lote adicional: **120 GETs autenticados, oito tentativas de POST (duas
 rejeitadas e seis bem-sucedidas), um GET sem autenticação com 401**. Os tetos
 aprovados estão esgotados. Incluindo as consultas anteriores e C01: 157 GETs,
 nove tentativas de POST, 166 chamadas autenticadas; trocas OAuth não entram
@@ -101,13 +101,16 @@ Em 05/11/2026, o PO escolheu **manter bloqueado e buscar leitura confiável**.
 Não foram adotadas a restrição a duas casas nem a conferência humana como
 substituto. A [investigação pública](monetary-readback-research.md) não comprovou
 um leitor monetário automático fiel. A pergunta técnica ao fornecedor está
-preparada, sem envio; nenhum novo GET autenticado ou efeito ERP foi executado.
+preparada, sem envio. Na investigação pública inicial, anterior à comparação
+v2 × v3 descrita abaixo, não houve novo GET autenticado ou efeito ERP.
 
 Mantém-se F1-G01 aberto até comprovar um meio suportado de ler
 subtotais e total com fidelidade. Não é necessário novo pedido para apresentar
 o problema ao fornecedor. Preparar dúvida técnica não autoriza enviá-la nem
 compartilhar credenciais, IDs ou dados fiscais. Novas consultas autenticadas
-exigem novo orçamento, pois o atual terminou.
+exigiam novo orçamento, posteriormente concedido para a prova v2 × v3.
+O orçamento dessa prova também foi consumido: sete tentativas; não autoriza
+reiniciar os coletores com os mesmos journals.
 
 Alternativas não escolhidas, que exigiriam decisão explícita e registro do contrato:
 
@@ -125,14 +128,26 @@ fiscal real aceito, não uma validação fiscal universal. OAuth/refresh/PKCE,
 concorrência, quotas compartilhadas e falhas de runtime continuam nos gates
 T03/T04/T08/T09/T14/T15 correspondentes; mocks não são evidência remota.
 
-Continuação em 05/11: o PO autorizou comparador local e até seis leituras v2 ×
-v3 de C02–C04. O [plano dividido](monetary-readback-plan.md) e os testes
-diagnosticam valores/identidade separadamente. As duas credenciais foram renovadas pelo PO após auditoria das dependências
-no escopo acessível. A leitura C02/v3 confirmou a perda de fidelidade por
-linha; C02/v2 HTTP 200 parou no tipo de conteúdo antes do parse. Duas das
-seis consultas foram consumidas. A continuação de cinco leituras, incluindo
-uma substituição v2 adicional, aguarda autorização explícita. O journal
-original permanece preservado. F1-G01/T02 permanecem abertos.
+Continuação em 05/11: o PO autorizou comparador local, renovação e retomada
+de cinco leituras, sete tentativas no total. As duas credenciais foram renovadas
+após auditoria no escopo acessível. A [prova v2 × v3](evidence/monetary-readback-live-result.json)
+concluiu os seis resultados caso/versão; a tentativa v2 original consumiu um slot
+sem parse por MIME, e sua substituição autorizada retornou JSON como `text/html`.
+Journal original preservado, sete tentativas totais, seis comparações, zero
+mutação de negócio pelo probe e coletor encerrado. As duas rotações de
+credenciais autorizadas foram concluídas separadamente. V2 reproduz as divergências v3 em C02–C04:
+
+| Caso | Resultado comum v2/v3                            | Consequência                                                       |
+| ---- | ------------------------------------------------ | ------------------------------------------------------------------ |
+| C02  | Unitários 0,33/0,67; total 3,00                  | Subtotais calculados 0,99/2,01 contra UI 1,00/2,00                 |
+| C03  | Produtos 1,08; pedido 1,10                       | Total produtos divergente e identidade de linhas repetidas ambígua |
+| C04  | Unitário zero × 1000; produtos 0,02; pedido 0,01 | Perde a linha de um centavo e total pedido diverge da UI 0,02      |
+
+**F1-G01/T02 continuam abertos.** O fallback v2 está descartado como solução
+para estes casos. O próximo desbloqueio depende de rota e contrato suportados
+pelo fornecedor, seguidos de prova nos pedidos existentes. O [rascunho técnico](monetary-readback-question.md)
+foi atualizado, sem envio. Não houve decisão de reduzir precisão, aceitar só
+total global ou trocar conciliação automática por conferência humana.
 
 ## Verificação e segurança
 

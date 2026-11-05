@@ -8,19 +8,18 @@ Não altera o runtime, o modelo monetário ou a sequência de liberação de T03
 
 ## Entregas e condição de passagem
 
-| Entrega                                        | Estado                                       | Evidência / próximo passo                                                                                                                                           |
-| ---------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A — comparador decimal local                   | Implementada e verificada offline            | [Comparador](monetary-comparator.mjs), testes e [reprodução histórica](evidence/monetary-comparison-historical.json)                                                |
-| B — até seis leituras dos pedidos existentes   | Executor preparado; execução remota pendente | [Probe](monetary-readback-probe.mjs); três GETs v3 e três POSTs de consulta v2, zero mutações ERP                                                                   |
-| C — avaliar leitor / esclarecer com fornecedor | Depende dos resultados B                     | Se v2 for fiel, especificar o leitor complementar; se divergir, completar a [pergunta preparada](monetary-readback-question.md). Envio ao fornecedor não autorizado |
-| D — encerrar F1-G01 / T02                      | Bloqueada                                    | Regra suportada de precisão/arredondamento, identidade por linha, subtotais e total comprovados; então liberar T03                                                  |
+| Entrega                                        | Estado                                        | Evidência / próximo passo                                                                                                          |
+| ---------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| A — comparador decimal local                   | Implementada e verificada offline             | [Comparador](monetary-comparator.mjs), testes e [reprodução histórica](evidence/monetary-comparison-historical.json)               |
+| B — leituras dos pedidos existentes            | Concluída: seis resultados em sete tentativas | [Prova remota](evidence/monetary-readback-live-result.json); três GETs v3 e quatro POSTs de leitura v2, zero mutações de negócio   |
+| C — avaliar leitor / esclarecer com fornecedor | V2 insuficiente; pergunta atualizada          | V2 reproduz as divergências v3. [Pergunta técnica pronta](monetary-readback-question.md); envio ao fornecedor ainda não autorizado |
+| D — encerrar F1-G01 / T02                      | Bloqueada                                     | Regra suportada de precisão/arredondamento, identidade por linha, subtotais e total comprovados; então liberar T03                 |
 
-O usuário informou que **as credenciais expostas ainda não foram trocadas**.
-Não houve chamada autenticada nesta entrega. O executor recusa credenciais
-sem declaração de renovação. O segredo do aplicativo deve ser renovado antes
-de novo OAuth; revisar dependências antes de revogar/trocar o token legado.
-A prova não realiza rotação, não recupera valores de saídas anteriores e não
-altera aplicativos ou permissões da conta.
+As credenciais Olist expostas foram renovadas pelo PO antes da prova.
+As dependências acessíveis foram revisadas e a conta conferida contra o plano
+privado. O executor exige declaração de renovação; não realiza a troca nem
+recupera segredos de saídas anteriores. Callback e permissões foram preservados.
+A execução e os limites da auditoria estão registrados abaixo.
 
 ## O que o comparador resolve
 
@@ -128,14 +127,14 @@ não comprova ausência de consumidores externos ou workflows arquivados.
 A exportação do Checkout InfinitePay foi concluída manualmente pelo PO.
 
 A [projeção sanitizada de prontidão](evidence/monetary-readback-readiness.json)
-registra a renovação, o escopo da auditoria e as duas leituras consumidas.
+registra a renovação, o escopo da auditoria e as sete tentativas realizadas.
 A primeira autenticação usou o valor de um campo oculto, que não correspondia
 ao segredo revelado pelo controle Exibir; falhou antes de ler pedidos.
 A captura correta, seguida de Ocultar, permitiu a troca OAuth.
 
 O journal original registra C02/v3 comparado e C02/v2 HTTP 200 interrompido
 por `INVALID_CONTENT_TYPE`, antes de interpretar o corpo. Foram consumidas
-**duas das seis tentativas**, com quatro restantes. Não há resposta v2
+**duas das seis tentativas** nessa execução inicial. Não há resposta v2
 recuperável dessa tentativa. O tipo MIME exato não foi registrado pelo leitor
 anterior. O diagnóstico C02/v3 mantém 0,33 × 3 e 0,67 × 3: soma R$ 3,00,
 mas subtotais calculados R$ 0,99/R$ 2,01 divergem da UI R$ 1,00/R$ 2,00.
@@ -145,13 +144,34 @@ no endpoint PHP fixo, com parse estrito, limite de tamanho e validação de
 identidade preservados. HTML real continua rejeitado; v3 exige JSON.
 O MIME é registrado apenas como enumeração segura.
 
-A continuação está preparada, mas depende de aprovação adicional explícita:
-**cinco leituras** (C02/v2, C03/v3, C03/v2, C04/v3, C04/v2), sete tentativas
-no total. Não reinicia as seis originais. Exige `five-read-approval.json`
-privado com `approved: true`, código de aprovação específico e SHA-256 do
-journal original; valida a sequência anterior e cria exclusivamente
-`five-read-journal.jsonl`, sem sobrescrever o original ou permitir retomada
-implícita. Não alterar o arquivo de aprovação antes da resposta do PO.
+O PO autorizou explicitamente as cinco leituras da retomada em 05/11,
+com sete tentativas no total. A execução concluiu C02/v2, C03/v3, C03/v2,
+C04/v3 e C04/v2, todas HTTP 200. As três respostas v2 eram JSON rotulado
+`text/html`; as duas v3 eram `application/json`. O arquivo privado de aprovação
+foi ativado somente após a resposta, e o SHA-256 do journal original permaneceu
+igual. O journal de continuação é exclusivo, sem reinício ou retry.
+A sessão foi encerrada após a coleta; nenhum token foi persistido em claro.
+
+A [evidência remota sanitizada](evidence/monetary-readback-live-result.json)
+contém seis comparações válidas em sete tentativas. O probe não realizou
+mutações de pedidos, cadastros, fiscal, estoque ou financeiro; as duas
+rotações autorizadas de credenciais são registradas separadamente.
+V2 e v3 produziram os mesmos diagnósticos nos três casos:
+
+| Caso | Resultado das duas APIs                                           | Limite observado                                                                            |
+| ---- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| C02  | Unitários 0,33/0,67; total R$ 3,00                                | Multiplicação retorna R$ 0,99/2,01 contra R$ 1,00/2,00 na UI                                |
+| C03  | Produtos R$ 1,08; pedido R$ 1,10                                  | Total de produtos diverge; duas linhas do mesmo produto continuam sem identidade inequívoca |
+| C04  | Unitário 0,00 para mil unidades; produtos R$ 0,02; pedido R$ 0,01 | Perda de precisão e total do pedido divergente da UI R$ 0,02                                |
+
+O fallback v2 foi testado e **não resolve F1-G01**. Não há base para repetir
+as mesmas leituras esperando recuperar precisão nem para fechar T02.
+A próxima dependência é uma rota/contrato suportado que preserve os valores e
+identidade por linha. A [pergunta ao fornecedor](monetary-readback-question.md)
+está atualizada com a comparação v2/v3, sem envio. A autorização de investigar
+e concluir F1 não altera por si só o contrato monetário aprovado.
+
+Os comandos abaixo documentam sessões já consumidas, não instruem repetir:
 
 ```text
 node docs/integrations/olist/monetary-readback-session.mjs <diretorio-privado-f1>/monetary-readback --continue-five
@@ -161,7 +181,7 @@ Foi acrescentada [sessão OAuth específica](monetary-readback-session.mjs),
 sem os oito GETs do coletor antigo. Ela importa um envelope RSA-OAEP/SHA-256
 cifrado de 512 bytes, valida a declaração de renovação dos dois segredos e
 o documento conferido na sessão ERP, troca uma vez o código OAuth e entrega
-o access token em memória ao executor das seis leituras. Não há `/info`,
+o access token em memória ao executor da agenda aprovada. Não há `/info`,
 refresh, retry ou criação ERP implícitos. Callback de uso único limpa a URL;
 fechamento/falha descartam credenciais. Não executar o coletor de leitura ou
 de lote antigo para obter o access token desta prova.
@@ -175,15 +195,15 @@ O envelope privado contém `clientId`, `clientSecret`, `v2Token`,
 `verifiedAccountDocument` e `credentialsRenewed: true`; a chave privada fica
 em memória. Só gerar/importar esse envelope após renovação real e revisão
 das dependências. Nunca colocar os valores em chat, argumentos de shell,
-capturas ou arquivos em claro. Não há coletor real ativo; a sessão anterior foi encerrada após a interrupção.
+capturas ou arquivos em claro. Não há coletor real ativo; a sessão de continuação foi encerrada após a coleta.
 
 Validação atual: 40/40 testes offline aprovados em Node 24.20.0, sem
 skips, incluindo OAuth mockado + exatamente seis consultas, callback forjado,
 credenciais não renovadas, fechamento durante importação do envelope,
 aprovação separada da continuação e exatamente cinco leituras com OAuth mockado.
 Regressão completa dos oito arquivos Olist: **111/111**, sem skips; QA da
-continuação sem finding bloqueante. O teto de sete tentativas não é evidência
-de execução: o realizado permanece em duas até a autorização adicional.
+continuação sem finding bloqueante. A prova remota registrou sete tentativas,
+seis comparações válidas e zero escrita ERP; os testes usam rede simulada.
 QA identificou uma corrida de descarte na importação; a guarda de fechamento
 e o descarte em `finally` foram incorporados antes da publicação.
 
@@ -195,3 +215,12 @@ A revisão de revogação/rotação dos demais serviços afetados está pendente
 não foi executada como parte da autorização restrita a Olist. As consultas
 posteriores projetaram somente nomes/contagens/conclusões; não reemitir nem
 publicar o inventário integral.
+
+## Direção do PO após a comparação
+
+Em 05/11/2026, o PO esclareceu que quer focar na implementação. A investigação
+externa foi encerrada e a pergunta ao suporte permanece sem envio. A prova
+negativa de leitura permanece registrada; não há fechamento artificial de F1
+nem mudança dos critérios monetários. A preparação de código local pode
+avançar desativada, com validação sintética e falha fechada para geração ERP.
+Conexão real, inclusões e ativação continuam sujeitas aos gates próprios.

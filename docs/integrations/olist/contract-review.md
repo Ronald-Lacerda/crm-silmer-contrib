@@ -102,3 +102,10 @@ continuam nas tarefas posteriores. G07/G08 mantêm os gates próprios.
 API perde precisão dos unitários e diverge nos totais em C03/C04. Não há leitor
 monetário automático fiel comprovado. T02/F1 e a liberação de T03 permanecem
 abertos até prova técnica ou decisão explícita de alteração do contrato.
+
+Atualização de 05/11 após [comparação remota v2 × v3](evidence/monetary-readback-live-result.json):
+sete tentativas, seis resultados válidos, zero escrita. O fallback v2 reproduziu
+as divergências por linha/total v3 e não resolve G01. As credenciais Olist
+foram renovadas pelo PO. A próxima dependência é rota e contrato de precisão
+suportados, seguidos de prova consistente; pergunta técnica preparada e não
+enviada. A autorização de concluir F1 não muda os critérios da ADR 057.
