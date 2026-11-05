@@ -1,5 +1,12 @@
 // Orders module (ADR 006): the Pedido aggregate, its ficha and persistence.
 export {
+  calculateSizePricing,
+  changeSizePricingQuantity,
+  createSizePricing,
+  duplicateSizePricingGroup,
+  reviewSizePricingSubtotal,
+} from './domain/size-pricing.js';
+export {
   BillingError,
   billingPercent,
   billingSplit,

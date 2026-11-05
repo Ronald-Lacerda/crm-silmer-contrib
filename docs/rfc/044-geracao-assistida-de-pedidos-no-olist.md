@@ -742,6 +742,10 @@ novo, não depende de posse e não dá edição de cadastros fora da sequência.
 - [ ] **OLIST-T20** IDs estáveis de grupo/linha, subtotais e revisão humana
       após quantidade; migração/compatibilidade estrutural. OLIST-09–10, 29, 42–44.
       Dono Backend. Depende T03. Evidência: reordenação/duplicação/M em dois grupos.
+      Preparação local autorizada pelo PO em 05/11: **T20a/T21a** implementam
+      [núcleo de domínio](../integrations/olist/implementation-progress.md),
+      com IDs, soma exata e revisão após quantidade. Não integra API/banco/UI,
+      não fecha T20/T21 nem libera geração ERP ou o gate F1.
 - [ ] **OLIST-T21** Domínio/API de subtotal e total calculado; confirmação sem
       valor livre e contrato antigo limitado à igualdade calculada. OLIST-10,
       34, 40–43. Dono Backend. Depende T20. Evidência: manipulação/overflow,

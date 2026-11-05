@@ -18,6 +18,11 @@ universos ativos preservando história; exportado não reabre para editar nem
 cancela ERP. Rótulos Aplicação/Previsão de entrega exigem ficha v7, sem mudar
 v2–v6. N8n e Financeiro mantêm fronteiras próprias, com emendas da nova capacidade.
 
+Preparação local em 05/11 (T20a/T21a): o domínio Orders contém o núcleo de
+IDs e subtotais por tamanho, cálculo exato e revisão após quantidade.
+[Implementação e limites](docs/integrations/olist/implementation-progress.md).
+Ainda sem persistência/API/UI e sem geração ERP; o gate monetário F1 permanece.
+
 ## Cobranças do pedido — InfinitePay (05/11/2026)
 
 A [ADR 058](docs/adr/058-cobrancas-do-pedido-com-infinitepay.md), após aprovação
