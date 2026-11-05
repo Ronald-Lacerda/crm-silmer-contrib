@@ -12,12 +12,15 @@
   "maximumGetAttempts": 14,
   "maximumPostAttempts": 3,
   "maximumNominalTotalCents": 520,
-  "actualGetAttempts": 0,
-  "actualPostAttempts": 0,
-  "newOrdersCreated": 0,
-  "apiProofPassed": false,
-  "nativeUiProofPassed": false,
-  "f1GatePassed": false,
-  "currentBlocker": "BROWSER_CONTROL_NOT_RESPONDING",
-  "privateValuesIncluded": false
+  "actualGetAttempts": 14,
+  "actualPostAttempts": 3,
+  "newOrdersCreated": 3,
+  "apiProofPassed": true,
+  "nativeUiProofPassed": true,
+  "f1GatePassed": true,
+  "currentBlocker": null,
+  "privateValuesIncluded": false,
+  "proofResult": "exact-cent-proof-result.json",
+  "f1Scope": "exact-cent-v1",
+  "collectorStopped": true
 }

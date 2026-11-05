@@ -6,11 +6,45 @@ OLIST-T02 / OLIST-03–17, 20, 26, 35–41. Fechamento das experiências autoriz
 [ADR 057](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) ·
 [Resultados sanitizados](evidence/phase1-controlled-results.json).
 
-**Experiências autorizadas concluídas; T02 e gate F1 continuam abertos por
-F1-G01.** A UI permite comprovar cada linha destes casos, mas a leitura pública
-v3 observada não fornece valores suficientes e consistentes para a futura
-reconciliação monetária automática. Nenhuma inclusão confirmada foi repetida.
-Não liberar T03/Fase 2 nem considerar este relatório uma mudança do contrato.
+**Fase 1 / T02 concluídas para o escopo inicial de centavos exatos.**
+A redução de escopo foi aprovada na [ADR 059](../../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md)
+/[RFC 046](../../rfc/046-olist-escopo-inicial-de-centavos-exatos.md). A
+[prova C05–C07](evidence/exact-cent-proof-result.json) confirmou API e tela
+nativa: três pedidos abertos, 14 GETs, três POSTs e R$ 5,20 nominal, sem retry.
+Cada marcador de linha voltou intacto pela API, inclusive produto repetido;
+produto/quantidade/unitário/subtotal técnico e ambos os totais coincidiram.
+Coletores encerrados, IDs e journals privados preservados.
+
+| Caso | Subtotais calculados da API e vistos na tela | Total nas duas leituras | Situação nativa |
+| ---- | -------------------------------------------- | ----------------------- | --------------- |
+| C05  | R$ 0,03 e R$ 0,06                            | R$ 0,09                 | Em aberto       |
+| C06  | R$ 0,01, R$ 0,02, R$ 0,03 e R$ 0,04          | R$ 0,10                 | Em aberto       |
+| C07  | R$ 5,00 (500 unidades) e R$ 0,01             | R$ 5,01                 | Em aberto       |
+
+A tela padrão não exibe os marcadores opacos; sua preservação foi conferida
+pela API, e a tela confirmou produtos/quantidades e os valores renderizados.
+Os três pedidos oferecem Lançar contas/Lançar estoque; essas ações não foram
+acionadas. Nenhum comando fiscal/estoque/contas/cobrança/limpeza foi enviado.
+Essas observações não certificam universalmente efeitos assíncronos do provedor.
+
+## Limites do fechamento
+
+- Somente `subtotalCents % quantity === 0`, com inteiros positivos, sem
+  arredondamento. Preço fracionário continua válido no CRM e bloqueia toda a
+  exportação antes de qualquer inclusão dependente.
+- Não será exportado automaticamente R$ 1,00 para três unidades nem R$ 0,01
+  para mil unidades. Não há mudança de negociação, divisão artificial de
+  linha, resíduo, desconto compensatório ou envio parcial.
+- Marcador ausente/ambíguo, fusão, produto/quantidade/valor divergente ou efeito
+  incerto interrompem sem repetir POST; o ID conhecido permanece preservado.
+- C02–C04 continuam com as divergências históricas. O fechamento não declara
+  que as APIs foram corrigidas ou que todo unitário fracionário é suportado.
+- T03 pode iniciar no escopo aprovado. API/persistência/ACL/worker/UI, legado,
+  loja e os demais gates de implementação/piloto continuam pendentes. Não há
+  geração integrada em produção, deploy ou habilitação de conta nesta entrega.
+
+As seções seguintes registram as experiências e decisões **anteriores** à
+emenda de centavos exatos; não substituem o fechamento restrito acima.
 
 ## Capacidades comprovadas nesta conta
 

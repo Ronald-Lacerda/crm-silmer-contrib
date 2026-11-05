@@ -1,0 +1,120 @@
+{
+  "task": "OLIST-T02/T06a",
+  "observedOn": "2026-11-05",
+  "policy": "exact-cent-v1",
+  "state": "phase1_closed_for_exact_cent_scope",
+  "scopeDecision": "ADR-059/RFC-046",
+  "executedSourceCommit": "98a68543",
+  "sourceSha256": {
+    "modules/orders/src/domain/olist-exact-cent.js": "647892bbbfd6027bb53e34530f462d389edc894c28d7008d9f8671f825eff1ad",
+    "docs/integrations/olist/exact-cent-proof.mjs": "9dd822bc5144293bcc6e9f0f9191d41c7b1742579632246f62ab585f276f7c6f",
+    "docs/integrations/olist/monetary-readback-session.mjs": "f8e25360f54456ee73287a1e20dc6e7b26ef5fd60e2a0752ee8eadc83ca74987"
+  },
+  "oauthCodeExchanges": 1,
+  "actualGetAttempts": 14,
+  "actualPostAttempts": 3,
+  "newOrdersCreated": 3,
+  "nominalTotalCents": 520,
+  "automaticRetries": 0,
+  "collectorStopped": true,
+  "apiProofPassed": true,
+  "nativeUiProofPassed": true,
+  "f1GatePassed": true,
+  "f1GateScope": "exact positive integer cents per unit; all lines identifiable and independently returned values/totals verified",
+  "productionExporterIntegrated": false,
+  "pilotOrDeploymentApproved": false,
+  "priorFractionalCasesFixed": false,
+  "results": [
+    {
+      "alias": "C05",
+      "lineCount": 2,
+      "totalCents": 9,
+      "api": {
+        "markerIdentityVerified": true,
+        "exactLineMoneyVerified": true,
+        "exactTotalsVerified": true
+      },
+      "nativeUi": {
+        "alias": "C05",
+        "lineCount": 2,
+        "quantities": [3, 3],
+        "lineSubtotalsCents": [3, 6],
+        "totalProductsCents": 9,
+        "totalOrderCents": 9,
+        "referenceVisible": true,
+        "open": true,
+        "allLineMoneyMatches": true,
+        "lineMarkersVisible": false,
+        "launchAccountsActionAvailable": true,
+        "launchStockActionAvailable": true
+      }
+    },
+    {
+      "alias": "C06",
+      "lineCount": 4,
+      "totalCents": 10,
+      "api": {
+        "markerIdentityVerified": true,
+        "exactLineMoneyVerified": true,
+        "exactTotalsVerified": true
+      },
+      "nativeUi": {
+        "alias": "C06",
+        "lineCount": 4,
+        "quantities": [1, 1, 1, 1],
+        "lineSubtotalsCents": [1, 2, 3, 4],
+        "totalProductsCents": 10,
+        "totalOrderCents": 10,
+        "referenceVisible": true,
+        "open": true,
+        "allLineMoneyMatches": true,
+        "lineMarkersVisible": false,
+        "launchAccountsActionAvailable": true,
+        "launchStockActionAvailable": true
+      }
+    },
+    {
+      "alias": "C07",
+      "lineCount": 2,
+      "totalCents": 501,
+      "api": {
+        "markerIdentityVerified": true,
+        "exactLineMoneyVerified": true,
+        "exactTotalsVerified": true
+      },
+      "nativeUi": {
+        "alias": "C07",
+        "lineCount": 2,
+        "quantities": [500, 1],
+        "lineSubtotalsCents": [500, 1],
+        "totalProductsCents": 501,
+        "totalOrderCents": 501,
+        "referenceVisible": true,
+        "open": true,
+        "allLineMoneyMatches": true,
+        "lineMarkersVisible": false,
+        "launchAccountsActionAvailable": true,
+        "launchStockActionAvailable": true
+      }
+    }
+  ],
+  "businessCommandsIssued": {
+    "createOrders": 3,
+    "createContacts": 0,
+    "createProducts": 0,
+    "invoice": 0,
+    "inventoryPosting": 0,
+    "accountPosting": 0,
+    "charge": 0,
+    "delete": 0
+  },
+  "uiObservationLimits": "Default native view does not display opaque line markers; marker preservation was verified by API. Available posting actions and open status are native observations, not a universal assertion about asynchronous provider effects.",
+  "excluded": [
+    "Fractional-cent derived unit prices",
+    "Automatic rounding or negotiated amount/quantity changes",
+    "Compensation between lines or partial export",
+    "Missing/ambiguous markers or mismatching returned money",
+    "Unrestricted precision guarantees and production rollout"
+  ],
+  "privateValuesIncluded": false
+}

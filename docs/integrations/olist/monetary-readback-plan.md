@@ -1,19 +1,26 @@
 # F1-G01 — diagnóstico dividido em entregas
 
+**Atualização de fechamento:** a [ADR 059](../../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md)
+/[RFC 046](../../rfc/046-olist-escopo-inicial-de-centavos-exatos.md) aprovou a
+redução de escopo. [C05–C07 passaram em API e tela](evidence/exact-cent-proof-result.json);
+F1/T02 fechados somente para unitários exatos em centavos. O diagnóstico
+fracionário abaixo permanece histórico e verdadeiro; não é mais impedimento
+ao início de T03 nesse subconjunto. Não houve mensagem ao suporte.
+
 OLIST-T02 / OLIST-09–10, 14–17, 40–42. Continuação autorizada pelo PO em
 05/11/2026: comparador local e prova limitada v2 × v3 nos pedidos já existentes.
 Preserva [ADR 057](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
 Não altera o runtime, o modelo monetário ou a sequência de liberação de T03.
 
-## Entregas e condição de passagem
+## Entregas do diagnóstico e fechamento posterior
 
 | Entrega                                        | Estado                                        | Evidência / próximo passo                                                                                                          |
 | ---------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | A — comparador decimal local                   | Implementada e verificada offline             | [Comparador](monetary-comparator.mjs), testes e [reprodução histórica](evidence/monetary-comparison-historical.json)               |
 | B — leituras dos pedidos existentes            | Concluída: seis resultados em sete tentativas | [Prova remota](evidence/monetary-readback-live-result.json); três GETs v3 e quatro POSTs de leitura v2, zero mutações de negócio   |
 | C — avaliar leitor / esclarecer com fornecedor | V2 insuficiente; pergunta atualizada          | V2 reproduz as divergências v3. [Pergunta técnica pronta](monetary-readback-question.md); envio ao fornecedor ainda não autorizado |
-| D — encerrar F1-G01 / T02                      | Bloqueada                                     | Regra suportada de precisão/arredondamento, identidade por linha, subtotais e total comprovados; então liberar T03                 |
+| D — encerrar F1-G01 / T02                      | Concluída no escopo exato da ADR 059          | [Prova C05–C07](evidence/exact-cent-proof-result.json); frações excluídas da exportação automática, T03 pode iniciar               |
 
 As credenciais Olist expostas foram renovadas pelo PO antes da prova.
 As dependências acessíveis foram revisadas e a conta conferida contra o plano

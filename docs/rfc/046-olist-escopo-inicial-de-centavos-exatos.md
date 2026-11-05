@@ -56,5 +56,14 @@ O mesmo journal impede novo orçamento por restart. Não apagar registros.
 
 ## Estado
 
-Mudança de escopo aprovada; implementação e testes locais em andamento.
-Prova remota pendente. F1 permanece aberto até evidência real consistente.
+**F1/T02 fechados para `exact-cent-v1` em 05/11/2026.**
+[Resultado sanitizado](../integrations/olist/evidence/exact-cent-proof-result.json):
+14 GETs, três POSTs, três pedidos/R$ 5,20; API e tela nativa consistentes em
+cada linha e total. Marcadores comprovados pela API; a tela padrão não os
+exibe. Pedidos em aberto, ações de lançar contas/estoque disponíveis e não
+acionadas. Coletores encerrados, nenhum retry, IDs preservados.
+
+160/160 testes de domínio/pedidos/loja e 126/126 Olist, sem skips, na versão
+executada. O fechamento libera o início de T03 dentro do escopo; não fecha
+as tarefas posteriores nem autoriza deploy/piloto. Casos fracionários e
+resultados ambíguos continuam bloqueados para exportação.

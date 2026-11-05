@@ -5,17 +5,22 @@ coordenado pelo Tech Lead (Codex nesta execução). Consulta em 04/11/2026.
 [Revisão T01](contract-review.md) · [RFC 050](../../rfc/050-geracao-assistida-de-pedidos-no-olist.md)
 · [ADR 057](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md).
 
-**Situação em 05/11/2026: experiências autorizadas concluídas; T02/F1 abertos
-por F1-G01 (leitura monetária automática).** Cliente, pai, M/G/GG e C02–C04
-criados e reconciliados sem repetir inclusões confirmadas. Origem e referência
-comprovadas nos novos pedidos. Os subtotais nativos conferem, mas os unitários
-e totais da API perdem precisão ou divergem: C04 tem R$ 0,02 na tela e 0.01
-em `valorTotalPedido`. C03 tem R$ 1,10 na tela e 1.08 em `valorTotalProdutos`.
-[Relatório atual e decisão do PO](phase1-report.md) ·
-[Resultado sanitizado](evidence/phase1-controlled-results.json).
+**Situação atual: Fase 1/T02 concluídas no escopo `exact-cent-v1`.**
+A [ADR 059](../../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md)
+/[RFC 046](../../rfc/046-olist-escopo-inicial-de-centavos-exatos.md) aprovou o
+bloqueio de unitários fracionários. [C05–C07 passaram por API e tela](evidence/exact-cent-proof-result.json):
+três pedidos abertos, 14 GETs, três POSTs, R$ 5,20, marcadores preservados pela
+API e valores/totais nativos consistentes. Coletor encerrado, sem retry.
+T03 pode iniciar; não há geração integrada nem liberação de piloto/produção.
 
-As seções de planejamento e checkpoints abaixo preservam seu escopo histórico;
-o relatório acima governa o estado atual, limites e próximos passos.
+Cliente, pai, M/G/GG e origem/referência foram comprovados nas experiências
+anteriores. C02–C04 continuam com as divergências fracionárias históricas;
+o fechamento restrito não as corrige. A tela padrão não exibe os marcadores,
+verificados pela API. Não foram acionadas ações fiscais/estoque/contas.
+[Relatório atual e limites](phase1-report.md).
+
+As seções abaixo preservam planejamento e checkpoints históricos anteriores
+ao fechamento restrito. O relatório acima governa o estado atual.
 
 ## Schema e reprodução
 

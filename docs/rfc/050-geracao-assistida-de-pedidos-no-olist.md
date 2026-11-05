@@ -3,8 +3,9 @@
 Emenda de escopo de 05/11/2026: [RFC 046](046-olist-escopo-inicial-de-centavos-exatos.md)
 /[ADR 059](../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) supersede
 a amplitude monetária inicial: somente unitários exatos em centavos, com
-frações bloqueadas antes de qualquer inclusão. F1 permanece condicionado à
-prova real desse subconjunto. Os demais requisitos continuam vigentes.
+frações bloqueadas antes de qualquer inclusão. F1/T02 foram fechados após a
+[prova real C05–C07](../integrations/olist/evidence/exact-cent-proof-result.json)
+desse subconjunto. Os demais requisitos e gates posteriores continuam vigentes.
 
 RFC 050. Especificação de produto, desenho técnico e plano de execução.
 Revisão 2 de 04/11/2026. Responsável: Tech Lead. Decisor: proprietário.
@@ -678,7 +679,7 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       Evidência: [revisão T01](../integrations/olist/contract-review.md), matriz dos
       50 requisitos, donos por tarefa e gaps F1-G01–08. Concluída documentalmente
       em 04/11/2026; T02/F1 continuam abertos.
-- [ ] **OLIST-T02** Provar API/conta: cliente, produto pai/variações/tamanhos,
+- [x] **OLIST-T02** Provar API/conta: cliente, produto pai/variações/tamanhos,
       referências/SKU, cadastro fiscal, permissões, gatilhos e precisão por linha.
       OLIST-03–17, 20, 26, 35–41. Dono Integrações. Leitura/fixtures em paralelo
       com T01; escrita controlada só autorizada no ambiente definido.
@@ -713,6 +714,14 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       não resolve G01. F1-G01/T02 seguem abertos, dependentes de rota/contrato
       fiel suportado pelo fornecedor; pergunta preparada, sem envio. Regressão
       111/111 e QA da continuação sem bloqueio; sem liberação de T03.
+
+Fechamento posterior à investigação: em 05/11/2026, a [ADR 059](../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md)
+/[RFC 046](046-olist-escopo-inicial-de-centavos-exatos.md) aprovou o subconjunto
+de unitários exatos em centavos. [C05–C07 passaram na API e na tela](../integrations/olist/evidence/exact-cent-proof-result.json):
+14 GETs, três POSTs, R$ 5,20, identidade opaca por linha e valores/totais
+consistentes. F1/T02 fechados **somente nesse escopo**; T03 pode iniciar.
+Frações e casos ambíguos permanecem bloqueados, sem correção de C02–C04 ou
+liberação de produção/piloto. Os parágrafos anteriores são checkpoints históricos.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado
 fiscal inventado ou suposição de idempotência remota. Plano para ausência de
@@ -1000,16 +1009,16 @@ total calculado e schema expand. Reconciliar a janela antes de retomar.
 Checklists de tarefas são fonte de status. Registrar evidências abaixo sem
 duplicar checkboxes. Decisão aceita não marca implementação como concluída.
 
-| Entrega/gate             | Responsável designado  | Evidência/resultado                                                                                                                                       | Commit/PR                   | Deploy/aceite                                 |
-| ------------------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | --------------------------------------------- |
-| OLIST-PLAN-01            | Tech Lead              | Proposta original; substituída nos pontos revistos                                                                                                        | c33b5d34                    | Documental                                    |
-| OLIST-PLAN-02            | Tech Lead              | ADR 057, OLIST-01–50, T01–T26 e emendas canônicas                                                                                                         | Registrar no handoff        | Documental                                    |
-| F1 / T01–T02             | Tech Lead; Integrações | [T01 revisada](../integrations/olist/contract-review.md); [T02 experiências concluídas](../integrations/olist/phase1-report.md), leitura monetária aberta | Ver histórico OLIST-T01/T02 | F1 aberto por F1-G01; casos aprovados criados |
-| F2 / T03–T05/T19         | A designar             | A preencher                                                                                                                                               | A preencher                 | Dados/checkbox/conexão                        |
-| F3 / T06–T10/T20–T24/T26 | A designar             | A preencher                                                                                                                                               | A preencher                 | CRM/cadastros/venda                           |
-| F4 / T11–T13/T25         | A designar             | A preencher                                                                                                                                               | A preencher                 | UI/ficha v7                                   |
-| F5 / T14–T15             | A designar             | A preencher                                                                                                                                               | A preencher                 | QA/operação                                   |
-| F6 / T16–T18             | A designar             | A preencher                                                                                                                                               | A preencher                 | Piloto/ampliação                              |
+| Entrega/gate             | Responsável designado  | Evidência/resultado                                                                                                                                   | Commit/PR                   | Deploy/aceite                                                             |
+| ------------------------ | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------- |
+| OLIST-PLAN-01            | Tech Lead              | Proposta original; substituída nos pontos revistos                                                                                                    | c33b5d34                    | Documental                                                                |
+| OLIST-PLAN-02            | Tech Lead              | ADR 057, OLIST-01–50, T01–T26 e emendas canônicas                                                                                                     | Registrar no handoff        | Documental                                                                |
+| F1 / T01–T02             | Tech Lead; Integrações | [T01 revisada](../integrations/olist/contract-review.md); [T02 concluída no escopo exato](../integrations/olist/phase1-report.md), frações bloqueadas | Ver histórico OLIST-T01/T02 | F1 fechado no escopo exact-cent-v1; frações fora da exportação automática |
+| F2 / T03–T05/T19         | A designar             | A preencher                                                                                                                                           | A preencher                 | Dados/checkbox/conexão                                                    |
+| F3 / T06–T10/T20–T24/T26 | A designar             | A preencher                                                                                                                                           | A preencher                 | CRM/cadastros/venda                                                       |
+| F4 / T11–T13/T25         | A designar             | A preencher                                                                                                                                           | A preencher                 | UI/ficha v7                                                               |
+| F5 / T14–T15             | A designar             | A preencher                                                                                                                                           | A preencher                 | QA/operação                                                               |
+| F6 / T16–T18             | A designar             | A preencher                                                                                                                                           | A preencher                 | Piloto/ampliação                                                          |
 
 ### Definition of Ready
 
@@ -1041,6 +1050,6 @@ Deploy/amostra/piloto/aceite:
 Riscos, bloqueios e próximo item desbloqueado:
 ```
 
-Próximos itens: resolver a limitação de leitura monetária F1-G01 documentada no relatório; concluir T02/gate F1 antes da fundação/checkbox/IDs e subtotal. Não liberar
+Próximos itens: T02/F1 concluídos para o escopo exato da ADR 059; iniciar T03 de dados/conexão e os controles posteriores. A limitação fracionária permanece registrada. Não liberar
 geração real antes de cadastro automático seguro, precisão por linha, filtros
 de cancelamento e identidade individual do piloto estarem validados.

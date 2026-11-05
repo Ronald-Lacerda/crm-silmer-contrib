@@ -12,6 +12,11 @@ corretos; multiplicação exata do unitário retornado confere a linha, e ambos
 os totais devem coincidir. F1 só fecha para esse subconjunto após prova API/UI;
 os gates de conexão/ACL/runtime/piloto continuam separados. Sem nova infraestrutura.
 
+Prova C05–C07 concluída em 05/11: [API e tela nativa consistentes](docs/integrations/olist/evidence/exact-cent-proof-result.json),
+14 GETs, três pedidos/R$ 5,20. F1/T02 fechados somente para `exact-cent-v1`;
+T03 pode iniciar. Runtime integrado, ACL, banco, UI e piloto seguem nas tarefas
+posteriores; frações continuam bloqueadas antes do envio.
+
 ## Olist por habilitação e subtotal por tamanho em 04/11/2026
 
 [ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), OLIST-PLAN-02. Desenho

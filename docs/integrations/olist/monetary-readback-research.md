@@ -4,7 +4,12 @@ OLIST-T02 / F1-G01 / OLIST-09–10, 14–17, 40–42. Consulta pública em
 05/11/2026. [Resultado dos casos](phase1-report.md) ·
 [Manifesto do schema consultado](evidence/monetary-readback-research.json).
 
-**Resultado: nenhum leitor monetário automático confiável foi comprovado.**
+**Resultado da investigação fracionária: nenhum leitor fiel foi comprovado
+para o escopo irrestrito.** Depois, o PO aprovou a [ADR 059](../../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md)
+/[RFC 046](../../rfc/046-olist-escopo-inicial-de-centavos-exatos.md). A
+[prova C05–C07](evidence/exact-cent-proof-result.json) fechou F1/T02 somente
+para unitários exatos em centavos, com conferência por linha e total. Os
+parágrafos seguintes preservam a investigação anterior a essa decisão.
 O PO escolheu manter F1 bloqueada e buscar leitura confiável. A investigação
 preserva o contrato da ADR 057; não adota restrição a duas casas nem conferência
 humana como substituto da conciliação automática. T02 permanece desmarcada e

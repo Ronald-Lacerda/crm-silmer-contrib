@@ -5,12 +5,15 @@
 - [x] Registrar redução de escopo aprovada na [ADR 059](../../../docs/adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) / [RFC 046](../../../docs/rfc/046-olist-escopo-inicial-de-centavos-exatos.md).
 - [x] Implementar bloqueio fracionário e conferência exata por identidade de linha no núcleo Orders.
 - [x] Validar negativos offline e preparar prova C05–C07, até três pedidos/R$ 5,20, 14 GETs, sem retry.
-- [ ] Executar prova API e tela na conta autorizada; fechar T02/F1 somente para o subconjunto se passar.
+- [x] Executar prova API e tela na conta autorizada; T02/F1 fechados somente para o subconjunto exact-cent-v1.
 
 O bloqueio não altera subtotais negociados nem a validade do CRM. Controles de
-API/persistência/ACL/piloto continuam nas tarefas próprias. A prova real ainda
-não foi iniciada: o controle do Chrome está sem resposta; aguarda recuperar a
-aba autenticada. Nenhuma inclusão nova por esta etapa.
+API/persistência/ACL/piloto continuam nas tarefas próprias. A prova real C05–C07 foi concluída após recuperar a aba: três pedidos
+abertos, 14 GETs, três POSTs, R$ 5,20, valores por linha/totais e marcadores
+consistentes. [Evidência](../../../docs/integrations/olist/evidence/exact-cent-proof-result.json).
+Coletor encerrado. T03 pode iniciar, sem liberação de piloto/produção.
+
+Os checkpoints datados abaixo são históricos, anteriores ao fechamento restrito.
 
 ## OLIST-T02 — Prova de capacidades em andamento (04/11/2026)
 

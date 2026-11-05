@@ -95,5 +95,7 @@ Validação atual: 160/160 testes de domínio/pedidos/loja e 126/126 testes Olis
 sem skips (conjuntos separados). Typecheck local, lint do patch com globals
 Node das ferramentas de prova, fronteiras e build aprovados. QA independente:
 29/29 testes de domínio/executor, sem finding bloqueante para a prova limitada.
-A prova real permanece pendente da recuperação do controle do Chrome; zero
-GETs/POSTs dessa prova foram executados até esse checkpoint.
+A prova real C05–C07 foi concluída: 14 GETs, três POSTs e R$ 5,20 nominal.
+[API e tela nativa coincidiram](evidence/exact-cent-proof-result.json), com
+marcadores únicos preservados pela API. Coletor encerrado; F1/T02 fechados
+apenas para o subconjunto exato, sem ativação de piloto/produção.

@@ -109,3 +109,14 @@ as divergências por linha/total v3 e não resolve G01. As credenciais Olist
 foram renovadas pelo PO. A próxima dependência é rota e contrato de precisão
 suportados, seguidos de prova consistente; pergunta técnica preparada e não
 enviada. A autorização de concluir F1 não muda os critérios da ADR 057.
+
+## Fechamento no escopo reduzido em 05/11
+
+A [ADR 059](../../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md)
+/[RFC 046](../../rfc/046-olist-escopo-inicial-de-centavos-exatos.md) alterou
+explicitamente o critério monetário inicial. [C05–C07](evidence/exact-cent-proof-result.json)
+passaram por API e tela: F1-G01/T02 fechados somente para unitários exatos em
+centavos, com identidade inequívoca e conferência exata de cada linha/totais.
+Os checkpoints anteriores de G01 permanecem históricos; o problema fracionário
+não foi corrigido. T03 pode iniciar. G07/G08 e os demais gates posteriores
+continuam próprios; nenhuma habilitação, deploy ou piloto foi liberado.
