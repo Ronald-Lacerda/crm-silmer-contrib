@@ -318,6 +318,16 @@ ou reconciliação por referência após perda do ID. F1 permanece aberto.
 
 ## Provas adicionais necessárias para fechar F1
 
+[Plano exato proposto](next-controlled-cases.json), ainda sem autorização.
+Até seis POSTs (cliente, pai M/G, GG e três pedidos) e oitenta GETs
+autenticados mais um GET sem autenticação. O aplicativo precisará de
+Incluir e editar em Contatos/Produtos, que o ERP agrupa; nenhuma exclusão.
+O cliente proposto usa exatamente os dados da empresa configurada na conta;
+a busca visual não encontrou o documento, mas não comprova ausência global.
+A API deverá conferir formatos/situações/paginação antes de qualquer POST.
+Preço de catálogo zero é proposto explicitamente só para os novos produtos,
+sem mudar o modelo existente; se não for aceito, parar sem corrigir o payload.
+
 C01 prova apenas a venda exata com cadastros existentes. Não encerra T02.
 As próximas propostas devem ser preparadas e aprovadas antes das respectivas
 inclusões; o orçamento abaixo é planejamento, sem autorização:
@@ -328,7 +338,7 @@ inclusões; o orçamento abaixo é planejamento, sem autorização:
 | Pai e filhos iniciais | Até 1 POST produto tipo V, grade Tamanho e M/G iniciais; prefixo CRM-F1-20261104-A, SKUs próprios; fiscal/unidade de modelo comercial aprovado, sem saldo/estoque inicial ou vínculo com canais | IDs do pai e de cada filho, vínculo/grade/SKU por readback; não assumir atomicidade                                                                      |
 | Filho adicional       | Até 1 POST variação GG no pai novo, SKU próprio; parar e reconciliar qualquer incerteza                                                                                                         | Identidade/grade/vínculo; nenhum retry criador                                                                                                           |
 | Terços                | Até 1 pedido: M 3 x 0,3333 e G 3 x 0,6667; expectativa diagnóstica 1,00 e 2,00 por linha                                                                                                        | Escala armazenada, cada subtotal e total, sem ajuste artificial                                                                                          |
-| Empate e identidade   | Até 1 pedido diagnóstico: M novo 1 x 0,005; mesmo M novo 1 x 0,015; M existente 1 x 0,025; G novo 1 x 0,035; expectativa half-up hipotética 0,01/0,02/0,03/0,04                                 | Determinar regra real de empate; preservar quatro linhas, produto repetido e mesmo tamanho em grupos distintos                                           |
+| Empate e identidade   | Até 1 pedido diagnóstico: M novo 1 x 0,005; mesmo M novo 1 x 0,015; M existente 1 x 1,025; G novo 1 x 0,035; expectativa half-up hipotética 0,01/0,02/1,03/0,04                                 | Determinar regra real de empate; preservar quatro linhas, produto repetido e mesmo tamanho em grupos distintos                                           |
 | Escala pequena        | Até 1 pedido: M 1000 x 0,000010 e G 1 x 0,01; expectativa diagnóstica 0,01/0,01                                                                                                                 | Escala aceita/rejeitada e subtotais; quantidade pode contaminar relatórios apesar de valor baixo                                                         |
 
 As sondas de empate/escala são experimentos do contrato, não representam
@@ -337,9 +347,12 @@ atribuída ao ERP antes da leitura real. Aceitação de seis casas comprova some
 a escala testada, não um máximo universal. Cada rejeição será registrada sem
 repetir automaticamente a inclusão ou alterar valores para passar.
 
-O conjunto C01 mais três sondas tem expectativa monetária hipotética de R$ 6,12
-e teto de planejamento R$ 10,00. Esse teto não autoriza execução nem garante o
-resultado antes de provar arredondamento. Todos os registros permaneceriam na
+As três novas sondas têm expectativa monetária hipotética de R$ 4,12
+(R$ 7,12 incluindo C01), com teto proposto de R$ 10,00 para os novos pedidos.
+Esses valores não autorizam execução nem garantem resultado antes de provar
+arredondamento. Usar 1,025 no M existente evita propor unitário quase zero em
+produto operacional de catálogo maior; os unitários menores ficam nos novos
+produtos com catálogo zero, se aprovados. Todos os registros permaneceriam na
 conta operacional e as quantidades poderiam aparecer em relatórios.
 
 ## CPF gerado e limites da prova fiscal

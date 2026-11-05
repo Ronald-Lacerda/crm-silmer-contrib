@@ -1,0 +1,192 @@
+{
+  "task": "OLIST-T02",
+  "environment": "current-operational-account",
+  "approval": false,
+  "sendable": false,
+  "referencePrefix": "CRM-F1-20261104",
+  "date": "2026-11-04",
+  "purpose": "Complete remaining real API contract probes after C01 and dedicated-origin setup. This document does not authorize ERP writes.",
+  "access": {
+    "application": "CRM Silmer - prova F1 - controlada",
+    "addIncludeEditModules": ["Contatos", "Produtos"],
+    "keepIncludeEditModules": ["Pedidos"],
+    "deleteModules": [],
+    "otherNewScopes": []
+  },
+  "limits": {
+    "maximumAuthenticatedGets": 80,
+    "maximumUnauthenticatedGets": 1,
+    "maximumPostAttempts": 6,
+    "maximumNewOrders": 3,
+    "nominalNewOrderTotalCents": 412,
+    "newOrderBudgetCents": 1000,
+    "noAutomaticRetry": true
+  },
+  "customer": {
+    "maximumPostAttempts": 1,
+    "source": "Exact fiscal identity and address from the company configured in this same ERP account, privately captured and matched to C01 account document",
+    "newSituation": "B",
+    "newCode": "CRM-F1-20261104-CLI",
+    "absenceProof": "Both formatted and normalized document searches, explicit A/B/I/E situations, complete pagination, exact local document match. Reuse one A/B match unchanged; stop on I/E, duplicates, incomplete search or mismatch.",
+    "creationPayloadBinding": "Private exact fiscal source. No generated CPF, email, phone or access credentials."
+  },
+  "parent": {
+    "maximumPostAttempts": 1,
+    "method": "POST",
+    "path": "/produtos",
+    "payload": {
+      "tipo": "V",
+      "sku": "CRM-F1-20261104-A",
+      "descricao": "CAMISA PV PERSONALIZADA - PROVA CRM F1",
+      "unidade": "Un",
+      "ncm": "6205.30.00",
+      "origem": 0,
+      "precos": {
+        "preco": 0
+      },
+      "grade": ["Tamanho"],
+      "variacoes": [
+        {
+          "sku": "CRM-F1-20261104-A-M",
+          "grade": [
+            {
+              "chave": "Tamanho",
+              "valor": "M"
+            }
+          ],
+          "precos": {
+            "preco": 0
+          }
+        },
+        {
+          "sku": "CRM-F1-20261104-A-G",
+          "grade": [
+            {
+              "chave": "Tamanho",
+              "valor": "G"
+            }
+          ],
+          "precos": {
+            "preco": 0
+          }
+        }
+      ]
+    },
+    "source": "Unit, origin and NCM read from the existing CAMISA PV PERSONALIZADA M; catalog zero is a proposed explicit test-only price, requiring PO approval.",
+    "stock": "Omit initial stock, balance and stock commands; no channel listing or sync."
+  },
+  "additionalVariation": {
+    "maximumPostAttempts": 1,
+    "method": "POST",
+    "path": "/produtos/{confirmedNewParentId}/variacoes",
+    "payload": {
+      "sku": "CRM-F1-20261104-A-GG",
+      "grade": [
+        {
+          "chave": "Tamanho",
+          "valor": "GG"
+        }
+      ],
+      "precos": {
+        "preco": 0
+      }
+    }
+  },
+  "orders": [
+    {
+      "reference": "CRM-F1-20261104-C02",
+      "purpose": "Four decimal places, thirds, new origin and searchable reference",
+      "items": [
+        {
+          "resource": "new-M",
+          "quantity": 3,
+          "unitLexeme": "0.3333",
+          "hypotheticalLineCents": 100
+        },
+        {
+          "resource": "new-G",
+          "quantity": 3,
+          "unitLexeme": "0.6667",
+          "hypotheticalLineCents": 200
+        }
+      ],
+      "hypotheticalTotalCents": 300
+    },
+    {
+      "reference": "CRM-F1-20261104-C03",
+      "purpose": "Ties, repeated same product with different values, M in two distinct parents",
+      "items": [
+        {
+          "resource": "new-M",
+          "quantity": 1,
+          "unitLexeme": "0.005",
+          "hypotheticalLineCents": 1
+        },
+        {
+          "resource": "new-M",
+          "quantity": 1,
+          "unitLexeme": "0.015",
+          "hypotheticalLineCents": 2
+        },
+        {
+          "resource": "existing-M-from-C01",
+          "quantity": 1,
+          "unitLexeme": "1.025",
+          "hypotheticalLineCents": 103
+        },
+        {
+          "resource": "new-G",
+          "quantity": 1,
+          "unitLexeme": "0.035",
+          "hypotheticalLineCents": 4
+        }
+      ],
+      "hypotheticalTotalCents": 110
+    },
+    {
+      "reference": "CRM-F1-20261104-C04",
+      "purpose": "Six decimal places and large quantity",
+      "items": [
+        {
+          "resource": "new-M",
+          "quantity": 1000,
+          "unitLexeme": "0.000010",
+          "hypotheticalLineCents": 1
+        },
+        {
+          "resource": "new-G",
+          "quantity": 1,
+          "unitLexeme": "0.01",
+          "hypotheticalLineCents": 1
+        }
+      ],
+      "hypotheticalTotalCents": 2
+    }
+  ],
+  "orderBinding": {
+    "idContato": "confirmed exact account-company customer, created or reused",
+    "situacao": 0,
+    "ecommerce": {
+      "id": "private dedicated-origin integrator ID candidate; its API-v3 mapping remains unproved",
+      "numeroPedidoEcommerce": "exact case reference"
+    },
+    "optionalMoneyOrCommands": "Omit freight, expenses, discounts, installments, integrated payment, fiscal/stock/financial/shipping/message commands.",
+    "existingRecords": "C01 and existing buyer/catalog remain untouched."
+  },
+  "verification": {
+    "decimalLexemes": "Preserve request/response numeric source lexemes; do not infer precision from displayed two-decimal units.",
+    "lineSubtotals": "Independently read each native ERP UI line subtotal because item GET does not expose a separate subtotal. Global total alone is insufficient.",
+    "rounding": "All expected line cents are diagnostic half-up hypotheses, not an asserted ERP rule.",
+    "reference": "After C02, GET by reference and known ID must identify exactly the same order/origin/customer/items. Stop subsequent orders if missing or ambiguous.",
+    "recovery": "Reserve each effect and dependent resource before POST in durable private journal; persist confirmed remote IDs before advancing. Never retry an uncertain or rejected POST, edit, cancel or delete for cleanup.",
+    "readOnlyRejections": "One unauthenticated GET /info to observe authentication rejection; bounded invalid filtered GET may inspect validation. No malformed or duplicate creation for testing."
+  },
+  "stopConditions": [
+    "Any identity, fiscal-source or catalog-price discrepancy before a write",
+    "Unknown outcome, invalid success response, absent ID, partial parent/variation mismatch",
+    "Unexpected charge, credential generation, extra scope, auto stock/finance/fiscal/channel action",
+    "C02 reference/origin not preserved or incomplete/ambiguous reconciliation",
+    "Any need to change approved payload, add an order or correct a saved record"
+  ],
+  "effectsNotice": "All created customers, parent/three variations and up to three orders remain in the operational ERP/reports. The 1000-unit case can affect quantity reports even at low value. Orders consume real sequential numbers. No cancellation/deletion as cleanup."
+}

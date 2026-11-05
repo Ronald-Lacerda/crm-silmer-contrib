@@ -1,0 +1,29 @@
+{
+  "task": "OLIST-T02",
+  "preparedOn": "2026-11-04",
+  "erpWritesExecuted": 0,
+  "approval": false,
+  "sendable": false,
+  "planFile": "../next-controlled-cases.json",
+  "planSha256": "7093d23b393e3a242bd8f615ceafd025b7de6753eca2ce60e3a244b88a3be745",
+  "privateSource": {
+    "accountCompanyMatched": true,
+    "fiscalAddressAndIePresent": true,
+    "uiDocumentSearchFound": false,
+    "absenceProvenByApi": false,
+    "sourceProductUnit": "Un",
+    "sourceProductNcm": "6205.30.00",
+    "sourceProductOrigin": 0
+  },
+  "offlineValidation": {
+    "privateContactSchemaPassed": true,
+    "parentSchemaPassed": true,
+    "additionalVariationSchemaPassed": true,
+    "orderTemplatesSchemaPassed": true,
+    "exactRationalHypotheticalSumsPassed": true,
+    "postBudget": 6,
+    "hypotheticalNewOrderTotalCents": 412
+  },
+  "limits": "Schema acceptance and rational half-up expectations are preparation only, not proof of ERP tax validation, decimal storage or line totals.",
+  "privacy": "No private fiscal documents, account/contact/product IDs, integrator ID, credentials or addresses."
+}
