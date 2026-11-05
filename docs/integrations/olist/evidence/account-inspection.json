@@ -1,12 +1,11 @@
 {
   "task": "OLIST-T02",
-  "observedOn": "2026-11-04",
+  "observedOn": "2026-11-05",
   "environment": "current-operational-account",
-  "authorization": "Original batch and one identical additional customer POST approved. Both returned 400; the additional attempt identified codigo length/limit. No corrected payload, third customer POST or dependent creation approved.",
+  "authorization": "All specifically approved controlled creations completed. Eight batch POST attempts and 120 authenticated GETs exhausted; no further business writes or API GETs authorized.",
   "method": "Authenticated Chrome UI, initial eight fixed API-v3 GETs, and sixteen C01 diagnostic/preflight GETs.",
-  "erpMutations": 7,
   "createdCredentials": 1,
-  "authenticatedApiV3Calls": 94,
+  "authenticatedApiV3Calls": 166,
   "privacy": "No company identifiers, user identifiers, client records, secrets, private URLs or raw screenshots in this artifact.",
   "observations": [
     {
@@ -460,11 +459,23 @@
       "c01Mutations": 0,
       "bothReservationsPreserved": true,
       "evidence": "customer-diagnostic-live-result.json"
+    },
+    {
+      "action": "corrected-batch-and-native-ui-proof-completed",
+      "userApproval": "Autorizar esta correção limitada",
+      "additionalAuthenticatedGetsAfterPreviousCheckpoint": 66,
+      "additionalBusinessPostAttempts": 6,
+      "additionalSuccessfulCreationHttpOperations": 6,
+      "physicalBusinessRecordsCreatedInThisContinuation": 8,
+      "C01Mutations": 0,
+      "confirmedCreationRepeated": false,
+      "monetaryReadbackGateOpen": true,
+      "evidence": "phase1-controlled-results.json"
     }
   ],
   "applicationConfigurationsSaved": 3,
-  "liveApiEvidence": "read-only-live-result.json",
-  "observationsScope": "The observations array preserves the initial UI inspection before app creation. Later state changes are recorded in events and read-only-live-result.json.",
+  "liveApiEvidence": "phase1-controlled-results.json",
+  "observationsScope": "Initial observations and historical events retain their checkpoint scope. Current aggregate and final evidence include the authorized continuation through C04.",
   "originRecordsCreated": 1,
   "originSetupStagesCompleted": [
     "connection",
@@ -476,9 +487,21 @@
     "mappings"
   ],
   "globalCommercialSettingsSaved": 0,
-  "mutationCountingMethod": "High-level approved configuration/business checkpoints, not HTTP requests or individual setup saves.",
-  "authenticatedApiV3GetCalls": 91,
-  "authenticatedApiV3PostAttempts": 3,
+  "mutationCountingMethod": "Historical configuration checkpoints and business HTTP counts are separate. Current physical resources and HTTP creation operations are explicitly counted in phase1-controlled-results.json.",
+  "authenticatedApiV3GetCalls": 157,
+  "authenticatedApiV3PostAttempts": 9,
   "unauthenticatedApiV3GetCalls": 1,
-  "apiCallCountingMethod": "GET and POST attempts counted separately and summed into authenticatedApiV3Calls; prior checkpoint 37 represented authenticated GETs and omitted the successful C01 POST."
+  "apiCallCountingMethod": "GET and POST attempts counted separately and summed into authenticatedApiV3Calls; prior checkpoint 37 represented authenticated GETs and omitted the successful C01 POST.",
+  "securityFollowUp": {
+    "unmaskedCredentialsAppearedInToolOutput": true,
+    "affectedKinds": [
+      "private-application-client-secret",
+      "existing-account-legacy-api-token"
+    ],
+    "credentialValuesInVersionedArtifacts": false,
+    "rotationOrRevocationPerformed": false,
+    "userHandoffRequiredForCredentialChange": true,
+    "legacyTokenDependenciesMustBeReviewedBeforeRotation": true
+  },
+  "erpMutationsAtPreviousCheckpoint": 7
 }

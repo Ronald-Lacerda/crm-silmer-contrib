@@ -1,0 +1,191 @@
+{
+  "task": "OLIST-T02",
+  "observedOn": "2026-11-05",
+  "environment": "current-operational-account",
+  "status": "authorized_experiments_completed_monetary_readback_gate_open",
+  "f1GatePassed": false,
+  "productionExporterImplemented": false,
+  "approvals": [
+    "Autorizar este lote controlado",
+    "Autorizar uma tentativa adicional",
+    "Autorizar esta correção limitada"
+  ],
+  "batchTotals": {
+    "authenticatedGets": 120,
+    "unauthenticatedGets": 1,
+    "unauthenticatedStatus": 401,
+    "erpPostAttempts": 8,
+    "rejectedPostAttempts": 2,
+    "successfulPostAttempts": 6,
+    "maximumAuthorizedAuthenticatedGets": 120,
+    "maximumAuthorizedPosts": 8,
+    "remainingAuthorizedGets": 0,
+    "remainingAuthorizedPosts": 0
+  },
+  "allPhase1ApiTotals": {
+    "authenticatedGets": 157,
+    "erpPostAttempts": 9,
+    "authenticatedCalls": 166,
+    "unauthenticatedGets": 1,
+    "includesEarlierC01": true,
+    "oauthExchangesExcluded": true
+  },
+  "createdBusinessResources": {
+    "customer": 1,
+    "parentProduct": 1,
+    "variations": 3,
+    "ordersIncludingC01": 4,
+    "totalPhysicalRecords": 9,
+    "successfulHttpCreationOperationsIncludingC01": 7
+  },
+  "identityProof": {
+    "customerCodigoOmittedOnlyAfterExplicitApproval": true,
+    "customerPostStatus": 200,
+    "erpAssignedCodePresent": false,
+    "fiscalAddressIeRegimeTypeAndSituationMatched": true,
+    "customerSituation": "B",
+    "customerType": "Cliente",
+    "exactDocumentLookupConfirmed": true,
+    "initialParentAndMGSkuGradeIdsConfirmed": true,
+    "parentPostStatus": 201,
+    "extraGGPostStatus": 201,
+    "extraGGResponseIdRelation": "parent",
+    "canonicalGGChildReconciledByParentSkuGrade": true,
+    "initialMGIdsStable": true,
+    "C02C03C04OriginAndReferenceRoundtripAndLookupConfirmed": true,
+    "C01ReferenceLossPreservedWithoutMutation": true,
+    "remoteUniquenessOrIdempotencyProven": false,
+    "composedProductCreationAtomicityProven": false
+  },
+  "money": {
+    "independentNativeUiProof": true,
+    "noOrderEdited": true,
+    "C02": {
+      "requestUnits": ["0.3333", "0.6667"],
+      "quantities": [3, 3],
+      "apiUnitBySourceLine": ["0.33", "0.67"],
+      "apiTotalProducts": "3",
+      "apiTotalOrder": "3",
+      "uiTotalCents": 300,
+      "apiUnitsTimesQuantityCents": [99, 201],
+      "uiSubtotalsCents": [100, 200]
+    },
+    "C03": {
+      "requestUnits": ["0.005", "0.015", "1.025", "0.035"],
+      "quantities": [1, 1, 1, 1],
+      "apiUnitBySourceLine": ["0.01", "0.02", "1.03", "0.04"],
+      "apiTotalProducts": "1.08",
+      "apiTotalOrder": "1.1",
+      "uiTotalCents": 110,
+      "uiSubtotalsCents": [1, 2, 103, 4],
+      "fourSeparateLinesPreserved": true,
+      "distinctMParentsPreserved": true
+    },
+    "C04": {
+      "requestUnits": ["0.000010", "0.01"],
+      "quantities": [1000, 1],
+      "apiUnitBySourceLine": ["0", "0.01"],
+      "apiTotalProducts": "0.02",
+      "apiTotalOrder": "0.01",
+      "uiTotalCents": 2,
+      "uiSubtotalsCents": [1, 1],
+      "sixFractionalPositionsInLiteral": true,
+      "significantFractionalPlaces": 5,
+      "maximumAcceptedScaleProven": false
+    },
+    "newOrdersUiTotalCents": 412,
+    "newOrdersAuthorizedCapCents": 1000,
+    "withC01UiTotalCents": 712,
+    "universalRoundingOrStoredUnitPrecisionProven": false,
+    "automaticApiOnlyFidelityCheckProven": false
+  },
+  "effects": {
+    "confirmedCreationRepeated": false,
+    "automaticRetry": false,
+    "existingRecordsEdited": false,
+    "C01Mutated": false,
+    "ordersCancelledOrDeleted": false,
+    "fiscalCommands": 0,
+    "stockCommands": 0,
+    "financialCommands": 0,
+    "collectionCommands": 0,
+    "shippingCommands": 0,
+    "messagesSent": 0,
+    "globalCommercialSettingsChanged": 0,
+    "absenceOfEveryAsynchronousProviderEffectCertified": false,
+    "observedUiOrdersOpen": true,
+    "stockAndAccountsNotLaunchedInObservedUi": true
+  },
+  "recovery": {
+    "durableReservationsAndConfirmedIdsPreservedPrivately": true,
+    "GGParentResponseResolvedWithSixGetsNoPost": true,
+    "C03AmbiguityStoppedBeforeC04": true,
+    "C03DiagnosticUsedPredeclaredCentOutcomesAndIndependentNativeUi": true,
+    "differentApiProductTotalNotOverwrittenOrHidden": true,
+    "C04OriginalPayloadCreatedOnce": true,
+    "oauth401BeforeBusinessCallsExcludedFromErpCounts": true,
+    "collectorsStopped": true
+  },
+  "securityFollowUp": {
+    "unmaskedCredentialsAppearedInToolOutput": true,
+    "affectedKinds": [
+      "private-application-client-secret",
+      "existing-account-legacy-api-token"
+    ],
+    "credentialValuesInVersionedArtifacts": false,
+    "rotationOrRevocationPerformed": false,
+    "userHandoffRequiredForCredentialChange": true,
+    "legacyTokenDependenciesMustBeReviewedBeforeRotation": true
+  },
+  "decisionRequired": "F1-G01: prove a reliable supported monetary reader before automatic reconciliation, or obtain an explicit product decision narrowing the contract or requiring human verification. No option approved by this artifact.",
+  "privacy": "Only fixed aliases, public case amounts, boolean conclusions and integer counters. Resource IDs, fiscal documents, addresses, private hashes, raw errors, OAuth codes, credentials and screenshots are excluded.",
+  "checkpoints": [
+    {
+      "checkpoint": "initial-customer-rejected",
+      "authenticatedGets": 27,
+      "erpPostAttempts": 1
+    },
+    {
+      "checkpoint": "absence-reconciliation",
+      "authenticatedGets": 13,
+      "erpPostAttempts": 0
+    },
+    {
+      "checkpoint": "identical-customer-diagnostic",
+      "authenticatedGets": 14,
+      "erpPostAttempts": 1
+    },
+    {
+      "checkpoint": "corrected-customer-parent-GG",
+      "authenticatedGets": 40,
+      "erpPostAttempts": 3
+    },
+    {
+      "checkpoint": "GG-read-only-reconciliation",
+      "authenticatedGets": 6,
+      "erpPostAttempts": 0
+    },
+    {
+      "checkpoint": "C02-C03",
+      "authenticatedGets": 12,
+      "erpPostAttempts": 2
+    },
+    {
+      "checkpoint": "C03-read-only-stop",
+      "authenticatedGets": 2,
+      "erpPostAttempts": 0
+    },
+    {
+      "checkpoint": "C03-reconciliation-C04",
+      "authenticatedGets": 6,
+      "erpPostAttempts": 1
+    }
+  ],
+  "correctedCheckpointExecutedSourceSha256": {
+    "controlled-batch.mjs": "14f2b9159737c1a1cd749905c89ccdb45766de130ee7e84e3282c45fbd2eb01d",
+    "controlled-batch.test.mjs": "25d1fd791bb2388b3a51f761e0f9fdfd21d529ce2a90739acbe708da514e545e",
+    "controlled-batch.fixtures.mjs": "801c03cf983f12c9de780467b115aa66e64736b7abc315cf566ab41dc1e0ae4a",
+    "batch-session.mjs": "b6d22e7544ef514356bf29a979606e96c1a686483d77a874f24222ea4bac7dea",
+    "batch-session.test.mjs": "738f76de902fc8beab7405663d039c6e94496d7341d2954d0d390a3a2227597a"
+  }
+}

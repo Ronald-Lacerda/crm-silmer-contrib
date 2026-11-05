@@ -11,8 +11,9 @@
     "createdCount": 1,
     "existingOriginNamesUnchanged": ["Shopee", "TikTok Shop"],
     "identifierStoredPrivately": true,
-    "apiV3EcommerceIdRoundtripProven": false,
-    "setupComplete": true
+    "apiV3EcommerceIdRoundtripProven": true,
+    "setupComplete": true,
+    "provenCases": ["C02", "C03", "C04"]
   },
   "savedReadback": {
     "name": "CRM Silmer - prova F1",
@@ -35,7 +36,8 @@
     "externalEndpointProvided": false,
     "oauthScopeChanged": false,
     "credentialModalAutomaticallyDisplayedAtCompletion": true,
-    "existingAccountTokenPersistedInArtifacts": false
+    "existingAccountTokenPersistedInArtifacts": false,
+    "unmaskedExistingAccountTokenAppearedInToolOutput": true
   },
   "effects": {
     "newOrders": 0,
@@ -60,7 +62,7 @@
       "resolution": "No workaround; user approved the exact parameters with Autorizar esses parâmetros. The same save then succeeded and a fresh origin readback confirmed false/N."
     }
   ],
-  "requiredDecision": "A separately approved case is still required to prove API-v3 origin/reference roundtrip and remaining new-record and monetary capabilities.",
+  "requiredDecision": "Origin/reference roundtrip proved in C02-C04. F1 still requires monetary-readback decision; see phase1-report.md.",
   "privacy": "No integrator ID, account token, credential, raw private URL, fiscal document or personal data.",
   "f1GatePassed": false,
   "parameterApproval": "Autorizar esses parâmetros",

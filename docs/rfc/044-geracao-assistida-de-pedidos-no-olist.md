@@ -676,47 +676,25 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       referências/SKU, cadastro fiscal, permissões, gatilhos e precisão por linha.
       OLIST-03–17, 20, 26, 35–41. Dono Integrações. Leitura/fixtures em paralelo
       com T01; escrita controlada só autorizada no ambiente definido.
-      Evidência parcial: [matriz T02](../integrations/olist/capabilities.md), schema
-      oficial 3.1/hash, fixtures e 11 testes offline. PO autorizou consultas na
-      conta operacional e [preparo do caso controlado](../integrations/olist/controlled-case.md)
-      antes de aprovar qualquer criação. Gatilhos, automações e reserva
-      inspecionados na UI; Gestão de Aplicativos instalada gratuitamente.
-      Posteriormente o PO aprovou explicitamente criar e conectar o
-      [aplicativo somente leitura](../integrations/olist/read-only-access.md).
-      [Oito GET reais](../integrations/olist/evidence/read-only-live-result.json)
-      retornaram 200; conta confirmada, callback local aceito, limite de leitura
-      observado 30/minuto. Coletor encerrado, sem tokens persistidos; aplicativo
-      permanece somente leitura. Zero cadastros/vendas criados. Fiscal, criação
-      automática, precisão/linhas, rejeições e recuperação real pendentes;
-      T02/F1 continuam abertos. Coletor com 17 testes offline.
-      C01: comprador confirmado pelo PO e
-      [preparação real](../integrations/olist/evidence/controlled-sale-preflight.json)
-      concluída com dez GET na rodada final, zero POST ERP. ID/documento,
-      pai, SKUs e grade M/G conferidos; filtro com máscara necessário nesse
-      cadastro. Após aprovação específica, somente Pedidos recebeu Incluir/
-      editar e um POST C01 retornou 201. Subtotais R$ 1,00/R$ 2,00 e total
-      R$ 3,00 conferidos na UI; referência voltou vazia, ecommerce.id zero.
-      [Venda e reconciliação por ID](../integrations/olist/evidence/controlled-sale-live-result.json),
-      sem repetir/editar/cancelar. Núcleo/transporte com 29 testes sintéticos.
-      PO autorizou uma origem própria API do ERP: CRM Silmer - prova F1 foi
-      cadastrada, estoque Não atualizar/Manual salvo e preço fixo padrão
-      preservado. Após aprovação explícita dos parâmetros, a
-      [origem foi concluída](../integrations/olist/evidence/crm-origin-setup.json):
-      rastreamento desativado/política N salvos e relidos, natureza fiscal
-      padrão preservada, URLs vazias/e-mails desativados/sem frete vinculado.
-      Nenhum novo pedido/C01 alterado. Referência, cadastros
-      automáticos e precisão restante mantêm F1 aberto.
-      Lote adicional aprovado: escopos Contatos/Produtos ampliados sem exclusão;
-      27 GETs precederam um POST /contatos, rejeitado com 400. Nenhum
-      dependente foi enviado. Treze GETs de reconciliação não encontraram
-      cadastro e não liberam retry. Causa específica não retida na tentativa;
-      coletor corrigido/testado (12 mocks). [Resultado do lote](../integrations/olist/evidence/controlled-batch-live-result.json).
-      Cadastro, pai/variações, nova referência e precisão continuam abertos.
-      Uma tentativa adicional idêntica foi depois aprovada: mais 14 GETs e
-      um POST /contatos retornaram 400, campo codigo, categoria tamanho/limite.
-      [Diagnóstico](../integrations/olist/evidence/customer-diagnostic-live-result.json);
-      UI indica código opcional, mas omissão ainda não foi aprovada/provada
-      na API. Nenhum dependente foi enviado; reservas preservadas.
+      Evidências: [matriz](../integrations/olist/capabilities.md), schema 3.1/hash,
+      [relatório atual](../integrations/olist/phase1-report.md) e
+      [resultado sanitizado](../integrations/olist/evidence/phase1-controlled-results.json).
+      Em 05/11/2026 todas as experiências autorizadas foram concluídas na conta
+      operacional: cliente real, pai V com M/G, GG adicional e C01–C04, sem
+      repetir inclusão confirmada. C01 perdeu referência e ficou intacto;
+      C02–C04 comprovaram origem CRM/referência e consulta. GG retornou ID do pai,
+      reconciliado por seis GETs para o filho canônico, com M/G estáveis.
+      Correção do cliente omitiu somente codigo após aprovação explícita;
+      fiscal/endereço/tipo Cliente/situação B conferidos. Lote adicional consumiu
+      120 GETs, oito POSTs (dois rejeitados, seis sucessos) e um GET sem
+      autenticação com 401; orçamento esgotado. Coletores encerrados.
+      C02–C04 somam R$ 4,12 na UI, com cada subtotal conferido. A API devolve
+      unitários arredondados; C03 traz total de produtos 1.08 contra R$ 1,10 na
+      UI, e C04 total do pedido 0.01 contra R$ 0,02 na UI. F1-G01 permanece:
+      falta leitura monetária automática fiel. T02 desmarcada e T03/Fase 2 não
+      liberadas; decisão do PO necessária para reduzir o escopo ou acrescentar
+      conferência humana. Não inferir precisão máxima, idempotência remota ou
+      atomicidade composta. Executor atual com 25 testes locais aprovados.
 
 Gate F1: esquema de cliente/produto/variação e dinheiro comprovado; sem dado
 fiscal inventado ou suposição de idempotência remota. Plano para ausência de
@@ -1000,16 +978,16 @@ total calculado e schema expand. Reconciliar a janela antes de retomar.
 Checklists de tarefas são fonte de status. Registrar evidências abaixo sem
 duplicar checkboxes. Decisão aceita não marca implementação como concluída.
 
-| Entrega/gate             | Responsável designado  | Evidência/resultado                                                                                       | Commit/PR                   | Deploy/aceite              |
-| ------------------------ | ---------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------- | -------------------------- |
-| OLIST-PLAN-01            | Tech Lead              | Proposta original; substituída nos pontos revistos                                                        | c33b5d34                    | Documental                 |
-| OLIST-PLAN-02            | Tech Lead              | ADR 057, OLIST-01–50, T01–T26 e emendas canônicas                                                         | Registrar no handoff        | Documental                 |
-| F1 / T01–T02             | Tech Lead; Integrações | [T01 revisada](../integrations/olist/contract-review.md); T02 offline/UI; caso controlado e API pendentes | Ver histórico OLIST-T01/T02 | F1 aberto; sem escrita ERP |
-| F2 / T03–T05/T19         | A designar             | A preencher                                                                                               | A preencher                 | Dados/checkbox/conexão     |
-| F3 / T06–T10/T20–T24/T26 | A designar             | A preencher                                                                                               | A preencher                 | CRM/cadastros/venda        |
-| F4 / T11–T13/T25         | A designar             | A preencher                                                                                               | A preencher                 | UI/ficha v7                |
-| F5 / T14–T15             | A designar             | A preencher                                                                                               | A preencher                 | QA/operação                |
-| F6 / T16–T18             | A designar             | A preencher                                                                                               | A preencher                 | Piloto/ampliação           |
+| Entrega/gate             | Responsável designado  | Evidência/resultado                                                                                                                                       | Commit/PR                   | Deploy/aceite                                 |
+| ------------------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | --------------------------------------------- |
+| OLIST-PLAN-01            | Tech Lead              | Proposta original; substituída nos pontos revistos                                                                                                        | c33b5d34                    | Documental                                    |
+| OLIST-PLAN-02            | Tech Lead              | ADR 057, OLIST-01–50, T01–T26 e emendas canônicas                                                                                                         | Registrar no handoff        | Documental                                    |
+| F1 / T01–T02             | Tech Lead; Integrações | [T01 revisada](../integrations/olist/contract-review.md); [T02 experiências concluídas](../integrations/olist/phase1-report.md), leitura monetária aberta | Ver histórico OLIST-T01/T02 | F1 aberto por F1-G01; casos aprovados criados |
+| F2 / T03–T05/T19         | A designar             | A preencher                                                                                                                                               | A preencher                 | Dados/checkbox/conexão                        |
+| F3 / T06–T10/T20–T24/T26 | A designar             | A preencher                                                                                                                                               | A preencher                 | CRM/cadastros/venda                           |
+| F4 / T11–T13/T25         | A designar             | A preencher                                                                                                                                               | A preencher                 | UI/ficha v7                                   |
+| F5 / T14–T15             | A designar             | A preencher                                                                                                                                               | A preencher                 | QA/operação                                   |
+| F6 / T16–T18             | A designar             | A preencher                                                                                                                                               | A preencher                 | Piloto/ampliação                              |
 
 ### Definition of Ready
 
@@ -1041,6 +1019,6 @@ Deploy/amostra/piloto/aceite:
 Riscos, bloqueios e próximo item desbloqueado:
 ```
 
-Próximos itens: terminar consultas e preparar aprovação do caso controlado na conta atual; concluir T02/gate F1 antes da fundação/checkbox/IDs e subtotal. Não liberar
+Próximos itens: resolver a limitação de leitura monetária F1-G01 documentada no relatório; concluir T02/gate F1 antes da fundação/checkbox/IDs e subtotal. Não liberar
 geração real antes de cadastro automático seguro, precisão por linha, filtros
 de cancelamento e identidade individual do piloto estarem validados.

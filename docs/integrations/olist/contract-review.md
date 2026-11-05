@@ -86,3 +86,19 @@ de caso controlado, com aprovação antes de qualquer criação. Essa orientaç�
 atualiza F1-G05: conta dedicada não é mais o bloqueio; acesso v3, gatilhos e
 payload/efeitos conferidos continuam necessários. [Inspeção e caso](controlled-case.md).
 Demais decisões/ADRs e gates permanecem; esta atualização não aprova POSTs.
+
+## Resultado das experiências T02 em 05/11/2026
+
+[Relatório atual](phase1-report.md): cliente/pai/M/G/GG e C01–C04 criados com
+aprovações específicas. G02 tem inclusão composta e reconciliação de filhos
+comprovadas na amostra, sem garantia de atomicidade. G04 tem roundtrip de
+origem/referência nos três pedidos novos, sem garantia de unicidade remota.
+G03 tem um conjunto fiscal real aceito; validações universais não foram inferidas.
+G05 foi resolvido pela escolha expressa da conta operacional e casos controlados.
+G06 tem OAuth e permissões concretas comprovados; refresh/PKCE/concorrência
+continuam nas tarefas posteriores. G07/G08 mantêm os gates próprios.
+
+**G01 continua bloqueante:** subtotais corretos e comprováveis na UI, porém a
+API perde precisão dos unitários e diverge nos totais em C03/C04. Não há leitor
+monetário automático fiel comprovado. T02/F1 e a liberação de T03 permanecem
+abertos até prova técnica ou decisão explícita de alteração do contrato.

@@ -8,18 +8,13 @@ Dono: Tech Lead/Integrações (Codex nesta execução).
 
 ## Autorização e resultado
 
-O PO confirmou a conta operacional para consultas e preparo de caso controlado,
-com aprovação antes de cada criação. Depois aprovou o aplicativo de leitura e,
-expressamente, a ampliação somente de Pedidos e o único pedido C01 de R$ 3,00.
-Ambos foram executados; C01 retornou 201 e foi conferido sem edição posterior.
-Não há autorização para novos clientes/produtos/variações/pedidos, nova
-integração/origem, cobrança, documento ou mensagem. A preferência anterior por
-conta dedicada foi substituída pelo plano operacional controlado.
-
-A inspeção inicial abaixo foi feita pela interface, sem chamar a API v3,
-salvar parâmetros ou alterar registros ERP. Depois, o aplicativo autorizado
-executou os oito GET da seção seguinte. Os valores abaixo foram lidos dos controles
-selecionados; não são inferência da documentação pública ou teste de efeito.
+Inspeção e C01 abaixo são checkpoints históricos. Depois, o PO aprovou a
+origem exclusiva, o lote adicional, o diagnóstico idêntico e a correção limitada
+de codigo. Todos os casos autorizados foram executados, sem repetir inclusão
+confirmada. [Resultado atual, contagens e decisão necessária](phase1-report.md).
+O orçamento de GETs/POSTs terminou. Nenhuma nova inclusão, edição, limpeza,
+mensagem ou ação fiscal/estoque/financeira está autorizada por este documento.
+A conta operacional foi a escolha explícita do PO.
 
 ## Gatilhos observados
 

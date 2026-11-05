@@ -23,6 +23,10 @@ import {
   executeBatch,
   reconcileRejectedCustomer,
   diagnoseCustomerOnce,
+  executeCorrectedBatch,
+  reconcileCreatedGG,
+  executeRemainingOrders,
+  executeLastScaleProbe,
 } from './controlled-batch.mjs';
 const ROOT = resolve('C:/Users/sutil/dev/Pessoal/crm-silmer/var/olist-phase1');
 const LOCAL = 'http://127.0.0.1:8765';
@@ -40,7 +44,17 @@ export async function startBatchSession(
   root = ROOT,
   { approvedDigest, fetcher = fetch, pause, mode = 'execute' } = {},
 ) {
-  if (!['execute', 'reconcile', 'diagnostic'].includes(mode))
+  if (
+    ![
+      'execute',
+      'reconcile',
+      'diagnostic',
+      'corrected',
+      'gg-reconcile',
+      'orders',
+      'c04',
+    ].includes(mode)
+  )
     throw new Error('INVALID_MODE');
   const input = JSON.parse(
     await readFile(join(root, 'f1-next-cases-private.json'), 'utf8'),
@@ -48,6 +62,82 @@ export async function startBatchSession(
   let bound = bindBatch(await loadBatchPlan(), input);
   if (approvedDigest !== bound.digest)
     throw new Error('EXPLICIT_APPROVAL_REQUIRED');
+  if (mode === 'corrected') {
+    const previous = await Promise.all(
+      [
+        'batch-session-6ee4884f617891a34d81ba4e/result.json',
+        'batch-session-541c5eb73e5cdf73b4ee2f08/result.json',
+        'batch-session-5cd4c144adaa1bcb476a1235/result.json',
+      ].map(async (file) =>
+        JSON.parse(await readFile(join(root, file), 'utf8')),
+      ),
+    );
+    if (
+      previous.reduce((n, r) => n + r.gets, 0) !== 54 ||
+      previous.reduce((n, r) => n + r.erpPostAttempts, 0) !== 2 ||
+      previous[0].code !== 'HTTP_400' ||
+      previous[2].code !== 'HTTP_400' ||
+      previous[2].calls.at(-1)?.validationFields?.join() !== 'codigo'
+    )
+      throw new Error('CORRECTION_BASELINE_NOT_CONFIRMED');
+  }
+  if (mode === 'orders') {
+    const corrected = JSON.parse(
+      await readFile(
+        join(root, 'batch-session-d2da13c1181465ebe5c3f685/result.json'),
+        'utf8',
+      ),
+    );
+    const gg = JSON.parse(
+      await readFile(
+        join(root, 'batch-session-bab2e6f44241282cd5e9811b/result.json'),
+        'utf8',
+      ),
+    );
+    if (
+      corrected.gets !== 40 ||
+      corrected.erpPostAttempts !== 3 ||
+      gg.gets !== 6 ||
+      gg.erpPostAttempts !== 0 ||
+      gg.readyForOriginallyApprovedOrders !== true
+    )
+      throw new Error('ORDER_BASELINE_NOT_CONFIRMED');
+  }
+  if (mode === 'c04') {
+    const stopped = JSON.parse(
+      await readFile(
+        join(root, 'batch-session-2f25350cf8568937580cceeb/result.json'),
+        'utf8',
+      ),
+    );
+    if (
+      stopped.gets !== 2 ||
+      stopped.erpPostAttempts !== 0 ||
+      stopped.code !== 'C03_DIAGNOSTIC_MONEY_DIVERGENT'
+    )
+      throw new Error('C04_READ_BUDGET_NOT_CONFIRMED');
+
+    const prior = JSON.parse(
+      await readFile(
+        join(root, 'batch-session-36743b86505b3c3c11dd2dfb/result.json'),
+        'utf8',
+      ),
+    );
+    const ui = JSON.parse(
+      await readFile(join(root, 'c02-c03-ui-proof.json'), 'utf8'),
+    );
+    if (
+      prior.gets !== 12 ||
+      prior.erpPostAttempts !== 2 ||
+      prior.code !== 'ORDER_LINES_AMBIGUOUS' ||
+      ui.independentNativeUi !== true ||
+      ui.C02.totalCents !== 300 ||
+      ui.C03.totalCents !== 110 ||
+      ui.C02.lines.map((x) => x.subtotalCents).join() !== '100,200' ||
+      ui.C03.lines.map((x) => x.subtotalCents).join() !== '1,2,103,4'
+    )
+      throw new Error('C04_BASELINE_NOT_CONFIRMED');
+  }
   const directory = join(
     root,
     'batch-session-' + randomBytes(12).toString('hex'),
@@ -114,7 +204,15 @@ export async function startBatchSession(
           ? '<p>Somente treze GETs de reconciliacao, zero POST ERP. A reserva anterior permanece.</p><a href="'
           : mode === 'diagnostic'
             ? '<p>Uma tentativa adicional identica do cliente aprovada pelo PO, ate dezessete GETs. Sem produtos ou pedidos neste modo.</p><a href="'
-            : '<p>Ate seis POSTs, oitenta GETs autenticados e um GET sem autenticacao. Lote aprovado pelo PO; os registros permanecerao no ERP.</p><a href="') +
+            : mode === 'corrected'
+              ? '<p>Correcao aprovada: omitir somente codigo e, apos reconciliar o cliente, retomar cinco inclusoes dependentes. Ate seis POSTs e 66 GETs nesta sessao; tetos cumulativos oito POSTs e 120 GETs.</p><a href="'
+              : mode === 'gg-reconcile'
+                ? '<p>Somente reconciliacao de GG: ate oito GETs, zero POST ERP. Nenhuma inclusao sera repetida.</p><a href="'
+                : mode === 'orders'
+                  ? '<p>Somente os tres pedidos ja aprovados. Ate tres POSTs e vinte GETs; cumulativos oito POSTs e 120 GETs. Nenhum cadastro sera repetido.</p><a href="'
+                  : mode === 'c04'
+                    ? '<p>Somente C04 ja aprovado, apos conferencia nativa de C02/C03. Ate um POST e seis GETs restantes.</p><a href="'
+                    : '<p>Ate seis POSTs, oitenta GETs autenticados e um GET sem autenticacao. Lote aprovado pelo PO; os registros permanecerao no ERP.</p><a href="') +
           esc(authorizationUrl(credentials.clientId, state)) +
           '">Conectar Olist para lote F1</a>',
       );
@@ -151,7 +249,15 @@ export async function startBatchSession(
           ? reconcileRejectedCustomer
           : mode === 'diagnostic'
             ? diagnoseCustomerOnce
-            : executeBatch
+            : mode === 'corrected'
+              ? executeCorrectedBatch
+              : mode === 'gg-reconcile'
+                ? reconcileCreatedGG
+                : mode === 'orders'
+                  ? executeRemainingOrders
+                  : mode === 'c04'
+                    ? executeLastScaleProbe
+                    : executeBatch
       )(bound, {
         token: response.body.access_token,
         approvedDigest,
@@ -271,9 +377,30 @@ export async function startBatchSession(
       encryptedEnvelopeFile: envelope,
       publicKeySha256: createHash('sha256').update(pem).digest('hex'),
       mode,
-      maximumPosts: mode === 'reconcile' ? 0 : mode === 'diagnostic' ? 1 : 6,
+      maximumPosts:
+        mode === 'reconcile' || mode === 'gg-reconcile'
+          ? 0
+          : mode === 'diagnostic'
+            ? 1
+            : mode === 'orders'
+              ? 3
+              : mode === 'c04'
+                ? 1
+                : 6,
       maximumAuthenticatedGets:
-        mode === 'reconcile' ? 13 : mode === 'diagnostic' ? 17 : 80,
+        mode === 'reconcile'
+          ? 13
+          : mode === 'diagnostic'
+            ? 17
+            : mode === 'corrected'
+              ? 66
+              : mode === 'gg-reconcile'
+                ? 8
+                : mode === 'orders'
+                  ? 20
+                  : mode === 'c04'
+                    ? 6
+                    : 80,
       maximumUnauthenticatedGets: mode === 'execute' ? 1 : 0,
       lifetimeMinutes: 30,
     }) + '\n',
@@ -287,7 +414,15 @@ if (
   const a = process.argv.slice(2);
   if (
     a.length !== 2 ||
-    !['--approved', '--reconcile', '--diagnostic'].includes(a[0]) ||
+    ![
+      '--approved',
+      '--reconcile',
+      '--diagnostic',
+      '--corrected',
+      '--gg-reconcile',
+      '--orders',
+      '--c04',
+    ].includes(a[0]) ||
     !/^[a-f0-9]{64}$/.test(a[1])
   ) {
     process.stderr.write(
@@ -302,7 +437,15 @@ if (
           ? 'reconcile'
           : a[0] === '--diagnostic'
             ? 'diagnostic'
-            : 'execute',
+            : a[0] === '--corrected'
+              ? 'corrected'
+              : a[0] === '--gg-reconcile'
+                ? 'gg-reconcile'
+                : a[0] === '--orders'
+                  ? 'orders'
+                  : a[0] === '--c04'
+                    ? 'c04'
+                    : 'execute',
     }).catch((e) => {
       process.stderr.write(
         /^[A-Z][A-Z_0-9]+$/.test(e.message)

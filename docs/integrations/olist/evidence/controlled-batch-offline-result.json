@@ -1,15 +1,15 @@
 {
   "task": "OLIST-T02",
   "runtime": "Node 24.20.0",
-  "tests": 14,
-  "passed": 14,
+  "tests": 25,
+  "passed": 25,
   "failed": 0,
   "externalCallsDuringTests": 0,
   "sourceSha256": {
-    "controlled-batch.mjs": "d6f04654d989415219676bfd9b54b4fc191cecf92236fa7ad4a256fc234e44df",
-    "controlled-batch.test.mjs": "7fc3a0b026b5ee75153e3e1c8c6827a103e8279cf9ffb79f5f38a556a949ac2c",
-    "controlled-batch.fixtures.mjs": "f53905dedeb950e094f48e1fdd2af32f038504f96fb7bd143b02b3ddac1f4398",
-    "batch-session.mjs": "4972b66c26f2bddd7a8474da2307a155e8af668d849a73a7dbaf83b5ac637ed8",
+    "controlled-batch.mjs": "6dbd598e6815e303e19b56a05327d2e48423c0d514716a331d22601b48f5de81",
+    "controlled-batch.test.mjs": "57c11aa89fb56a5711787daa3343a215c63f50c6f9d20486f39f2287c1b42376",
+    "controlled-batch.fixtures.mjs": "9aea7c484adeeb8482cf43235ae7b7ff17242fdfe171306b8a68a582274b7206",
+    "batch-session.mjs": "426b4d92541324a87c4909fedaddebeaedb0f3e8807e82f60c286e78a7b24ab9",
     "batch-session.test.mjs": "738f76de902fc8beab7405663d039c6e94496d7341d2954d0d390a3a2227597a"
   },
   "cases": [
@@ -26,7 +26,19 @@
     "HTTP400 preserves allowed field/category diagnostics without provider values",
     "rejected-customer reconciliation uses thirteen GETs and never releases the original reservation",
     "explicit identical diagnostic rejection posts exactly once and preserves both reservations",
-    "successful diagnostic reconciles fiscal/type/situation and stores confirmed ID without dependents"
+    "successful diagnostic reconciles fiscal/type/situation and stores confirmed ID without dependents",
+    "corrected batch deletes only codigo, reconciles ERP assigned code and respects cumulative eight POST/120 GET ceilings",
+    "corrected rejection sends no dependent POST and preserves both earlier reservations",
+    "corrected C02 reference loss prevents C03/C04 with IDs retained",
+    "complete partial product search is locally matched by exact SKU and parent identity",
+    "GG parent response ID reconciled to unique canonical child without another POST",
+    "changed initial M/G identity blocks reconciliation",
+    "order-only resume creates original three orders and no new catalog/contact",
+    "C04-only resume creates one unchanged final case within cumulative 120 GETs/eight POSTs",
+    "changed C03 monetary projection stops C04",
+    "API product-total mismatch remains explicit despite independent native UI line proof"
   ],
-  "proofLimit": "Mock execution validates local guards, not remote API behavior or F1 completion."
+  "proofLimit": "Mock execution validates local guards, not remote API behavior or F1 completion.",
+  "testExecution": "24 core tests and one mocked loopback OAuth transport test; all passed on 2026-11-05. No external calls.",
+  "sourceHashScope": "Current checked-in proof tools; not asserted to be the exact source for every historical live receipt."
 }

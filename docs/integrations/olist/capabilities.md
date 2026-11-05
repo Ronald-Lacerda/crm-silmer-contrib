@@ -5,17 +5,17 @@ coordenado pelo Tech Lead (Codex nesta execução). Consulta em 04/11/2026.
 [Revisão T01](contract-review.md) · [RFC 044](../../rfc/044-geracao-assistida-de-pedidos-no-olist.md)
 · [ADR 057](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md).
 
-**Situação: contrato/offline e primeira prova autenticada de leitura entregues;
-T02 e gate F1 abertos.** O PO aprovou o aplicativo privado somente leitura e
-a conexão temporária. Os oito GET retornaram 200 e a conta coincidiu; callback
-local aceito e limite de leitura observado de 30/minuto. Depois, o PO aprovou
-o caso C01: um POST retornou 201 e a UI comprovou R$ 1,00/R$ 2,00 por linha,
-total R$ 3,00. A referência não foi preservada; o caso foi reconciliado por ID,
-sem repetição ou edição. Nenhum parâmetro comercial global foi alterado.
-[Evidência da venda e reconciliação](evidence/controlled-sale-live-result.json).
-[Evidência real](evidence/read-only-live-result.json) ·
-[Configuração e encerramento do coletor](read-only-access.md) ·
-[Gatilhos e caso controlado](controlled-case.md).
+**Situação em 05/11/2026: experiências autorizadas concluídas; T02/F1 abertos
+por F1-G01 (leitura monetária automática).** Cliente, pai, M/G/GG e C02–C04
+criados e reconciliados sem repetir inclusões confirmadas. Origem e referência
+comprovadas nos novos pedidos. Os subtotais nativos conferem, mas os unitários
+e totais da API perdem precisão ou divergem: C04 tem R$ 0,02 na tela e 0.01
+em `valorTotalPedido`. C03 tem R$ 1,10 na tela e 1.08 em `valorTotalProdutos`.
+[Relatório atual e decisão necessária](phase1-report.md) ·
+[Resultado sanitizado](evidence/phase1-controlled-results.json).
+
+As seções de planejamento e checkpoints abaixo preservam seu escopo histórico;
+o relatório acima governa o estado atual, limites e próximos passos.
 
 ## Schema e reprodução
 
@@ -71,7 +71,7 @@ python docs/integrations/olist/capture_schema.py
 ## Matriz de capacidades
 
 “Documentado” significa propriedade/operação no schema ou texto oficial;
-“aberto” exige observação na conta. As leituras têm evidência real limitada; inclusões e dinheiro permanecem abertos.
+“aberto” exige observação na conta. Criações e leitura por identidade foram comprovadas na amostra; fidelidade monetária automática permanece aberta. Os detalhes históricos da matriz são complementados pelo relatório atual.
 
 | Capacidade                         | Evidência pública e observação offline                                                                                                                                                                                              | Situação / prova restante                                                                                                    |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -234,31 +234,15 @@ solicitar aprovação. Nenhum orçamento da matriz original autoriza execução.
 
 ## Handoff e próximo passo
 
-- T01: concluída e publicada no commit `bb453651`.
-- T02: captura/schema, fixtures e 11 testes offline concluídos; inspeção UI
-  e oito GET reais de leitura concluídos. Aplicativo de leitura criado com
-  aprovação específica, OAuth/loopback aceito, conta confirmada e quota de
-  leitura observada de 30/minuto. Coletor parado, tokens não persistidos.
-- Leituras com busca teste: zero contatos/produtos; zero pedidos da referência.
-  Isso não prova unicidade/filtro exato nem inexistência global. Sete vendedores,
-  um depósito e dez itens em cada primeira página de pagamento/recebimento.
-- Cadastro fiscal aceito, criação automática de cliente/pai/variações,
-  referências em roundtrip, escala/arredondamento por linha, rejeições e
-  recuperação continuam pendentes. C01 criou uma venda; demais cadastros não criados e F1 aberto.
-- C01: comprador confirmado pelo PO e preparação real concluída com dez GET
-  na rodada final. ID/documento, pai, SKUs, grade M/G e referência conferidos.
-  [Evidência real e diagnósticos](evidence/controlled-sale-preflight.json).
-  Consulta com CNPJ normalizado retornou zero; formato com máscara encontrou
-  o registro. Contato existente A reutilizável sem criar acesso; novos usam B.
-- Núcleo/transporte C01 com 29 testes sintéticos, modo padrão sem escrita;
-  [evidência offline](evidence/controlled-sale-offline-result.json).
-  Após aprovação específica, app renomeado e Pedidos Incluir/editar habilitado.
-  Um POST real retornou 201; dinheiro exato e recuperação por ID comprovados.
-  Referência vazia com ecommerce.id zero exige prova de uma origem própria;
-  não houve novo envio/alteração. Escala e demais cadastros continuam abertos.
-- Nenhuma migração, runtime, deploy, habilitação de operadora ou piloto.
-  T03 depende da prova real T02 e do gate F1; aprovação de leitura não libera
-  ampliação de permissões ou escrita controlada.
+T01 concluída. As experiências T02 autorizadas terminaram com um cliente, um
+pai, três variações e C01–C04 criados. Lote adicional: 120 GETs e oito POSTs,
+sem saldo autorizado. Não reexecutar nenhuma inclusão. Todos os IDs/reservas
+estão preservados fora do Git. Os 25 testes atuais passaram.
+
+F1-G01 exige a decisão apresentada no [relatório](phase1-report.md). A UI prova
+cada linha da amostra, mas a API não fornece leitura monetária automática fiel.
+T02 continua desmarcada; T03/Fase 2 não liberadas. Nenhum runtime, migração,
+deploy ou piloto foi implementado. Os checkpoints seguintes são históricos.
 
 ## Limitação observada em C01
 
@@ -275,7 +259,7 @@ A UI confirmou a conclusão; não ofereceu opção de envio de NF-e. [Estado da 
 Nenhuma nova venda foi autorizada ou criada nesta configuração.
 Não usar número de ordem de compra como remendo nem repetir C01.
 
-## Resultado do lote adicional aprovado
+## Histórico: lote adicional inicialmente interrompido
 
 O PO aprovou o plano de até seis POSTs. Contatos/Produtos receberam Incluir
 e editar, sem exclusão. Após 27 GETs autenticados de identidade/ausência,
@@ -285,7 +269,7 @@ Treze GETs posteriores por documento/código não encontraram cadastro; a
 reserva segue bloqueada, sem retry. Total novo: 40 GETs autenticados, um
 GET não autenticado (401) e um POST rejeitado. C01 intacto.
 [Resultado real](evidence/controlled-batch-live-result.json);
-[12 testes do executor corrigido](evidence/controlled-batch-offline-result.json).
+[Testes atuais do executor](evidence/controlled-batch-offline-result.json).
 Nova tentativa do cliente exige aprovação explícita; não inventar correção
 ou considerar o schema suficiente para a validação fiscal real. F1 aberto.
 
@@ -295,6 +279,6 @@ Um POST adicional idêntico foi aprovado e executado após mais 14 GETs.
 Retornou 400 com campo **codigo** e categoria **tamanho ou limite**; nenhum
 dependente foi enviado e ambas as reservas permanecem. A UI trata Código como
 opcional, sem revelar limite. [Diagnóstico real](evidence/customer-diagnostic-live-result.json).
-Omitir somente codigo é uma proposta ainda não aprovada/testada na API, sem
-alterar dados fiscais. Total do lote: 54 GETs autenticados, um não autenticado,
-dois POSTs rejeitados e nenhum ID novo confirmado. T02/F1 abertos.
+Naquele checkpoint, omitir somente codigo ainda dependia de aprovação. Depois
+o PO aprovou a correção limitada, que foi aceita. O [relatório atual](phase1-report.md)
+registra essa execução, os dependentes e a limitação monetária restante.

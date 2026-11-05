@@ -5,15 +5,18 @@ Dono: Tech Lead/Integrações (Codex nesta execução). 04/11/2026.
 [RFC 044](../../rfc/044-geracao-assistida-de-pedidos-no-olist.md) ·
 [Consultas e caso controlado](controlled-case.md).
 
-## Estado atual após C01
+## Estado atual após os casos controlados
 
-O histórico abaixo registra o checkpoint inicial de leitura. Posteriormente,
-o PO autorizou expressamente o caso C01 e a ampliação somente de Pedidos:
-o mesmo aplicativo agora se chama **CRM Silmer - prova F1 - controlada** e
-mantém Incluir e editar somente em Pedidos. Exclusões e demais escritas
-continuam desmarcadas. Um pedido de R$ 3,00 foi criado, sem segundo POST.
-[Evidência atual](evidence/controlled-sale-live-result.json). Tokens continuam
-sem persistência; credenciais permanecem no ERP. Nenhum novo aplicativo criado.
+O histórico abaixo registra a primeira prova somente leitura. Depois de
+aprovações específicas, o aplicativo passou a **CRM Silmer - prova F1 -
+controlada**, com Incluir e editar em Contatos, Produtos e Pedidos, sem exclusão.
+Cliente, pai, M/G/GG e C01–C04 foram criados. Coletores encerrados, tokens não
+persistidos; credenciais permanecem no ERP. O lote de 120 GETs/oito POSTs está
+esgotado. [Resultado e limitação monetária](phase1-report.md).
+
+Saídas de ferramentas exibiram credenciais sem máscara por falha de coleta;
+os valores não estão versionados. O relatório registra o tratamento pendente
+de troca pelo usuário, sem executar rotação/revogação automaticamente.
 
 ## Entrega e autorização
 

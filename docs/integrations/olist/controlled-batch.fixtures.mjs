@@ -42,11 +42,46 @@ const response = (x, status = 200) =>
   });
 const page = (x) => ({ itens: x, paginacao: { offset: 0, total: x.length } });
 export function provider(plan, options = {}) {
-  let customer = null,
-    parent = false,
-    gg = false;
+  let customer = options.seedCreatedCustomer
+      ? {
+          ...input().customer,
+          codigo: '',
+          tipos: [{ id: 5, descricao: 'Cliente' }],
+          id: 100,
+        }
+      : null,
+    parent = Boolean(options.seedCreatedGG),
+    gg = Boolean(options.seedCreatedGG);
   const orders = [],
     calls = [];
+  if (options.seedRoundingOrders) {
+    for (const [index, order] of plan.orders.slice(0, 2).entries()) {
+      orders.push({
+        id: 400 + index,
+        data: '2026-11-04',
+        situacao: 0,
+        cliente: { id: 100, cpfCnpj: input().customer.cpfCnpj },
+        ecommerce: { id: 777, numeroPedidoEcommerce: order.reference },
+        itens: order.items.map((x) => ({
+          produto: {
+            id:
+              x.resource === 'new-M' ? 201 : x.resource === 'new-G' ? 202 : 11,
+          },
+          quantidade: x.quantity,
+          valorUnitario:
+            Math.round((Number(x.unitLexeme) + Number.EPSILON) * 100) / 100,
+        })),
+        valorTotalPedido: order.hypotheticalTotalCents / 100,
+        valorTotalProdutos: order.hypotheticalTotalCents / 100,
+        idNotaFiscal: 0,
+        pagamentosIntegrados: [],
+        pagamento: { parcelas: [] },
+      });
+    }
+    if (options.c03ProductProjectionDiffers)
+      orders[1].valorTotalProdutos = 1.08;
+    if (options.badC03Numeric) orders[1].itens[0].valorUnitario = 0.03;
+  }
   const parentObject = () => ({
     id: 200,
     tipo: 'V',
@@ -153,7 +188,15 @@ export function provider(plan, options = {}) {
           if (options.existingSku && sku === plan.parent.payload.sku && active)
             return response(page([{ id: 900, sku }]));
           return response(
-            page(active ? products.filter((x) => x.sku === sku) : []),
+            page(
+              active
+                ? products.filter((x) =>
+                    options.partialProducts
+                      ? x.sku.startsWith(sku)
+                      : x.sku === sku,
+                  )
+                : [],
+            ),
           );
         }
         if (p === '/produtos/200') return response(parentObject());
@@ -199,6 +242,7 @@ export function provider(plan, options = {}) {
         assert.equal(b.situacao, 'B');
         customer = {
           ...b,
+          codigo: b.codigo ?? '100001',
           tipos: b.tipos.map((id) => ({ id, descricao: 'Cliente' })),
           id: 100,
         };
@@ -215,7 +259,7 @@ export function provider(plan, options = {}) {
       }
       if (p === '/produtos/200/variacoes') {
         gg = true;
-        return response({ id: 203 }, 201);
+        return response({ id: options.ggReturnsParent ? 200 : 203 }, 201);
       }
       if (p === '/pedidos') {
         const index = orders.length,
