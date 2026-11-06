@@ -3,6 +3,9 @@
 Status: implementação autorizada em 05/11/2026 após aprovação do protótipo
 refinado. [RFC 044](../../../docs/rfc/044-performance-comercial-e-central-de-acoes.md)
 e [ADR 059](../../../docs/adr/059-central-de-acoes-e-performance-comercial.md).
+ACT-06 emendada e MET-01–12 acrescentados em 05/11/2026 pela
+[RFC 048](../../../docs/rfc/048-metricas-de-expediente-perda-e-presenca.md) e
+[ADR 060](../../../docs/adr/060-metricas-de-expediente-perda-e-presenca.md) (ACT-T04).
 Complementa FIN-01–03, PNL-01–04, PLA-04–12 e FINQ-04/18/19.
 
 ## Central do vendedor — ACT-01–12
@@ -32,8 +35,8 @@ Complementa FIN-01–03, PNL-01–04, PLA-04–12 e FINQ-04/18/19.
    objeto no PostgreSQL existente, com versão própria, versão do alvo e revisão
    da mensagem. Transferência, fechamento ou nova demanda invalidam decisão
    obsoleta; adiado vencido volta à fila. Adiar não resolve obrigação do pedido.
-6. **ACT-06 — Retomada:** após 48h sem resposta à última saída humana enviada,
-   pode aparecer sugestão em conversa própria humana, aberta e não arquivada.
+6. **ACT-06 — Retomada:** após 72h (emenda ADR 060; eram 48h) sem resposta
+   à última saída humana enviada, pode aparecer sugestão em conversa própria humana, aberta e não arquivada.
    Não inventar compromisso, perda ou desinteresse. Saída falha/desconhecida
    não fundamenta sugestão nem pode esconder cliente que ainda espera. Retorno
    agendado exige decisão humana; não inferir promessa do conteúdo do chat.
@@ -104,6 +107,78 @@ Complementa FIN-01–03, PNL-01–04, PLA-04–12 e FINQ-04/18/19.
    Workflow não salva execuções com dados pessoais. Configuração/publicação e
    entrega real são gates operacionais separados dos testes locais.
 
+## Métricas de expediente, perda e presença — MET-01–12
+
+Decisões do PO em 05/11/2026 (RFC 048 / ADR 060). Todo contato é lead: o
+contato acontece sempre por iniciativa do cliente.
+
+1. **MET-01 — Expediente:** política `expediente-v1`, segunda a sexta,
+   09:00–12:00 e 13:00–18:00, America/Sao_Paulo, sem feriados. Minutos úteis
+   só pela função SQL `crm.business_minutes_v1(from, to)`, fonte única da API
+   e dos testes; a resposta informa a versão. Mudar a política cria `_v2`
+   sem reescrever a `_v1`. Prova: virada de dia, almoço, fim de semana e
+   intervalo que começa ou termina fora do expediente.
+2. **MET-02 — Tempo para assumir:** do pedido de atendimento (handoff) até a
+   tomada, em minutos de expediente, na janela PERF-02 (7/30 dias). Crédito a
+   quem assumiu. Pedido ainda sem tomada aparece como aberto, com idade, e
+   nunca é omitido. Tomada direta sem pedido não gera amostra.
+3. **MET-03 — Tempo até a 1ª resposta:** até a primeira resposta humana
+   efetiva do vendedor no ciclo (PERF-03: queued/failed/unknown, bot e
+   notificações não contam), em minutos de expediente, com crédito a quem
+   assumiu. Início: a tomada ou, sem mensagem do cliente pendente nesse
+   instante, a primeira mensagem do cliente posterior. Espera sem resposta
+   aparece como aberta.
+4. **MET-04 — Apresentação:** MET-02/03 mostram mediana, p90 e quantidade de
+   amostras. p90 é nulo com menos de 5 amostras; sem amostra é nulo, não 0.
+5. **MET-05 — Sem resposta:** conversa do vendedor em modo humano com
+   mensagem do cliente sem resposta humana efetiva há mais de 15 minutos de
+   expediente. Duas leituras: retrato de agora (Dashboard) e total de
+   episódios no período (tabela da equipe). Cada período de espera conta uma
+   vez, por mais mensagens que o cliente envie; a espera termina na primeira
+   resposta humana efetiva.
+6. **MET-06 — Lead perdido:** declaração explícita do responsável da
+   conversa ou de administrador, nunca inferida (ACT-06 continua). Motivo
+   obrigatório de lista fechada: `preco`, `prazo`, `concorrente`, `silencio`,
+   `indisponivel` ou `outro`; `outro` exige texto de 1–140 caracteres,
+   cifrado e fora de logs, auditoria e agregações. Só em conversa aberta, com
+   dono, em modo humano; recusa com `409 LEAD_HAS_ORDER` se o ciclo tiver
+   pedido pendente ou confirmado. Idempotency-Key, CSRF, versão esperada e
+   auditoria sem texto livre; actorId forjado é recusado.
+7. **MET-07 — Registro e reabertura:** desfecho em
+   `crm.lead_outcome_events`, imutável e versionado por conversa. Não altera
+   estado nem encerramento da conversa, nem status de pedido; não usa
+   Negócio. Marcar perdido não encerra a conversa. Mensagem nova do cliente
+   reabre automaticamente, de forma derivada, preservando o histórico.
+   Reabertura manual é correção: a perda corrigida sai da contagem.
+8. **MET-08 — Efeito na central:** perda ativa retira retomada, “responder”
+   e lembretes daquela conversa da central; falhas de envio continuam
+   visíveis. A leitura de perdas no período agrupa por motivo, sem o texto
+   livre.
+9. **MET-09 — Presença:** “online” é CRM aberto, aba visível e interação nos
+   últimos 10 minutos. O cliente envia `POST /api/v1/presence/heartbeat` sem
+   corpo só nessa condição; o servidor grava no máximo uma linha por usuário
+   por minuto em `crm.user_presence_minutes`, pelo relógio do servidor, sem
+   IP, user-agent ou rota. Flag `DASHBOARD_PRESENCE_ENABLED` desligada por
+   padrão: sem flag, nada é gravado e a presença aparece indisponível.
+   Retenção de 90 dias.
+10. **MET-10 — Privacidade da presença:** finalidade de gestão comercial,
+    não controle de jornada ou ponto. Legítimo interesse com teste de
+    balanceamento registrado e aviso à equipe antes de ligar a flag; cada
+    vendedor vê os próprios dados.
+11. **MET-11 — R$ por hora online:** vendido atribuído (PERF-01) ÷ todas as
+    horas online do período, dentro ou fora do expediente. Nulo com menos de
+    60 minutos online. Só vendedores; loja e sem atribuição ficam fora. Se a
+    cobertura de presença começou depois do início da janela, o indicador
+    começa no início da cobertura e a resposta declara isso.
+12. **MET-12 — Acesso e contrato:** administrador ativo vê a equipe;
+    vendedor só a própria linha (PERF-07), mesmo com parâmetros manipulados;
+    Financeiro não tem acesso. Leituras privadas/no-store em
+    `GET /api/v1/dashboard/metrics/{service,losses,presence}?days=7|30` e
+    `GET /api/v1/conversations/:id/lead-outcome`; comando em
+    `POST /api/v1/conversations/:id/lead-outcome`. Não altera
+    `/dashboard/performance` nem o checkpoint (PERF-08). Migrações expand
+    `0060` (expediente e índices), `0061` (desfechos) e `0062` (presença).
+
 ## Verificação e fronteiras
 
 Cobrir positivos, negativos e concorrentes: pagamento×entrega, legado, novo
@@ -111,5 +186,6 @@ valor, transferência×decisão, nova mensagem, fechamento, replay, snooze venci
 prazo ausente, loja, teste, outra conta, Financeiro, CSRF, snapshot repetido,
 falha parcial e timeout. Testes live usam somente dados sintéticos.
 Não inclui cobrança InfinitePay da RFC 045, novo status comercial, coortes ou
-follow-up automático. PNL-01–03 ganham a composição desta central; PNL-04 não
+follow-up automático. A perda declarada de MET-06–08 não é status comercial:
+é desfecho de lead em registro próprio (emenda ADR 060). PNL-01–03 ganham a composição desta central; PNL-04 não
 altera o destino atual do login.

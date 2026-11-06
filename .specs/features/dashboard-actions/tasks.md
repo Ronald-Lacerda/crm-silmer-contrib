@@ -27,29 +27,30 @@ Evidências e limitações: [QA de 05/11](../../../docs/qa/dashboard-central-202
 Essa segunda tarefa distingue código entregue de ativação/homologação; não
 autoriza restauração de banco ou alteração de workflows comerciais existentes.
 
-## ACT-T04 — Refinamento do Dashboard por papel (proposta de design, 05/11/2026)
+## ACT-T04 — Refinamento do Dashboard por papel e métricas novas (05/11/2026)
 
-Proposta de design; não autoriza implementação. Componentes e regras na §18
-do [design.md](../../../design.md). Decisões do PO em 05/11/2026, registradas
-como contexto:
+Implementação autorizada pelo PO em 05/11/2026, **backend primeiro**: a
+interface do redesenho espera a fatia de interface de outra sessão (ACT-T03)
+chegar ao master. Componentes e práticas na §18–19 do
+[design.md](../../../design.md). Decisões em
+[RFC 048](../../../docs/rfc/048-metricas-de-expediente-perda-e-presenca.md) /
+[ADR 060](../../../docs/adr/060-metricas-de-expediente-perda-e-presenca.md);
+contrato em ACT-06 (72h) e MET-01–12 da [spec](spec.md). Vendedor vê só os
+próprios números (PERF-07) e o crédito da venda é do responsável na
+confirmação (PERF-01).
 
-- Vendedor vê só os próprios números (já coberto por PERF-07).
-- Expediente das 9h às 18h; “sem resposta” conta só dentro do expediente.
-- Retomada sugerida após 3 dias; hoje são 48h (`DASHBOARD_FOLLOWUP_HOURS`,
-  ACT-06).
-- Todo contato é lead: o contato acontece sempre por iniciativa do cliente.
-- Marcar lead como perdido exige motivo obrigatório e auditável. Hoje está
-  fora de escopo: a spec proíbe inferir perda (ACT-06) e não cria status
-  novo; aqui é declaração explícita do vendedor, por isso precisa de RFC.
-- Crédito da venda é do último responsável no momento da confirmação
-  (compatível com PERF-01).
-- Métricas novas para o gestor: “tempo online ativo” (CRM aberto com uso
-  nos últimos 10 min) e “R$ por hora online”.
-
-- [x] Componentes e regras no design.md (este commit).
-- [ ] RFC complementar ao RFC 044: expediente, follow-up de 72h, motivo de
-      perda obrigatório, tempo online ativo e R$/hora, tempo de 1ª resposta
-      e “sem resposta” no expediente.
+- [x] Componentes e práticas no design.md.
+- [x] RFC 048 / ADR 060 e emenda da spec (este commit).
+- [ ] B — Métricas de expediente (MET-01–05) e retomada em 72h (ACT-06):
+      migração 0060 e `GET /api/v1/dashboard/metrics/service`.
+- [ ] C — Lead perdido com motivo (MET-06–08): migração 0061,
+      `/api/v1/conversations/:id/lead-outcome` e
+      `GET /api/v1/dashboard/metrics/losses`.
+- [ ] D — Presença e R$/hora (MET-09–11) com heartbeat no cliente:
+      migração 0062, `POST /api/v1/presence/heartbeat`,
+      `GET /api/v1/dashboard/metrics/presence`, flag desligada, teste de
+      balanceamento e aviso à equipe antes de ligar.
+- [ ] Interface do redesenho, depois de ACT-T03 no master.
 - [ ] Integrar saldo InfinitePay à central (COB-DASH-01): link vencido →
       “Gerar novo link”; “Resultado a conferir” → conferência humana.
 - [ ] Quando Olist (ADR 057) chegar ao master: estado da exportação

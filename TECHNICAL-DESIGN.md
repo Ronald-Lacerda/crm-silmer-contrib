@@ -462,6 +462,29 @@ confirmados e não representam recebimentos. SSE usa IDs e metadados mínimos.
 Reconexão recupera estado; conflito preserva rascunho até atualização.
 Teclado, foco e ARIA fazem parte do aceite.
 
+### Métricas de expediente, perda e presença — ACT-T04
+
+[ADR 060](docs/adr/060-metricas-de-expediente-perda-e-presenca.md) e
+[ACT-06/MET-01–12](.specs/features/dashboard-actions/spec.md). Endpoints
+novos, sem alterar `/dashboard/performance` nem o checkpoint (PERF-08):
+
+| Contrato                                            | Uso                                                                                           |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `GET /api/v1/dashboard/metrics/service?days=7\|30`  | Tempo para assumir e 1ª resposta (mediana, p90, amostras, abertos) e “sem resposta”.          |
+| `GET /api/v1/dashboard/metrics/losses?days=7\|30`   | Perdas declaradas por motivo, sem texto livre; correções manuais fora da contagem.            |
+| `GET /api/v1/dashboard/metrics/presence?days=7\|30` | Minutos online, cobertura e R$ por hora online; indisponível com a flag desligada.            |
+| `GET`/`POST /api/v1/conversations/:id/lead-outcome` | Ler/declarar perda ou corrigir; Idempotency-Key, CSRF, versão esperada; `409 LEAD_HAS_ORDER`. |
+| `POST /api/v1/presence/heartbeat`                   | Sem corpo; no máximo uma linha por usuário/minuto pelo relógio do servidor.                   |
+
+Migrações expand: `0060` cria `crm.business_minutes_v1(from, to)`
+(`expediente-v1`: seg–sex, 09–12h e 13–18h, America/Sao_Paulo) e índices
+das consultas; `0061` cria `crm.lead_outcome_events`, imutável, versionada
+por conversa, com texto de `outro` cifrado; `0062` cria
+`crm.user_presence_minutes` sem IP, user-agent ou rota, com expurgo após 90
+dias. `DASHBOARD_PRESENCE_ENABLED` é desligada por padrão. Autorização como
+PERF-07 (admin vê equipe, vendedor só a própria linha, Financeiro sem acesso).
+A sugestão de retomada (`DASHBOARD_FOLLOWUP_HOURS`) passa a 72h.
+
 ## 6. OpenAI, acesso e privacidade
 
 OpenAI é o provedor do MVP ([ADR 021](docs/adr/021-adotar-openai-no-mvp.md)).

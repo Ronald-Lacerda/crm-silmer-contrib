@@ -189,14 +189,22 @@ explícita de recebimento integral e preserva a entrega.
 
 [ACT-01–12, PERF-01–08 e CHK-01–08](.specs/features/dashboard-actions/spec.md)
 (ACT-T01) definem lembretes pessoais com versão/revisão, sugestão de retomada
-após 48h de saída humana enviada e navegação para a Inbox real. Não há envio
-pelo Dashboard ou retorno ao bot. Atribuição comercial é congelada para o
+após 72h de saída humana enviada (ADR 060) e navegação para a Inbox real.
+Não há envio pelo Dashboard ou retorno ao bot. Atribuição comercial é congelada para o
 responsável na confirmação, separada do executor; legado sem evidência fica
 sem atribuição. A mesma consulta apura desempenho e checkpoint diário das 08h,
 referente ao dia anterior em São Paulo. n8n agenda e transporta com capacidade
 técnica dedicada, snapshot cifrado imutável e reserva única por destino privado.
 Replay ou resultado incerto não autorizam novo envio. A flag fica desativada
 até configuração e homologação operacional (ACT-T02).
+
+A [ADR 060](docs/adr/060-metricas-de-expediente-perda-e-presenca.md)
+(MET-01–12, ACT-T04) mede atendimento em minutos de expediente pela função
+SQL versionada `crm.business_minutes_v1`: tempo para assumir, 1ª resposta e
+“sem resposta” acima de 15 minutos úteis. Lead perdido é declaração humana
+com motivo, em `crm.lead_outcome_events`, sem encerrar a conversa nem mudar
+pedido. Presença (`crm.user_presence_minutes`, flag desligada, 90 dias)
+alimenta o R$ por hora online; vendedor vê só a própria linha.
 
 O responsável ou administrador encerra explicitamente um ciclo de Conversa
 como `concluido` ou `sem_pedido`; a hora e o autor ficam registrados. Pedido

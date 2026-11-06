@@ -2,6 +2,9 @@
 
 ## Decisão de 05/11/2026
 
+- [060 — Métricas de expediente, perda declarada e presença](060-metricas-de-expediente-perda-e-presenca.md),
+  RFC 048 / ACT-T04: minutos de expediente por função SQL versionada, lead
+  perdido em desfecho próprio e presença sob flag; supersede a ADR 059 só nas 48h.
 - [059 — Central de ações e performance comercial](059-central-de-acoes-e-performance-comercial.md),
   RFC 044 / ACT-T01: fila pessoal, conferências independentes, crédito congelado
   e checkpoint diário com snapshot e reserva por destinatário; ativação ACT-T02.
