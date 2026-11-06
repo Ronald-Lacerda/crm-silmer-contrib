@@ -2,7 +2,7 @@
 
 ## Evolução aprovada Olist e subtotal por tamanho em 04/11/2026
 
-[ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 044](docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md), requisitos OLIST-01–50,
+[ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), requisitos OLIST-01–50,
 tarefa documental OLIST-PLAN-02 e execução OLIST-T01–T26. Contrato aprovado,
 implementação/piloto pendentes; prevalece sobre descrições históricas incompatíveis.
 

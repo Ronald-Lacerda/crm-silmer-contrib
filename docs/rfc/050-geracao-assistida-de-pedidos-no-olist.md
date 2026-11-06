@@ -1,6 +1,6 @@
 # Geração assistida de pedidos de venda no Olist
 
-RFC 044. Especificação de produto, desenho técnico e plano de execução.
+RFC 050. Especificação de produto, desenho técnico e plano de execução.
 Revisão 2 de 04/11/2026. Responsável: Tech Lead. Decisor: proprietário.
 Público: Produto, Backend/Dados, Integrações, Frontend/A11y, QA e DevOps.
 

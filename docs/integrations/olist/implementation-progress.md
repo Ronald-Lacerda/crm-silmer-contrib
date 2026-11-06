@@ -2,7 +2,7 @@
 
 OLIST-T20a/T21a, preparação parcial de T20/T21. Requisitos OLIST-09–10,
 40, 42–43, [ADR 057](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
-e [RFC 044](../../rfc/044-geracao-assistida-de-pedidos-no-olist.md).
+e [RFC 050](../../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
 
 Em 05/11/2026, após a comparação v2/v3, o PO pediu foco na implementação.
 Nenhuma mensagem foi enviada ao suporte. A investigação externa foi encerrada;

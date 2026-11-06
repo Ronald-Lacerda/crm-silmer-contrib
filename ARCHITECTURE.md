@@ -2,7 +2,7 @@
 
 ## Olist por habilitação e subtotal por tamanho em 04/11/2026
 
-[ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 044](docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md), OLIST-PLAN-02. Desenho
+[ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), OLIST-PLAN-02. Desenho
 aprovado para implementar, sem runtime ou ativação entregues nesta revisão.
 
 API oficial no monólito/worker/PostgreSQL existentes. Checkbox ortogonal ao

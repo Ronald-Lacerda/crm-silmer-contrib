@@ -9,7 +9,7 @@
   protótipo refinado aprovado e recorte registrado na ADR 059 / ACT-T01.
 ## Decisão de 04/11/2026
 
-- [044 — Geração assistida de pedidos de venda no Olist](044-geracao-assistida-de-pedidos-no-olist.md),
+- [050 — Geração assistida de pedidos de venda no Olist](050-geracao-assistida-de-pedidos-no-olist.md),
   revisão 2 decidida na ADR 057 / OLIST-PLAN-02. OLIST-01–50, seis fases,
   T01–T26: habilitação, cadastros, subtotais, cancelamento CRM e rótulos.
   Validações técnicas, implementação e piloto continuam pendentes.

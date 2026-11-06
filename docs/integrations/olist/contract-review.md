@@ -2,7 +2,7 @@
 
 OLIST-T01 / OLIST-01–50. Revisão de 04/11/2026 sobre `977b3134`.
 Responsável de integração e fechamento: Tech Lead (Codex nesta execução).
-[Contrato de produto e tarefas](../../rfc/044-geracao-assistida-de-pedidos-no-olist.md),
+[Contrato de produto e tarefas](../../rfc/050-geracao-assistida-de-pedidos-no-olist.md),
 [decisões aceitas](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md).
 Sem issue/PR específica nesta revisão; publicação na branch `codex/olist-specification`.
 
@@ -73,7 +73,7 @@ baseline. Foi consultado somente como mapa. O worktree da RFC não possui
 
 ## Verificação desta entrega
 
-Revisão cruzada de RULES, spec CRM, PRD, TDD, ARCHITECTURE, ADR 057 e RFC 044;
+Revisão cruzada de RULES, spec CRM, PRD, TDD, ARCHITECTURE, ADR 057 e RFC 050;
 cobertura dos 50 IDs; links locais e Markdown alterado; `git diff --check`.
 Sem alteração de runtime, migração, conta, cadastro, impressão ou infraestrutura.
 T02 registra separadamente schema/hash, fixtures, resultados e plano de prova

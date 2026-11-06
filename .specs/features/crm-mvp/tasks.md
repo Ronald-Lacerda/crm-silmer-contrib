@@ -191,7 +191,7 @@ runtime, habilitação real ou inclusão ERP nesta entrega.
 
 ## OLIST-PLAN-02 — Decisões Olist subtotal cancelamento e rótulos
 
-- [x] Registrar decisões do proprietário na ADR 057 e reconciliar RFC 044,
+- [x] Registrar decisões do proprietário na ADR 057 e reconciliar RFC 050,
       RULES, PRD/specs, arquitetura/TDD e índices sem implementar runtime.
 - [x] Planejar OLIST-01–50, seis fases e OLIST-T01–T26, com subtotais por tamanho,
       checkbox por usuário, cadastros/variações e cancelamento CRM pré-exportação.
@@ -200,7 +200,7 @@ runtime, habilitação real ou inclusão ERP nesta entrega.
 - [ ] Implementar rótulos e ficha v7 preservando versões anteriores; aprovar amostra.
 - [ ] Validar e liberar piloto individual por ID privado; não habilitar conta no código.
 
-[RFC 044](../../../docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md) /
+[RFC 050](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md) /
 [ADR 057](../../../docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md).
 Esta entrega registra produto e prepara execução, sem alterar usuários ou ERP.
 
@@ -1172,8 +1172,8 @@ Coleta permanece manual; expurgo diário14dias autorizado pelo proprietário.
 
 - [x] Preparar especificação completa com requisitos OLIST-01–32, seis fases,
       tarefas OLIST-T01–T18, testes negativos, recuperação e checklists na
-      [RFC 044](../../../docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md).
-- [x] Revisar decisões de produto na ADR 057/RFC 044 revisão 2 (OLIST-PLAN-02).
+      [RFC 050](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md).
+- [x] Revisar decisões de produto na ADR 057/RFC 050 revisão 2 (OLIST-PLAN-02).
 - [ ] Provar contratos técnicos de cadastros/precisão e preencher parâmetros reais.
 - [ ] Implementar e validar OLIST-T01–T15 e T19–T26 conforme gates da RFC revisada.
 - [ ] Autorizar/executar piloto e decidir ampliação em OLIST-T16–T18.

@@ -2,7 +2,7 @@
 
 Data: 04/11/2026. Status: decisões de produto aceitas pelo proprietário no chat.
 Proposta e contrato de execução:
-[RFC 044](../rfc/044-geracao-assistida-de-pedidos-no-olist.md).
+[RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
 Requisitos: OLIST-01–50. Tarefas: OLIST-PLAN-02 e OLIST-T01–T26 na RFC e no
 [plano macro](../../.specs/features/crm-mvp/tasks.md).
 Issue/PR específica: não criada nesta etapa documental.

@@ -3,7 +3,7 @@
 OLIST-T02 / OLIST-09–10, 14–17, 40–42. Continuação autorizada pelo PO em
 05/11/2026: comparador local e prova limitada v2 × v3 nos pedidos já existentes.
 Preserva [ADR 057](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
-e [RFC 044](../../rfc/044-geracao-assistida-de-pedidos-no-olist.md).
+e [RFC 050](../../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
 Não altera o runtime, o modelo monetário ou a sequência de liberação de T03.
 
 ## Entregas e condição de passagem

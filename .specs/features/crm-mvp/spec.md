@@ -98,7 +98,7 @@ padrão de PCX-15a; as filas pessoais e capacidades permanecem existentes.
 ## Olist e melhorias comerciais aprovadas em 04/11/2026
 
 [ADR 057](../../../docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
-e [RFC 044](../../../docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md)
+e [RFC 050](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md)
 são a emenda OLIST-01–50. OLIST-PLAN-02 prepara T01–T26; implementação pendente.
 
 Os critérios OLIST prevalecem sobre posse obrigatória na geração ERP,

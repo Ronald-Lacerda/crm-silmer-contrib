@@ -15,7 +15,7 @@
 ## Decisão de 04/11/2026
 
 - [057 — Olist por habilitação e subtotal por tamanho](057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md),
-  RFC 044 / OLIST-PLAN-02: checkbox por usuário, qualquer Pedido completo,
+  RFC 050 / OLIST-PLAN-02: checkbox por usuário, qualquer Pedido completo,
   criação de cadastros/variações, subtotal por tamanho, cancelamento CRM
   pré-exportação, rótulos Aplicação/Previsão de entrega e piloto individual.
 

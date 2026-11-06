@@ -2,7 +2,7 @@
 
 OLIST-T02 / OLIST-03–05, 07–13, 20, 25–27, 35–41.
 Dono: Tech Lead/Integrações (Codex nesta execução). 04/11/2026.
-[RFC 044](../../rfc/044-geracao-assistida-de-pedidos-no-olist.md) ·
+[RFC 050](../../rfc/050-geracao-assistida-de-pedidos-no-olist.md) ·
 [Consultas e caso controlado](controlled-case.md).
 
 ## Estado atual após os casos controlados

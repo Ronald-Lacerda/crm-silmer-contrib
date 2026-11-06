@@ -2,7 +2,7 @@
 
 ## Olist subtotal e cancelamento contrato para implementação
 
-[ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 044](docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md), OLIST-01–50,
+[ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), OLIST-01–50,
 OLIST-PLAN-02 e T01–T26. Não representa código ou schema já publicados.
 
 - Identidade/acesso: checkbox default false gerido por Admin, autorização

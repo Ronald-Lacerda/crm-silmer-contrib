@@ -2,7 +2,7 @@
 
 ## Evolução aprovada para implementação Olist e valores por tamanho
 
-Decisão de 04/11/2026 na [ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 044](docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md),
+Decisão de 04/11/2026 na [ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md),
 OLIST-01–50 e OLIST-PLAN-02. Estes pontos supersedem os trechos antigos
 incompatíveis para o novo contrato; o código ainda não foi alterado.
 

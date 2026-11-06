@@ -3,7 +3,7 @@
 ## Emenda Olist e cancelamento de 04/11/2026
 
 [ADR 057](../../../docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
-/ [RFC 044](../../../docs/rfc/044-geracao-assistida-de-pedidos-no-olist.md),
+/ [RFC 050](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md),
 OLIST-02/19/33/45–47 / OLIST-PLAN-02: contrato para implementar.
 
 Habilitado Olist é capacidade ortogonal também ao perfil Financeiro: concede

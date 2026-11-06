@@ -2,7 +2,7 @@
 
 OLIST-T02 / OLIST-03–17, 20, 26, 35–41. Fechamento das experiências autorizadas em
 05/11/2026, na conta operacional escolhida pelo PO.
-[RFC 044](../../rfc/044-geracao-assistida-de-pedidos-no-olist.md) ·
+[RFC 050](../../rfc/050-geracao-assistida-de-pedidos-no-olist.md) ·
 [ADR 057](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) ·
 [Resultados sanitizados](evidence/phase1-controlled-results.json).
 

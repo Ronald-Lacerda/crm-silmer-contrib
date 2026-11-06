@@ -2,7 +2,7 @@
 
 OLIST-T02 / OLIST-03–17, 20, 26, 35–41. Responsável: Integrações,
 coordenado pelo Tech Lead (Codex nesta execução). Consulta em 04/11/2026.
-[Revisão T01](contract-review.md) · [RFC 044](../../rfc/044-geracao-assistida-de-pedidos-no-olist.md)
+[Revisão T01](contract-review.md) · [RFC 050](../../rfc/050-geracao-assistida-de-pedidos-no-olist.md)
 · [ADR 057](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md).
 
 **Situação em 05/11/2026: experiências autorizadas concluídas; T02/F1 abertos

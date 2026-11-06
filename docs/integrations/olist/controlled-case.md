@@ -2,7 +2,7 @@
 
 OLIST-T02 / OLIST-03–17, 20, 26, 35–41. Inspeção em 04/11/2026.
 Dono: Tech Lead/Integrações (Codex nesta execução).
-[RFC 044](../../rfc/044-geracao-assistida-de-pedidos-no-olist.md) ·
+[RFC 050](../../rfc/050-geracao-assistida-de-pedidos-no-olist.md) ·
 [Prova de capacidades](capabilities.md) ·
 [Observações sanitizadas](evidence/account-inspection.json).
 
