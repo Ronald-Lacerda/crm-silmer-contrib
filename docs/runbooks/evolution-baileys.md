@@ -5,6 +5,25 @@ Decisão: [ADR 050](../adr/050-evolution-baileys-como-ponte-do-whatsapp.md),
 [RFC 039](../rfc/039-evolution-baileys-como-ponte-do-whatsapp.md).
 Rastreabilidade: EVOL-01, OPS-1, INT-1/2, ORC-01..08, INB-01, MSG-01..04.
 
+## Referência publicada reconciliada — 05/11/2026
+
+SIL-36 registra no Git a versão publicada
+`4becba96-a3eb-4ef3-9b6c-9762537d84f2`, com 141 nós, como referência
+operacional. O [manifesto](../../ops/n8n/workflows/production-reference.json)
+contém proveniência, fingerprints e limites da sanitização; o
+[índice dos workflows](../../ops/n8n/workflows/README.md) distingue o export
+publicado do candidato Meta de 115 nós e vincula os extras preservados às
+pendências SIL-8 e SIL-39–49.
+
+O publicado não foi alterado. Rascunho e publicado têm o mesmo código e
+conexões: oito posições e a omissão de um parâmetro igual ao default
+instalado não representam publicação funcional pendente. A referência
+sanitizada não contém os vínculos privados necessários a uma implantação.
+Para qualquer release futura, partir do export operacional protegido e
+aplicar somente o delta aprovado, preservando anexos recebidos, reserva da
+IA, diagnósticos, turnos, OA e recibos. Não importar o candidato nem usar
+substituição integral de código para reconciliar os extras.
+
 ## Preparação
 
 O proprietário autorizou preparar Evolution/Baileys no EasyPanel, integrá-la ao

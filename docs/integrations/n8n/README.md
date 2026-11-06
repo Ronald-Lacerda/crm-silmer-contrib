@@ -95,11 +95,11 @@ O nó de contexto diz ao modelo o produto reconhecido e como perguntar o
 próximo ponto (`POINT_QUESTIONS`). Ele só emite `briefing_complete` quando os
 pontos do produto e o nome estiverem presentes; o nome pedido duas vezes sem
 resposta deixa de ser exigido. Os grupos de produto ficam em `PRODUCT_KINDS`
-e `NAMED_MODELS`. Para trocar a ordem ou acrescentar um kit, edite
+e `NAMED_MODELS`. Para preparar uma mudança de ordem ou acrescentar um kit, edite
 `ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sdk.js`, atualize o snapshot
-sanitizado principal com os nós gerados por `render-mvp-workflow.mjs` e rode
+candidato da jornada com os nós gerados por `render-mvp-workflow.mjs` e rode
 `npm run generate:n8n-dev-workflow` e `npm run generate:n8n-local-workflow`.
-O snapshot principal guarda a jornada com a fronteira Meta e não contém o
+O candidato guarda a jornada com a fronteira Meta e não contém o
 ramo de mídia da Inbox aplicado no n8n por `patch-evolution-inbound-images.mjs`
 e `patch-evolution-inbound-audio.mjs`. O principal publicado usa Evolution
 ([ADR 050](../../adr/050-evolution-baileys-como-ponte-do-whatsapp.md)): não
@@ -108,6 +108,16 @@ devolveria o transporte à Meta ou perderia o ramo de mídia. Leve mudanças da
 jornada como delta sobre o export vivo, comparando nós, conexões e settings.
 `create-evolution-workflow.mjs` converte uma fonte para Evolution e serve para
 candidatos inativos e testes; ver o [runbook Evolution](../../runbooks/evolution-baileys.md).
+
+A referência operacional versionada é agora o [export publicado de 141 nós](../../../ops/n8n/workflows/k7tI6T4RhQPyJkn9-published.sanitized.json),
+selecionado pelo [manifesto de produção](../../../ops/n8n/workflows/production-reference.json).
+O publicado é a fonte da verdade. O candidato Meta de 115 nós, SDK,
+geradores e snapshots DEV/local permanecem preservados. As funcionalidades
+que diferem da produção têm [pendências separadas](../../../ops/n8n/workflows/README.md)
+no Linear. `prepare-vendedor-update.mjs` substitui códigos inteiros e não é
+procedimento seguro para reaplicar esses deltas sem revisão dos wrappers.
+O alinhamento SIL-36 não importou, executou ou publicou workflows.
+
 Os gatilhos de transferência da ADR 009 são
 aplicados pelo nó de decisão, não só pelo prompt: pergunta de preço, frete ou
 pagamento repetida (a primeira é adiada, ADR 051); pedido de pessoa ou de vendedor pelo nome; nome fora do CRM pedido

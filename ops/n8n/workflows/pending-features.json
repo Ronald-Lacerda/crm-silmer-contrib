@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 1,
+  "reference": "production-reference.json",
+  "policy": "Preserved candidate changes. Reapply separately onto the published reference; no import or publication authorized by this ledger.",
+  "items": [
+    {
+      "key": "vnd-l04",
+      "issue": "SIL-8",
+      "url": "https://linear.app/marfimsolucoes/issue/SIL-8",
+      "title": "Reaplicar perguntas de imagem, saudações e textos VND-L04 como delta",
+      "requirements": "VND-L04 / AGT-01–06/10 / ORC-03/05/07",
+      "nodes": [
+        "Montar contexto da IA (MVP)",
+        "Atendente virtual Silmer (MVP)",
+        "Normalizar decisão da IA (MVP)"
+      ],
+      "delta": "Imagem isolada não define arte pronta; perguntas contextuais e alternativas sem repetição; saudação não repete produto já informado; filtro de elogios e textos sem Ótima pergunta!/promessa de atendimento imediato. Coordenar recorrência com SIL-42 e regras de interpretação com SIL-46.",
+      "status": "pending",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
+    },
+    {
+      "key": "audio-transcript",
+      "issue": "SIL-39",
+      "url": "https://linear.app/marfimsolucoes/issue/SIL-39/registrar-no-crm-a-transcricao-do-audio-do-cliente-como-delta-do",
+      "title": "Registrar no CRM a transcrição do áudio do cliente como delta do publicado",
+      "requirements": "INBOX-AUDIO-TRANSCRIPT-01 / AGT-01 / MSG-01",
+      "nodes": [
+        "Áudio não lido? (MVP)",
+        "Preparar transcrição do áudio (MVP)",
+        "CRM aceita a transcrição? (MVP)",
+        "CRM - Registrar transcrição do áudio (MVP)"
+      ],
+      "delta": "O publicado transcreve o áudio para o modelo, mas segue diretamente para Montar contexto da IA. O candidato registra message.transcribed e reaproveita o texto transcrito no histórico.",
+      "status": "pending",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
+    },
+    {
+      "key": "ai-failure-handoff",
+      "issue": "SIL-40",
+      "url": "https://linear.app/marfimsolucoes/issue/SIL-40/reaplicar-handoff-por-falha-do-agente-e-do-normalizador",
+      "title": "Reaplicar handoff por falha do agente e do normalizador",
+      "requirements": "AGENTE-FAIL-01 / AGT-05/09 / ORC-08",
+      "nodes": [
+        "Atendente virtual Silmer (MVP)",
+        "Normalizar decisão da IA (MVP)",
+        "Preparar handoff de falha da IA (MVP)"
+      ],
+      "delta": "O publicado não contém o nó Preparar handoff de falha da IA nem as conexões de erro do agente e normalizador. O candidato contém continueErrorOutput e handoff automation_failure com resumo da ficha.",
+      "status": "pending",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
+    },
+    {
+      "key": "holidays",
+      "issue": "SIL-41",
+      "url": "https://linear.app/marfimsolucoes/issue/SIL-41/reaplicar-calendario-de-feriados-no-horario-informado-pelo-agente",
+      "title": "Reaplicar calendário de feriados no horário informado pelo agente",
+      "requirements": "VND-L03 / AGT-02/05",
+      "nodes": [
+        "Montar contexto da IA (MVP)",
+        "Normalizar decisão da IA (MVP)",
+        "Preparar handoff de conteúdo (MVP)"
+      ],
+      "delta": "O publicado usa a semana regular e procura abertura em até sete dias. O candidato considera a lista de feriados 2026/2027, busca até 14 dias e usa avisos específicos.",
+      "status": "pending",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
+    },
+    {
+      "key": "returning-customer",
+      "issue": "SIL-42",
+      "url": "https://linear.app/marfimsolucoes/issue/SIL-42/reconhecer-cliente-recorrente-sem-expor-pedidos-anteriores-ao-modelo",
+      "title": "Reconhecer cliente recorrente sem expor pedidos anteriores ao modelo",
+      "requirements": "VND-CTX-01 / AGT-01",
+      "nodes": [
+        "Montar contexto da IA (MVP)",
+        "Atendente virtual Silmer (MVP)",
+        "Normalizar decisão da IA (MVP)"
+      ],
+      "delta": "O candidato usa contagens de contact_context para acolher um cliente recorrente. Essa lógica e a saudação correspondente não constam do publicado.",
+      "status": "pending",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
+    },
+    {
+      "key": "subject-history",
+      "issue": "SIL-43",
+      "url": "https://linear.app/marfimsolucoes/issue/SIL-43/filtrar-historico-do-agente-por-assunto-mantendo-mensagens-relevantes",
+      "title": "Filtrar histórico do agente por assunto mantendo mensagens relevantes",
+      "requirements": "VND-CTX-01 / AGT-01 / ORC-03",
+      "nodes": ["Montar contexto da IA (MVP)"],
+      "delta": "Com vários assuntos, o publicado exclui todo o histórico recente. O candidato usa subject_ids para incluir mensagens do assunto alvo e não marcadas, excluindo mensagens exclusivas de outros assuntos.",
+      "status": "pending",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
+    },
+    {
+      "key": "requested-seller",
+      "issue": "SIL-44",
+      "url": "https://linear.app/marfimsolucoes/issue/SIL-44/levar-vendedor-solicitado-pelo-nome-no-handoff-sem-atribuicao",
+      "title": "Levar vendedor solicitado pelo nome no handoff sem atribuição automática",
+      "requirements": "INBOX-HANDOFF-02 / AGT-03 / ORC-07",
+      "nodes": [
+        "Montar contexto da IA (MVP)",
+        "Normalizar decisão da IA (MVP)",
+        "Preparar handoff da IA (MVP)"
+      ],
+      "delta": "O candidato resolve requested_seller_id contra sellers devolvidos pelo CRM; o publicado não propaga esse identificador no handoff.",
+      "status": "pending",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
+    },
+    {
+      "key": "partnership-reason",
+      "issue": "SIL-45",
+      "url": "https://linear.app/marfimsolucoes/issue/SIL-45/distinguir-motivo-de-parceria-no-handoff-do-agente",
+      "title": "Distinguir motivo de parceria no handoff do agente",
+      "requirements": "INBOX-HANDOFF-02 / VND-L03 / AGT-03",
+      "nodes": [
+        "Atendente virtual Silmer (MVP)",
+        "Normalizar decisão da IA (MVP)"
+      ],
+      "delta": "O publicado mapeia partnership para human_requested. O candidato envia partnership quando o CRM anuncia o contrato novo e esclarece que ter loja/empresa não implica revenda.",
+      "status": "pending",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
+    },
+    {
+      "key": "language-false-positives",
+      "issue": "SIL-46",
+      "url": "https://linear.app/marfimsolucoes/issue/SIL-46/reaplicar-correcoes-de-interpretacao-de-produto-fotos-canal-e-origem",
+      "title": "Reaplicar correções de interpretação de produto, fotos, canal e origem da arte",
+      "requirements": "VND-L03 / AGT-01–05 / ADRs 049/051",
+      "nodes": [
+        "Montar contexto da IA (MVP)",
+        "Atendente virtual Silmer (MVP)",
+        "Normalizar decisão da IA (MVP)"
+      ],
+      "delta": "O candidato corrige faixa etária/preço e jogo isolado, diferencia foto de referência de foto pedida à Silmer, restringe pedido de outro canal e condiciona sim à pergunta anterior sobre arte. Essas regras divergem do publicado.",
+      "status": "pending",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
+    },
+    {
+      "key": "integrated-telemetry",
+      "issue": "SIL-47",
+      "url": "https://linear.app/marfimsolucoes/issue/SIL-47/reconciliar-telemetria-integrada-do-candidato-com-os-wrappers",
+      "title": "Reconciliar telemetria integrada do candidato com os wrappers publicados",
+      "requirements": "AGENTE-OBS-01–03 / AGT-06/10",
+      "nodes": [
+        "Preparar inbound CRM (MVP)",
+        "Montar contexto da IA (MVP)",
+        "Normalizar decisão da IA (MVP)",
+        "Preparar handoff da IA (MVP)",
+        "Preparar handoff de conteúdo (MVP)",
+        "Preparar reserva de envio da IA (MVP)"
+      ],
+      "delta": "O publicado já possui wrappers AGENTE-OBS-03 e turnos por versão. O candidato integra a telemetria ao código e adiciona contadores prévios da ficha, asked_point determinado por campo/data e dados para falha da IA.",
+      "status": "pending",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
+    },
+    {
+      "key": "provider-parameters",
+      "issue": "SIL-48",
+      "url": "https://linear.app/marfimsolucoes/issue/SIL-48/revisar-responses-api-retries-e-timeout-antes-de-reaplicar-parametros",
+      "title": "Revisar Responses API, retries e timeout antes de reaplicar parâmetros do Git",
+      "requirements": "AGENTE-FAIL-01 / AGT-09 / ORC-05/08",
+      "nodes": [
+        "OpenAI - Modelo do MVP",
+        "OpenAI - Observador interno de compra (OA)",
+        "OpenAI - Transcrever áudio (MVP)",
+        "CRM - Reservar envio da IA (MVP)"
+      ],
+      "delta": "Candidato explicita responseApiEnabled=true, maxRetries=1 no modelo e timeout de transcrição 30s; publicado tem flag ausente, maxRetries=2 e transcrição 60s. O candidato também põe 3 tentativas na reserva da IA, enquanto o publicado preserva resposta completa, sem retry, com validador próprio.",
+      "status": "pending",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
+    },
+    {
+      "key": "legacy-and-defaults",
+      "issue": "SIL-49",
+      "url": "https://linear.app/marfimsolucoes/issue/SIL-49/revisar-diferencas-de-gatilhos-legados-headers-e-defaults-dos",
+      "title": "Revisar diferenças de gatilhos legados, headers e defaults dos candidatos",
+      "requirements": "EVOL-01 / ORC-03/05/08 / CHAN-WA-01",
+      "nodes": [
+        "WhatsApp - Receber eventos (MVP)",
+        "Site - Montar evento do chat (MVP)",
+        "Site - Receber mensagem do chat (MVP)"
+      ],
+      "delta": "O publicado omite disabled no nó de entrada WhatsApp - Receber eventos (MVP); o candidato explicita disabled=false. Isso não demonstra desativação ou mudança de transporte. Há diferenças na conexão Site - Montar evento do chat → Normalizar evento WhatsApp, nos headers de versão por ramo e em errorWorkflow. O candidato também explicita métodos, contentType, modo de switch, formData, autoFix e opções do chat.",
+      "status": "pending",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
+    }
+  ]
+}

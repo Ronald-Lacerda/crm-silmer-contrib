@@ -129,6 +129,41 @@ Operação: rascunhos são temporários e saem com a instância da Inbox. Não h
 API, migration ou configuração nova. Rollback é reverter a entrega de frontend;
 mensagens aceitas pela API não devem ser reenviadas para testar apresentação.
 
+## SIL-36 — Git reconciliado com a referência publicada (05/11/2026)
+
+Manutenção de referência: ORC-03/05/08 e AGT-10; ADRs 050/052/056.
+O proprietário definiu o publicado como fonte da verdade e autorizou somente
+alinhamento Git e registro das funcionalidades extras no Linear.
+
+- [x] Comparar publicado/rascunho/Git: 141 nós operacionais, sem diferença
+      funcional no rascunho; oito posições e um parâmetro igual ao default.
+- [x] Ler publicado em transação READ ONLY; sanitizar vínculos privados antes
+      de transferir, com fingerprints calculados na origem e releitura final
+      de versão/nós/conexões/settings inalterados.
+- [x] Versionar o export publicado de 141 nós e seu manifesto como referência
+      operacional; preservar os 29 artefatos anteriores de ops/n8n byte a byte.
+- [x] Registrar os deltas em SIL-8 e SIL-39–49, com código preservado,
+      requisitos, nós afetados e critérios de aceite separados.
+- [x] Validar fingerprints, privacidade, topologia e preservação; revisão
+      independente sem achados pendentes e entrega em branch própria.
+- [ ] Confirmar o teste de áudio Firefox em ambiente compatível/CI antes
+      da integração: execução local bloqueada por `spawn UNKNOWN`.
+
+Validação após rebase sobre a master: `npm run validate` com 1.757 aprovados, 16 ignorados,
+nenhuma falha e build; 12 testes focados aprovados após a correção do header
+técnico SHA256. E2E: 500 aprovados na suíte e quatro falhas transitórias
+aprovadas isoladamente com dois workers; sete ignorados e o caso Firefox
+sem iniciar. Auditoria sem vulnerabilidades high/critical. Nenhum teste foi
+removido ou enfraquecido. Commit/push da entrega incluem este registro;
+integração na master e deploy não pertencem à autorização desta tarefa.
+
+[Referência e pendências](../../../ops/n8n/workflows/README.md).
+O candidato Meta/SDK e os testes continuam preparados para evolução; isso
+não comprova publicação dos extras. Nenhuma importação, ativação, execução
+de workflow ou mudança de produção pertence a esta tarefa. Checkboxes
+históricos de implementação não substituem o estado operacional registrado
+nessa referência nem encerram as pendências separadas.
+
 ## AGENTE-OBS-03 — Turnos por versão no workflow vivo (04/11/2026)
 
 AGT-06/10 e ORC-03/05, sob a ADR 052.

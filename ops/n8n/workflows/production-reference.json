@@ -1,0 +1,176 @@
+{
+  "schemaVersion": 1,
+  "task": "SIL-36",
+  "requirements": ["ORC-03", "ORC-05", "ORC-08", "AGT-10"],
+  "operationalSourceOfTruth": "k7tI6T4RhQPyJkn9-published.sanitized.json",
+  "workflowId": "k7tI6T4RhQPyJkn9",
+  "publishedVersionId": "4becba96-a3eb-4ef3-9b6c-9762537d84f2",
+  "capturedAt": "2026-11-06T02:51:42.296Z",
+  "nodeCount": 141,
+  "deployable": false,
+  "fingerprintAlgorithm": "SHA-256 of JSON.stringify with object keys recursively sorted by String.localeCompare; arrays retain order",
+  "sanitizedFingerprints": {
+    "nodes": "8fc51c1b5200c75acbeb19d0cc72795d7201eba83358189373da3b3055e58118",
+    "connections": "2ce3f639869077de896062584f2fb65208071bbcacdbc1a358f6522811623e01",
+    "settings": "08621e7fb88c40701d39a784a3666f43ec2f9f49bc9dffb27fe45f2de6316066",
+    "groups": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "sanitization": {
+    "removedKeys": ["credentials", "webhookId", "pinData"],
+    "credentialNodesRemoved": 39,
+    "webhookIdsRemoved": 8,
+    "phoneMarker": "__SILMER_OWN_NUMBER__",
+    "phoneBindingsReplaced": 1,
+    "hostMarkers": ["https://crm.invalid", "http://evolution.invalid:8080"],
+    "privateHeaderValueMarker": "__CREDENTIAL_HEADER_VALUE__",
+    "technicalVersionHeadersPreserved": true,
+    "topLevelActive": false,
+    "settingsOrigin": "Current workflow_entity; workflow_history does not retain historical settings"
+  },
+  "versionHeaders": [
+    {
+      "node": "CRM - Registrar inbound (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Registrar handoff (MVP)",
+      "version": "evolution-baileys-1-turns-1"
+    },
+    {
+      "node": "CRM - Registrar message.sent do aviso (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Marcar envio desconhecido do aviso (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Registrar falha ao abrir pedido (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Reservar envio da IA (MVP)",
+      "version": "evolution-baileys-1-turns-1"
+    },
+    {
+      "node": "CRM - Registrar message.sent da IA (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Marcar envio desconhecido da IA (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Registrar status de entrega (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Reservar envio humano (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Baixar midia reservada (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Preflight midia reservada (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Concluir falha anterior ao envio (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Registrar message.sent humano (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Marcar envio humano desconhecido (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Registrar workflow.failed (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "Inbox - Imagem recebida - Salvar no CRM",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "Inbox - Imagem recebida - Registrar falha",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Reler conversa (MVP)",
+      "version": "evolution-baileys-1"
+    },
+    {
+      "node": "CRM - Reler para sugestão (OA)",
+      "version": "mvp-simple-21"
+    },
+    {
+      "node": "CRM - Registrar transcrição interna (OA)",
+      "version": "mvp-simple-21"
+    },
+    {
+      "node": "CRM - Reler após transcrição interna (OA)",
+      "version": "mvp-simple-21"
+    },
+    {
+      "node": "CRM - Registrar observação interna de compra (OA)",
+      "version": "mvp-simple-21"
+    },
+    {
+      "node": "CRM - Concluir falha do destinatario (MVP)",
+      "version": "evolution-baileys-1"
+    }
+  ],
+  "productionVerification": {
+    "readOnly": true,
+    "versionUnchanged": true,
+    "nodesUnchanged": true,
+    "connectionsUnchanged": true,
+    "settingsUnchanged": true,
+    "workflowsExecuted": false,
+    "workflowImportsOrPublications": false
+  },
+  "candidate": {
+    "path": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+    "nodeCount": 115,
+    "role": "Preserved Meta-based journey candidate and test fixture; not the deployed workflow",
+    "sourceCommit": "72702f0a97ee59f7ef0cfd6f211ccae517ce918f",
+    "pendingFeatures": "pending-features.json",
+    "generatorPolicy": "Existing generators and whole-code preparers remain candidate tooling; never apply them directly over the published reference"
+  },
+  "preservedArtifactsSha256": {
+    "ops/n8n/bind-crm-credential.mjs": "4dcf183c0f991af6181e0dc7f031a2cccce90bedfa693bf02e4a79e93ac87d70",
+    "ops/n8n/evolution-recipient-preflight.mjs": "6a509455240edd331a289b6351b4f7d9cc7e21bb5a1d342be80949bc45e36c8a",
+    "ops/n8n/import-local-workflow.mjs": "a73aa5c8f934187b97dc5c43a5e5a02074b39f560b13567fade5d121ca38238c",
+    "ops/n8n/legacy-transport-cleanup.mjs": "fb9c595ce5857a00cf82ec323810680b85ec98d4e03409e8927cfe1bf3d0eb31",
+    "ops/n8n/patch-ai-stale-reservation.mjs": "0b408053bee65e527079aa678526f8939a6b469f7590f6ac01ccb5aed28633d1",
+    "ops/n8n/patch-evolution-ack-identity.mjs": "9a88d76126ecb08feb0a342e0a6bb171fedc3e4550966ec56e90677f3b9dd988",
+    "ops/n8n/patch-evolution-failure-reasons.mjs": "2cc2f0ff7c947393c9d4f38c1e49acce2cfba7215088bd8ff9e99101932fe6cb",
+    "ops/n8n/patch-evolution-inbound-audio.mjs": "c19438cec5641b95b91211719747f89a1f17cb045fa3d5f416aae3d71d37b7de",
+    "ops/n8n/patch-evolution-inbound-images.mjs": "0c74dac492adf74f594fa48b8119a7a8ad3330a710e8289c56d053f102fe2686",
+    "ops/n8n/patch-order-assistance.mjs": "f0e8843d5982dc4910fb8d2203478d3ed443026b33c0dd61cf0133d2970e3e0f",
+    "ops/n8n/patch-turn-telemetry.mjs": "78e48d1a77cf033bfe8c82929ae6cfb558d6583a9b67c3fd9b954db315672a3c",
+    "ops/n8n/patch-waha-inbound-images.mjs": "d4ac511b573a62b73e1746d36ba6200498933598271d019490c1d1100b1cb547",
+    "ops/n8n/patch-workflow-failure-diagnostics.mjs": "302cef440d6d3df35ad866ef4c621c8a64e975fd55c5d3a4679aac0de4fd2444",
+    "ops/n8n/site-chat/silmer-chat.css": "cbb04246510ce649dec8a7ed2b447b2d202b6f27e698f8dfba2e4275dcc4ca9d",
+    "ops/n8n/workflows/0S5ZS1xeDCSoWovs-dev-test.sanitized.json": "df42100cbc635f89f097f56746ce792a81574f7b2a0dc1415b439261a9bc6dd1",
+    "ops/n8n/workflows/0S5ZS1xeDCSoWovs-local-test.sanitized.json": "c11ca738139400f55898b9d51ff2547d9802da79430f4ad25da3c394eca7c257",
+    "ops/n8n/workflows/create-daily-checkpoint-workflow.mjs": "2512fc2975d7f551af01aa0707598c3433d811ca56cac86f2f0a77535560cef6",
+    "ops/n8n/workflows/create-dev-test-workflow.mjs": "14275d41e261acf7a873b0c31d9b4025777e3df5dadc96576619d3a93424a04f",
+    "ops/n8n/workflows/create-evolution-workflow.mjs": "317d700d65dbd0a9da248ce17b9b74f0bee7f67fa88ab29f6b223f78107ea142",
+    "ops/n8n/workflows/create-waha-workflow.mjs": "375d4c71d3d8cb72e17842221dda471dc0ba4298676a1107328e08ba477fc1ca",
+    "ops/n8n/workflows/create-wppconnect-workflow.mjs": "b8af6d0ef7d9ae2ecd5e42bf0fd447259b0fc5c5076f247bf8fd8d1c1583eb8c",
+    "ops/n8n/workflows/daily-checkpoint.sanitized.json": "fc339ff5ba3d5f8929e9479362325705eb92a7067ba17f30e3560106201f4fa9",
+    "ops/n8n/workflows/k7tI6T4RhQPyJkn9-0c41ee97-954b-4319-b822-fbb91f239b6e.sanitized.json": "5bd8a12f1cada1c0f6a18c321532571075db920cb790684111c0d6ce282e40bf",
+    "ops/n8n/workflows/k7tI6T4RhQPyJkn9-98f96069-ede2-4900-aa5c-7fec0d3b80cb.sanitized.json": "b7bfe0a1b8a086ce9b14fdd7e87a6745aa93bb406815aeada3b0155480eeea3e",
+    "ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json": "a24a57be8d7b99df152643e4da915371c6663717c6740863c6fe50c84d6fb10b",
+    "ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sdk.js": "96744fea53f8f7c856d18f5c4a1ffb47ff5c1e9c7007a5359ce7705c7b7d2a4d",
+    "ops/n8n/workflows/organize-vendedor-workflow.mjs": "ef3a5934b4f542b96c81520c448861b436c76b11105be8fa2d73b8b62de3d890",
+    "ops/n8n/workflows/prepare-vendedor-update.mjs": "9547c9cbaeb17c7d1b1cdabfccb4b944469198b117fbcfbb935081d3ed35afa9",
+    "ops/n8n/workflows/render-mvp-workflow.mjs": "9df30ce6bbd14b3f5381f030045870e0cc9da5172104efb4cdf079c042dedbc9"
+  }
+}
