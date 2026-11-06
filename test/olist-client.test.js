@@ -384,8 +384,12 @@ test('Olist order lookup validates each detail reference instead of trusting the
       );
     }
     return url.pathname.endsWith('/1')
-      ? json({ id: 1, numeroPedidoEcommerce: 'CRM-other' })
-      : json({ id: 2, numeroPedidoEcommerce: 'CRM-order-a' });
+      ? json({
+          id: 1,
+          numeroPedidoEcommerce: 'CRM-order-a',
+          ecommerce: { numeroPedidoEcommerce: 'CRM-other' },
+        })
+      : json({ id: 2, ecommerce: { numeroPedidoEcommerce: 'CRM-order-a' } });
   });
   assert.equal((await client.findOrder('CRM-order-a'))?.id, 2);
   assert.equal(urls.length, 3);
@@ -395,7 +399,7 @@ test('Olist order lookup refuses a detail with an identity different from the re
   const { client } = harness((url) =>
     url.pathname.endsWith('/pedidos')
       ? page([{ id: 1 }], 1)
-      : json({ id: 2, numeroPedidoEcommerce: 'CRM-order-a' }),
+      : json({ id: 2, ecommerce: { numeroPedidoEcommerce: 'CRM-order-a' } }),
   );
   await assert.rejects(client.findOrder('CRM-order-a'), {
     code: 'OLIST_INVALID_RESPONSE',
@@ -408,7 +412,7 @@ test('Olist ambiguous order references require reconciliation after all candidat
       ? page([{ id: 1 }, { id: 2 }], 2)
       : json({
           id: Number(url.pathname.split('/').at(-1)),
-          numeroPedidoEcommerce: 'CRM-order-a',
+          ecommerce: { numeroPedidoEcommerce: 'CRM-order-a' },
         }),
   );
   await assert.rejects(client.findOrder('CRM-order-a'), {
@@ -706,4 +710,19 @@ test('T22 fiscal policy is explicit, optional for old settings, and never inferr
     assert.throws(() =>
       olistSettings({ ...EMPTY_OLIST_SETTINGS, productFiscal: value }),
     );
+});
+
+test('Olist order detail without the documented reference cannot prove absence or authorize inclusion', async () => {
+  for (const detail of [
+    { id: 1, numeroPedidoEcommerce: 'CRM-order-a' },
+    { id: 1, ecommerce: {} },
+    { id: 1, ecommerce: { numeroPedidoEcommerce: null } },
+  ]) {
+    const { client } = harness((url) =>
+      url.pathname.endsWith('/pedidos') ? page([{ id: 1 }], 1) : json(detail),
+    );
+    await assert.rejects(client.findOrder('CRM-order-a'), {
+      code: 'OLIST_INCOMPLETE_LOOKUP',
+    });
+  }
 });

@@ -12,8 +12,8 @@ const CATALOGS = Object.freeze({
 /** Fixed official host/routes only. No generic HTTP or arbitrary payload port.
  * @param {{credentials:()=>Promise<{token:string,version:number}>, quota:any, fetch?:typeof fetch, timeoutMs?:number, onAuthFailure?:(version:number)=>Promise<unknown>}} options */
 export function createOlistClient(options) {
-  /** @param {string} path */
-  async function get(path) {
+  /** @param {string} path @param {boolean} [raw] */
+  async function get(path, raw = false) {
     const credentials = await options.credentials();
     await options.quota.reserve();
     try {
@@ -21,6 +21,7 @@ export function createOlistClient(options) {
         token: credentials.token,
         fetch: options.fetch,
         timeoutMs: options.timeoutMs,
+        raw,
       });
       await options.quota.observe(response.headers);
       return response.body;
@@ -90,6 +91,9 @@ export function createOlistClient(options) {
     /** @param {number} id */ contact: (id) => detail('/contatos', id),
     /** @param {number} id */ product: (id) => detail('/produtos', id),
     /** @param {number} id */ order: (id) => detail('/pedidos', id),
+    /** Raw numeric lexemes for exact sale reconciliation; no JSON Number money.
+     * @param {number} id */ orderRaw: async (id) =>
+      get('/pedidos/' + integer(id), true),
     /** @param {string} document */
     async findCustomer(document) {
       const normalized = normalizeDocument(document);
@@ -157,7 +161,9 @@ export function createOlistClient(options) {
       const matches = [];
       for (const candidate of candidates) {
         const valueOfOrder = await detail('/pedidos', integer(candidate.id));
-        if (valueOfOrder.numeroPedidoEcommerce === value)
+        if (typeof valueOfOrder.ecommerce?.numeroPedidoEcommerce !== 'string')
+          throw new OlistError('OLIST_INCOMPLETE_LOOKUP');
+        if (valueOfOrder.ecommerce.numeroPedidoEcommerce === value)
           matches.push(valueOfOrder);
       }
       return exact(matches, () => true);

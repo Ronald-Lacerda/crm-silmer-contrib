@@ -1,7 +1,7 @@
 import { OlistError } from './errors.js';
 import { OLIST_API, OLIST_TOKEN } from './configuration.js';
 /** No redirect, no upstream text in errors, bounded streaming and one deadline.
- * @param {string} url @param {{fetch?: typeof fetch, method?:string, token?:string, form?:URLSearchParams, timeoutMs?:number, maxBytes?:number}} options */
+ * @param {string} url @param {{fetch?: typeof fetch, method?:string, token?:string, form?:URLSearchParams, timeoutMs?:number, maxBytes?:number,raw?:boolean}} options */
 export async function olistJson(url, options = {}) {
   const parsed = new URL(url);
   const apiUrl = new URL(OLIST_API);
@@ -92,7 +92,8 @@ export async function olistJson(url, options = {}) {
     } finally {
       reader.releaseLock();
     }
-    const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    const raw = Buffer.concat(chunks).toString('utf8');
+    const body = options.raw ? raw : JSON.parse(raw);
     return { body, headers: response.headers };
   } catch (error) {
     if (error instanceof OlistError) throw error;

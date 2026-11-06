@@ -112,7 +112,7 @@ export function createOlistApiRuntime(database, options) {
       )
         throw new OlistError('FORBIDDEN', 403);
       const exports = await client.query(
-        'SELECT state,stage,remote_number FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2',
+        'SELECT state,stage,remote_number,last_error_code FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2',
         [config.accountKey, order.id],
       );
       const operation = exports.rows[0];
@@ -132,6 +132,9 @@ export function createOlistApiRuntime(database, options) {
               state: operation.state,
               stage: operation.stage,
               number: operation.remote_number ?? null,
+              ...(operation.last_error_code
+                ? { errorCode: operation.last_error_code }
+                : {}),
             }
           : null,
       };

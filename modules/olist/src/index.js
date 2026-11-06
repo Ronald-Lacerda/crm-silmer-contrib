@@ -25,3 +25,8 @@ export {
 export { createOlistResourceWriter } from './resource-writer.js';
 
 export { createOlistResourceResolver } from './resource-resolver.js';
+
+export { buildOlistSalePayload, reconcileOlistSale } from './sale-payload.js';
+export { createOlistSaleWriter } from './sale-writer.js';
+
+export { createOlistDispatcher } from './dispatcher.js';

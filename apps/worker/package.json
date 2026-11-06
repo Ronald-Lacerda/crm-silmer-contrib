@@ -9,6 +9,7 @@
   "dependencies": {
     "@crm-silmer/database": "0.0.0",
     "@crm-silmer/integration-reliability": "0.0.0",
-    "@crm-silmer/shared": "0.0.0"
+    "@crm-silmer/shared": "0.0.0",
+    "@crm-silmer/olist": "0.0.0"
   }
 }

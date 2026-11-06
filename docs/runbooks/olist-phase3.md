@@ -1,9 +1,77 @@
-# Olist — Fase 3: composição, prévia e comando Olist
+# Olist — Fase 3: composição, prévia, comando e despacho Olist
 
-OLIST-T20/T21/T26/T24/T06/T22/T07, composição, fontes, cadastros e comando. Requisitos
+OLIST-T20/T21/T26/T24/T06/T22/T07/T08, composição, fontes, cadastros e venda. Requisitos
 OLIST-09–10, 29, 34, 40–44;
 [ADR 057](../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
+
+## T08 — despacho reservado e comparação remota
+
+OLIST-13–17, 20, 25–27, 36–41. O consumidor dedicado da fila olist exige
+OLIST_DISPATCH_ENABLED=true e configuração completa; ausente, vazio ou false
+não consulta banco, fila ou HTTP. Conta continua exigindo creation_enabled=true,
+recovery_required=false e conexão válida. Defaults permanecem desligados.
+Esta entrega não autoriza ativação real, deploy ou piloto.
+
+### Sequência e reserva
+
+Job olist.export fornece somente exportId; snapshot cifrado e executor/época
+originais governam o despacho. Preflight integral precede até a criação do
+cliente. Exige política exact-cent-v1 e paymentDueOn explícito e válido para
+uma parcela do total inteiro. paymentTerms é descritivo: não infere vencimento,
+parcelamento nem pagamento. receivingMethodId é opcional e validado em catálogo.
+Snapshot antigo sem vencimento bloqueia antes de qualquer cadastro; configuração
+real de natureza/origem/gatilhos permanece no gate T15.
+
+Cliente, pais e variações usam tickets T22. Cada etapa revalida executor/checkbox/
+época, conta, conexão, parâmetros, Pedido e fonte. Ready exige todos os vínculos
+confirmados na mesma conta e mapping congelado cifrado/HMAC. Reserva final
+revalida tudo e persiste request cifrado/ticket antes de um único POST /pedidos.
+A referência remota é consultada antes dos cadastros e novamente após ready,
+imediatamente antes da reserva da venda.
+Credenciais são atuais; heartbeat precede cada HTTP, inclusive refresh. Perder
+lease depois da reserva conserva incerteza e não autoriza repetição.
+
+Venda aberta usa datas congeladas, IDs verificados e marcador opaco por linha.
+ID e número retornados são observados antes do GET, inclusive se falhar quota
+ou a resposta secundária. Não confirma pagamento nem altera o Pedido comercial;
+não chama emissão fiscal, baixa/estoque adicional, exclusão ou cancelamento ERP.
+
+### Comparação e recuperação
+
+GET bruto limitado preserva lexemas numéricos sem Number monetário. Confirma
+comprador/documento, origem/referência, situação e datas, depois exige bijeção
+de linhas por marcador, produto, quantidade, unitário e subtotal exatos. Ambos
+os totais retornados devem coincidir com snapshot. Reordenação é aceita; linhas
+fundidas, repetidas, omitidas ou compensadas são recusadas mesmo com total global
+igual. Prova mínima cifrada e vínculo confirmado são persistidos juntos.
+
+Tentativa existente exige igualdade byte a byte com o request reservado e segue
+somente por leitura. ID conhecido usa GET; sem ID, busca completa confirma a
+referência em ecommerce.numeroPedidoEcommerce antes do GET bruto. Zero, múltiplos
+ou divergência mantêm bloqueio sem outro POST. Venda preexistente sem ticket
+exige T09, sem vínculo automático. ID/número de até 19 dígitos observados no POST
+são preservados como texto; ID acima de MAX_SAFE_INTEGER fica incerto porque a
+porta GET atual exige inteiro seguro; número acima desse limite também impede
+confirmar readback na porta atual. Nunca arredondar ou repetir inclusão.
+
+O job marca efeito antes do dispatcher e não faz retry automático. Erros expõem
+somente códigos seguros; GET Olist pode projetar errorCode sem request, resposta
+remota ou PII. Reconciliação administrativa completa é T09; guardas posteriores/
+restore são T10. A fase 3 permanece aberta.
+
+### Migração e rollback
+
+Aplicar 0068_olist_sale_dispatch.expand.sql depois de 0067 e antes do código.
+Acrescenta mapping, ID/número observado, erro e prova cifrada, protegidos por
+triggers imutáveis; não habilita conta/worker. Upgrade/reapply preservam jobs e
+reservas anteriores. Sem infraestrutura ou dependência externa nova.
+
+Rollback desliga OLIST_DISPATCH_ENABLED e comandos novos; drena efeitos em voo
+e preserva filas, reservas, chaves/envelopes, observações e auditoria. Não apagar
+reserva ou restaurar backup para liberar POST. Sem down destrutivo. Resultado
+já iniciado é preservado após revogação; próxima inclusão exige autorização
+atual novamente.
 
 ## T07 — comando idempotente, snapshot e job
 
@@ -58,8 +126,8 @@ Não altera status, quitação, Nota criada, datas, total, ficha ou métricas CR
 
 Conta exige creation_enabled=true e recovery_required=false, conexão atual
 válida e sem renovação/troca em curso. Esses controles continuam desligados por
-padrão e nenhum valor real foi modificado. A fila olist não é consumida pelo
-worker padrão: o despacho e a revalidação de cada efeito continuam em T08.
+padrão e nenhum valor real foi modificado. T08 acrescenta consumidor separado
+opt-in e revalidação por efeito; o worker padrão não consome essa fila.
 Não ativar o piloto só porque o comando local devolveu 202.
 
 ### Migração e rollback
@@ -82,7 +150,8 @@ cego de efeito ERP foi introduzido por esse tratamento.
 OLIST-07–08, 12–17, 27, 35–39. `createOlistResourceResolver` é uma porta interna:
 recebe exportId e autoridade atual, carrega o snapshot cifrado/imutável do export
 e ignora qualquer plano comercial fornecido pelo caller. Não existe rota pública
-para cadastros nem handler de worker ativo. T07 está descrita acima; T08 ainda precisa despachar a sequência/venda. Criação real continua desligada.
+para cadastros. T08 compõe o resolvedor em worker dedicado opt-in acima.
+Criação real continua desligada.
 
 ### Snapshot e parâmetros
 
@@ -576,3 +645,33 @@ Logs sintéticos em var/olist-t07-*.log, fora do versionamento. As duas novas
 suítes PostgreSQL também entram em test:olist:live; os skips do gate unitário
 foram executados separadamente em banco dedicado. Entrega atômica OLIST-T07 na
 branch codex/olist-phase3. Próximo item T08; gate F3 permanece aberto.
+
+## Fechamento T08 — 06/11/2026
+
+Dispatcher, consumidor dedicado opt-in e migration expand 0068 entregues. O
+snapshot governa a sequência cliente/pais/variações/venda; cada efeito tem
+revalidação e ticket. Mapping/request/prova são imutáveis, ID/número antecedem
+GET e a comparação lossless exige cada linha e total, inclusive contra
+compensação entre linhas. Nenhuma dependência externa ou infraestrutura nova.
+
+- npm run validate: aprovado, 1922 testes/21 skips explícitos, incluindo tipos,
+  lint, formatação, fronteiras, validadores e build.
+- Regressão SQL ampliada Pedidos/Loja/Olist: 146/146, sem skips. A suíte T08
+  integrada foi repetida após a última guarda de referência: 13/13 aprovados.
+- Dispatcher final: 15/15; worker: 6/6; transporte/codec: 14/14. Cenários incluem
+  concorrência, timeout, falhas de commit, revogação/configuração, precisão,
+  total compensado, request congelado divergente e identidade extensa.
+- npm audit --audit-level=high: aprovado, zero altas/críticas; um baixo/cinco
+  moderados preexistentes, sem atualização de dependências.
+- E2E completo: 485 aprovados/7 skips previstos, dois workers, porta dedicada
+  4187; nenhuma alteração em assertions, timeout ou testes de interface.
+- Revisão independente Backend/Integrações/QA sem findings altos/médios após
+  correções de referência oficial, request reservado e observação de IDs.
+  Núcleo final (client/dispatcher/worker/transporte): 63/63, sem skips.
+
+A suíte test:olist:live inclui agora o SQL da venda. Os skips sem banco no gate
+unitário foram executados separadamente com TEST_DATABASE_URL dedicado. O
+PostgreSQL sintético 18.6 foi encerrado após os gates SQL. Logs sintéticos em
+var/olist-t08-*.log, fora do versionamento. Despacho e conta continuam desligados
+por padrão, sem acesso real ao ERP, deploy ou piloto. Entrega atômica OLIST-T08
+na branch codex/olist-phase3. Próximos T09/T23/T10; gate F3 permanece aberto.

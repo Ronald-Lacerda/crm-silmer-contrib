@@ -271,6 +271,7 @@ export function createOlistPreview(database, options) {
             ['warehouseId', 'warehouses'],
             ['paymentMethodId', 'paymentMethods'],
             ['priceListId', 'priceLists'],
+            ['receivingMethodId', 'receivingMethods'],
           ]) {
             if (
               before.settings[field] !== null &&

@@ -54,6 +54,7 @@ const settings = {
   paymentMethodId: 14,
   originId: 15,
   paymentTerms: '30 dias',
+  paymentDueOn: '2026-11-30',
 };
 const registration = {
   personType: /** @type {const} */ ('individual'),

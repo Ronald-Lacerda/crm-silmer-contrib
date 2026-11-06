@@ -79,6 +79,15 @@ export function buildOlistPreviewPlan(input) {
   for (const key of REQUIRED_SETTINGS)
     if (!Number.isSafeInteger(settings?.[key]) || settings[key] <= 0)
       issue('OLIST_SETTINGS_REQUIRED', 'settings.' + key);
+  if (!calendarDay(settings?.paymentDueOn))
+    issue('OLIST_SETTINGS_REQUIRED', 'settings.paymentDueOn');
+  if (
+    settings?.receivingMethodId !== undefined &&
+    settings.receivingMethodId !== null &&
+    (!Number.isSafeInteger(settings.receivingMethodId) ||
+      settings.receivingMethodId <= 0)
+  )
+    issue('OLIST_SETTINGS_INVALID', 'settings.receivingMethodId');
   if (!validText(settings?.paymentTerms, 120))
     issue('OLIST_SETTINGS_REQUIRED', 'settings.paymentTerms');
   for (const key of ['priceListId'])

@@ -110,13 +110,15 @@ function childCandidate(parent, child, strict) {
 }
 /** Server-only T22 orchestration. The persisted export is the sole source;
  * callers provide no commercial payload. Production has no creator route or
- * worker handler until T07/T08. Tickets, not retries or leases, own effects.
- * @param {{repository:any,client:any,writer:any,config:{accountKey:string,contextKey:string,hmacKey:Buffer}}} options */
+ * generic write port. The T08 worker composes it internally; tickets, not
+ * retries or leases, own effects.
+ * @param {{repository:any,client:any,writer:any,config:{accountKey:string,contextKey:string,hmacKey:Buffer},onStage?:(stage:string)=>Promise<unknown>}} options */
 export function createOlistResourceResolver({
   repository,
   client,
   writer,
   config,
+  onStage,
 }) {
   /** @param {any} input */
   async function resolve(input) {
@@ -447,6 +449,7 @@ export function createOlistResourceResolver({
         for (const child of node.children.values())
           childCandidate(node.remote, child, Boolean(child.row.latestAttempt));
     }
+    await onStage?.('customer');
     if (!buyerRemote) {
       const response = await dispatch(
         buyerRow,
@@ -465,6 +468,7 @@ export function createOlistResourceResolver({
         throw error;
       }
     } else buyerRow = await bindFound(buyerRow, buyerRemote.id);
+    await onStage?.('product');
     for (const node of nodes.values()) {
       if (!node.remote) {
         const children = [...node.children.values()];
@@ -499,6 +503,7 @@ export function createOlistResourceResolver({
           throw error;
         }
       } else node.row = await bindFound(node.row, node.remote.id);
+      await onStage?.('variation');
       for (const child of node.children.values()) {
         child.row = await current(child.row);
         const parentId = remoteNumber(node.row.remote_id);

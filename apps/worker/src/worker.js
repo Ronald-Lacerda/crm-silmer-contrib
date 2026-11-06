@@ -1,3 +1,8 @@
+import {
+  createOlistJobHandler,
+  createOlistDispatchRuntime,
+} from './olist-runtime.js';
+import { olistConfiguration } from '@crm-silmer/olist';
 import { pathToFileURL } from 'node:url';
 import { clearInterval, setInterval } from 'node:timers';
 
@@ -275,6 +280,30 @@ export class WorkerRuntime {
     await this.healthInFlight;
     this.logger.info('worker_stopped');
   }
+}
+
+/** Opt-in Olist consumer. With dispatch off, neither queue nor database is touched.
+ * @param {{database:any,environment?:Record<string,string|undefined>,dispatcher?:any,queue?:any,fetch?:typeof fetch,clock?:()=>Date,logger?:any,metrics?:any,workerId?:string,now?:()=>number}} options */
+export function createOlistWorkerRuntime(options) {
+  const environment = options.environment ?? process.env;
+  if (
+    environment.OLIST_DISPATCH_ENABLED !== 'true' ||
+    !olistConfiguration(environment).configured
+  )
+    return undefined;
+  const dispatcher = options.dispatcher ?? createOlistDispatchRuntime(options);
+  return new WorkerRuntime({
+    handlers: {
+      'olist.export': createOlistJobHandler({ dispatcher, environment }),
+    },
+    queueName: 'olist',
+    queue:
+      options.queue ?? new PostgresJobQueue({ database: options.database }),
+    logger: options.logger,
+    metrics: options.metrics,
+    workerId: options.workerId ?? 'olist-' + process.pid,
+    now: options.now,
+  });
 }
 
 export class MediaRetentionScheduler {
@@ -611,7 +640,7 @@ export function createChatMediaWorkerRuntime(options) {
 }
 
 /** Starts text delivery without waiting for an external signature CDN.
- * @param {{commandWorker: {start: Function},mediaWorker: {start: Function},chatMediaWorker?: {start: Function},chatMediaCleanup?:{start:Function},retentionScheduler: {start: Function},signatureRefresh: {start: () => Promise<void>},scannerDaemon?: {start: () => Promise<void>},stallScheduler?: {start: Function},billingWorker?: {start: Function}}} services */
+ * @param {{commandWorker: {start: Function},mediaWorker: {start: Function},chatMediaWorker?: {start: Function},chatMediaCleanup?:{start:Function},retentionScheduler: {start: Function},signatureRefresh: {start: () => Promise<void>},scannerDaemon?: {start: () => Promise<void>},stallScheduler?: {start: Function},billingWorker?: {start: Function},olistWorker?: {start: Function}}} services */
 export async function startWorkerServices({
   commandWorker,
   mediaWorker,
@@ -622,6 +651,7 @@ export async function startWorkerServices({
   scannerDaemon,
   stallScheduler,
   billingWorker,
+  olistWorker,
 }) {
   await commandWorker.start();
   await stallScheduler?.start();
@@ -630,6 +660,7 @@ export async function startWorkerServices({
   await chatMediaWorker?.start();
   await chatMediaCleanup?.start();
   await retentionScheduler.start();
+  await olistWorker?.start();
   void signatureRefresh.start();
   await billingWorker?.start();
 }
@@ -801,7 +832,15 @@ export async function startWorkerFromEnvironment(options = {}) {
         options.importModule,
       ),
     });
+    const olistWorker = createOlistWorkerRuntime({
+      database,
+      environment,
+      queue,
+      logger,
+      workerId: 'olist-' + process.pid,
+    });
     await startWorkerServices({
+      olistWorker,
       commandWorker,
       mediaWorker,
       chatMediaWorker,
@@ -814,6 +853,7 @@ export async function startWorkerFromEnvironment(options = {}) {
     });
     return Object.freeze({
       runtime: Object.freeze({
+        olistWorker,
         commandWorker,
         mediaWorker,
         retentionScheduler,
@@ -833,6 +873,7 @@ export async function startWorkerFromEnvironment(options = {}) {
           mediaWorker.stop(),
           chatMediaWorker?.stop(),
           billingWorker?.stop(),
+          olistWorker?.stop(),
         ]);
         await scannerDaemon.stop();
         await database.close();

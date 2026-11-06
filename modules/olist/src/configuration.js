@@ -103,11 +103,28 @@ export function olistProductFiscal(raw) {
     throw new OlistError('OLIST_PRODUCT_FISCAL_REQUIRED', 400);
   return { ncm: value.ncm, origin: value.origin, unit: value.unit };
 }
+/** Explicit single due date, never derived from a free-text payment term.
+ * @param {unknown} value */
+function paymentDueOn(value) {
+  if (
+    typeof value !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/u.test(value) ||
+    !Number.isFinite(Date.parse(value + 'T00:00:00Z')) ||
+    new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) !== value
+  )
+    throw new OlistError('INVALID_REQUEST', 400);
+  return value;
+}
 /** Full replacement; settings never infer a seller.
  * @param {unknown} raw */
 export function olistSettings(raw) {
   const fields = Object.keys(EMPTY_OLIST_SETTINGS);
-  const value = object(raw, [...fields, 'productFiscal']);
+  const value = object(raw, [
+    ...fields,
+    'productFiscal',
+    'paymentDueOn',
+    'receivingMethodId',
+  ]);
   if (fields.some((field) => !Object.hasOwn(value, field)))
     throw new OlistError('INVALID_REQUEST', 400);
   return Object.fromEntries(
@@ -115,11 +132,13 @@ export function olistSettings(raw) {
       key,
       entry === null
         ? null
-        : key === 'productFiscal'
-          ? olistProductFiscal(entry)
-          : key.endsWith('Id')
-            ? integer(entry)
-            : text(entry, 120),
+        : key === 'paymentDueOn'
+          ? paymentDueOn(entry)
+          : key === 'productFiscal'
+            ? olistProductFiscal(entry)
+            : key.endsWith('Id')
+              ? integer(entry)
+              : text(entry, 120),
     ]),
   );
 }

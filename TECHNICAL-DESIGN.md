@@ -24,6 +24,21 @@ guardrail, abertura humana, transporte, reservas, epoch e revisão; preparação
 offline recusa drift e dados fixados. Sem migração ou infraestrutura nova.
 [Operação e rollback](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T08 — despacho reservado e comparação exata (06/11/2026)
+
+OLIST-13–17, 20, 25–27, 36–41: consumidor dedicado opt-in da fila olist lê
+somente exportId e usa snapshot cifrado e executor/época originais. Cada etapa
+revalida autorização, versões e conexão; cada efeito tem ticket durável antes
+do HTTP e exige lease válido. Migration expand 0068 congela mapping, request,
+ID/número observado e prova cifrada do GET. Retomada compara os bytes reservados
+e só consulta. Confirmação exige cada linha e ambos os totais exatos, sem Number
+monetário; incerteza nunca libera novo POST.
+
+paymentDueOn explícito define uma parcela do total, sem dedução pelo texto de
+prazo ou confirmação de pagamento. OLIST_DISPATCH_ENABLED e conta seguem
+desligados por padrão. [Contrato e rollback](docs/runbooks/olist-phase3.md#t08--despacho-reservado-e-comparação-remota).
+Próximos T09/T23/T10; F3 aberto, sem ERP real, deploy ou piloto nesta entrega.
+
 ## OLIST-T07 — comando idempotente com snapshot e job (06/11/2026)
 
 OLIST-01–02, 06, 11–15, 30, 33: POST /api/v1/orders/:id/olist/export recebe
@@ -35,8 +50,8 @@ convergem sem duplicar operação ou trocar executor/data. Migration expand 0067
 protege o fingerprint semântico imutável e preserva os snapshots antigos.
 
 A data ERP é congelada no comando sem confirmar ou mudar datas do Pedido.
-Gates atuais são obrigatórios inclusive no replay; a fila olist permanece sem
-consumidor nesta entrega. Conta segue desabilitada por padrão, sem despacho,
+Gates atuais são obrigatórios inclusive no replay; T08 acrescenta consumidor
+opt-in. Conta e despacho seguem desligados por padrão, sem
 acesso real ao ERP, deploy ou piloto. [Contrato e rollback](docs/runbooks/olist-phase3.md#t07--comando-idempotente-snapshot-e-job).
 
 ## OLIST-T22 — resolução e criação segura de cadastros (06/11/2026)
@@ -52,8 +67,8 @@ busca vazia. Reconciliação positiva preserva o histórico anterior.
 Política fiscal opcional productFiscal nos parâmetros centrais é explícita e
 versionada, sem default. Prévia conhece a política e confirma situação/SKU nos
 catálogos; cliente não recebe codigo nem acesso ao ERP. Nenhuma rota criadora
-ou handler de worker foi habilitado: T07 está descrita acima; T08, UI, operação e piloto continuam
-pendentes. [Contrato e rollback](docs/runbooks/olist-phase3.md#t22--resolução-e-criação-segura-de-cadastros).
+genérica foi habilitada; T08 acrescenta worker dedicado opt-in.
+UI, operação e piloto continuam pendentes. [Contrato e rollback](docs/runbooks/olist-phase3.md#t22--resolução-e-criação-segura-de-cadastros).
 
 ## OLIST-T06 — prévia completa sem escrita ERP (06/11/2026)
 

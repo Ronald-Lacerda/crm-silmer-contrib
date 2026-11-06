@@ -3716,6 +3716,12 @@ components:
                 ncm: { type: string, pattern: '^[0-9]{8}$' }
                 origin: { type: integer, minimum: 0, maximum: 8 }
                 unit: { type: string, pattern: '^[A-Z0-9]{1,6}$' }
+        paymentDueOn:
+          description: Vencimento único explícito do total no ERP; não é data de recebimento nem deriva da legenda paymentTerms.
+          type: [string, 'null']
+          format: date
+        receivingMethodId:
+          { type: [integer, 'null'], minimum: 1, maximum: 9007199254740991 }
         paymentTerms: { type: [string, 'null'], minLength: 1, maxLength: 120 }
         purchaseOrder: { type: [string, 'null'], minLength: 1, maxLength: 120 }
     OlistStatus:
@@ -3794,6 +3800,7 @@ components:
                   }
                 stage: { enum: [customer, product, variation, sale, complete] }
                 number: { type: [string, 'null'] }
+                errorCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{0,63}$' }
     OlistProblem:
       type: object
       additionalProperties: false

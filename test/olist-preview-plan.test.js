@@ -90,6 +90,7 @@ function fixture() {
       paymentMethodId: 10,
       originId: 11,
       paymentTerms: '30 dias',
+      paymentDueOn: '2026-11-30',
       purchaseOrder: null,
       priceListId: null,
     },
