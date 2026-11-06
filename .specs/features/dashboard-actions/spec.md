@@ -142,8 +142,11 @@ contato acontece sempre por iniciativa do cliente.
    `indisponivel` ou `outro`; `outro` exige texto de 1–140 caracteres,
    cifrado e fora de logs, auditoria e agregações. Só em conversa aberta, com
    dono, em modo humano; recusa com `409 LEAD_HAS_ORDER` se o ciclo tiver
-   pedido pendente ou confirmado. Idempotency-Key, CSRF, versão esperada e
-   auditoria sem texto livre; actorId forjado é recusado.
+   pedido pendente ou confirmado. Recusa com `409 LEAD_AWAITING_REPLY` se a
+   última mensagem do cliente ainda não tiver resposta humana efetiva: quem
+   espera não some da central (ACT-06), o vendedor responde antes de marcar.
+   Idempotency-Key, CSRF, versão esperada e auditoria sem texto livre;
+   actorId forjado é recusado.
 7. **MET-07 — Registro e reabertura:** desfecho em
    `crm.lead_outcome_events`, imutável e versionado por conversa. Não altera
    estado nem encerramento da conversa, nem status de pedido; não usa

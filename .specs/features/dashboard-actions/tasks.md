@@ -43,7 +43,7 @@ confirmação (PERF-01).
 - [x] RFC 048 / ADR 061 e emenda da spec (este commit).
 - [ ] B — Métricas de expediente (MET-01–05) e retomada em 72h (ACT-06):
       migração 0061 e `GET /api/v1/dashboard/metrics/service`.
-- [ ] C — Lead perdido com motivo (MET-06–08): migração 0062,
+- [x] C — Lead perdido com motivo (MET-06–08): migração 0062,
       `/api/v1/conversations/:id/lead-outcome` e
       `GET /api/v1/dashboard/metrics/losses`.
 - [ ] D — Presença e R$/hora (MET-09–11) com heartbeat no cliente:

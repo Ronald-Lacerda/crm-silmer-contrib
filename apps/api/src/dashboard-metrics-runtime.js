@@ -1,5 +1,6 @@
 import { lockDashboardReader } from './dashboard-access.js';
 import { DashboardError, dashboardPeriod } from './dashboard-runtime.js';
+import { activeLeadLossSql, EFFECTIVE_HUMAN_SEND } from './lead-outcome-sql.js';
 
 /** RFC 048 / ADR 061: the versioned business-hours policy every service
  * metric is measured with. The SQL function `crm.business_minutes_v1` is the
@@ -14,15 +15,11 @@ export const BUSINESS_HOURS = Object.freeze({
   unansweredThresholdMinutes: 15,
 });
 
-const EFFECTIVE_HUMAN_SEND = (/** @type {string} */ m) =>
-  `${m}.direction = 'outbound' AND ${m}.author_kind = 'human' AND ${m}.status = 'sent'
-   AND coalesce(${m}.delivery_status,'sent') NOT IN ('failed','outcome_unknown')`;
-
-/** "Sem resposta agora" is a snapshot of open conversations with an owner.
- * Fatia C (lead perdido, MET): acrescente aqui a condição "sem perda ativa"
- * para que uma perda declarada tire a conversa deste retrato. */
+/** "Sem resposta agora" is a snapshot of open conversations with an owner
+ * and no active declared loss (MET-08). */
 const UNANSWERED_NOW_CONVERSATION = `candidates.terminal_at IS NULL
-  AND candidates.archived_at IS NULL AND candidates.assigned_user_id IS NOT NULL`;
+  AND candidates.archived_at IS NULL AND candidates.assigned_user_id IS NOT NULL
+  AND NOT ${activeLeadLossSql('candidates.id')}`;
 
 /** @param {unknown} value */
 function minutes(value) {
@@ -320,6 +317,127 @@ export async function readServiceMetrics(database, input) {
   };
 }
 
+/** MET-06 closed list; aggregations use only the code, never the note. */
+export const LEAD_LOSS_REASONS = Object.freeze([
+  'preco',
+  'prazo',
+  'concorrente',
+  'silencio',
+  'indisponivel',
+  'outro',
+]);
+
+/** @param {any} row */
+function byReason(row) {
+  return Object.fromEntries(
+    LEAD_LOSS_REASONS.map((reason) => [reason, Number(row?.[reason] ?? 0)]),
+  );
+}
+
+/** Declared losses of a São Paulo calendar window (MET-06–08). A loss is
+ * effective unless the next version is a manual reopening (a correction).
+ * Each conversation counts once, through its latest effective loss marked in
+ * the window: that loss gives the owner (who owned the conversation when it
+ * was marked) and the reason. A loss the customer reopened by writing again
+ * still counts and is also reported in `reopenedByCustomerCount`. The
+ * free-text note is never read here.
+ * @param {{query:(sql:string,values?:unknown[])=>Promise<{rows:any[]}>}} database
+ * @param {{from:string,to:string,actorId:string,manager:boolean,now:Date}} input
+ */
+export async function readLossMetrics(database, input) {
+  const from = calendarDay(input.from);
+  const to = calendarDay(input.to);
+  if (from > to) throw new DashboardError(400, 'INVALID_FILTER');
+  const manager = input.manager === true;
+  const counted = LEAD_LOSS_REASONS.map(
+    (reason) =>
+      `count(*) FILTER (WHERE reason_code = '${reason}')::integer AS ${reason}`,
+  ).join(', ');
+  const kept = LEAD_LOSS_REASONS.map(
+    (reason) => `coalesce(l.${reason}, 0) AS ${reason}`,
+  ).join(', ');
+  const result = await database.query(
+    `WITH bounds AS (
+       SELECT ($1::date::timestamp AT TIME ZONE 'America/Sao_Paulo') AS from_at,
+              (($2::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo') AS to_at,
+              $5::timestamptz AS now_at
+     ), effective AS (
+       SELECT DISTINCT ON (loss.conversation_id) loss.conversation_id, loss.owner_id,
+              loss.reason_code, loss.last_inbound_message_id
+       FROM crm.lead_outcome_events loss CROSS JOIN bounds
+       WHERE loss.outcome = 'lost' AND loss.occurred_at >= bounds.from_at
+         AND loss.occurred_at < bounds.to_at AND loss.occurred_at <= bounds.now_at
+         AND NOT EXISTS (
+           SELECT 1 FROM crm.lead_outcome_events correction
+           WHERE correction.conversation_id = loss.conversation_id
+             AND correction.version = loss.version + 1
+             AND correction.outcome = 'reopened'
+             AND correction.occurred_at <= bounds.now_at)
+       ORDER BY loss.conversation_id, loss.version DESC
+     ), classified AS (
+       SELECT effective.owner_id, effective.reason_code,
+              effective.last_inbound_message_id IS DISTINCT FROM (
+                SELECT customer.id FROM crm.messages customer
+                WHERE customer.conversation_id = effective.conversation_id
+                  AND customer.direction = 'inbound' AND customer.author_kind = 'contact'
+                  AND customer.occurred_at <= bounds.now_at
+                ORDER BY customer.occurred_at DESC, customer.id DESC LIMIT 1
+              ) AS reopened_by_customer
+       FROM effective CROSS JOIN bounds
+     ), losses AS (
+       SELECT owner_id AS user_id, count(*)::integer AS lost_count,
+              count(*) FILTER (WHERE reopened_by_customer)::integer AS reopened_count,
+              ${counted}
+       FROM classified GROUP BY owner_id
+     ), people AS (
+       SELECT u.id AS user_id, u.name, u.disabled_at IS NULL AS active,
+              coalesce(l.lost_count, 0) AS lost_count,
+              coalesce(l.reopened_count, 0) AS reopened_count, ${kept}
+       FROM crm.users u LEFT JOIN crm.user_functions f ON f.user_id = u.id
+       LEFT JOIN losses l ON l.user_id = u.id
+       WHERE ($4::boolean OR u.id = $3)
+         AND (f.function_name = 'Vendedor' OR l.user_id IS NOT NULL)
+         AND (u.disabled_at IS NULL OR l.user_id IS NOT NULL)
+     )
+     SELECT coalesce((SELECT jsonb_agg(to_jsonb(people) ORDER BY name, user_id)
+                      FROM people), '[]'::jsonb) AS people`,
+    [from, to, input.actorId, manager, input.now.toISOString()],
+  );
+  /** @type {Array<{userId:string,name:string|null,active:boolean,lostCount:number,reopenedByCustomerCount:number,byReason:Record<string,number>}>} */
+  const rows = (result.rows[0]?.people ?? []).map((/** @type {any} */ row) => ({
+    userId: row.user_id,
+    name: row.name,
+    active: row.active === true,
+    lostCount: Number(row.lost_count ?? 0),
+    reopenedByCustomerCount: Number(row.reopened_count ?? 0),
+    byReason: byReason(row),
+  }));
+  /** @param {(row: typeof rows[number]) => number} pick */
+  const total = (pick) => rows.reduce((sum, row) => sum + pick(row), 0);
+  return {
+    from,
+    to,
+    scope: manager ? 'team' : 'self',
+    rows,
+    ...(manager
+      ? {
+          totals: {
+            lostCount: total((row) => row.lostCount),
+            reopenedByCustomerCount: total(
+              (row) => row.reopenedByCustomerCount,
+            ),
+            byReason: Object.fromEntries(
+              LEAD_LOSS_REASONS.map((reason) => [
+                reason,
+                total((row) => row.byReason[reason]),
+              ]),
+            ),
+          },
+        }
+      : {}),
+  };
+}
+
 /** @param {any} database @param {{access:any,clock?:()=>Date}} options */
 export function createDashboardMetricsRuntime(database, options) {
   const clock = options.clock ?? (() => new Date());
@@ -349,6 +467,30 @@ export function createDashboardMetricsRuntime(database, options) {
           businessHours: BUSINESS_HOURS,
           rows: report.rows,
           ...(report.team ? { team: report.team } : {}),
+        };
+      });
+    },
+    /** @param {{actor:any,days?:number}} input */
+    async losses(input) {
+      const now = clock();
+      const period = dashboardPeriod(now, input.days ?? 7);
+      return database.transaction(async (/** @type {any} */ client) => {
+        const reader = await lockDashboardReader(client, input.actor);
+        const report = await readLossMetrics(client, {
+          from: period.from,
+          to: period.to,
+          actorId: reader.id,
+          manager: reader.scope === 'team',
+          now,
+        });
+        return {
+          from: report.from,
+          to: report.to,
+          days: period.days,
+          scope: report.scope,
+          generatedAt: now.toISOString(),
+          rows: report.rows,
+          ...(report.totals ? { totals: report.totals } : {}),
         };
       });
     },

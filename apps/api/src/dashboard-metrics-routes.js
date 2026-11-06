@@ -68,8 +68,8 @@ async function respond(reply, work) {
   }
 }
 
-/** RFC 048 metric reads. `metrics/losses` and `metrics/presence` join this
- * file with the same period, scope and error contract.
+/** RFC 048 metric reads. `metrics/presence` joins this file with the same
+ * period, scope and error contract.
  * @param {import('fastify').FastifyInstance} api @param {any} metrics
  */
 export function registerDashboardMetricsRoutes(api, metrics) {
@@ -81,6 +81,16 @@ export function registerDashboardMetricsRoutes(api, metrics) {
         const days = period(request.query);
         const { actor } = await reader(request, metrics);
         return metrics.service({ actor, days });
+      }),
+  );
+  api.get(
+    '/api/v1/dashboard/metrics/losses',
+    { config: READ_LIMIT },
+    (request, reply) =>
+      respond(reply, async () => {
+        const days = period(request.query);
+        const { actor } = await reader(request, metrics);
+        return metrics.losses({ actor, days });
       }),
   );
 }

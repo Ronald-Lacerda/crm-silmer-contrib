@@ -1611,6 +1611,90 @@ paths:
         '400': { $ref: '#/components/responses/InvalidRequest' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /conversations/{conversationId}/lead-outcome:
+    get:
+      operationId: getLeadOutcome
+      summary: Estado do desfecho declarado do lead (MET-06–08, RFC 048)
+      description: >-
+        Ação conversation.read com papel relido no PostgreSQL. Somente o
+        responsável atual da conversa ou administrador ativo
+        (COMMERCIAL_ADMIN); outro vendedor e Financeiro recebem 403. Estado
+        derivado, sem escrita no caminho de entrada: `open` (nenhum
+        desfecho), `lost` (último evento é perda e a última mensagem do
+        cliente ainda é aquela sobre a qual a perda foi declarada),
+        `reopened_by_customer` (o cliente escreveu depois da perda) e
+        `reopened_manual` (correção manual). Em `reopened_manual`, motivo,
+        responsável e autor descrevem a perda corrigida e `reopenedAt` é a
+        correção. É a única leitura que devolve o texto de `outro`.
+        Qualquer parâmetro de consulta é 400. Privada no-store, limite de 60
+        leituras/minuto.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/HumanReadOrigin'
+      responses:
+        '200':
+          description: Desfecho atual do lead
+          headers:
+            Cache-Control:
+              { schema: { type: string, const: 'private, no-store' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeadOutcomeDetail' }
+        '400': { $ref: '#/components/responses/LeadOutcomeProblem' }
+        '403': { $ref: '#/components/responses/LeadOutcomeProblem' }
+        '404': { $ref: '#/components/responses/LeadOutcomeProblem' }
+        '429': { description: Limite de leituras excedido }
+        '503': { $ref: '#/components/responses/LeadOutcomeProblem' }
+    post:
+      operationId: recordLeadOutcome
+      summary: Declara lead perdido com motivo ou corrige a perda (MET-06–08)
+      description: >-
+        Ação conversation.transition. Somente o responsável atual ou
+        administrador; `ownerId` é o responsável no momento e `markedBy`
+        quem declarou (actorId no corpo é 400). Exige conversa com
+        responsável, em modo humano e aberta (409 LEAD_NOT_ELIGIBLE). Perda
+        é recusada com 409 LEAD_HAS_ORDER se o ciclo tiver pedido pendente
+        ou confirmado, com 409 LEAD_AWAITING_REPLY se a última mensagem do
+        cliente não tiver envio humano efetivo depois dela (ACT-06) e com
+        409 LEAD_ALREADY_LOST se já houver perda ativa. Reabertura manual
+        sem perda ativa é 409 LEAD_NOT_LOST. `expectedConversationVersion`
+        (mensagem nova do cliente incrementa a versão) e
+        `expectedOutcomeVersion` divergentes são 409 VERSION_CONFLICT. Não
+        altera estado, encerramento ou versão da conversa nem pedido, e não
+        usa Negócio. `reasonCode` fora da lista é 422 INVALID_LOSS_REASON;
+        `outro` exige `note` de 1–140 caracteres após trim, sem caracteres
+        de controle (422 INVALID_LOSS_NOTE), e `note` com outro motivo é
+        400. O texto é cifrado (AES-256-GCM, AAD do evento) e nunca aparece
+        na resposta, em logs, auditoria (`lead.outcome.recorded` com versão
+        e código do motivo), idempotência ou agregações. Mesma chave com o
+        mesmo comando devolve a mesma resposta; com outro comando é 409
+        IDEMPOTENCY_KEY_REUSED. Limite de 30 comandos/minuto.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LeadOutcomeCommand' }
+      responses:
+        '200':
+          description: Desfecho registrado (ou replay idempotente)
+          headers:
+            Cache-Control:
+              { schema: { type: string, const: 'private, no-store' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LeadOutcomeRecorded' }
+        '400': { $ref: '#/components/responses/LeadOutcomeProblem' }
+        '403': { $ref: '#/components/responses/LeadOutcomeProblem' }
+        '404': { $ref: '#/components/responses/LeadOutcomeProblem' }
+        '409': { $ref: '#/components/responses/LeadOutcomeProblem' }
+        '422': { $ref: '#/components/responses/LeadOutcomeProblem' }
+        '429': { description: Limite de comandos excedido }
+        '503': { $ref: '#/components/responses/LeadOutcomeProblem' }
   /conversations/{conversationId}/archive:
     post:
       operationId: archiveConversation
@@ -2503,6 +2587,42 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { description: Limite de leituras excedido }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /dashboard/metrics/losses:
+    get:
+      operationId: getDashboardLossMetrics
+      summary: Leads perdidos declarados no período, por motivo (MET-06–08)
+      description: >-
+        Mesmo escopo e validação de `/dashboard/metrics/service`: vendedor
+        ativo recebe só a própria linha, administrador ativo recebe a equipe
+        e `totals`, Financeiro recebe 403; chave além de `days` é 400
+        INVALID_REQUEST e outro valor de `days` é 400 INVALID_FILTER. Uma
+        perda é efetiva salvo quando a versão seguinte é uma reabertura
+        manual (correção). Cada conversa conta uma vez, pela última perda
+        efetiva marcada na janela, que define o responsável (dono no momento
+        da marcação) e o motivo. Perda reaberta pelo cliente continua
+        contando e soma também em `reopenedByCustomerCount`. Só códigos de
+        motivo; o texto livre nunca é lido. Privada no-store, limite de 60
+        leituras/minuto.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/HumanReadOrigin'
+        - in: query
+          name: days
+          schema: { type: string, enum: ['7', '30'], default: '7' }
+      responses:
+        '200':
+          description: Perdas declaradas do período
+          headers:
+            Cache-Control:
+              { schema: { type: string, const: 'private, no-store' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardLossMetrics' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { description: Limite de leituras excedido }
+        '503': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
     automationBasic:
@@ -2758,6 +2878,114 @@ components:
               properties:
                 count: { type: integer, minimum: 0 }
                 oldestWaitingMinutes: { type: [number, 'null'], minimum: 0 }
+    LeadLossReason:
+      type: string
+      enum: [preco, prazo, concorrente, silencio, indisponivel, outro]
+    LeadOutcomeCommand:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            [outcome, reasonCode, expectedConversationVersion, expectedOutcomeVersion]
+          properties:
+            outcome: { type: string, const: lost }
+            reasonCode: { $ref: '#/components/schemas/LeadLossReason' }
+            note:
+              type: string
+              description: >-
+                Obrigatório só com `outro`: 1–140 caracteres após trim, sem
+                caracteres de controle. Proibido com outro motivo.
+            expectedConversationVersion: { type: integer, minimum: 1 }
+            expectedOutcomeVersion: { type: integer, minimum: 0 }
+        - type: object
+          additionalProperties: false
+          required: [outcome, expectedConversationVersion, expectedOutcomeVersion]
+          properties:
+            outcome: { type: string, const: reopened }
+            expectedConversationVersion: { type: integer, minimum: 1 }
+            expectedOutcomeVersion: { type: integer, minimum: 1 }
+    LeadOutcomeRecorded:
+      type: object
+      additionalProperties: false
+      required:
+        [conversationId, outcome, outcomeVersion, reasonCode, hasNote, ownerId, markedBy, markedAt]
+      properties:
+        conversationId: { type: string }
+        outcome: { type: string, enum: [lost, reopened] }
+        outcomeVersion: { type: integer, minimum: 1 }
+        reasonCode:
+          oneOf:
+            - { $ref: '#/components/schemas/LeadLossReason' }
+            - { type: 'null' }
+        hasNote: { type: boolean }
+        ownerId: { type: string }
+        markedBy: { type: string }
+        markedAt: { type: string, format: date-time }
+    LeadOutcomeDetail:
+      type: object
+      additionalProperties: false
+      required:
+        [state, outcomeVersion, reasonCode, ownerId, markedBy, markedAt, reopenedAt]
+      properties:
+        state:
+          type: string
+          enum: [open, lost, reopened_by_customer, reopened_manual]
+        outcomeVersion: { type: integer, minimum: 0 }
+        reasonCode:
+          oneOf:
+            - { $ref: '#/components/schemas/LeadLossReason' }
+            - { type: 'null' }
+        note:
+          type: string
+          description: Só quando o motivo descrito é `outro`.
+        ownerId: { type: [string, 'null'] }
+        markedBy: { type: [string, 'null'] }
+        markedAt: { type: [string, 'null'], format: date-time }
+        reopenedAt: { type: [string, 'null'], format: date-time }
+    LeadLossReasonCounts:
+      type: object
+      additionalProperties: false
+      required: [preco, prazo, concorrente, silencio, indisponivel, outro]
+      properties:
+        preco: { type: integer, minimum: 0 }
+        prazo: { type: integer, minimum: 0 }
+        concorrente: { type: integer, minimum: 0 }
+        silencio: { type: integer, minimum: 0 }
+        indisponivel: { type: integer, minimum: 0 }
+        outro: { type: integer, minimum: 0 }
+    DashboardLossMetrics:
+      type: object
+      additionalProperties: false
+      required: [from, to, days, scope, generatedAt, rows]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        days: { type: integer, enum: [7, 30] }
+        scope: { type: string, enum: [team, self] }
+        generatedAt: { type: string, format: date-time }
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              [userId, name, active, lostCount, reopenedByCustomerCount, byReason]
+            properties:
+              userId: { type: string }
+              name: { type: [string, 'null'] }
+              active: { type: boolean }
+              lostCount: { type: integer, minimum: 0 }
+              reopenedByCustomerCount: { type: integer, minimum: 0 }
+              byReason: { $ref: '#/components/schemas/LeadLossReasonCounts' }
+        totals:
+          type: object
+          description: Somente para administrador (scope team).
+          additionalProperties: false
+          required: [lostCount, reopenedByCustomerCount, byReason]
+          properties:
+            lostCount: { type: integer, minimum: 0 }
+            reopenedByCustomerCount: { type: integer, minimum: 0 }
+            byReason: { $ref: '#/components/schemas/LeadLossReasonCounts' }
     FinancePage:
       type: object
       additionalProperties: false
@@ -5343,6 +5571,25 @@ components:
           properties:
             code: { type: string }
   responses:
+    LeadOutcomeProblem:
+      description: >-
+        application/problem+json com `code` público: INVALID_REQUEST,
+        INVALID_IDEMPOTENCY_KEY, INVALID_LOSS_REASON, INVALID_LOSS_NOTE,
+        FORBIDDEN, CSRF_INVALID, CONVERSATION_NOT_FOUND, LEAD_NOT_ELIGIBLE,
+        LEAD_HAS_ORDER, LEAD_AWAITING_REPLY, LEAD_ALREADY_LOST,
+        LEAD_NOT_LOST, VERSION_CONFLICT, IDEMPOTENCY_KEY_REUSED ou
+        SERVICE_UNAVAILABLE, sem eco do corpo recebido
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [type, title, status, code]
+            properties:
+              type: { type: string, const: about:blank }
+              title: { type: string }
+              status: { type: integer }
+              code: { type: string }
     N8nProblem:
       description: Erro compatível em application/problem+json sem eco de PII
       content:

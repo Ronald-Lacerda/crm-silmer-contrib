@@ -5,10 +5,15 @@ import { DashboardError } from './dashboard-runtime.js';
 /** Re-read the active role under the read transaction (PERF-07/ACT-10): the
  * session's cached actor never decides scope. An administrator sees the team;
  * any other Vendedor only its own row. Financeiro is refused by `authorize`.
- * @param {any} client @param {any} actor
+ * Writes (lead outcome) pass their own action, e.g. `conversation.transition`.
+ * @param {any} client @param {any} actor @param {string} [action]
  * @returns {Promise<{id:string,kind:'human',functionName:string,capabilities:string[],scope:'team'|'self'}>}
  */
-export async function lockDashboardReader(client, actor) {
+export async function lockDashboardReader(
+  client,
+  actor,
+  action = 'conversation.read',
+) {
   if (actor?.kind !== 'human' || !actor.id) {
     throw new DashboardError(403, 'FORBIDDEN');
   }
@@ -34,7 +39,7 @@ export async function lockDashboardReader(client, actor) {
     functionName: row.function_name,
     capabilities,
   };
-  authorize(/** @type {any} */ (live), 'conversation.read');
+  authorize(/** @type {any} */ (live), action);
   return {
     ...live,
     scope: capabilities.includes('COMMERCIAL_ADMIN') ? 'team' : 'self',

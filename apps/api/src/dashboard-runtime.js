@@ -10,6 +10,8 @@ import {
   promisedDeliveryOn,
 } from '@crm-silmer/orders';
 
+import { activeLeadLossSql } from './lead-outcome-sql.js';
+
 export const DASHBOARD_ACTION_LIMIT = 100;
 export const DASHBOARD_FOLLOWUP_HOURS = 72;
 
@@ -433,13 +435,14 @@ export function createDashboardRuntime(database, options) {
         const actor = await lockActor(client, input.actor, false);
         const [conversations, orders] = await Promise.all([
           client.query(
-            `SELECT c.id,c.version,c.assigned_user_id,c.automation_state,contact.display_name,last_message.*,
+            `SELECT c.id,c.version,c.assigned_user_id,c.automation_state,contact.display_name,last_message.*,lead_loss.lead_loss_active,
                     h.id AS handoff_id,h.version AS handoff_version,h.status AS handoff_status,
                     h.created_at AS handoff_created_at,h.due_at AS handoff_due_at,h.target_role AS handoff_target_role,${DECISION_FIELDS}
              FROM crm.conversations c
              JOIN crm.contact_identities identity ON identity.id = c.contact_identity_id
              JOIN crm.contacts contact ON contact.id = identity.current_contact_id
              ${LAST_MESSAGE_JOIN}
+             LEFT JOIN LATERAL (SELECT ${activeLeadLossSql('c.id')} AS lead_loss_active) lead_loss ON true
              LEFT JOIN LATERAL (SELECT * FROM crm.handoffs active WHERE active.conversation_id=c.id
                AND active.status='pending' AND active.target_role='Vendedor' ORDER BY active.created_at DESC LIMIT 1) h ON true
              LEFT JOIN crm.dashboard_action_decisions d ON d.user_id=$1
@@ -456,8 +459,9 @@ export function createDashboardRuntime(database, options) {
                       OR last_delivery_status IN ('failed','outcome_unknown')))
                  OR (last_direction='outbound' AND last_author_kind='human' AND last_status='sent'
                      AND coalesce(last_delivery_status,'sent') NOT IN ('failed','outcome_unknown')
-                     AND coalesce(last_sent_at,last_occurred_at) <= $2::timestamptz)
-                 OR (d.decision='schedule' AND d.target_version=c.version
+                     AND coalesce(last_sent_at,last_occurred_at) <= $2::timestamptz
+                     AND NOT lead_loss.lead_loss_active)
+                 OR (d.decision='schedule' AND d.target_version=c.version AND NOT lead_loss.lead_loss_active
                      AND d.source_revision='message:' || coalesce(message_id,'none') || ':' ||
                          coalesce(last_status,'none') || ':' || coalesce(last_delivery_status,'none')))
              ORDER BY CASE WHEN last_direction='inbound' OR h.id IS NOT NULL
@@ -495,10 +499,18 @@ export function createDashboardRuntime(database, options) {
             [actor.id],
           ),
         ]);
+        // MET-08: an active declared loss removes the follow-up and the
+        // reminders; send failures stay, they still need the send resolved.
         const items = conversations.rows
-          .map((/** @type {any} */ row) =>
-            projectDashboardConversation(row, now),
-          )
+          .map((/** @type {any} */ row) => {
+            const item = projectDashboardConversation(row, now);
+            return row.lead_loss_active &&
+              (item?.kind === 'followup' ||
+                (item?.kind === 'reminder' &&
+                  !String(item.reason).startsWith('send_')))
+              ? null
+              : item;
+          })
           .filter(Boolean);
         for (const row of orders.rows) {
           const order = await loadOrder(client, row.id);

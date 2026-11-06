@@ -27,6 +27,7 @@ import { createFinanceApiRuntime } from './finance-runtime.js';
 import { createDashboardApiRuntime } from './dashboard-runtime.js';
 import { createDashboardCheckpointRuntime } from './dashboard-checkpoint-runtime.js';
 import { createDashboardMetricsRuntime } from './dashboard-metrics-runtime.js';
+import { createLeadOutcomeApiRuntime } from './lead-outcome-runtime.js';
 import { createHealthErrorsRuntime } from './health-errors-runtime.js';
 import { registerHealthErrorsRoutes } from './health-errors-routes.js';
 import { createShippingApiRuntime } from './shipping-runtime.js';
@@ -72,6 +73,7 @@ import { createSafeLogger, SERVICES } from '@crm-silmer/shared';
  *   dashboard?: ReturnType<typeof createDashboardApiRuntime>,
  *   dashboardCheckpoint?: ReturnType<typeof createDashboardCheckpointRuntime>,
  *   dashboardMetrics?: ReturnType<typeof createDashboardMetricsRuntime>,
+ *   leadOutcomes?: ReturnType<typeof createLeadOutcomeApiRuntime>,
  *   healthErrors?: ReturnType<typeof createHealthErrorsRuntime>,
  *   operationalHealth?: ReturnType<typeof createOperationalHealth>,
  *   shipping?: ReturnType<typeof createShippingApiRuntime>,
@@ -290,6 +292,14 @@ export function createServerApi(runtime = {}) {
     (runtime.database && operations
       ? createDashboardMetricsRuntime(runtime.database, { access: operations })
       : undefined);
+  const leadOutcomes =
+    runtime.leadOutcomes ??
+    (runtime.database && operations && orders
+      ? createLeadOutcomeApiRuntime(runtime.database, {
+          access: operations,
+          environment,
+        })
+      : undefined);
   const finance =
     runtime.finance ??
     (runtime.database && operations && orders
@@ -314,6 +324,7 @@ export function createServerApi(runtime = {}) {
       dashboard,
       dashboardCheckpoint,
       dashboardMetrics,
+      leadOutcomes,
       shipping,
       automationAuth,
       commercial,

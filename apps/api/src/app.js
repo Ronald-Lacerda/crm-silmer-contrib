@@ -22,6 +22,7 @@ import { registerFinanceRoutes } from './finance-routes.js';
 import { registerDashboardRoutes } from './dashboard-routes.js';
 import { registerDashboardCheckpointRoutes } from './dashboard-checkpoint-routes.js';
 import { registerDashboardMetricsRoutes } from './dashboard-metrics-routes.js';
+import { registerLeadOutcomeRoutes } from './lead-outcome-routes.js';
 import { registerShippingRoutes } from './shipping-routes.js';
 import { registerN8nRoutes } from './n8n-routes.js';
 import { registerN8nCommandMediaRoutes } from './n8n-command-media-routes.js';
@@ -64,6 +65,7 @@ export const WEBHOOK_REQUESTS_PER_SECOND = 20;
  *   dashboard?: any,
  *   dashboardCheckpoint?: any,
  *   dashboardMetrics?: any,
+ *   leadOutcomes?: any,
  *   shipping?: any,
  *   orderPdfRenderer?: (html: string) => Promise<Buffer>,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime
@@ -353,6 +355,15 @@ export function createApi(options = {}, runtime = {}) {
     api.register(async (metricsScope) => {
       await metricsScope.register(rateLimit, { global: false });
       registerDashboardMetricsRoutes(metricsScope, runtime.dashboardMetrics);
+    });
+  }
+  if (runtime.leadOutcomes) {
+    api.register(async (leadScope) => {
+      await leadScope.register(rateLimit, { global: false });
+      registerLeadOutcomeRoutes(leadScope, runtime.leadOutcomes, (request) => ({
+        correlationId:
+          requests.get(request)?.correlationId ?? 'lead-outcome-request',
+      }));
     });
   }
   if (runtime.finance) {
