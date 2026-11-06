@@ -599,6 +599,13 @@ PR para o `master`.
 | PNL-05 | PNL-T05 | `orders-summary.test.js` “PNL-05: "Vendido por dia" is the last seven São Paulo days, today last, whatever the period”; `dashboard-format.test.js` “Painel: the week by day labels each day and speaks every value”, “Painel: a week without sales is a flat baseline, a failed read has no bars” e “Painel: bar values are compact reais”; `test:orders:live` | Coberto |
 | PNL-06 | PNL-T05 | `operation-runtime.test.js` “PNL-06: only a COMMERCIAL_ADMIN reads who has conversations unanswered for 15 minutes”; `dashboard-format.test.js` “Painel: "Atendimento agora" links three rows into the Inbox”, “Painel: a failed queue reads "—" in every attendance row, never "0"” e “Painel: the manager hears about a late seller right after the SLA”; `dashboard-next-step.spec.js` “PNL-06: a seller with unanswered conversations opens the Inbox on their conversations”; `test:operation-read:live` | Coberto |
 
+Revisão de integração de PNL-T05 (06/11/2026): após uma leitura válida,
+falha de atualização remove as barras de Vendido por dia e substitui as
+contagens de Atendimento agora por “—”, com recuperação por teclado. Os
+rótulos do gráfico podem ocupar duas linhas em colunas estreitas, inclusive
+em 1024 px com menu expandido, sem recortar o valor ou sua descrição textual.
+Regressões em `dashboard-refresh.spec.js` e `dashboard-roles.spec.js`.
+
 Divergência de PNL-01: com a fila em falha, o cartão do gestor pula as
 condições que dependem da fila e mostra a próxima que conseguiu ler (por
 exemplo, "Conferir 2 entregas atrasadas"), e o do vendedor sem outra

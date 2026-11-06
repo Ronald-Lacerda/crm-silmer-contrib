@@ -22,6 +22,7 @@ const QUEUE_SUMMARY = Object.freeze({
 async function mockDashboard(page, options = {}) {
   let summaryReads = 0;
   let failNext = false;
+  let failNextInbox = false;
   /** @type {() => void} */
   let releaseEvent = () => {};
   const eventGate = new Promise((resolve) => {
@@ -55,8 +56,9 @@ async function mockDashboard(page, options = {}) {
       });
     }
     if (path === '/api/v1/inbox/summary') {
-      if (options.failFirstInbox) {
+      if (options.failFirstInbox || failNextInbox) {
         options.failFirstInbox = false;
+        failNextInbox = false;
         return json({ code: 'UNAVAILABLE' }, 503);
       }
       return json(QUEUE_SUMMARY);
@@ -94,6 +96,11 @@ async function mockDashboard(page, options = {}) {
           to: '2026-10-15',
         },
         today: '2026-10-15',
+        daily: Array.from({ length: 7 }, (_, index) => ({
+          day: `2026-10-${String(index + 9).padStart(2, '0')}`,
+          confirmedCount: index === 6 ? confirmedCount : 1,
+          soldAmountCents: index === 6 ? soldAmountCents : 10000,
+        })),
       });
     }
     return json({ code: 'NOT_FOUND' }, 404);
@@ -102,6 +109,10 @@ async function mockDashboard(page, options = {}) {
   return {
     failNextRefresh() {
       failNext = true;
+      releaseEvent();
+    },
+    failNextQueueRefresh() {
+      failNextInbox = true;
       releaseEvent();
     },
     summaryReads: () => summaryReads,
@@ -114,6 +125,8 @@ test('keeps loaded sales visible after a live refresh fails and retries on deman
   const mock = await mockDashboard(page);
   await page.goto('/dashboard');
   await expect(page.getByText('R$ 2.500,00')).toBeVisible();
+  const daily = page.getByRole('region', { name: 'Vendido por dia' });
+  await expect(daily.getByRole('img')).toBeVisible();
 
   mock.failNextRefresh();
   await expect(page.getByRole('alert')).toContainText(
@@ -124,10 +137,14 @@ test('keeps loaded sales visible after a live refresh fails and retries on deman
     page.getByRole('heading', { name: 'Dashboard indisponível' }),
   ).toHaveCount(0);
   expect(mock.summaryReads()).toBe(2);
+  // PNL-05: the previous chart cannot stand in for a failed current read.
+  await expect(daily.getByRole('img')).toHaveCount(0);
+  await expect(daily).toContainText('Sem dados de vendas agora');
 
   await page.getByRole('button', { name: 'Tentar novamente' }).click();
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page.getByText('R$ 4.500,00')).toBeVisible();
+  await expect(daily.getByRole('img')).toBeVisible();
 });
 
 test('shows a clear initial error and recovers with retry', async ({
@@ -242,4 +259,42 @@ test('keeps retry focused when only the queue recovers after a total failure', a
   await expect(
     page.getByRole('heading', { name: 'Dashboard', exact: true }),
   ).toBeFocused();
+});
+
+test('PNL-03: a failed queue refresh replaces previously loaded attendance counts with dashes', async ({
+  page,
+}) => {
+  const mock = await mockDashboard(page);
+  await page.goto('/dashboard');
+  const attendance = page.getByRole('region', {
+    name: 'Atendimento agora',
+    exact: true,
+  });
+  await expect(attendance.locator('.attendance-value')).toHaveText([
+    '0',
+    '3',
+    '0',
+  ]);
+  mock.failNextQueueRefresh();
+  await expect(attendance.getByRole('alert')).toContainText(
+    'A fila não foi atualizada agora.',
+  );
+  await expect(attendance.locator('.attendance-value')).toHaveText([
+    '—',
+    '—',
+    '—',
+  ]);
+  await expect(attendance).not.toContainText('Respondendo normalmente');
+  await expect(
+    page.getByRole('region', { name: 'Vendido por dia' }).getByRole('img'),
+  ).toBeVisible();
+  await attendance.getByRole('button', { name: 'Tentar novamente' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(attendance.getByRole('alert')).toHaveCount(0);
+  await expect(attendance.locator('.attendance-value')).toHaveText([
+    '0',
+    '3',
+    '0',
+  ]);
+  await expect(attendance.getByRole('heading')).toBeFocused();
 });

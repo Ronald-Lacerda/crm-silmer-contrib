@@ -360,8 +360,8 @@
 
 /* Bars in pure CSS: each column draws its value above a bar whose height is
    its share of the week's best day (`--bar`, 0 to 1). `--headroom` stays
-   free above the tallest bar for its value: two lines on the phone, where
-   "4,1 mil" may wrap, one line from the tablet up. */
+   free above the tallest bar for its value: two lines when a narrow column
+   makes "4,1 mil" wrap, including desktops with the menu expanded. */
 .sales-chart-plot {
   --headroom: 2.125rem;
   display: grid;
@@ -534,14 +534,6 @@
 @media (min-width: 769px) {
   .dashboard-card {
     padding: var(--space-5) var(--space-6);
-  }
-
-  .sales-chart-plot {
-    --headroom: 1.5rem;
-  }
-
-  .sales-chart-value {
-    white-space: nowrap;
   }
 }
 

@@ -188,10 +188,16 @@ const sections = computed(() =>
 
 // PNL-05: the week by day; FIN-02 / T130, no bars without a sales read.
 const salesChart = computed(() =>
-  dailySalesChart(summary.value.daily, { loaded: summaryLoaded.value }),
+  dailySalesChart(summary.value.daily, {
+    loaded: summaryLoaded.value && !error.value,
+  }),
 );
 // PNL-06 / PNL-03: three links into the Inbox; "—" without a queue read.
-const attendance = computed(() => attendanceRows(queue.value));
+const attendance = computed(() =>
+  attendanceRows(queue.value, {
+    failed: !queue.value || Boolean(queueError.value),
+  }),
+);
 
 async function loadDashboard({ announce = false } = {}) {
   controller?.abort();

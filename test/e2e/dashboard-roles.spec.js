@@ -225,3 +225,48 @@ test('the queue and detail fit phone, tablet and notebook without horizontal scr
   await page.setViewportSize({ width: 390, height: 844 });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test('PNL-05: manager chart labels fit phone, narrow desktop with expanded menu and notebook', async ({
+  page,
+}) => {
+  await mockPainel(page);
+  await page.goto('/dashboard');
+  const chart = page.getByRole('region', { name: 'Vendido por dia' });
+  await expect(chart.getByRole('img')).toBeVisible();
+  await page.evaluate(() => globalThis.document.fonts.ready);
+  for (const width of [390, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    if (width === 1024)
+      await page
+        .getByRole('button', { name: 'Expandir menu', exact: true })
+        .click();
+    await page.screenshot({
+      path: test.info().outputPath('manager-' + width + '.png'),
+      fullPage: true,
+    });
+    const labels = await chart
+      .locator('.sales-chart-value')
+      .evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const range = globalThis.document.createRange();
+          range.selectNodeContents(node);
+          return {
+            label: node.textContent,
+            textWidth: range.getBoundingClientRect().width,
+            columnWidth: node.parentElement?.getBoundingClientRect().width ?? 0,
+          };
+        }),
+      );
+    for (const label of labels)
+      expect(label.textWidth, width + 'px: ' + label.label).toBeLessThanOrEqual(
+        label.columnWidth + 0.5,
+      );
+    expect(
+      await page.evaluate(
+        () =>
+          globalThis.document.documentElement.scrollWidth -
+          globalThis.document.documentElement.clientWidth,
+      ),
+    ).toBeLessThanOrEqual(0);
+  }
+});
