@@ -157,18 +157,18 @@ contato acontece sempre por iniciativa do cliente.
    e lembretes daquela conversa da central; falhas de envio continuam
    visíveis. A leitura de perdas no período agrupa por motivo, sem o texto
    livre.
-9. **MET-09 — Presença:** “online” é CRM aberto, aba visível e interação nos
+9. **MET-09 — Presença (backlog desde 05/11/2026):** “online” é CRM aberto, aba visível e interação nos
    últimos 10 minutos. O cliente envia `POST /api/v1/presence/heartbeat` sem
    corpo só nessa condição; o servidor grava no máximo uma linha por usuário
    por minuto em `crm.user_presence_minutes`, pelo relógio do servidor, sem
    IP, user-agent ou rota. Flag `DASHBOARD_PRESENCE_ENABLED` desligada por
    padrão: sem flag, nada é gravado e a presença aparece indisponível.
    Retenção de 90 dias.
-10. **MET-10 — Privacidade da presença:** finalidade de gestão comercial,
+10. **MET-10 — Privacidade da presença (backlog):** finalidade de gestão comercial,
     não controle de jornada ou ponto. Legítimo interesse com teste de
     balanceamento registrado e aviso à equipe antes de ligar a flag; cada
     vendedor vê os próprios dados.
-11. **MET-11 — R$ por hora online:** vendido atribuído (PERF-01) ÷ todas as
+11. **MET-11 — R$ por hora online (backlog):** vendido atribuído (PERF-01) ÷ todas as
     horas online do período, dentro ou fora do expediente. Nulo com menos de
     60 minutos online. Só vendedores; loja e sem atribuição ficam fora. Se a
     cobertura de presença começou depois do início da janela, o indicador

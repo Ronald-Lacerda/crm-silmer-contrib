@@ -6,6 +6,10 @@ Complementa a [RFC 044](044-performance-comercial-e-central-de-acoes.md) e a
 [ADR 059](../adr/059-central-de-acoes-e-performance-comercial.md).
 Contrato: [ACT-06 emendado e MET-01–12](../../.specs/features/dashboard-actions/spec.md).
 Tarefa: [ACT-T04](../../.specs/features/dashboard-actions/tasks.md).
+
+Atualização de 05/11/2026: a presença e o R$ por hora online (MET-09–11)
+foram adiados pelo PO para o backlog; nada deles é implementado nem
+migrado (a migração 0063 fica reservada). O restante segue aceito.
 Responsável: Tech Lead.
 
 ## Demanda

@@ -464,6 +464,9 @@ Teclado, foco e ARIA fazem parte do aceite.
 
 ### Métricas de expediente, perda e presença — ACT-T04
 
+Presença, heartbeat e R$ por hora (MET-09–11, migração 0063) estão em
+backlog desde 05/11/2026 e não existem no código.
+
 [ADR 061](docs/adr/061-metricas-de-expediente-perda-e-presenca.md) e
 [ACT-06/MET-01–12](.specs/features/dashboard-actions/spec.md). Endpoints
 novos, sem alterar `/dashboard/performance` nem o checkpoint (PERF-08):

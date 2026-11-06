@@ -41,12 +41,13 @@ confirmação (PERF-01).
 
 - [x] Componentes e práticas no design.md.
 - [x] RFC 048 / ADR 061 e emenda da spec (este commit).
-- [ ] B — Métricas de expediente (MET-01–05) e retomada em 72h (ACT-06):
+- [x] B — Métricas de expediente (MET-01–05) e retomada em 72h (ACT-06):
       migração 0061 e `GET /api/v1/dashboard/metrics/service`.
 - [x] C — Lead perdido com motivo (MET-06–08): migração 0062,
       `/api/v1/conversations/:id/lead-outcome` e
       `GET /api/v1/dashboard/metrics/losses`.
-- [ ] D — Presença e R$/hora (MET-09–11) com heartbeat no cliente:
+- [ ] D — **Backlog** (adiada pelo PO em 05/11/2026; não implementar sem
+      nova decisão). Presença e R$/hora (MET-09–11) com heartbeat no cliente:
       migração 0063, `POST /api/v1/presence/heartbeat`,
       `GET /api/v1/dashboard/metrics/presence`, flag desligada, teste de
       balanceamento e aviso à equipe antes de ligar.

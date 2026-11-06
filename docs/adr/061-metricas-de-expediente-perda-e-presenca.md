@@ -6,6 +6,10 @@ complementar à [RFC 044](../rfc/044-performance-comercial-e-central-de-acoes.md
 Contrato: [ACT-06 emendado e MET-01–12](../../.specs/features/dashboard-actions/spec.md).
 Tarefa: ACT-T04.
 
+Atualização de 05/11/2026: a presença e o R$ por hora online (MET-09–11)
+foram adiados pelo PO para o backlog; nada deles é implementado nem
+migrado (a migração 0063 fica reservada). O restante segue aceito.
+
 **Supersede em parte a [ADR 059](059-central-de-acoes-e-performance-comercial.md)
 somente no intervalo da sugestão de retomada (48h → 72h).** Emenda a
 fronteira “novo status comercial” da spec para admitir a perda declarada

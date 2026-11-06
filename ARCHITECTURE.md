@@ -203,7 +203,7 @@ A [ADR 061](docs/adr/061-metricas-de-expediente-perda-e-presenca.md)
 SQL versionada `crm.business_minutes_v1`: tempo para assumir, 1ª resposta e
 “sem resposta” acima de 15 minutos úteis. Lead perdido é declaração humana
 com motivo, em `crm.lead_outcome_events`, sem encerrar a conversa nem mudar
-pedido. Presença (`crm.user_presence_minutes`, flag desligada, 90 dias)
+pedido. Presença (`crm.user_presence_minutes`, flag desligada, 90 dias), em backlog desde 05/11/2026,
 alimenta o R$ por hora online; vendedor vê só a própria linha.
 
 O responsável ou administrador encerra explicitamente um ciclo de Conversa
