@@ -24,12 +24,22 @@ function harness(actor = SELLER, record) {
   const calls = [];
   /** @type {string[]} */
   const logs = [];
+  /** @param {any} input */
+  const session = (input) => {
+    if (!String(input.cookie ?? '').includes('crm_session='))
+      throw Object.assign(new Error('no session'), {
+        statusCode: 401,
+        code: 'INVALID_CREDENTIALS',
+      });
+  };
   const runtime = {
     authorizeRead: async (/** @type {any} */ input) => {
+      session(input);
       authorize(actor, input.action);
       return { actor };
     },
     authorizeWrite: async (/** @type {any} */ input) => {
+      session(input);
       authorize(actor, input.action);
       if (input.origin !== ORIGIN || input.csrfToken !== 'synthetic-csrf')
         throw Object.assign(new Error('forbidden'), {
@@ -147,6 +157,19 @@ test('MET-06: a valid loss reaches the runtime trimmed and the answer never echo
     note: `${'a'.repeat(139)}🧵`,
   });
   assert.equal(limit.statusCode, 200);
+  // The length is measured after NFC: 140 decomposed "é" are 140 characters.
+  calls.length = 0;
+  const decomposed = await post(api, {
+    ...LOST,
+    note: `e${control(0x301)}`.repeat(140),
+  });
+  assert.equal(decomposed.statusCode, 200);
+  assert.equal(
+    parseLeadOutcomeCommand(calls[0].body).note,
+    control(0xe9).repeat(140),
+  );
+  const plain = await post(api, { ...LOST, note: 'Cliente desistiu' });
+  assert.equal(plain.statusCode, 200);
 });
 
 test('MET-06: extra keys, a forged actor and a note outside "outro" are 400', async (t) => {
@@ -210,6 +233,16 @@ test('MET-06: closed reason list and the 1-140 control-free note are 422', async
     [{ ...LOST, note: `sino${control(7)}` }, 'INVALID_LOSS_NOTE'],
     [{ ...LOST, note: `zero${control(0)}byte` }, 'INVALID_LOSS_NOTE'],
     [{ ...LOST, note: `bidi${control(0x202e)}texto` }, 'INVALID_LOSS_NOTE'],
+    [{ ...LOST, note: control(0x200e) }, 'INVALID_LOSS_NOTE'],
+    [
+      { ...LOST, note: `Cliente${control(0x200b)}desistiu` },
+      'INVALID_LOSS_NOTE',
+    ],
+    [{ ...LOST, note: `privado${control(0xe000)}` }, 'INVALID_LOSS_NOTE'],
+    [{ ...LOST, note: `sepa${control(0x2028)}rador` }, 'INVALID_LOSS_NOTE'],
+    [{ ...LOST, note: '!!! ...' }, 'INVALID_LOSS_NOTE'],
+    [{ ...LOST, note: '🧵🧵' }, 'INVALID_LOSS_NOTE'],
+    [{ ...LOST, note: `e${control(0x301)}`.repeat(141) }, 'INVALID_LOSS_NOTE'],
   ])) {
     const refused = await post(api, JSON.parse(JSON.stringify(body)));
     assert.equal(refused.statusCode, 422, JSON.stringify(body));
@@ -326,4 +359,42 @@ test('MET-08: the detail read takes no query and losses accept only days=7|30', 
     assert.equal(refused.statusCode, 400, url);
     assert.equal(refused.json().code, code, url);
   }
+});
+
+test('MET-06: no session is 401 and the command limit is 30 per minute', async (t) => {
+  const { api, calls } = harness();
+  t.after(() => api.close());
+  for (const request of [
+    { method: 'GET', url: URL },
+    { method: 'GET', url: LOSSES_URL },
+    {
+      method: 'POST',
+      url: URL,
+      headers: {
+        origin: ORIGIN,
+        'x-csrf-token': 'synthetic-csrf',
+        'idempotency-key': 'lead-command-synthetic',
+      },
+      payload: LOST,
+    },
+  ]) {
+    const refused = await api.inject(/** @type {any} */ (request));
+    assert.equal(refused.statusCode, 401, request.url);
+    assert.equal(refused.json().code, 'INVALID_CREDENTIALS', request.url);
+  }
+  assert.equal(calls.length, 0);
+  const limited = harness();
+  t.after(() => limited.api.close());
+  const statuses = [];
+  for (let attempt = 0; attempt < 31; attempt += 1)
+    statuses.push(
+      (
+        await post(limited.api, LOST, {
+          'idempotency-key': `lead-command-${attempt}`,
+        })
+      ).statusCode,
+    );
+  assert.deepEqual(statuses.slice(0, 30), Array(30).fill(200));
+  assert.equal(statuses.at(-1), 429);
+  assert.equal(limited.calls.length, 30);
 });

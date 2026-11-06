@@ -13,9 +13,13 @@ import { EFFECTIVE_HUMAN_SEND } from './lead-outcome-sql.js';
 /** MET-06: the `outro` note, after trimming, in Unicode characters. */
 export const LEAD_NOTE_MAX_LENGTH = 140;
 const TERMINAL_STATES = ['encerrada', 'sem_lead', 'convertida_em_lead'];
-/** Control, lone surrogate, line/paragraph separators and bidi overrides. */
+/** Control, format (bidi, zero-width), private use, unassigned, lone
+ * surrogate and line/paragraph separators: none of them is readable text. */
 const FORBIDDEN_NOTE_CHARACTERS =
-  /[\p{Cc}\p{Cs}\u2028\u2029\u202a-\u202e\u2066-\u2069]/u;
+  /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}]/u;
+
+/** At least one letter or digit: punctuation or symbols alone say nothing. */
+const READABLE_NOTE = /[\p{L}\p{N}]/u;
 
 export class LeadOutcomeError extends Error {
   /** @param {number} statusCode @param {string} code */
@@ -103,12 +107,14 @@ export function parseLeadOutcomeCommand(body) {
   }
   if (typeof input.note !== 'string')
     throw new LeadOutcomeError(422, 'INVALID_LOSS_NOTE');
-  const note = input.note.trim();
+  // NFC first, so the length and the stored text are the canonical form.
+  const note = input.note.normalize('NFC').trim();
   const length = [...note].length;
   if (
     length < 1 ||
     length > LEAD_NOTE_MAX_LENGTH ||
-    FORBIDDEN_NOTE_CHARACTERS.test(note)
+    FORBIDDEN_NOTE_CHARACTERS.test(note) ||
+    !READABLE_NOTE.test(note)
   )
     throw new LeadOutcomeError(422, 'INVALID_LOSS_NOTE');
   return {
@@ -219,6 +225,10 @@ export function createLeadOutcomeRuntime(database, options) {
             [conversationId],
           )
         ).rows[0];
+        // A seller cannot tell a missing conversation from someone else's:
+        // both are 403. Only an administrator learns that it does not exist.
+        if (!conversation && actor.scope !== 'team')
+          throw new LeadOutcomeError(403, 'FORBIDDEN');
         if (!conversation)
           throw new LeadOutcomeError(404, 'CONVERSATION_NOT_FOUND');
         if (
@@ -367,6 +377,8 @@ export function createLeadOutcomeRuntime(database, options) {
             [conversationId],
           )
         ).rows[0];
+        if (!conversation && reader.scope !== 'team')
+          throw new LeadOutcomeError(403, 'FORBIDDEN');
         if (!conversation)
           throw new LeadOutcomeError(404, 'CONVERSATION_NOT_FOUND');
         if (

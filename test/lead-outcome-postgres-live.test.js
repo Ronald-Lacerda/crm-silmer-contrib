@@ -423,18 +423,30 @@ test(
       { code: 'FORBIDDEN' },
     );
 
-    // Another seller and Financeiro are refused; missing conversation is 404.
+    // Another seller and Financeiro are refused. A seller cannot tell a
+    // missing conversation from someone else's (403); only an admin gets 404.
     const foreign = await conversation(seller.id);
     await human(foreign, seller.id);
     await assert.rejects(lose(other, foreign), { code: 'FORBIDDEN' });
     await assert.rejects(lose(financial, foreign), { code: 'FORBIDDEN' });
+    const missingBody = {
+      outcome: 'lost',
+      reasonCode: 'preco',
+      expectedConversationVersion: 1,
+      expectedOutcomeVersion: 0,
+    };
+    await assert.rejects(record(seller, `missing-${runId}`, missingBody), {
+      code: 'FORBIDDEN',
+    });
     await assert.rejects(
-      record(seller, `missing-${runId}`, {
-        outcome: 'lost',
-        reasonCode: 'preco',
-        expectedConversationVersion: 1,
-        expectedOutcomeVersion: 0,
-      }),
+      leads.detail({ actor: seller, conversationId: `missing-${runId}` }),
+      { code: 'FORBIDDEN' },
+    );
+    await assert.rejects(record(admin, `missing-${runId}`, missingBody), {
+      code: 'CONVERSATION_NOT_FOUND',
+    });
+    await assert.rejects(
+      leads.detail({ actor: admin, conversationId: `missing-${runId}` }),
       { code: 'CONVERSATION_NOT_FOUND' },
     );
 
@@ -764,5 +776,58 @@ test(
     // The service snapshot still reads with the active-loss filter.
     const service = await metrics.service({ actor: admin, days: 7 });
     assert.equal(service.scope, 'team');
+
+    // A replay of the same key after the seller lost the conversation is
+    // refused, never answered from the cache.
+    const transferred = await conversation(seller.id);
+    await human(transferred, seller.id);
+    const transferredBody = {
+      outcome: 'lost',
+      reasonCode: 'preco',
+      expectedConversationVersion: await conversationVersion(transferred),
+      expectedOutcomeVersion: 0,
+    };
+    await record(seller, transferred, transferredBody, `owned-${runId}`);
+    await pool.query(
+      `UPDATE crm.conversations SET assigned_user_id=$2,version=version+1 WHERE id=$1`,
+      [transferred, other.id],
+    );
+    await assert.rejects(
+      record(seller, transferred, transferredBody, `owned-${runId}`),
+      { code: 'FORBIDDEN' },
+    );
+
+    // A customer message racing the declaration never leaves a waiting
+    // customer behind an active loss: either the command conflicts or the
+    // loss is reopened by that message, and the reply is in the queue.
+    for (let round = 0; round < 6; round += 1) {
+      const racing = await conversation(seller.id);
+      await human(racing, seller.id);
+      const body = {
+        outcome: 'lost',
+        reasonCode: 'silencio',
+        expectedConversationVersion: await conversationVersion(racing),
+        expectedOutcomeVersion: 0,
+      };
+      const [declared] = await Promise.allSettled([
+        record(seller, racing, body),
+        customer(racing),
+      ]);
+      const state = (
+        await leads.detail({ actor: seller, conversationId: racing })
+      ).state;
+      if (declared.status === 'fulfilled')
+        assert.equal(state, 'reopened_by_customer');
+      else {
+        assert.ok(
+          ['VERSION_CONFLICT', 'LEAD_AWAITING_REPLY'].includes(
+            declared.reason.code,
+          ),
+          declared.reason.code,
+        );
+        assert.equal(state, 'open');
+      }
+      assert.deepEqual(await actionKinds(seller, racing), ['reply']);
+    }
   },
 );

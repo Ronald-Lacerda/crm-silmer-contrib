@@ -1618,7 +1618,10 @@ paths:
       description: >-
         Ação conversation.read com papel relido no PostgreSQL. Somente o
         responsável atual da conversa ou administrador ativo
-        (COMMERCIAL_ADMIN); outro vendedor e Financeiro recebem 403. Estado
+        (COMMERCIAL_ADMIN); outro vendedor e Financeiro recebem 403. Sem
+        sessão válida é 401 INVALID_CREDENTIALS. Para não-administrador,
+        conversa inexistente também é 403 (não revela existência); só o
+        administrador recebe 404 CONVERSATION_NOT_FOUND. Estado
         derivado, sem escrita no caminho de entrada: `open` (nenhum
         desfecho), `lost` (último evento é perda e a última mensagem do
         cliente ainda é aquela sobre a qual a perda foi declarada),
@@ -1642,16 +1645,23 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/LeadOutcomeDetail' }
         '400': { $ref: '#/components/responses/LeadOutcomeProblem' }
+        '401': { $ref: '#/components/responses/LeadOutcomeProblem' }
         '403': { $ref: '#/components/responses/LeadOutcomeProblem' }
         '404': { $ref: '#/components/responses/LeadOutcomeProblem' }
-        '429': { description: Limite de leituras excedido }
+        '429':
+          description: >-
+            Mais de 60 leituras por minuto do mesmo cliente; corpo JSON do
+            limitador, sem dados da conversa
         '503': { $ref: '#/components/responses/LeadOutcomeProblem' }
     post:
       operationId: recordLeadOutcome
       summary: Declara lead perdido com motivo ou corrige a perda (MET-06–08)
       description: >-
-        Ação conversation.transition. Somente o responsável atual ou
-        administrador; `ownerId` é o responsável no momento e `markedBy`
+        Ação conversation.transition. Sem sessão válida é 401
+        INVALID_CREDENTIALS; Origin/CSRF inválidos são 403. Somente o
+        responsável atual ou administrador; para não-administrador,
+        conversa inexistente ou alheia é 403 FORBIDDEN e só o administrador
+        recebe 404 CONVERSATION_NOT_FOUND. `ownerId` é o responsável no momento e `markedBy`
         quem declarou (actorId no corpo é 400). Exige conversa com
         responsável, em modo humano e aberta (409 LEAD_NOT_ELIGIBLE). Perda
         é recusada com 409 LEAD_HAS_ORDER se o ciclo tiver pedido pendente
@@ -1663,9 +1673,12 @@ paths:
         `expectedOutcomeVersion` divergentes são 409 VERSION_CONFLICT. Não
         altera estado, encerramento ou versão da conversa nem pedido, e não
         usa Negócio. `reasonCode` fora da lista é 422 INVALID_LOSS_REASON;
-        `outro` exige `note` de 1–140 caracteres após trim, sem caracteres
-        de controle (422 INVALID_LOSS_NOTE), e `note` com outro motivo é
-        400. O texto é cifrado (AES-256-GCM, AAD do evento) e nunca aparece
+        `outro` exige `note` normalizada em NFC, de 1–140 caracteres após
+        trim, com ao menos uma letra ou número e sem caracteres de
+        controle, formatação (bidi, largura zero), uso privado, não
+        atribuídos ou separadores de linha (422 INVALID_LOSS_NOTE); `note`
+        com outro motivo é 400. Replay da mesma chave por quem perdeu a
+        posse é 403, nunca a resposta guardada. O texto é cifrado (AES-256-GCM, AAD do evento) e nunca aparece
         na resposta, em logs, auditoria (`lead.outcome.recorded` com versão
         e código do motivo), idempotência ou agregações. Mesma chave com o
         mesmo comando devolve a mesma resposta; com outro comando é 409
@@ -1689,11 +1702,15 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/LeadOutcomeRecorded' }
         '400': { $ref: '#/components/responses/LeadOutcomeProblem' }
+        '401': { $ref: '#/components/responses/LeadOutcomeProblem' }
         '403': { $ref: '#/components/responses/LeadOutcomeProblem' }
         '404': { $ref: '#/components/responses/LeadOutcomeProblem' }
         '409': { $ref: '#/components/responses/LeadOutcomeProblem' }
         '422': { $ref: '#/components/responses/LeadOutcomeProblem' }
-        '429': { description: Limite de comandos excedido }
+        '429':
+          description: >-
+            Mais de 30 comandos por minuto do mesmo cliente; corpo JSON do
+            limitador, sem efeito no domínio
         '503': { $ref: '#/components/responses/LeadOutcomeProblem' }
   /conversations/{conversationId}/archive:
     post:
@@ -2594,7 +2611,8 @@ paths:
       description: >-
         Mesmo escopo e validação de `/dashboard/metrics/service`: vendedor
         ativo recebe só a própria linha, administrador ativo recebe a equipe
-        e `totals`, Financeiro recebe 403; chave além de `days` é 400
+        e `totals`, Financeiro recebe 403 e sem sessão válida é 401
+        INVALID_CREDENTIALS (corpo application/problem+json com `code`); chave além de `days` é 400
         INVALID_REQUEST e outro valor de `days` é 400 INVALID_FILTER. Uma
         perda é efetiva salvo quando a versão seguinte é uma reabertura
         manual (correção). Cada conversa conta uma vez, pela última perda
@@ -2621,7 +2639,10 @@ paths:
         '400': { $ref: '#/components/responses/InvalidRequest' }
         '401': { $ref: '#/components/responses/InvalidCredentials' }
         '403': { $ref: '#/components/responses/Forbidden' }
-        '429': { description: Limite de leituras excedido }
+        '429':
+          description: >-
+            Mais de 60 leituras por minuto do mesmo cliente; corpo JSON do
+            limitador
         '503': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
@@ -2893,8 +2914,10 @@ components:
             note:
               type: string
               description: >-
-                Obrigatório só com `outro`: 1–140 caracteres após trim, sem
-                caracteres de controle. Proibido com outro motivo.
+                Obrigatório só com `outro`: NFC, 1–140 caracteres após trim,
+                ao menos uma letra ou número, sem caracteres de controle,
+                formatação, uso privado ou não atribuídos. Proibido com
+                outro motivo.
             expectedConversationVersion: { type: integer, minimum: 1 }
             expectedOutcomeVersion: { type: integer, minimum: 0 }
         - type: object
@@ -5575,7 +5598,7 @@ components:
       description: >-
         application/problem+json com `code` público: INVALID_REQUEST,
         INVALID_IDEMPOTENCY_KEY, INVALID_LOSS_REASON, INVALID_LOSS_NOTE,
-        FORBIDDEN, CSRF_INVALID, CONVERSATION_NOT_FOUND, LEAD_NOT_ELIGIBLE,
+        INVALID_CREDENTIALS, FORBIDDEN, CSRF_INVALID, CONVERSATION_NOT_FOUND, LEAD_NOT_ELIGIBLE,
         LEAD_HAS_ORDER, LEAD_AWAITING_REPLY, LEAD_ALREADY_LOST,
         LEAD_NOT_LOST, VERSION_CONFLICT, IDEMPOTENCY_KEY_REUSED ou
         SERVICE_UNAVAILABLE, sem eco do corpo recebido
