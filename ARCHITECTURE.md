@@ -311,3 +311,11 @@ supersede o chat comercial ativo do site dos ADRs 026/034. Site/linktree
 usam link direto; o webhook antigo responde orientação estática antes de
 CRM/IA. A loja e dados históricos mantêm seus contratos. Configuração do
 perfil/Direct Instagram e publicação n8n exigem evidência própria.
+
+## Saúde operacional — OPS-HEALTH-T01
+
+A [ADR 060](docs/adr/060-saude-operacional-e-retencao-tecnica.md) define
+heartbeat/progresso por fila e snapshot operacional público200/503 atualizado
+a cada minuto, sem I/O por request. Diagnósticos da central têm14dias de
+retenção e limpeza diária limitada, fora da leitura. Coleta segue manual.
+Sem nova infraestrutura ou alteração do healthcheck de restart.

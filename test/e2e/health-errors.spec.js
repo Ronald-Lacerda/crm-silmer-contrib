@@ -473,13 +473,13 @@ test('OPS-INBOX-ACK-04: review and archive only the 12 WAHA pendencies by keyboa
     name: 'Resultado de tarefa desconhecido',
   });
   await expect(workerCard.locator('.health-error-facts')).toContainText(
-    'Ocorrências históricas (30 dias)14',
+    'Ocorrências históricas (14 dias)14',
   );
   await expect(workerCard.locator('.health-error-facts')).toContainText(
     'Pendências atuais1',
   );
   await expect(evolution.locator('.health-error-facts')).toContainText(
-    'Ocorrências históricas (30 dias)13',
+    'Ocorrências históricas (14 dias)13',
   );
   await expect(
     page.locator('.health-error-status').filter({ hasText: 'Resolvido' }),

@@ -1045,3 +1045,9 @@ local; relatório em `../inbound-media-inbox/validation.md`. Nenhuma aplicação
 ativação, recuperação de dados ou alteração
 operacional em produção concluída. Leitura do ambiente confirmou duas imagens
 sem anexos e recursos do scanner indisponíveis para a API; o worker os possui.
+
+## OPS-HEALTH-T01 — Sinais e healthcheck operacional (05/11/2026)
+
+Implementação e gates em [operational-health](../operational-health/tasks.md).
+OPSH-01–05, OPS-ERR-03/04/08, ADR060, RFC045 e issue11.
+Coleta permanece manual; expurgo diário14dias autorizado pelo proprietário.

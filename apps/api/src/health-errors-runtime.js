@@ -20,16 +20,28 @@ const CODES = new Map([
 const UUID =
   /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu;
 const RETENTION_SQL = [
-  "DELETE FROM crm.operational_incident_receipts WHERE observed_at < now() - interval '30 days'",
-  "DELETE FROM crm.operational_incident_history WHERE occurred_at < now() - interval '30 days'",
-  "DELETE FROM crm.operational_incidents WHERE last_seen_at < now() - interval '30 days'",
-  `UPDATE crm.operational_incidents i SET
-     occurrences = r.total, first_seen_at = r.first_seen,
-     version = nextval('crm.operational_incident_version')
-   FROM (SELECT incident_id, count(*)::bigint AS total, min(observed_at) AS first_seen
-         FROM crm.operational_incident_receipts GROUP BY incident_id) r
-   WHERE i.id = r.incident_id
-     AND (i.occurrences <> r.total OR i.first_seen_at <> r.first_seen)`,
+  `DELETE FROM crm.operational_incident_receipts WHERE event_key IN (
+     SELECT event_key FROM crm.operational_incident_receipts
+     WHERE observed_at < now() - interval '14 days'
+     ORDER BY observed_at, event_key LIMIT 1000
+   ) RETURNING event_key`,
+  `DELETE FROM crm.operational_incident_history WHERE id IN (
+     SELECT id FROM crm.operational_incident_history
+      WHERE occurred_at < now() - interval '14 days'
+        OR EXISTS (SELECT 1 FROM crm.operational_incidents i
+          WHERE i.id=incident_id AND i.last_seen_at < now() - interval '14 days'
+            AND NOT EXISTS (SELECT 1 FROM crm.operational_incident_receipts r
+              WHERE r.incident_id=i.id AND r.observed_at >= now()-interval '14 days'))
+     ORDER BY occurred_at, id LIMIT 1000
+   ) RETURNING id`,
+  // Never cascade a large group: its children must drain in bounded batches first.
+  `DELETE FROM crm.operational_incidents WHERE id IN (
+     SELECT i.id FROM crm.operational_incidents i
+     WHERE i.last_seen_at < now() - interval '14 days'
+       AND NOT EXISTS (SELECT 1 FROM crm.operational_incident_receipts r WHERE r.incident_id = i.id)
+       AND NOT EXISTS (SELECT 1 FROM crm.operational_incident_history h WHERE h.incident_id = i.id)
+     ORDER BY i.last_seen_at, i.id LIMIT 1000
+   ) RETURNING id`,
 ];
 
 /** @param {number} statusCode @param {string} code */
@@ -115,10 +127,21 @@ function incidentView(row) {
 
 /** @param {any} client */
 async function cleanup(client) {
-  await client.query(
-    "SELECT pg_advisory_xact_lock(hashtextextended('operational-incidents', 0))",
+  await client.query("SET LOCAL lock_timeout = '100ms'");
+  await client.query("SET LOCAL statement_timeout = '1s'");
+  const lock = await client.query(
+    "SELECT pg_try_advisory_xact_lock(hashtextextended('operational-incidents', 0)) AS acquired",
   );
-  for (const sql of RETENTION_SQL) await client.query(sql);
+  if (lock.rows[0]?.acquired !== true)
+    return { skipped: true, deleted: 0, batchFull: false };
+  let deleted = 0;
+  let batchFull = false;
+  for (const sql of RETENTION_SQL) {
+    const result = await client.query(sql);
+    deleted += result.rows.length;
+    batchFull ||= result.rows.length === 1000;
+  }
+  return { skipped: false, deleted, batchFull };
 }
 
 /**
@@ -200,7 +223,7 @@ const SOURCE_STATES_SQL = `
       n8n_command_id
     FROM crm.outbox_jobs
     WHERE status IN ('retry', 'dead_letter', 'outcome_unknown')
-      AND updated_at >= now() - interval '30 days'
+      AND updated_at >= now() - interval '14 days'
     UNION ALL
     SELECT 'n8n',
       CASE status WHEN 'failed' THEN 'N8N_FAILED'
@@ -213,14 +236,14 @@ const SOURCE_STATES_SQL = `
     FROM crm.n8n_commands
     WHERE (status IN ('failed', 'outcome_unknown')
         OR (status = 'processing' AND locked_until < now()))
-      AND updated_at >= now() - interval '30 days'`;
+      AND updated_at >= now() - interval '14 days'`;
 
 const SOURCE_FAILURES_SQL = `
   WITH sources AS (${SOURCE_STATES_SQL}), candidates AS (
     SELECT source, code, observed_at,
       encode(sha256(convert_to(receipt, 'UTF8')), 'hex') AS event_key
     FROM sources
-    WHERE observed_at <= now() AND observed_at >= now() - interval '30 days'
+    WHERE observed_at <= now() AND observed_at >= now() - interval '14 days'
   )
   SELECT * FROM candidates c WHERE NOT EXISTS (
     SELECT 1 FROM crm.operational_incident_receipts r WHERE r.event_key = c.event_key
@@ -394,7 +417,7 @@ const ACTIVE_FAILURES_SQL = `WITH sources AS (${SOURCE_STATES_SQL}),
   SELECT source, code, count(*)::int AS active_count,
     min(observed_at) AS active_first_seen_at, max(observed_at) AS active_last_seen_at
   FROM sources s
-  WHERE observed_at <= now() AND observed_at >= now() - interval '30 days'
+  WHERE observed_at <= now() AND observed_at >= now() - interval '14 days'
     AND NOT EXISTS (SELECT 1 FROM crm.n8n_command_operational_archives a
                     WHERE a.command_id = s.n8n_command_id)
     AND NOT EXISTS (SELECT 1 FROM concluded c WHERE c.command_id=s.n8n_command_id)
@@ -451,14 +474,20 @@ async function legacyArchiveManifest(client, lock = false) {
   return { rows, count: rows.length, fingerprint };
 }
 
-const SELECT_INCIDENT_SQL = `SELECT i.*, coalesce((
+const SELECT_INCIDENT_SQL = `SELECT i.*, r.total AS occurrences,
+  r.first_seen AS first_seen_at, r.last_seen AS last_seen_at, coalesce((
   SELECT jsonb_agg(h.entry ORDER BY h.occurred_at, h.version)
   FROM (SELECT jsonb_build_object('status', status, 'at', occurred_at) AS entry,
           occurred_at, version
         FROM crm.operational_incident_history WHERE incident_id = i.id
-          AND occurred_at >= now() - interval '30 days'
+          AND occurred_at >= now() - interval '14 days'
         ORDER BY version DESC LIMIT 50) h
-), '[]'::jsonb) AS history FROM crm.operational_incidents i`;
+), '[]'::jsonb) AS history FROM crm.operational_incidents i
+JOIN LATERAL (
+  SELECT count(*)::bigint AS total, min(observed_at) AS first_seen, max(observed_at) AS last_seen
+  FROM crm.operational_incident_receipts WHERE incident_id = i.id
+    AND observed_at >= now() - interval '14 days'
+) r ON r.total > 0`;
 
 /**
  * No raw exception, URL, customer identifier or external error text enters this
@@ -507,7 +536,7 @@ export function createHealthErrorsRuntime({
 
   return Object.freeze({
     async cleanup() {
-      await database.transaction(cleanup);
+      return database.transaction(cleanup);
     },
     /** @param {any} input */
     async list(input) {
@@ -520,7 +549,6 @@ export function createHealthErrorsRuntime({
         throw failure(400, 'INVALID_REQUEST');
       return database.transaction(async (/** @type {any} */ client) => {
         await identity.authorizeHealthErrors(auth, client);
-        await cleanup(client);
         const sources = await client.query(SOURCE_FAILURES_SQL);
         // Limit each refresh to a bounded transaction. The next refresh continues
         // the unseen receipts instead of losing the older part of the queue.
@@ -533,7 +561,7 @@ export function createHealthErrorsRuntime({
           });
         }
         const result = await client.query(
-          `${SELECT_INCIDENT_SQL} WHERE i.last_seen_at >= now() - interval '30 days'
+          `${SELECT_INCIDENT_SQL} WHERE i.last_seen_at >= now() - interval '14 days'
            ORDER BY i.last_seen_at DESC, i.id LIMIT 100`,
         );
         const items = await projectActivity(client, result.rows);

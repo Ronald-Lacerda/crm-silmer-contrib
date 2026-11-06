@@ -67,6 +67,9 @@ const categoricalPolicies = new Map([
       allowed: new Set([
         'API_START_FAILED',
         'JOB_FAILED',
+        'WORKER_HEALTH_PUBLISH_FAILED',
+        'OPERATIONAL_SAMPLING_FAILED',
+        'OPERATIONAL_CLEANUP_INCOMPLETE',
         'MEDIA_LEASE_LOST',
         'MEDIA_PROCESS_UNAVAILABLE',
         'CLAM_SIGNATURE_REFRESH_FAILED',
@@ -101,7 +104,12 @@ const categoricalPolicies = new Map([
   [
     'queue',
     {
-      allowed: new Set(['default', 'external_effects', 'chat_media']),
+      allowed: new Set([
+        'default',
+        'external_effects',
+        'chat_media',
+        'media-retention',
+      ]),
       fallback: 'unknown_queue',
     },
   ],

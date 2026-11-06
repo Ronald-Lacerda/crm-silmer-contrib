@@ -470,7 +470,7 @@ tarefa OPS-ERR-T01. Complementa PRV-01 e a observabilidade da issue #11.
 4. **OPS-ERR-04:** WHEN a central mostra ou persiste diagnóstico THEN SHALL
    limitar os dados a códigos controlados, contagens, horários, versões e
    IDs opacos permitidos; corpos, mensagens, dados de cliente, credenciais e
-   erros livres SHALL não aparecer. Retenção técnica SHALL ser de 30 dias.
+   erros livres SHALL não aparecer. Retenção técnica SHALL ser de 14 dias, com limpeza diária conforme ADR 060 e OPSH-04.
 5. **OPS-ERR-05:** WHEN o operador altera Novo, Em análise ou Resolvido THEN
    SHALL haver CSRF, origem, idempotência, versão e auditoria transacionais;
    conflito SHALL exigir atualização e histórico SHALL registrar as mudanças.

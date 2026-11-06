@@ -2,7 +2,10 @@ import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 
 import { PostgresAuditTrail } from '@crm-silmer/audit-privacy';
-import { createDatabase } from '@crm-silmer/database';
+import {
+  createDatabase,
+  PostgresOperationalSignals,
+} from '@crm-silmer/database';
 import { createMetaWhatsAppNormalizer } from '@crm-silmer/inbox-channels';
 import {
   InMemoryMetaEventStore,
@@ -28,6 +31,7 @@ import { registerHealthErrorsRoutes } from './health-errors-routes.js';
 import { createShippingApiRuntime } from './shipping-runtime.js';
 import { createN8nApiRuntime } from './n8n-runtime.js';
 import { createOperationReadRuntime } from './operation-runtime.js';
+import { createOperationalHealth } from './operational-health.js';
 import { createOperationalAuthRuntime } from './operational-auth-runtime.js';
 import { createOrderApiRuntime } from './order-runtime.js';
 import { createOrderAssistanceRuntime } from './order-assistance-runtime.js';
@@ -67,6 +71,7 @@ import { createSafeLogger, SERVICES } from '@crm-silmer/shared';
  *   dashboard?: ReturnType<typeof createDashboardApiRuntime>,
  *   dashboardCheckpoint?: ReturnType<typeof createDashboardCheckpointRuntime>,
  *   healthErrors?: ReturnType<typeof createHealthErrorsRuntime>,
+ *   operationalHealth?: ReturnType<typeof createOperationalHealth>,
  *   shipping?: ReturnType<typeof createShippingApiRuntime>,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime,
  *   subjects?: Record<string, any>,
@@ -326,6 +331,38 @@ export function createServerApi(runtime = {}) {
     // below must finish using its transactions before the pool is closed.
     api.addHook('onClose', closeDatabase.bind(database));
   }
+  const operationalSignals = database
+    ? new PostgresOperationalSignals({ database })
+    : undefined;
+  const operationalHealth =
+    runtime.operationalHealth ??
+    createOperationalHealth({
+      sample: async () => {
+        if (!operationalSignals) throw new Error('UNAVAILABLE');
+        return operationalSignals.sample([
+          'external_effects',
+          'media-retention',
+          ...(environment.CHAT_MEDIA_ENABLED === 'true' ? ['chat_media'] : []),
+        ]);
+      },
+      onFailure: () =>
+        logger.error('api_request_failed', {
+          error_code: 'OPERATIONAL_SAMPLING_FAILED',
+        }),
+    });
+  api.get('/api/health/operations', async (_request, reply) => {
+    const result = operationalHealth.read();
+    return reply
+      .header('cache-control', 'no-store')
+      .code(result.statusCode)
+      .send(result.body);
+  });
+  api.addHook('onReady', async () => {
+    operationalHealth.start();
+  });
+  api.addHook('onClose', async () => {
+    await operationalHealth.stop();
+  });
   const healthErrors =
     runtime.healthErrors ??
     (database && runtime.identity && environment.IDEMPOTENCY_ENVELOPE_KEY
@@ -344,16 +381,38 @@ export function createServerApi(runtime = {}) {
     const pendingIncidents = new Set();
     /** @type {ReturnType<typeof setInterval> | undefined} */
     let incidentCleanup;
+    let cleanupRunning = false;
     api.addHook('onReady', async () => {
       const purge = () => {
-        const pending = healthErrors.cleanup().catch(() => {
-          logger.error('api_request_failed', { error_code: 'UNHANDLED_ERROR' });
-        });
+        if (cleanupRunning) return;
+        cleanupRunning = true;
+        const pending = (async () => {
+          const startedAt = Date.now();
+          let result;
+          // Release DB locks between small batches; bound the whole daily pass.
+          for (let batch = 0; batch < 20; batch++) {
+            result = await healthErrors.cleanup();
+            if (!result?.batchFull || Date.now() - startedAt >= 5000) break;
+            await new Promise((resolve) => globalThis.setImmediate(resolve));
+          }
+          if (result?.batchFull || result?.skipped)
+            logger.warn('api_request_failed', {
+              error_code: 'OPERATIONAL_CLEANUP_INCOMPLETE',
+            });
+        })()
+          .catch(() => {
+            logger.error('api_request_failed', {
+              error_code: 'OPERATIONAL_CLEANUP_INCOMPLETE',
+            });
+          })
+          .finally(() => {
+            cleanupRunning = false;
+          });
         pendingIncidents.add(pending);
         void pending.finally(() => pendingIncidents.delete(pending));
       };
       purge();
-      incidentCleanup = globalThis.setInterval(purge, 60 * 60_000);
+      incidentCleanup = globalThis.setInterval(purge, 24 * 60 * 60_000);
       incidentCleanup.unref();
     });
     api.addHook('onResponse', async (request, reply) => {
@@ -362,6 +421,7 @@ export function createServerApi(runtime = {}) {
       if (
         reply.statusCode < 500 ||
         pendingIncidents.size >= 16 ||
+        request.routeOptions.url === '/api/health/operations' ||
         request.routeOptions.url?.startsWith('/api/v1/admin/health-errors')
       )
         return;

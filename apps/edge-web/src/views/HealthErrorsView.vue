@@ -286,7 +286,7 @@ onBeforeUnmount(() => {
     </header>
 
     <p class="health-errors-scope">
-      Pendências ativas e histórico dos últimos 30 dias são consultas distintas.
+      Pendências ativas e histórico dos últimos 14 dias são consultas distintas.
       Arquivar uma pendência não confirma o resultado do envio. Erros da API são
       registrados a partir da ativação desta central; falhas de tarefas e
       comandos n8n são coletadas dos registros do CRM. Esta consulta não
@@ -441,7 +441,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <p v-if="answer" class="health-errors-checked">
-        {{ answeredView === 'active' ? 'Ativas' : 'Histórico (30 dias)' }} ·
+        {{ answeredView === 'active' ? 'Ativas' : 'Histórico (14 dias)' }} ·
         {{ filterLabel }} · Última consulta:
         {{ healthErrorInstant(answer.checkedAt) }} (Brasília). Até 100
         ocorrências agrupadas.
@@ -498,7 +498,7 @@ onBeforeUnmount(() => {
             </dl>
             <dl v-else class="health-error-facts">
               <div>
-                <dt>Ocorrências históricas (30 dias)</dt>
+                <dt>Ocorrências históricas (14 dias)</dt>
                 <dd>{{ item.occurrences }}</dd>
               </div>
               <div>
@@ -519,7 +519,7 @@ onBeforeUnmount(() => {
               <dl>
                 <template v-if="answeredView === 'active'">
                   <div>
-                    <dt>Ocorrências históricas (30 dias)</dt>
+                    <dt>Ocorrências históricas (14 dias)</dt>
                     <dd>{{ item.occurrences }}</dd>
                   </div>
                   <div>

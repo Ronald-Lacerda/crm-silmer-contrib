@@ -521,13 +521,19 @@ não herdam a retenção curta de mídia.
 
 ## 8. Deploy, recuperação e observabilidade
 
+OPSH-01–05 / OPS-HEALTH-T01: heartbeat e progresso por fila no PostgreSQL;
+amostragem a cada 60s, snapshot com validade120s. GET /api/health/operations
+lê somente memória e responde200/503 com status técnicos. Não usar para restart.
+Consultas indexadas, lock_timeout100ms, statement_timeout1s e execução única.
+Nenhuma coleta automática de incidentes. Ver ADR060 e runbook de Saúde e erros.
+
 A central **Saúde e erros** (ADR 055, OPS-ERR-T01) usa o shell Vue e o
 PostgreSQL existentes. A API exige a conta humana operadora designada,
 ativa e com `COMMERCIAL_ADMIN`, inclusive na consulta e no replay de uma
 triagem. Captura 5xx e ingestão idempotente dos estados de falha de
 jobs/comandos n8n produzem grupos por origem e código controlado, sem
 payload ou erro livre. A triagem usa versão, CSRF, idempotência e auditoria;
-recorrências reabrem grupos resolvidos. Retenção técnica de 30 dias e
+recorrências reabrem grupos resolvidos. Retenção técnica de 14 dias (ADR 060), com limpeza diária fora da consulta e
 rollback expand-only no [runbook](docs/runbooks/saude-erros.md).
 
 Manter deploy automático GitHub→EasyPanel

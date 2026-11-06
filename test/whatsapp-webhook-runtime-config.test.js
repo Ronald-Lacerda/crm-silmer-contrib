@@ -6,6 +6,7 @@ import {
   createDurableMetaWebhookRuntime,
   createServerApi,
 } from '../apps/api/src/server.js';
+import { createOperationalHealth } from '../apps/api/src/operational-health.js';
 
 const DATABASE = /** @type {any} */ (
   Object.freeze({
@@ -116,7 +117,14 @@ test('rejects a signed callback outside the configured Meta account scope', asyn
       ],
     }),
   );
-  const api = createServerApi({ database, environment });
+  const api = createServerApi({
+    database,
+    environment,
+    // Count only webhook transactions, independently from periodic health work.
+    operationalHealth: createOperationalHealth({
+      sample: async () => ({ worker: true, queue: true, commands: true }),
+    }),
+  });
   const response = await api.inject({
     method: 'POST',
     url: '/api/v1/webhooks/meta/whatsapp',

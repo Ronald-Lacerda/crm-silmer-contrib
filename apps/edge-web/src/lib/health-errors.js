@@ -21,7 +21,7 @@ export const HEALTH_ERROR_STATUSES = Object.freeze([
 
 export const HEALTH_ERROR_VIEWS = Object.freeze([
   { value: 'active', label: 'Ativas' },
-  { value: 'history', label: 'Histórico (30 dias)' },
+  { value: 'history', label: 'Histórico (14 dias)' },
 ]);
 
 /** @param {string} value */

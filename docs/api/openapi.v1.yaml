@@ -6,6 +6,55 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /api/health/operations:
+    servers: [{ url: / }]
+    get:
+      operationId: readOperationalHealth
+      summary: Snapshot operacional público sem acesso ao banco por request
+      description: >-
+        OPSH-01–05 / ADR 060. Amostragem interna a cada 60 segundos; snapshot
+        vence após 120 segundos. Não usar para restart de containers ou
+        readiness de roteamento. Não comprova saúde de provedores externos.
+      security: []
+      responses:
+        '200':
+          description: Worker, fila e comandos saudáveis; Cache-Control no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status, checkedAt, checks]
+                properties:
+                  status: { enum: [ok] }
+                  checkedAt: { type: string, format: date-time }
+                  checks:
+                    type: object
+                    additionalProperties: false
+                    required: [worker, queue, commands]
+                    properties:
+                      worker: { enum: [ok, degraded] }
+                      queue: { enum: [ok, degraded] }
+                      commands: { enum: [ok, degraded] }
+        '503':
+          description: Sinal degradado ou snapshot ausente, falho ou vencido; Cache-Control no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [status]
+                properties:
+                  status: { enum: [degraded, unavailable] }
+                  checkedAt: { type: string, format: date-time }
+                  checks:
+                    type: object
+                    additionalProperties: false
+                    required: [worker, queue, commands]
+                    properties:
+                      worker: { enum: [ok, degraded] }
+                      queue: { enum: [ok, degraded] }
+                      commands: { enum: [ok, degraded] }
   /inbox/conversations/{conversationId}/order-assistance:
     get:
       operationId: readConversationOrderAssistance

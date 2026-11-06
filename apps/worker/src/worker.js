@@ -1,7 +1,10 @@
 import { pathToFileURL } from 'node:url';
 import { clearInterval, setInterval } from 'node:timers';
 
-import { createDatabase } from '@crm-silmer/database';
+import {
+  createDatabase,
+  PostgresOperationalSignals,
+} from '@crm-silmer/database';
 import {
   ClamAvMediaScanner,
   ClamAvDaemon,
@@ -39,6 +42,7 @@ export class WorkerRuntime {
    *   logger?: ReturnType<typeof createSafeLogger>,
    *   metrics?: MetricRegistry,
    *   now?: () => number,
+   *   healthSignals?: {publish: Function},
    *   pollIntervalMs?: number,
    *   queueName?: string,
    *   queue?: {claim: Function, heartbeat: Function, markEffectStarted: Function, settle: Function},
@@ -55,6 +59,11 @@ export class WorkerRuntime {
     this.pollIntervalMs = options.pollIntervalMs ?? 1_000;
     this.leaseMs = options.leaseMs ?? 30_000;
     this.now = options.now ?? Date.now;
+    this.healthSignals = options.healthSignals;
+    /** @type {Date|null} */
+    this.pollCompletedAt = null;
+    /** @type {Promise<void>|undefined} */
+    this.healthInFlight = undefined;
     this.queue = options.queue;
     this.queueName = options.queueName ?? 'default';
     this.handlers = Object.freeze({ ...(options.handlers ?? {}) });
@@ -84,6 +93,34 @@ export class WorkerRuntime {
   }
 
   emitHeartbeat() {
+    if (this.healthSignals) {
+      if (this.healthInFlight) return this.healthInFlight;
+      this.healthInFlight = this.healthSignals
+        .publish({
+          queue: this.queueName,
+          pollCompletedAt: this.pollCompletedAt,
+        })
+        .then((/** @type {{heartbeat: number,age: number}} */ result) => {
+          this.metrics.record(
+            'worker_heartbeat_unixtime_seconds',
+            result.heartbeat,
+            { queue: this.queueName },
+          );
+          this.metrics.record('worker_oldest_job_age_seconds', result.age, {
+            queue: this.queueName,
+          });
+        })
+        .catch(() => {
+          this.logger.error('worker_job_failed', {
+            error_code: 'WORKER_HEALTH_PUBLISH_FAILED',
+            queue: this.queueName,
+          });
+        })
+        .finally(() => {
+          this.healthInFlight = undefined;
+        });
+      return this.healthInFlight;
+    }
     this.metrics.record(
       'worker_heartbeat_unixtime_seconds',
       Math.floor(this.now() / 1000),
@@ -103,11 +140,12 @@ export class WorkerRuntime {
       queue: event.queue ?? 'default',
     };
     this.metrics.increment('worker_jobs_failed_total', 1, context);
-    this.metrics.record(
-      'worker_oldest_job_age_seconds',
-      Math.max(0, event.ageSeconds ?? 0),
-      context,
-    );
+    if (event.ageSeconds !== undefined)
+      this.metrics.record(
+        'worker_oldest_job_age_seconds',
+        Math.max(0, event.ageSeconds),
+        context,
+      );
     this.logger.error('worker_job_failed', context);
   }
 
@@ -115,7 +153,12 @@ export class WorkerRuntime {
   async poll() {
     if (this.pollInFlight) return this.pollInFlight;
     this.pollInFlight = this.runOnce()
-      .then(() => {})
+      .then(() => {
+        this.pollCompletedAt = new Date(this.now());
+      })
+      .catch(() => {
+        this.logger.error('worker_job_failed', { error_code: 'JOB_FAILED' });
+      })
       .finally(() => {
         this.pollInFlight = undefined;
       });
@@ -226,6 +269,7 @@ export class WorkerRuntime {
       this.pollTimer = undefined;
     }
     await this.pollInFlight;
+    await this.healthInFlight;
     this.logger.info('worker_stopped');
   }
 }
@@ -413,6 +457,7 @@ export async function loadAutomationStallSweeper(
  *   fetchImpl?: (input: URL, init: RequestInit) => Promise<{status: number, json: () => Promise<unknown>}>,
  *   logger?: ReturnType<typeof createSafeLogger>,
  *   metrics?: MetricRegistry,
+ *   healthSignals?: {publish: Function},
  *   queue?: {claim: Function, heartbeat: Function, markEffectStarted: Function, settle: Function},
  *   workerId?: string,
  * }} options
@@ -456,13 +501,14 @@ export function createWorkerRuntime(options) {
     },
     logger: options.logger,
     metrics: options.metrics,
+    healthSignals: options.healthSignals,
     queue,
     queueName: N8N_COMMAND_QUEUE,
     workerId: options.workerId,
   });
 }
 
-/** @param {{database: any, logger?: ReturnType<typeof createSafeLogger>, mediaVolume: {delete: Function}, metrics?: MetricRegistry, queue?: any, repository: any, workerId?: string}} options */
+/** @param {{database: any, logger?: ReturnType<typeof createSafeLogger>, mediaVolume: {delete: Function}, metrics?: MetricRegistry, healthSignals?: {publish: Function}, queue?: any, repository: any, workerId?: string}} options */
 export function createMediaRetentionWorkerRuntime(options) {
   if (
     !options?.database ||
@@ -479,6 +525,7 @@ export function createMediaRetentionWorkerRuntime(options) {
     },
     logger: options.logger,
     metrics: options.metrics,
+    healthSignals: options.healthSignals,
     queue:
       options.queue ?? new PostgresJobQueue({ database: options.database }),
     queueName: MEDIA_RETENTION_QUEUE,
@@ -486,7 +533,7 @@ export function createMediaRetentionWorkerRuntime(options) {
   });
 }
 
-/** @param {{database: any,environment?: Record<string,string|undefined>,logger?: ReturnType<typeof createSafeLogger>,queue?: any,repository?: any,store?: any,spoolRoot?: string,workerId?: string}} options */
+/** @param {{database: any,healthSignals?: {publish:Function},environment?: Record<string,string|undefined>,logger?: ReturnType<typeof createSafeLogger>,queue?: any,repository?: any,store?: any,spoolRoot?: string,workerId?: string}} options */
 export function createChatMediaWorkerRuntime(options) {
   const environment = options.environment ?? process.env;
   const repository =
@@ -521,6 +568,7 @@ export function createChatMediaWorkerRuntime(options) {
     queue:
       options.queue ?? new PostgresJobQueue({ database: options.database }),
     queueName: CHAT_MEDIA_QUEUE,
+    healthSignals: options.healthSignals,
     logger: options.logger,
     workerId: options.workerId,
   });
@@ -613,6 +661,7 @@ export async function startWorkerFromEnvironment(options = {}) {
       options.importModule,
     );
     const queue = new PostgresJobQueue({ database });
+    const healthSignals = new PostgresOperationalSignals({ database });
     const repository = new PostgresTransientMediaRepository({ database });
     const mediaVolume = new PrivateMediaVolume({
       maxBytes: requiredPositiveInteger(environment, 'PRIVATE_MEDIA_MAX_BYTES'),
@@ -626,6 +675,7 @@ export async function startWorkerFromEnvironment(options = {}) {
     });
     const commandWorker = createWorkerRuntime({
       commandStore,
+      healthSignals,
       database,
       environment,
       logger,
@@ -633,6 +683,7 @@ export async function startWorkerFromEnvironment(options = {}) {
       workerId: `n8n-${process.pid}`,
     });
     const mediaWorker = createMediaRetentionWorkerRuntime({
+      healthSignals,
       database,
       logger,
       mediaVolume,
@@ -652,6 +703,7 @@ export async function startWorkerFromEnvironment(options = {}) {
     const chatMediaWorker =
       environment.CHAT_MEDIA_ENABLED === 'true'
         ? createChatMediaWorkerRuntime({
+            healthSignals,
             database,
             environment,
             queue,

@@ -24,7 +24,7 @@ ocorrências não confirma saúde dos provedores ou da infraestrutura.
 
 O recorte inicial **Ativas** usa os estados atuais das fontes, excluindo
 comandos arquivados operacionalmente. **Histórico** conserva as ocorrências
-deduplicadas dos últimos 30 dias, incluindo revisões anteriores da mesma fonte.
+deduplicadas dos últimos 14 dias, incluindo revisões anteriores da mesma fonte.
 Uma mesma operação pode aparecer em Processamento e Automação n8n; não some
 essas contagens como se fossem envios distintos. Datas ativas e históricas são
 apresentadas separadamente. Um grupo sem fonte ativa pode continuar em análise
@@ -41,7 +41,7 @@ O arquivo operacional fica em `crm.n8n_command_operational_archives`; não muda
 status, erros ou horários de comandos/jobs/mensagens, não fecha reconciliações,
 não habilita retry e não apaga recibos ou tentativas. Confirmações tardias ainda
 podem reconciliar o resultado pelo contrato existente. A marca acompanha a vida
-do comando, independentemente da retenção de 30 dias da central.
+do comando, independentemente da retenção de 14 dias da central.
 
 Na operação de 03/11/2026, o manifesto esperado é de **12 comandos WAHA**;
 o comando Evolution permanece em análise, projetado em worker e n8n. Conferir
@@ -123,7 +123,7 @@ mensagens, confirma pedidos ou altera o comando n8n de origem.
 
 Captura de 5xx começa com a implantação desta versão; não reconstrói logs
 antigos. Coleta das filas consulta estados de falha registrados no CRM nos
-últimos 30 dias, em lotes limitados e deduplicados. Não é o histórico completo
+últimos 14 dias, em lotes limitados e deduplicados. Não é o histórico completo
 de execuções n8n, heartbeat de todos os serviços ou monitor direto de IA,
 WhatsApp e storage. Uma mudança de estado/código da fonte pode produzir
 outra ocorrência; repetir a mesma coleta não incrementa a contagem.
@@ -131,9 +131,9 @@ outra ocorrência; repetir a mesma coleta não incrementa a contagem.
 Diagnósticos guardam códigos fixos, contagens, horários e identificadores
 opacos, sem stack, corpo, mensagem ou dado de cliente. Não acrescente detalhes
 livres, nomes, telefone ou credenciais aos registros e evidências. Dados
-técnicos seguem uma janela de 30 dias, incluindo a contagem e a primeira
+técnicos seguem uma janela de 14 dias, incluindo a contagem e a primeira
 ocorrência dos grupos ativos. A API limpa os registros na inicialização, a
-cada hora e durante a consulta; a consulta filtra a janela mesmo se a
+cada 24 horas, sem executar limpeza na consulta; a consulta filtra a janela mesmo se a
 limpeza estiver atrasada. Com o processo parado, o expurgo físico aguarda o
 retorno da API. Auditoria e respostas idempotentes conservam suas políticas
 próprias, sem transportar diagnósticos livres.
@@ -176,3 +176,43 @@ destinos de notificação, operador, retenção e drills continuam em
 issue #11. Se API ou banco estiverem indisponíveis, o painel também pode
 ficar indisponível. Não registrar essa tela como comprovação de monitor ou
 entrega de alertas externos.
+
+## Saúde operacional — ADR 060 / OPS-HEALTH-T01
+
+GET /api/health/operations é público, sem dados pessoais e sem I/O por request.
+Retorna200 com status ok ou503 com degraded/unavailable, checkedAt e checks
+worker/queue/commands. Não usar para restart ou readiness de roteamento.
+
+A API amostra uma vez por60s. Snapshot ausente, falho ou com mais de120s
+retorna503. Workers publicam a cada30s heartbeat e último poll concluído
+por fila obrigatória; atraso acima de120s degrada. Fila pending/retry elegível
+acima de300s e comandos processing com lease expirado há mais de120s
+degradam. Retry futuro não é atraso; falha histórica isolada não derruba health.
+CHAT_MEDIA_ENABLED acrescenta chat_media às filas obrigatórias; external_effects
+e media-retention são sempre exigidas. Nenhum probe chama n8n/WhatsApp/IA.
+
+Migration0058 antecede API/worker e cria tabela técnica e índices parciais.
+Antes de aplicar, medir tamanho das tabelas e usar janela de baixa carga.
+CREATE INDEX transacional pode bloquear escritas enquanto constrói o índice;
+lock_timeout100ms e statement_timeout1s fazem a migration falhar e reverter
+em vez de aguardar/bloquear por tempo ilimitado. Falha exige nova avaliação
+da janela, sem aumentar limites cegamente ou declarar implantação concluída.
+Leituras usam lock_timeout100ms e statement_timeout1s; não tomam locks de
+linhas de domínio. Requisições simultâneas ao endpoint apenas leem memória.
+Worker publica com uma execução por vez e stop aguarda trabalho em andamento.
+O progresso do poll expira mesmo que o timer continue vivo.
+
+Limpeza inicia no boot para recuperar paradas e repete a cada24h. Cada
+transação remove até1000 linhas por tabela técnica com try-lock e timeouts,
+sem cascatas grandes; pais aguardam drenagem dos filhos. Cada rodada diária
+processa até20lotes, cedendo execução entre transações, com orçamento de5s
+avaliado entre lotes; backlog/lock ocupado/falha gera OPERATIONAL_CLEANUP_INCOMPLETE. Dados vencidos são
+excluídos da leitura antes do expurgo físico. Reiniciar pode antecipar catch-up.
+Backlog ou contenção deve ser investigado; a retenção de mensagens, comandos,
+jobs e auditoria não muda. Eventos de saúde não alimentam a coleta de incidentes.
+
+Verificação local: testes operational-health, operational-signals-postgres-live
+e health-errors-retention com banco sintético dedicado. EXPLAIN verifica
+índices, sem prometer ausência de impacto na carga real. Conferir latência,
+locks e duração da amostragem após deploy. Rollback restaura aplicação anterior
+compatível, mantém schema expand e não recupera diagnósticos já expurgados.
