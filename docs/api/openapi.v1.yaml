@@ -3627,6 +3627,17 @@ components:
           { type: [integer, 'null'], minimum: 1, maximum: 9007199254740991 }
         originId:
           { type: [integer, 'null'], minimum: 1, maximum: 9007199254740991 }
+        productFiscal:
+          description: Política explícita para novos produtos, sem default e cifrada na revisão central; campo aditivo opcional.
+          oneOf:
+            - { type: 'null' }
+            - type: object
+              additionalProperties: false
+              required: [ncm, origin, unit]
+              properties:
+                ncm: { type: string, pattern: '^[0-9]{8}$' }
+                origin: { type: integer, minimum: 0, maximum: 8 }
+                unit: { type: string, pattern: '^[A-Z0-9]{1,6}$' }
         paymentTerms: { type: [string, 'null'], minLength: 1, maxLength: 120 }
         purchaseOrder: { type: [string, 'null'], minLength: 1, maxLength: 120 }
     OlistStatus:

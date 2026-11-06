@@ -305,8 +305,8 @@ test('Olist product lookup distinguishes exact SKU from prefix matches and rejec
     assert.equal(url.searchParams.get('codigo'), 'SKU-M');
     return page(
       [
-        { id: 1, codigo: 'SKU-M-OTHER' },
-        { id: 2, codigo: 'SKU-M' },
+        { id: 1, sku: 'SKU-M-OTHER' },
+        { id: 2, sku: 'SKU-M' },
       ],
       2,
     );
@@ -315,8 +315,8 @@ test('Olist product lookup distinguishes exact SKU from prefix matches and rejec
   const ambiguous = harness(() =>
     page(
       [
-        { id: 1, codigo: 'SKU-M' },
-        { id: 2, codigo: 'SKU-M' },
+        { id: 1, sku: 'SKU-M' },
+        { id: 2, sku: 'SKU-M' },
       ],
       2,
     ),
@@ -342,7 +342,7 @@ test('Olist lookup rejects inconsistent, duplicate and truncated pagination', as
     return page(
       Array.from({ length: 50 }, (_, index) => ({
         id: offset + index + 1,
-        codigo: 'OTHER',
+        sku: 'OTHER',
       })),
       offset === 0 ? 100 : 101,
       offset,
@@ -359,7 +359,7 @@ test('Olist lookup beyond 250 items reports incomplete even when an early item m
     return page(
       Array.from({ length: 50 }, (_, index) => ({
         id: offset + index + 1,
-        codigo: offset === 0 && index === 0 ? 'SKU-M' : 'OTHER',
+        sku: offset === 0 && index === 0 ? 'SKU-M' : 'OTHER',
       })),
       251,
       offset,
@@ -631,4 +631,79 @@ test('Olist catalog allowlist uses only the five supported v3 routes and a valid
     });
   }
   assert.deepEqual(unsupported.events, []);
+});
+
+test('T22 absence checks enumerate every customer state and both document formats before returning zero', async () => {
+  const { client, urls } = harness(() => page([], 0));
+  assert.equal(
+    await client.findCustomerAcrossStates('00.000.000/0001-00'),
+    null,
+  );
+  assert.equal(urls.length, 8);
+  assert.deepEqual(
+    [...new Set(urls.map((url) => url.searchParams.get('situacao')))].sort(),
+    ['A', 'B', 'E', 'I'],
+  );
+  assert.equal(
+    new Set(urls.map((url) => url.searchParams.get('cpfCnpj'))).size,
+    2,
+  );
+});
+test('T22 repeated sightings deduplicate by ID but distinct document matches block', async () => {
+  const one = harness(() => page([{ id: 7, cpfCnpj: syntheticDocument }], 1));
+  assert.equal(
+    (await one.client.findCustomerAcrossStates(syntheticDocument))?.id,
+    7,
+  );
+  const many = harness((url) =>
+    page(
+      [
+        {
+          id: url.searchParams.get('situacao') === 'B' ? 8 : 7,
+          cpfCnpj: syntheticDocument,
+        },
+      ],
+      1,
+    ),
+  );
+  await assert.rejects(
+    many.client.findCustomerAcrossStates(syntheticDocument),
+    { code: 'OLIST_AMBIGUOUS_MATCH' },
+  );
+});
+test('T22 inactive products are discovered by official sku, missing identity never proves absence', async () => {
+  const found = harness((url) =>
+    page(
+      url.searchParams.get('situacao') === 'I'
+        ? [{ id: 7, sku: 'CRM-product' }]
+        : [],
+      url.searchParams.get('situacao') === 'I' ? 1 : 0,
+    ),
+  );
+  assert.equal(
+    (await found.client.findProductAcrossStates('CRM-product'))?.id,
+    7,
+  );
+  const malformed = harness(() => page([{ id: 7, codigo: 'CRM-product' }], 1));
+  await assert.rejects(
+    malformed.client.findProductAcrossStates('CRM-product'),
+    { code: 'OLIST_INCOMPLETE_LOOKUP' },
+  );
+});
+test('T22 fiscal policy is explicit, optional for old settings, and never inferred', () => {
+  assert.deepEqual(olistSettings(EMPTY_OLIST_SETTINGS), EMPTY_OLIST_SETTINGS);
+  const productFiscal = { ncm: '61091000', origin: 0, unit: 'UN' };
+  assert.deepEqual(
+    olistSettings({ ...EMPTY_OLIST_SETTINGS, productFiscal }).productFiscal,
+    productFiscal,
+  );
+  for (const value of [
+    { ...productFiscal, ncm: '123' },
+    { ...productFiscal, origin: 9 },
+    { ...productFiscal, unit: '' },
+    { ...productFiscal, price: 0 },
+  ])
+    assert.throws(() =>
+      olistSettings({ ...EMPTY_OLIST_SETTINGS, productFiscal: value }),
+    );
 });

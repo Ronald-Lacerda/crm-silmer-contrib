@@ -86,20 +86,40 @@ export const EMPTY_OLIST_SETTINGS = Object.freeze({
   paymentTerms: null,
   purchaseOrder: null,
 });
+/** Explicit account policy; no fiscal or catalog defaults.
+ * @param {unknown} raw */
+export function olistProductFiscal(raw) {
+  const value = object(raw, ['ncm', 'origin', 'unit']);
+  if (
+    Object.keys(value).length !== 3 ||
+    typeof value.ncm !== 'string' ||
+    !/^[0-9]{8}$/u.test(value.ncm) ||
+    !Number.isInteger(value.origin) ||
+    value.origin < 0 ||
+    value.origin > 8 ||
+    typeof value.unit !== 'string' ||
+    !/^[A-Z0-9]{1,6}$/u.test(value.unit)
+  )
+    throw new OlistError('OLIST_PRODUCT_FISCAL_REQUIRED', 400);
+  return { ncm: value.ncm, origin: value.origin, unit: value.unit };
+}
 /** Full replacement; settings never infer a seller.
  * @param {unknown} raw */
 export function olistSettings(raw) {
-  const value = object(raw, Object.keys(EMPTY_OLIST_SETTINGS));
-  if (Object.keys(value).length !== Object.keys(EMPTY_OLIST_SETTINGS).length)
+  const fields = Object.keys(EMPTY_OLIST_SETTINGS);
+  const value = object(raw, [...fields, 'productFiscal']);
+  if (fields.some((field) => !Object.hasOwn(value, field)))
     throw new OlistError('INVALID_REQUEST', 400);
   return Object.fromEntries(
     Object.entries(value).map(([key, entry]) => [
       key,
       entry === null
         ? null
-        : key.endsWith('Id')
-          ? integer(entry)
-          : text(entry, 120),
+        : key === 'productFiscal'
+          ? olistProductFiscal(entry)
+          : key.endsWith('Id')
+            ? integer(entry)
+            : text(entry, 120),
     ]),
   );
 }

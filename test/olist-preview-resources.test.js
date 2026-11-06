@@ -395,7 +395,7 @@ test('actual client discovery uses bounded official GET endpoints and never enab
     client,
     resources: [],
   });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 11);
   assert.equal(result.customer.action, 'create');
   assert.equal(result.groups[0].action, 'create');
 });

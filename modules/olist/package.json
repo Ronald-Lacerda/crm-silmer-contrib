@@ -5,6 +5,7 @@
   "type": "module",
   "exports": "./src/index.js",
   "dependencies": {
-    "@crm-silmer/identity-access": "0.0.0"
+    "@crm-silmer/identity-access": "0.0.0",
+    "@crm-silmer/contacts": "0.0.0"
   }
 }

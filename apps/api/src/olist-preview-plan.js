@@ -63,7 +63,7 @@ function calendarDay(value) {
  * @param {{source:{order:any,sourceRevision:number,issues:{code:string,field:string}[]},
  * buyer:{name:string,phone:string|null,email?:string|null,registration:any}|null,
  * settings:any,now:Date}} input
- * @returns {{eligible:boolean,issues:{code:string,field:string}[],commercial:any,customer:any}}
+ * @returns {{eligible:boolean,issues:{code:string,field:string}[],commercial:any,customer:any,productFiscal?:any}}
  */
 export function buildOlistPreviewPlan(input) {
   /** @type {{code:string,field:string}[]} */

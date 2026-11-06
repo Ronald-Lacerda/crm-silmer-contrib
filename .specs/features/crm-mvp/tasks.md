@@ -141,6 +141,23 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 ## OLIST-T20b — Início da Fase 3 (05/11/2026)
 
+## OLIST-T22 — resolução e criação segura (06/11/2026)
+
+- [x] Compartilhar cliente/pai/tamanhos entre Pedidos com base cifrada imutável,
+      vínculo por export e request/tickets duráveis na migration expand 0066.
+- [x] Resolver snapshot persistido, política fiscal explícita, consulta completa
+      de situações/formatos e confirmação por documento, atributos, pai/SKU/grade.
+- [x] Reservar pai e filhos antes do POST composto, preservar IDs antes de GET,
+      bloquear zero após incerteza e retomar sem recriar sucesso anterior.
+- [x] Revalidar usuário/checkbox, conexão, configuração, Pedido e comprador/fonte
+      antes de cada efeito; resultado iniciado persiste após revogação.
+- [x] Concorrência, timeout, falha de commit, resposta ID-pai e recuperação
+      comprovados com fixtures sintéticas e PostgreSQL dedicado.
+
+OLIST-07–08, 12–17, 27, 35–39. [Contrato e evidências](../../../docs/runbooks/olist-phase3.md#t22--resolução-e-criação-segura-de-cadastros).
+Próximo T07, seguido de T08; F3 permanece aberto. Não há rota/worker criador
+ativo, integração real, deploy ou piloto nesta entrega.
+
 ## OLIST-T06 — prévia completa (06/11/2026)
 
 - [x] OLIST-T06: prévia por fonte atual/legado/loja com cadastro, preço exato,
@@ -153,7 +170,7 @@ cadastro fiscal, centavos exatos, configuração e descoberta somente leitura.
 Recibo cifrado por sessão/conta/fontes com validade de 15 minutos, revalidação
 e pendências explícitas. Gate local/evidências no
 [runbook](../../../docs/runbooks/olist-phase3.md#t06--prévia-completa-sem-escrita-erp).
-T22/T07 são os próximos itens independentes; gate F3, UI, deploy e piloto seguem
+T22 está concluída acima; o próximo item é T07; gate F3, UI, deploy e piloto seguem
 abertos. Nenhuma criação ERP foi habilitada.
 
 ## OLIST-T24 — Fonte da loja sem alterar checkout (05/11/2026)
@@ -169,7 +186,7 @@ abertos. Nenhuma criação ERP foi habilitada.
 
 OLIST-01, 06–12, 19, 29, 34–35, 44. [ADR 067](../../../docs/adr/067-fontes-comerciais-suplementares-sem-reescrever-ficha.md),
 [runbook](../../../docs/runbooks/olist-phase3.md). T24/T26 concluídas no domínio/API;
-próximas tarefas T22/T07. F3 permanece aberto, sem UI, deploy ou geração ERP.
+próxima tarefa T07. F3 permanece aberto, sem UI, deploy ou geração ERP.
 
 ## OLIST-T26 — Legado sem reescrever ficha (05/11/2026)
 

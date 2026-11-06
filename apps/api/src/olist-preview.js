@@ -87,6 +87,7 @@ export function createOlistPreview(database, options) {
       let buyer =
         source.order && 'buyer' in source.order ? source.order.buyer : null;
       let buyerVersion = null;
+      let buyerContactId = null;
       let buyerIdentities = [];
       if (order.origin !== 'loja') {
         const contactId =
@@ -137,6 +138,7 @@ export function createOlistPreview(database, options) {
             registration,
           };
           buyerVersion = Number(contact.version);
+          buyerContactId = contact.id;
         }
       }
       const resources = (
@@ -200,6 +202,11 @@ export function createOlistPreview(database, options) {
         operation,
         order: { id: order.id, number: order.number, status: order.status },
         connected,
+        sourceVersions: {
+          contactId: buyerContactId,
+          contactVersion: buyerVersion,
+          sourceRevision: source.sourceRevision,
+        },
       };
     });
   }
@@ -233,6 +240,7 @@ export function createOlistPreview(database, options) {
       )
         throw new OlistError('OLIST_PREVIEW_STALE', 409);
       const issues = [...plan.issues];
+      plan.productFiscal = before.settings?.productFiscal ?? null;
       if (!before.connected)
         issues.push({ code: 'OLIST_RECONNECT_REQUIRED', field: 'connection' });
       if (before.operation)
@@ -304,6 +312,9 @@ export function createOlistPreview(database, options) {
               expiresAt,
               commercial: plan.commercial,
               customer: plan.customer,
+              productFiscal: plan.productFiscal,
+              policy: 'exact-cent-v1',
+              sourceVersions: before.sourceVersions,
               registrations,
             },
             config.envelopeKey,

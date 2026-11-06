@@ -106,8 +106,44 @@ export function createOlistClient(options) {
       const value = text(sku, 100);
       return exact(
         await pages('/produtos', { codigo: value }),
-        (row) => row.codigo === value,
+        (row) => row.sku === value,
       );
+    },
+    /** Complete search over all documented states and document formats. Repeated
+     * sightings of one ID are one entity; distinct exact identities are ambiguous.
+     * @param {string} document */
+    async findCustomerAcrossStates(document) {
+      const value = normalizeDocument(document);
+      const masked =
+        value.length === 11
+          ? value.replace(/^(...)(...)(...)(..)$/u, '$1.$2.$3-$4')
+          : value.replace(/^(..)(...)(...)(....)(..)$/u, '$1.$2.$3/$4-$5');
+      const matches = new Map();
+      for (const situacao of ['A', 'B', 'I', 'E'])
+        for (const cpfCnpj of [value, masked]) {
+          for (const row of await pages('/contatos', { cpfCnpj, situacao })) {
+            if (typeof row.cpfCnpj !== 'string')
+              throw new OlistError('OLIST_INCOMPLETE_LOOKUP');
+            if (normalizeDocument(row.cpfCnpj) === value)
+              matches.set(row.id, row);
+          }
+        }
+      return exact([...matches.values()], () => true);
+    },
+    /** @param {string} sku */
+    async findProductAcrossStates(sku) {
+      const value = text(sku, 100);
+      const matches = new Map();
+      for (const situacao of ['A', 'I', 'E'])
+        for (const row of await pages('/produtos', {
+          codigo: value,
+          situacao,
+        })) {
+          if (typeof row.sku !== 'string')
+            throw new OlistError('OLIST_INCOMPLETE_LOOKUP');
+          if (row.sku === value) matches.set(row.id, row);
+        }
+      return exact([...matches.values()], () => true);
     },
     /** @param {string} reference */
     async findOrder(reference) {

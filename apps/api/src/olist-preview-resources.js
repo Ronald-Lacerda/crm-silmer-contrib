@@ -1,6 +1,7 @@
 import {
   olistResourceIdentityHash,
   normalizeDocument,
+  olistProductFiscal,
 } from '@crm-silmer/olist';
 
 const PRODUCT_FIELDS = [
@@ -81,6 +82,39 @@ function sameFiscalCustomer(found, expected) {
 export async function planOlistResources({ client, config, plan, resources }) {
   /** @type {{code:string,field:string}[]} */
   const issues = [];
+  let fiscal = null;
+  if (plan.productFiscal !== null && plan.productFiscal !== undefined) {
+    try {
+      fiscal = olistProductFiscal(plan.productFiscal);
+    } catch {
+      issues.push({
+        code: 'OLIST_PRODUCT_FISCAL_REQUIRED',
+        field: 'settings.productFiscal',
+      });
+    }
+  }
+  const parentSizes = new Map();
+  for (const group of plan.commercial?.groups ?? []) {
+    const key = olistResourceIdentityHash(config.hmacKey, {
+      accountKey: config.accountKey,
+      kind: 'product',
+      identity: group.attributes,
+    });
+    const sizes = parentSizes.get(key) ?? new Set();
+    for (const line of group.lines) sizes.add(normalize(line.size));
+    parentSizes.set(key, sizes);
+    if (sizes.size > 100)
+      issues.push({
+        code: 'OLIST_RESOURCE_BATCH_LIMIT',
+        field: 'groups.' + group.groupId,
+      });
+  }
+  if (issues.length)
+    return {
+      customer: { action: 'blocked', remoteId: null },
+      groups: [],
+      issues,
+    };
   /** @type {Map<string,Promise<any>>} */
   const reads = new Map();
   let calls = 0;
@@ -124,7 +158,12 @@ export async function planOlistResources({ client, config, plan, resources }) {
         });
       reads.set(
         key,
-        Promise.resolve().then(() => client[method](value)),
+        Promise.resolve().then(() =>
+          (client[method + 'AcrossStates'] ?? client[method]).call(
+            client,
+            value,
+          ),
+        ),
       );
     }
     return reads.get(key);
@@ -176,8 +215,8 @@ export async function planOlistResources({ client, config, plan, resources }) {
     const field = 'groups.' + group.groupId;
     const identity = group.attributes;
     const identityKey = hash('product', identity);
-    const sku = 'CRM-P-' + identityKey;
     const link = linked('product', identityKey, field);
+    const sku = link.row?.reference ?? 'CRM-P-' + identityKey;
     const projected = {
       groupId: group.groupId,
       ...blocked(),
@@ -198,7 +237,7 @@ export async function planOlistResources({ client, config, plan, resources }) {
         if (!parent) {
           projected.action = 'create';
           // Fiscal defaults are account-specific and have not been approved.
-          issue(field, 'OLIST_PRODUCT_FISCAL_REQUIRED');
+          if (!fiscal) issue(field, 'OLIST_PRODUCT_FISCAL_REQUIRED');
         } else if (
           parent.tipo !== 'V' ||
           parent.situacao !== 'A' ||
@@ -207,6 +246,22 @@ export async function planOlistResources({ client, config, plan, resources }) {
         ) {
           parent = null;
           issue(field, 'OLIST_PRODUCT_DIVERGENT');
+        } else if (
+          fiscal &&
+          (String(parent.ncm ?? '').replace(/[.\s]/gu, '') !== fiscal.ncm ||
+            !(
+              (typeof parent.origem === 'number' &&
+                Number.isInteger(parent.origem) &&
+                parent.origem >= 0 &&
+                parent.origem <= 8) ||
+              (typeof parent.origem === 'string' &&
+                /^[0-8]$/u.test(parent.origem))
+            ) ||
+            Number(parent.origem) !== fiscal.origin ||
+            normalize(parent.unidade) !== normalize(fiscal.unit))
+        ) {
+          parent = null;
+          issue(field, 'OLIST_PRODUCT_FISCAL_DIVERGENT');
         } else {
           const description = PRODUCT_FIELDS.map((key) => group.attributes[key])
             .filter((value) => value !== '')

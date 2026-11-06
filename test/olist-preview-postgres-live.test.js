@@ -916,7 +916,7 @@ else
               identity,
             ]);
           f.responses.set('/produtos', {
-            itens: [{ id: 401, codigo: sku }],
+            itens: [{ id: 401, sku }],
             paginacao: { offset: 0, total: 1, limit: 50 },
           });
           f.responses.set('/produtos/401', {

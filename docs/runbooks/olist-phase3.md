@@ -1,9 +1,93 @@
-# Olist — Fase 3: composição, total e prévia
+# Olist — Fase 3: composição, prévia e cadastros
 
-OLIST-T20/T21/T26/T24/T06, composição, confirmação, fontes e prévia. Requisitos
+OLIST-T20/T21/T26/T24/T06/T22, composição, fontes, prévia e cadastros. Requisitos
 OLIST-09–10, 29, 34, 40–44;
 [ADR 057](../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
+
+## T22 — resolução e criação segura de cadastros
+
+OLIST-07–08, 12–17, 27, 35–39. `createOlistResourceResolver` é uma porta interna:
+recebe exportId e autoridade atual, carrega o snapshot cifrado/imutável do export
+e ignora qualquer plano comercial fornecido pelo caller. Não existe rota pública
+para cadastros nem handler de worker ativo. T07 ainda precisa aceitar/congelar o
+comando humano e T08 despachar a sequência/venda. Criação real continua desligada.
+
+### Snapshot e parâmetros
+
+Snapshot exige policy exact-cent-v1, customer pela allowlist oficial, commercial
+com grupos/linhas, quantidades/subtotais/unitários/total exatos e sourceVersions
+(contactId/contactVersion/sourceRevision), preservados no recibo da T06 para T07.
+Validação integral antecede bindings e HTTP: IDs opacos, somas BigInt, ausência
+de frações, tamanhos e atributos válidos. Mais de 100 tamanhos distintos para
+uma identidade de pai é pendência, inclusive em grupos repetidos do Pedido.
+Não dividir produto ou compensar valores para contornar esse limite.
+
+Settings admite productFiscal opcional/nulo, cifrado e versionado com os demais
+parâmetros: ncm (oito dígitos), origin (inteiro 0–8) e unit (1–6 caracteres
+alfanuméricos maiúsculos). Nenhum valor é escolhido automaticamente. Omissão na
+substituição integral mantém o contrato antigo, sem uma política inferida.
+Produto ausente sem política válida bloqueia antes do primeiro POST de cliente.
+Um pai encontrado é conferido fiscalmente quando a política está presente;
+origem remota ausente ou vazia não significa zero. Valores/gatilhos reais da
+conta e sua suficiência fiscal permanecem sob homologação T15.
+
+### Descoberta, reservas e resultados
+
+Cliente usa CPF/CNPJ verificável, busca completa pelas situações A/B/I/E e
+formatos normalizado/mascarado; produto usa código/SKU exato em A/I/E, com
+paginação completa e deduplicação de IDs. A listagem oficial informa sku,
+enquanto a criação pode retornar codigo. Ausência de identidade na listagem,
+ambiguidade, inatividade e divergência bloqueiam, sem nome aproximado. Cliente
+novo omite codigo (limitação comprovada em T02) e usa situação B sem acesso ao
+sistema. Não existe criação de funcionário, PATCH de cadastro ou exclusão.
+
+Base por cliente/documento, pai/atributos e variação/pai/tamanho é reservada
+localmente uma vez por conta e ligada aos exports. Base e request ficam em
+AES-GCM com AAD por entidade/tentativa e HMAC de conteúdo; conflito de base exige
+análise humana. Lista inicial de tamanhos não faz parte da base do pai: outro
+Pedido compartilha o pai vencedor e cria apenas seus tamanhos adicionais.
+
+Para pai V, todos os filhos do lote inicial recebem tickets antes do POST
+composto. Variação adicional tem reserva própria. Credenciais e quota são
+obtidas antes da reserva final; a reserva revalida versão/geração da conexão,
+usuário/sessão/checkbox, conta/restore, parâmetros, Pedido, comprador e revisão
+suplementar. Não há HTTP dentro de SQL. Só o ticket reservado autoriza o POST
+fechado, sem retry ou lease que expire permitindo recriação.
+
+O ID devolvido é persistido antes de qualquer GET ou próximo efeito. A API pode
+retornar o ID do pai ao incluir variação: esse ID fica como evidência observada;
+o vínculo do tamanho exige GET do pai com SKU/grade e GET independente do filho.
+Preços/estoque/tributação extra não são inventados nem atualizados. Cada subtotal
+comercial permanece no snapshot, sem depender do preço do catálogo.
+
+Timeout, 4xx/5xx, corpo inválido, resposta parcial, quota/commit falho ou falha de
+leitura após inclusão deixam tickets incertos/reservados para reconciliação.
+Sucesso anterior, ID observado e filhos confirmados são preservados. Zero em
+busca não libera POST; match positivo verificado pode confirmar a entidade e
+adicionar auditoria sem reescrever a tentativa incerta histórica. Depois de
+revogar o usuário, o resultado iniciado ainda pode ser persistido pelo ticket;
+o próximo efeito exige autoridade atual. Não há compensação destrutiva.
+
+### Migração, limites e rollback
+
+Aplicar 0066_olist_resource_resolution.expand.sql antes do código. Acrescenta
+base/envelope imutável de recurso, request/envelope imutável de tentativa,
+parent_attempt_id, observed_remote_id e índices; não altera ficha, gateway,
+preços, tabelas financeiras ou snapshots antigos. Operações antigas sem o novo
+contrato completo não são inferidas nem executadas pelo resolvedor.
+
+Manter conta de produção e criadores desligados até T07/T08 e os demais gates.
+Consultas completas podem esgotar quota em planos grandes: parar e retomar por
+leitura, preservando os tickets. Não aumentar automaticamente limites, limpar
+reservas, expirar tentativas ou refazer POST após uma falha. Proteção local não
+promete exactly-once do provedor nem elimina corrida com inclusão manual externa.
+
+Rollback desliga novas inclusões antes de pausar handlers futuros. Preservar
+0066, envelopes/chaves, vínculos, tentativas, IDs e auditoria; sem down, exclusão
+ERP ou restauração como primeira ação. Código anterior só retorna mantendo
+criadores desligados e sem liberar recursos reservados/incertos. Recovery de
+backup com janela externa exige reconciliar cada entidade antes de retomar.
 
 ## T06 — prévia completa sem escrita ERP
 
@@ -56,9 +140,9 @@ consulta especializada, sem assumir ausência. Vendedor, depósito, forma de
 pagamento e lista de preços, quando informada, são conferidos nos catálogos
 fechados suportados. Natureza/origem e gatilhos reais da conta continuam no
 gate operacional T15: esta entrega valida sua presença/formato/revisão, sem
-alegar homologação. Produto ausente mostra criação planejada e pendência
-fiscal explícita; não inventa NCM/unidade/origem/preço de cadastro. T22/T15
-completam essa parametrização antes de qualquer criação.
+alegar homologação. Produto ausente mostra criação planejada e exige productFiscal explícito na
+revisão central, conforme T22 acima. Não inventa NCM/unidade/origem/preço de
+cadastro; T15 homologa os valores reais antes de qualquer criação.
 
 Criação continua `false`, sem endpoint de envio. Recibo não é reserva nem
 prova de imutabilidade futura do ERP. Não houve acesso real ao ERP, deploy,
@@ -358,3 +442,33 @@ Logs sintéticos em var/olist-t06-*.log, fora do versionamento. Entrega atômica
 identificada por OLIST-T06 na branch codex/olist-phase3; sem acesso autenticado
 ao ERP, deploy, migração adicional ou piloto. Próximas tarefas T22/T07; gate F3
 permanece aberto até sequência confiável e guardas posteriores.
+
+## Fechamento T22 — 06/11/2026
+
+Resolvedor, builders e writer internos entregues com migration expand 0066.
+Sem rota criadora ou handler ativo: o comando/snapshot humano e a integração de
+worker/venda seguem T07/T08. Nenhum acesso autenticado ao ERP, deploy,
+habilitação ou piloto ocorreu. Nenhuma dependência externa foi adicionada;
+Olist reutiliza o módulo Contacts existente para validar o comprador.
+
+- `npm run validate`: aprovado, 1884 testes/18 skips explícitos, incluindo
+  tipos, lint, formatação, fronteiras, validadores e build.
+- Resolver adversarial: 14/14; transporte reservado/builders: 11/11.
+- SQL T22: 11/11 sem skips, incluindo resolver/writer/PostgreSQL reais com
+  provedor HTTP sintético, concorrência M/G vs G/P, timeout, falha de commit,
+  revogação/configuração e recuperação sem novo POST.
+- Regressão SQL ampliada Pedidos/Loja/Olist: 113/113 aprovados, zero skips.
+- E2E completo: 485 aprovados/7 skips previstos, porta dedicada 4187.
+- `npm audit --audit-level=high`: aprovado, zero altas/críticas; um baixo e
+  cinco moderados preexistentes, sem atualização de dependências.
+- Revisão independente Backend/Integrações/QA sem findings altos/críticos após
+  corrigir a coerção de origem fiscal ausente para zero e validar o negativo.
+
+A suíte `test:olist:live` inclui os testes SQL de recursos; o skip novo no gate
+unitário é executado separadamente com TEST_DATABASE_URL dedicado. O teste de
+upgrade confirma todas as expansões posteriores à fundação, inclusive 0066,
+preservando jobs antigos e reapply vazio. As fixtures de listagem foram
+corrigidas para sku, conforme schema oficial, sem aceitar codigo como prova.
+
+Logs sintéticos em var/olist-t22-*.log, não versionados. Entrega atômica OLIST-T22
+na branch codex/olist-phase3. Próximo item T07; gate F3 permanece aberto.

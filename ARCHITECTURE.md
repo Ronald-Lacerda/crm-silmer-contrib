@@ -19,6 +19,22 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T22 — resolução e criação segura de cadastros (06/11/2026)
+
+OLIST-07–08, 12–17, 27, 35–39: resolvedor interno carrega somente o snapshot
+cifrado do export, valida todo o plano antes dos efeitos e compartilha cliente,
+pai e tamanhos por identidade. Migration expand 0066 congela base da entidade,
+request por tentativa, relação pai/filhos e ID observado antes das leituras.
+Pai V reserva o lote inicial inteiro antes de um único POST; demais tamanhos
+usam seu próprio ticket. Resultado incerto nunca libera recriação por tempo ou
+busca vazia. Reconciliação positiva preserva o histórico anterior.
+
+Política fiscal opcional productFiscal nos parâmetros centrais é explícita e
+versionada, sem default. Prévia conhece a política e confirma situação/SKU nos
+catálogos; cliente não recebe codigo nem acesso ao ERP. Nenhuma rota criadora
+ou handler de worker foi habilitado: T07/T08, UI, operação e piloto continuam
+pendentes. [Contrato e rollback](docs/runbooks/olist-phase3.md#t22--resolução-e-criação-segura-de-cadastros).
+
 ## OLIST-T06 — prévia completa sem escrita ERP (06/11/2026)
 
 OLIST-06–12, 34–44: API dedicada com checkbox/sessão/CSRF lê fontes atuais,
