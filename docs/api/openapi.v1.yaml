@@ -2554,13 +2554,14 @@ paths:
         Ação order.edit, restrita ao dono da conversa ou a COMMERCIAL_ADMIN.
         `value` substitui a seção inteira; total de peças e campos faltantes
         são recalculados. Pedido confirmado não aceita edição (409); é preciso
-        reabrir. OLIST-T20b: size-pricing recebe um comando fechado de
+        reabrir. OLIST-T20/T21: size-pricing recebe um comando fechado de
         composição, não uma substituição. initialize adota explicitamente só
         pendente nunca confirmado; não infere valores históricos. Demais ações
-        referenciam IDs emitidos pelo servidor. Após adoção, items legado e
-        confirmação livre são recusados até os adapters T20/T21; a projeção
-        automática não sobrescreve a composição humana. Sem interface de adoção
-        ou envio Olist nesta fatia.
+        referenciam IDs emitidos pelo servidor. Após adoção, items legado é
+        recusado e a projeção automática não sobrescreve a composição humana.
+        Total monetário é calculado e gravado junto da ficha; mudar o total
+        anterior invalida quitação/check sem apagar histórico. Sem interface
+        de adoção ou envio Olist nesta entrega.
       security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
       parameters:
         - $ref: '#/components/parameters/OrderId'
@@ -2639,11 +2640,13 @@ paths:
   /orders/{orderId}/confirm:
     post:
       operationId: confirmOrder
-      summary: Confirma (gera) o pedido com valor final e forma de pagamento
+      summary: Confirma o pedido pelo total calculado e condição de pagamento
       description: >-
         Ação order.confirm, restrita ao dono da conversa ou a COMMERCIAL_ADMIN.
-        Exige valor final no formato brasileiro (ex.: 4.820,00) maior que zero,
-        forma de pagamento válida (campo paymentCondition), ao menos um item e,
+        OLIST-T21: calcula o total de subtotais completos/revisados, sem
+        fallback para preço livre ou rateio de legado. amountText pode ser
+        omitido; declaração antiga só é aceita se igual à soma calculada.
+        Exige forma de pagamento válida (campo paymentCondition), ao menos um item e,
         em cada item, os pontos principais das ADRs 016 e 020 (tipo, cor,
         técnica em tipo_servico, ao menos um tecido, ao menos uma linha de
         tamanho e gola), quem faz a arte do pedido (chave artwork) e a entrega
@@ -2653,7 +2656,7 @@ paths:
         autor, horário e data do pedido. Numa nova confirmação depois
         de reabrir, autor, horário e data passam a ser os da nova confirmação.
         Confirmações concorrentes sobre a mesma versão: uma vence e a outra
-        recebe 409.
+        recebe 409. Confirmação não declara quitação nem inicia exportação Olist.
       security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
       parameters:
         - $ref: '#/components/parameters/OrderId'
@@ -5770,6 +5773,10 @@ components:
         status: { $ref: '#/components/schemas/OrderStatus' }
         fabCode: { type: string }
         ficha: { $ref: '#/components/schemas/Ficha' }
+        pricing:
+          $ref: '#/components/schemas/SizePricingSummary'
+          readOnly: true
+          description: Presente somente em pedidos com composição por tamanho.
         totalPieces: { type: integer, minimum: 0 }
         missingFields:
           type: array
@@ -6126,6 +6133,49 @@ components:
       required: [contactId]
       properties:
         contactId: { type: string, minLength: 1, maxLength: 128 }
+    SizePricingSummary:
+      type: object
+      additionalProperties: false
+      required: [complete, totalCents, groups, issues]
+      properties:
+        complete: { type: boolean }
+        totalCents:
+          { type: [integer, 'null'], minimum: 1, maximum: 9007199254740991 }
+        groups:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, subtotalCents]
+            properties:
+              id: { type: string, format: uuid }
+              subtotalCents:
+                {
+                  type: [integer, 'null'],
+                  minimum: 1,
+                  maximum: 9007199254740991,
+                }
+        issues:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [code, groupId, lineId]
+            properties:
+              code:
+                {
+                  type: string,
+                  enum:
+                    [
+                      SIZE_PRICING_EMPTY,
+                      SIZE_PRICING_EMPTY_GROUP,
+                      SIZE_SUBTOTAL_REQUIRED,
+                      SIZE_SUBTOTAL_REVIEW_REQUIRED,
+                    ],
+                }
+              groupId: { type: [string, 'null'], format: uuid }
+              lineId: { type: [string, 'null'], format: uuid }
     SizePricingGroup:
       type: object
       additionalProperties: false
@@ -6305,7 +6355,7 @@ components:
     OrderConfirmRequest:
       type: object
       additionalProperties: false
-      required: [expectedVersion, amountText, paymentCondition]
+      required: [expectedVersion, paymentCondition]
       properties:
         expectedVersion:
           type: integer
@@ -6316,8 +6366,11 @@ components:
           minLength: 1
           maxLength: 32
           description: >-
-            Valor final em reais no formato brasileiro, sem o prefixo R$ (ex.:
-            4.820,00). Armazenado em centavos inteiros maiores que zero.
+            Compatibilidade com cliente antigo: declaração opcional em reais
+            no formato brasileiro (ex.: 4.820,00), aceita somente se igual ao
+            total calculado com todos os subtotais revisados. Omitir usa a soma.
+            Divergência retorna 422 SIZE_PRICING_AMOUNT_MISMATCH; não há fallback
+            de preço livre. Sem composição completa retorna ORDER_NOT_CONFIRMABLE.
         paymentCondition: { $ref: '#/components/schemas/PaymentCondition' }
     OrderReopenRequest:
       type: object
@@ -6559,7 +6612,7 @@ components:
                   SIZE_PRICING_NOT_INITIALIZED,
                   SIZE_PRICING_LEGACY_REQUIRES_ADAPTER,
                   SIZE_PRICING_ITEMS_MANAGED,
-                  SIZE_PRICING_CONFIRMATION_PENDING,
+                  SIZE_PRICING_AMOUNT_MISMATCH,
                   INVALID_DATE,
                   ORDER_STATUS_CONFLICT,
                   EMPTY_FILE,

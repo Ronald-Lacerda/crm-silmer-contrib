@@ -5,6 +5,7 @@ import { InMemoryOrderRepository } from '../modules/orders/src/adapters/in-memor
 import { createOrderService } from '../modules/orders/src/application/order-service.js';
 import { confirmOrder } from '../modules/orders/src/domain/order.js';
 import { orderContextsFrom } from './fixtures/order-contexts.js';
+import { fixturePricing } from './fixtures/size-pricing.js';
 
 const NOW = new Date('2026-09-12T15:00:00.000Z');
 const OWNER = Object.freeze({
@@ -44,17 +45,20 @@ const BRIEFING = Object.freeze({
 function sellerCompleted(order) {
   return {
     ...order,
-    ficha: {
-      ...order.ficha,
-      items: order.ficha.items.map((/** @type {any} */ item) => ({
-        ...item,
-        tipo_servico: 'Sublimação escolhida pelo vendedor',
-      })),
-      summary: {
-        ...order.ficha.summary,
-        data_entrega_confirmada: '2026-10-24',
+    ficha: fixturePricing(
+      {
+        ...order.ficha,
+        items: order.ficha.items.map((/** @type {any} */ item) => ({
+          ...item,
+          tipo_servico: 'Sublimação escolhida pelo vendedor',
+        })),
+        summary: {
+          ...order.ficha.summary,
+          data_entrega_confirmada: '2026-10-24',
+        },
       },
-    },
+      1000,
+    ),
   };
 }
 
@@ -155,6 +159,7 @@ test('an intent without a pending order creates one pre-filled from the pre-fich
     'summary.data_entrega_confirmada',
     'finalAmount',
     'paymentCondition',
+    'sizePricing',
   ]);
   assert.deepEqual(await repository.findById(order.id), order);
 });
@@ -369,6 +374,7 @@ test('the agent briefing is projected only while the conversation is with the ag
     'items[1].tipo_servico',
     'finalAmount',
     'paymentCondition',
+    'sizePricing',
   ]);
   assert.deepEqual(result.ficha.observations, ['Separar por tamanho']);
   assert.equal(result.ficha.serviceData.notes, 'Sem gola');

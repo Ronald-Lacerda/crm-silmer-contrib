@@ -8,6 +8,7 @@ import { InMemoryIdempotencyRecordStore } from '../modules/integration-reliabili
 import { InMemoryOrderRepository } from '../modules/orders/src/adapters/in-memory-order-repository.js';
 import { syntheticItems } from './fixtures/order-items.js';
 import { orderContextsFrom } from './fixtures/order-contexts.js';
+import { priceDraft } from './fixtures/size-pricing.js';
 
 const synthetic = JSON.parse(
   await readFile(
@@ -64,6 +65,14 @@ const ORDER_KEYS = [
   'updatedAt',
   'version',
 ];
+
+/** @param {any} order */
+function orderKeys(order) {
+  return [
+    ...ORDER_KEYS,
+    ...(order.ficha.sizePricing === undefined ? [] : ['pricing']),
+  ].sort();
+}
 
 /** @param {{readActor?: any, writeActor?: any, pdfRenderer?: (html: string) => Promise<Buffer>}} [options] */
 function orderHarness(options = {}) {
@@ -227,7 +236,7 @@ async function createConfirmed(runtime, conversationId, summary) {
       value: syntheticItems(),
     }),
   );
-  const edited = await runtime.patchSection(
+  let edited = await runtime.patchSection(
     seed({
       expectedVersion: withItems.version,
       orderId: withItems.id,
@@ -235,6 +244,7 @@ async function createConfirmed(runtime, conversationId, summary) {
       value: ART_FROM_CUSTOMER,
     }),
   );
+  edited = await priceDraft(runtime, edited, 482000, SELLER);
   return runtime.confirm(
     seed({
       amountText: '4.820,00',
@@ -544,7 +554,7 @@ test('GET /orders/:orderId returns the Order contract with named actors', async 
   assert.equal(response.headers['cache-control'], 'private, no-cache');
   const { order } = response.json();
   assert.deepEqual(Object.keys(response.json()), ['order']);
-  assert.deepEqual(Object.keys(order).sort(), ORDER_KEYS);
+  assert.deepEqual(Object.keys(order).sort(), orderKeys(order));
   assert.equal(order.number, '01-CRM');
   assert.equal(order.status, 'confirmado');
   assert.equal(order.finalAmountCents, 482000);
@@ -595,7 +605,10 @@ test('GET /orders filters by status, searches and pages with counts', async (t) 
   ]);
   assert.deepEqual(firstPage.counts, { confirmado: 1, pendente: 1 });
   assert.equal(firstPage.items.length, 1);
-  assert.deepEqual(Object.keys(firstPage.items[0]).sort(), ORDER_KEYS);
+  assert.deepEqual(
+    Object.keys(firstPage.items[0]).sort(),
+    orderKeys(firstPage.items[0]),
+  );
   assert.ok(firstPage.nextCursor);
 
   const next = await api.inject({
@@ -768,7 +781,7 @@ test('POST /conversations/:id/orders creates 201, then answers 200 with the pend
   assert.equal(created.statusCode, 201);
   assert.deepEqual(Object.keys(created.json()), ['order']);
   const { order } = created.json();
-  assert.deepEqual(Object.keys(order).sort(), ORDER_KEYS);
+  assert.deepEqual(Object.keys(order).sort(), orderKeys(order));
   assert.equal(order.status, 'pendente');
   assert.equal(order.ficha.summary.cliente, 'Cliente Sintetico');
   assert.equal(guards.at(-1)?.input.action, 'order.create');
@@ -904,6 +917,7 @@ test('PATCH /orders/:id/sections/:section saves the whole section', async (t) =>
     'summary.data_entrega_confirmada',
     'finalAmount',
     'paymentCondition',
+    'sizePricing',
   ]);
   assert.equal(guards.at(-1)?.input.action, 'order.edit');
 });
@@ -938,6 +952,7 @@ test('PATCH items takes a half-filled item, and one without the ADR 016 fields',
     'summary.data_entrega_confirmada',
     'finalAmount',
     'paymentCondition',
+    'sizePricing',
   ]);
 
   const blocked = await api.inject({
@@ -961,6 +976,8 @@ test('PATCH items takes a half-filled item, and one without the ADR 016 fields',
         'items[0].grade',
         'artwork',
         'summary.data_entrega_confirmada',
+        'finalAmount',
+        'sizePricing',
       ],
     },
   });
@@ -1132,8 +1149,8 @@ test('a malformed section answers 400 without echoing its content', async (t) =>
   assert.equal(summary.body.includes('PII-canary'), false);
 });
 
-/** @param {any} runtime @param {string} conversationId */
-async function createReady(runtime, conversationId) {
+/** @param {any} runtime @param {string} conversationId @param {boolean} [withPricing] */
+async function createReady(runtime, conversationId, withPricing = true) {
   const created = await createPending(runtime, conversationId);
   const order = await runtime.patchSection(
     seed({
@@ -1151,7 +1168,7 @@ async function createReady(runtime, conversationId) {
       value: syntheticItems(),
     }),
   );
-  return runtime.patchSection(
+  const edited = await runtime.patchSection(
     seed({
       expectedVersion: withItems.version,
       orderId: withItems.id,
@@ -1159,6 +1176,7 @@ async function createReady(runtime, conversationId) {
       value: ART_FROM_CUSTOMER,
     }),
   );
+  return withPricing ? priceDraft(runtime, edited, 482000, SELLER) : edited;
 }
 
 test('POST /orders/:id/confirm confirms with amount and condition', async (t) => {
@@ -1178,7 +1196,7 @@ test('POST /orders/:id/confirm confirms with amount and condition', async (t) =>
   assert.equal(response.statusCode, 200);
   assert.deepEqual(Object.keys(response.json()), ['order']);
   const { order } = response.json();
-  assert.deepEqual(Object.keys(order).sort(), ORDER_KEYS);
+  assert.deepEqual(Object.keys(order).sort(), orderKeys(order));
   assert.equal(order.status, 'confirmado');
   assert.equal(order.finalAmountCents, 482000);
   assert.equal(order.paymentCondition, 'cartao_credito');
@@ -1207,6 +1225,7 @@ test('confirming without what ADR 016 requires answers 422 ORDER_NOT_CONFIRMABLE
         'summary.data_entrega_confirmada',
         'finalAmount',
         'paymentCondition',
+        'sizePricing',
       ],
     },
   });
@@ -1241,7 +1260,6 @@ test('two confirmations on the same version: one 200, the other 409', async (t) 
       headers: { ...writeHeaders, 'idempotency-key': key },
       method: 'POST',
       payload: {
-        amountText: '100,00',
         expectedVersion: ready.version,
         paymentCondition: 'pix',
       },
@@ -1284,12 +1302,13 @@ test('POST /orders/:id/reopen returns a confirmed order to pending', async (t) =
   assert.equal(again.statusCode, 409);
   assert.deepEqual(again.json(), { error: { code: 'ORDER_STATUS_CONFLICT' } });
 
+  const repriced = await priceDraft(runtime, order, 500000, SELLER);
   const reconfirmed = await api.inject({
     headers: { ...writeHeaders, 'idempotency-key': 'reconfirm' },
     method: 'POST',
     payload: {
       amountText: '5.000,00',
-      expectedVersion: order.version,
+      expectedVersion: repriced.version,
       paymentCondition: 'pix',
     },
     url: `/api/v1/orders/${confirmed.id}/confirm`,
@@ -2099,4 +2118,72 @@ test('OLIST-T20 API creates and edits composition from an empty adopted draft wi
   assert.equal(order.totalPieces, 2);
   assert.equal(order.ficha.sizePricing[0].lines[0].subtotalReviewed, true);
   assert.equal(order.ficha.items[0].cor, 'VERDE');
+});
+
+test('OLIST-T21 confirmation computes an omitted amount and refuses a divergent legacy amount without a write', async (t) => {
+  const { api, runtime, guards } = orderHarness();
+  t.after(() => api.close());
+  const ready = await createReady(runtime, 'conversation-1');
+  const mismatch = await api.inject({
+    headers: { ...writeHeaders, 'idempotency-key': 't21-confirm-mismatch' },
+    method: 'POST',
+    url: `/api/v1/orders/${ready.id}/confirm`,
+    payload: {
+      expectedVersion: ready.version,
+      amountText: '5.000,00',
+      paymentCondition: 'pix',
+    },
+  });
+  assert.equal(mismatch.statusCode, 422);
+  assert.deepEqual(mismatch.json(), {
+    error: { code: 'SIZE_PRICING_AMOUNT_MISMATCH', fields: ['finalAmount'] },
+  });
+  const unchanged = (await runtime.get(ready.id)).order;
+  assert.equal(unchanged.version, ready.version);
+  assert.equal(unchanged.status, 'pendente');
+  assert.equal(unchanged.pricing?.totalCents, 482000);
+  const request = {
+    headers: { ...writeHeaders, 'idempotency-key': 't21-confirm-calculated' },
+    method: /** @type {const} */ ('POST'),
+    url: `/api/v1/orders/${ready.id}/confirm`,
+    payload: { expectedVersion: ready.version, paymentCondition: 'pix' },
+  };
+  const accepted = await api.inject(request);
+  assert.equal(accepted.statusCode, 200);
+  const confirmed = accepted.json().order;
+  assert.equal(confirmed.finalAmountCents, 482000);
+  assert.equal(confirmed.pricing.totalCents, 482000);
+  assert.equal(confirmed.pricing.complete, true);
+  assert.equal(guards.at(-1)?.input.action, 'order.confirm');
+  assert.equal(guards.at(-1)?.input.csrfToken, writeHeaders['x-csrf-token']);
+  assert.equal(guards.at(-1)?.input.origin, writeHeaders.origin);
+  assert.deepEqual((await api.inject(request)).json(), accepted.json());
+  assert.equal((await runtime.get(ready.id)).order.version, confirmed.version);
+});
+
+test('OLIST-T21 legacy browser amount does not bypass missing price composition', async (t) => {
+  const { api, runtime } = orderHarness();
+  t.after(() => api.close());
+  const ready = await createReady(runtime, 'conversation-1', false);
+  const refused = await api.inject({
+    headers: { ...writeHeaders, 'idempotency-key': 't21-confirm-unadopted' },
+    method: 'POST',
+    url: `/api/v1/orders/${ready.id}/confirm`,
+    payload: {
+      expectedVersion: ready.version,
+      amountText: '4.820,00',
+      paymentCondition: 'pix',
+    },
+  });
+  assert.equal(refused.statusCode, 422);
+  assert.deepEqual(refused.json(), {
+    error: {
+      code: 'ORDER_NOT_CONFIRMABLE',
+      fields: ['finalAmount', 'sizePricing'],
+    },
+  });
+  const unchanged = (await runtime.get(ready.id)).order;
+  assert.equal(unchanged.version, ready.version);
+  assert.equal(unchanged.status, 'pendente');
+  assert.equal(unchanged.finalAmountCents, null);
 });

@@ -110,6 +110,8 @@ import { ORDER_ORIGINS } from '../domain/store-order.js';
  *
  * - `saveSection`/`projectBriefing` write the ficha and its derived columns
  *   (`totalPieces`, `missingFields`, `updatedAt`) of a pending order only.
+ *   For sizePricing compositions, also persist the calculated finalAmountCents
+ *   (null while incomplete) and invalidate settlement on a changed known total.
  * - `saveStatus` writes the confirmation/reopen columns of the order and
  *   its ficha, so a generated order keeps the client it showed (ADR 018).
  * - `saveMilestones` writes the days of the trail (`paidOn`, `deliveredOn`,

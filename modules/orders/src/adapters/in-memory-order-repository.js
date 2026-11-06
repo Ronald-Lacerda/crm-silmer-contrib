@@ -1,3 +1,4 @@
+import { sizePricingSummary } from '../domain/size-pricing-composition.js';
 import {
   OrderConflictError,
   OrderForbiddenError,
@@ -579,8 +580,20 @@ export class InMemoryOrderRepository {
           'ORDER_STATUS_CONFLICT',
         );
       }
+      const finalAmountCents =
+        order.ficha.sizePricing === undefined
+          ? current.finalAmountCents
+          : sizePricingSummary(order.ficha).totalCents;
+      const amountChanged =
+        current.finalAmountCents !== null &&
+        current.finalAmountCents !== finalAmountCents;
       return {
         ...current,
+        finalAmountCents,
+        paidOn: amountChanged ? null : current.paidOn,
+        paymentReviewRequired: amountChanged
+          ? false
+          : current.paymentReviewRequired,
         ficha: clone(order.ficha),
         missingFields: [...order.missingFields],
         totalPieces: order.totalPieces,

@@ -1,3 +1,4 @@
+import { priceDraft } from './fixtures/size-pricing.js';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
@@ -153,6 +154,7 @@ test('saving items recalculates total pieces and what is missing', async () => {
     'items[0].gola',
     'finalAmount',
     'paymentCondition',
+    'sizePricing',
   ]);
   const saved = await service.patchSection(
     command({
@@ -164,7 +166,11 @@ test('saving items recalculates total pieces and what is missing', async () => {
   );
   assert.equal(saved.totalPieces, 32);
   assert.equal(saved.ficha.items.length, 2);
-  assert.deepEqual(saved.missingFields, ['finalAmount', 'paymentCondition']);
+  assert.deepEqual(saved.missingFields, [
+    'finalAmount',
+    'paymentCondition',
+    'sizePricing',
+  ]);
 
   const observations = await service.patchSection(
     command({
@@ -313,7 +319,7 @@ test('a stale version is reported as a conflict', async () => {
 
 test('confirming parses the amount and refuses what is missing per field', async () => {
   const { order, service } = await setup();
-  const withItems = await service.patchSection(
+  let withItems = await service.patchSection(
     command({
       expectedVersion: order.version,
       orderId: order.id,
@@ -325,7 +331,6 @@ test('confirming parses the amount and refuses what is missing per field', async
   await assert.rejects(
     service.confirm(
       command({
-        amountText: '',
         expectedVersion: withItems.version,
         orderId: order.id,
         paymentCondition: null,
@@ -333,7 +338,11 @@ test('confirming parses the amount and refuses what is missing per field', async
     ),
     (/** @type {any} */ error) => {
       assert.equal(error.code, 'ORDER_NOT_CONFIRMABLE');
-      assert.deepEqual(error.fields, ['finalAmount', 'paymentCondition']);
+      assert.deepEqual(error.fields, [
+        'finalAmount',
+        'paymentCondition',
+        'sizePricing',
+      ]);
       return true;
     },
   );
@@ -349,6 +358,7 @@ test('confirming parses the amount and refuses what is missing per field', async
     { code: 'INVALID_AMOUNT', statusCode: 422 },
   );
 
+  withItems = await priceDraft(service, withItems, 482000, OWNER);
   const confirmed = await service.confirm(
     command({
       amountText: '4.820,00',
@@ -401,6 +411,7 @@ test('a half-filled item is saved, and generating names what each item lacks (AD
     'items[1].gola',
     'finalAmount',
     'paymentCondition',
+    'sizePricing',
   ]);
   await assert.rejects(
     service.confirm(
@@ -419,6 +430,8 @@ test('a half-filled item is saved, and generating names what each item lacks (AD
         'items[1].malhas',
         'items[1].grade',
         'items[1].gola',
+        'finalAmount',
+        'sizePricing',
       ],
       statusCode: 422,
     },
@@ -444,13 +457,16 @@ test('a pending order without items cannot be confirmed', async () => {
         paymentCondition: 'pix',
       }),
     ),
-    { code: 'ORDER_NOT_CONFIRMABLE', fields: ['items'] },
+    {
+      code: 'ORDER_NOT_CONFIRMABLE',
+      fields: ['items', 'finalAmount', 'sizePricing'],
+    },
   );
 });
 
 test('a confirmed order is read-only until reopened, and a new owner confirms again', async () => {
   const { order, owners, service } = await setup();
-  const withItems = await service.patchSection(
+  let withItems = await service.patchSection(
     command({
       expectedVersion: order.version,
       orderId: order.id,
@@ -458,6 +474,7 @@ test('a confirmed order is read-only until reopened, and a new owner confirms ag
       value: syntheticItems(),
     }),
   );
+  withItems = await priceDraft(service, withItems, 10000, OWNER);
   const confirmed = await service.confirm(
     command({
       amountText: '100,00',
@@ -498,7 +515,7 @@ test('a confirmed order is read-only until reopened, and a new owner confirms ag
     ),
     { code: 'FORBIDDEN' },
   );
-  const reopened = await service.reopen({
+  let reopened = await service.reopen({
     actor: OTHER,
     correlationId: 'correlation-reopen',
     expectedVersion: confirmed.version,
@@ -518,6 +535,7 @@ test('a confirmed order is read-only until reopened, and a new owner confirms ag
     { code: 'ORDER_STATUS_CONFLICT' },
   );
 
+  reopened = await priceDraft(service, reopened, 12000, OTHER);
   const reconfirmed = await service.confirm({
     actor: OTHER,
     amountText: '120,00',
@@ -533,7 +551,7 @@ test('a confirmed order is read-only until reopened, and a new owner confirms ag
 
 test('the owner or an admin records the trail days of a confirmed order without reopening', async () => {
   const { order, owners, service } = await setup();
-  const withItems = await service.patchSection(
+  let withItems = await service.patchSection(
     command({
       expectedVersion: order.version,
       orderId: order.id,
@@ -541,6 +559,7 @@ test('the owner or an admin records the trail days of a confirmed order without 
       value: syntheticItems(),
     }),
   );
+  withItems = await priceDraft(service, withItems, 10000, OWNER);
   const confirmed = await service.confirm(
     command({
       amountText: '100,00',
@@ -846,7 +865,7 @@ test('OLIST-T20b preserves human composition against legacy replacement, automat
         paymentCondition: 'pix',
       }),
     ),
-    { code: 'SIZE_PRICING_CONFIRMATION_PENDING' },
+    { code: 'ORDER_NOT_CONFIRMABLE' },
   );
   assert.deepEqual((await repository.findById(saved.id))?.ficha, saved.ficha);
   assert.equal((await repository.findById(saved.id))?.version, saved.version);
@@ -865,14 +884,24 @@ test('OLIST-T20b preserves human composition against legacy replacement, automat
 });
 
 test('OLIST-T20b confirmed historical composition is not enriched through draft adoption', async () => {
-  const { service, order } = await pricedDraft();
-  const confirmed = await service.confirm(
-    command({
-      orderId: order.id,
-      expectedVersion: order.version,
-      amountText: '500,00',
+  const { service, repository, order } = await pricedDraft();
+  // Historical confirmed fixture, before the subtotal contract existed.
+  const confirmed = await repository.saveStatus(
+    {
+      ...order,
+      status: 'confirmado',
+      finalAmountCents: 50000,
+      confirmedAt: '2026-09-12T15:00:00.000Z',
+      confirmedBy: OWNER.id,
+      orderDate: '2026-09-12',
+      missingFields: [],
       paymentCondition: 'pix',
-    }),
+    },
+    {
+      actor: OWNER,
+      correlationId: 'synthetic-historical',
+      expectedVersion: order.version,
+    },
   );
   await assert.rejects(
     pricingCommand(service, confirmed, { action: 'initialize' }),
@@ -1084,4 +1113,220 @@ test('OLIST-T20 rejects identity replacement, duplicate sizes and malformed perm
     { code: 'SIZE_PRICING_INVALID' },
   );
   assert.equal((await repository.findById(saved.id))?.version, added.version);
+});
+
+async function negotiatedDraft() {
+  const context = await setup();
+  let order = await context.service.patchSection(
+    command({
+      orderId: context.order.id,
+      expectedVersion: context.order.version,
+      section: 'items',
+      value: syntheticItems().map((item, i) => ({
+        ...item,
+        grade: [{ tamanho: 'M', quantidade: i === 0 ? 10 : 20 }],
+      })),
+    }),
+  );
+  order = await pricingCommand(context.service, order, {
+    action: 'initialize',
+  });
+  const groups = managedGroups(order);
+  for (const [index, subtotalCents] of [18000, 32000].entries()) {
+    order = await pricingCommand(context.service, order, {
+      action: 'review_subtotal',
+      groupId: groups[index].id,
+      lineId: groups[index].lines[0].id,
+      subtotalCents,
+    });
+  }
+  return { ...context, order };
+}
+
+test('OLIST-T21 authoritative totals are persisted and confirmation accepts only omission or exact equality', async () => {
+  const { service, repository, order } = await negotiatedDraft();
+  assert.equal(order.finalAmountCents, 50000);
+  assert.equal((await repository.findById(order.id))?.finalAmountCents, 50000);
+  assert.deepEqual(order.missingFields, ['paymentCondition']);
+  const before = await repository.findById(order.id);
+  await assert.rejects(
+    service.confirm(
+      command({
+        orderId: order.id,
+        expectedVersion: order.version,
+        amountText: '499,99',
+        paymentCondition: 'pix',
+      }),
+    ),
+    { code: 'SIZE_PRICING_AMOUNT_MISMATCH' },
+  );
+  assert.deepEqual(await repository.findById(order.id), before);
+  const confirmed = await service.confirm(
+    command({
+      orderId: order.id,
+      expectedVersion: order.version,
+      paymentCondition: 'pix',
+    }),
+  );
+  assert.equal(confirmed.finalAmountCents, 50000);
+  assert.equal(confirmed.totalPieces, 30);
+  assert.equal(confirmed.status, 'confirmado');
+  const reopened = await service.reopen(
+    command({ orderId: order.id, expectedVersion: confirmed.version }),
+  );
+  const equal = await service.confirm(
+    command({
+      orderId: order.id,
+      expectedVersion: reopened.version,
+      amountText: '500,00',
+      paymentCondition: 'pix',
+    }),
+  );
+  assert.equal(equal.finalAmountCents, 50000);
+});
+
+test('OLIST-T21 changed or unreviewed subtotal invalidates settlement without restoring it when the amount returns', async () => {
+  const { service, repository, order } = await negotiatedDraft();
+  const groups = managedGroups(order);
+  const target = { groupId: groups[0].id, lineId: groups[0].lines[0].id };
+  let saved = await service.confirm(
+    command({
+      orderId: order.id,
+      expectedVersion: order.version,
+      paymentCondition: 'pix',
+    }),
+  );
+  saved = await service.recordMilestones(
+    command({
+      orderId: saved.id,
+      expectedVersion: saved.version,
+      paidOn: '2026-09-11',
+      deliveredOn: null,
+    }),
+  );
+  saved = await service.reopen(
+    command({ orderId: saved.id, expectedVersion: saved.version }),
+  );
+  assert.equal(saved.paidOn, '2026-09-11');
+  saved = await pricingCommand(service, saved, {
+    action: 'review_subtotal',
+    ...target,
+    subtotalCents: 17000,
+  });
+  assert.equal(saved.finalAmountCents, 49000);
+  assert.equal(saved.paidOn, null);
+  saved = await pricingCommand(service, saved, {
+    action: 'review_subtotal',
+    ...target,
+    subtotalCents: 18000,
+  });
+  assert.equal(saved.finalAmountCents, 50000);
+  assert.equal(saved.paidOn, null);
+  saved = await service.recordMilestones(
+    command({
+      orderId: saved.id,
+      expectedVersion: saved.version,
+      paidOn: '2026-09-11',
+      deliveredOn: null,
+    }),
+  );
+  saved = await pricingCommand(service, saved, {
+    action: 'change_quantity',
+    ...target,
+    quantity: 15,
+  });
+  assert.equal(saved.finalAmountCents, null);
+  assert.equal(saved.paidOn, null);
+  saved = await pricingCommand(service, saved, {
+    action: 'change_quantity',
+    ...target,
+    quantity: 10,
+  });
+  assert.equal(saved.finalAmountCents, null);
+  assert.ok(
+    saved.missingFields.includes(
+      `sizePricing.${target.groupId}.${target.lineId}`,
+    ),
+  );
+  await assert.rejects(
+    service.confirm(
+      command({
+        orderId: saved.id,
+        expectedVersion: saved.version,
+        amountText: '500,00',
+        paymentCondition: 'pix',
+      }),
+    ),
+    { code: 'ORDER_NOT_CONFIRMABLE' },
+  );
+  saved = await pricingCommand(service, saved, {
+    action: 'review_subtotal',
+    ...target,
+    subtotalCents: 18000,
+  });
+  assert.equal(saved.paidOn, null);
+  assert.equal((await repository.findById(saved.id))?.finalAmountCents, 50000);
+});
+
+test('OLIST-T21 concurrent confirmation and price revision serialize by order version', async () => {
+  const { service, repository, order } = await negotiatedDraft();
+  const group = managedGroups(order)[0];
+  const results = await Promise.allSettled([
+    service.confirm(
+      command({
+        orderId: order.id,
+        expectedVersion: order.version,
+        paymentCondition: 'pix',
+      }),
+    ),
+    pricingCommand(service, order, {
+      action: 'review_subtotal',
+      groupId: group.id,
+      lineId: group.lines[0].id,
+      subtotalCents: 15000,
+    }),
+  ]);
+  assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
+  const rejected = results.find((r) => r.status === 'rejected');
+  assert.ok(rejected && rejected.status === 'rejected');
+  assert.equal(rejected.reason.code, 'VERSION_CONFLICT');
+  const saved = await repository.findById(order.id);
+  assert.ok(saved);
+  assert.equal(saved.version, order.version + 1);
+  assert.equal(
+    saved.finalAmountCents,
+    saved.status === 'confirmado' ? 50000 : 47000,
+  );
+});
+
+test('OLIST-T21 fractional ERP unit cents do not block a valid commercial confirmation', async () => {
+  const { service, order } = await setup();
+  let saved = await service.patchSection(
+    command({
+      orderId: order.id,
+      expectedVersion: order.version,
+      section: 'items',
+      value: [
+        { ...syntheticItems()[0], grade: [{ tamanho: 'M', quantidade: 3 }] },
+      ],
+    }),
+  );
+  saved = await pricingCommand(service, saved, { action: 'initialize' });
+  const group = managedGroups(saved)[0];
+  saved = await pricingCommand(service, saved, {
+    action: 'review_subtotal',
+    groupId: group.id,
+    lineId: group.lines[0].id,
+    subtotalCents: 100,
+  });
+  const confirmed = await service.confirm(
+    command({
+      orderId: saved.id,
+      expectedVersion: saved.version,
+      paymentCondition: 'pix',
+    }),
+  );
+  assert.equal(confirmed.finalAmountCents, 100);
+  assert.equal(confirmed.status, 'confirmado');
+  assert.equal(confirmed.totalPieces, 3);
 });

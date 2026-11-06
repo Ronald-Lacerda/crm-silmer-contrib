@@ -24,6 +24,17 @@ guardrail, abertura humana, transporte, reservas, epoch e revisão; preparação
 offline recusa drift e dados fixados. Sem migração ou infraestrutura nova.
 [Operação e rollback](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T21 — total calculado e confirmação
+
+T20/T21 concluídas no domínio/API: subtotais revisados determinam total/grupos,
+gravação cifrada e coluna monetária na mesma escrita. Confirmação recalcula e
+exige composição completa; amountText antigo só por igualdade, sem fallback.
+Preço ausente/revisão deixam total null; mudança invalida quitação/check e
+preserva histórico. Reabertura adotada mantém IDs; legado/loja dependem T26/T24.
+A API expõe pricing derivado no escopo existente do Pedido. UI/Fase 4 e adapters
+são gates de rollout: não voltar à API antiga com mutações comerciais liberadas.
+[Contrato, evidências e rollback](docs/runbooks/olist-phase3.md).
+
 ## OLIST-T20 — composição e edição por identidade
 
 Comandos por identidade completam edição de atributos, grupos e linhas,
@@ -31,9 +42,9 @@ inclusão/remoção, alteração de tamanho e reordenação. Grade e preços via
 mesma escrita cifrada com ACL comercial, versão e idempotência. Mudança real
 exige revisão; reordenação e atualização sem mudança preservam aprovação.
 Legado/loja continuam sem reescrita e a UI pertence à Fase 4. T20 concluída no
-domínio/API, com T21 ainda pendente. [Contrato](docs/runbooks/olist-phase3.md).
+domínio/API; a confirmação T21 está descrita acima. [Contrato](docs/runbooks/olist-phase3.md).
 
-## OLIST-T20b — composição persistida opt-in
+## OLIST-T20b — composição persistida opt-in (histórico)
 
 OLIST-09, 29, 42–44: `ficha.sizePricing` opcional guarda grupos/linhas com IDs
 UUID e revisão humana no mesmo envelope AES-GCM da grade; alterações usam
@@ -41,8 +52,8 @@ UUID e revisão humana no mesmo envelope AES-GCM da grade; alterações usam
 existentes. Reordenação move peça e grupo juntos; duplicação cria IDs novos;
 quantidade invalida revisão. Limite agregado de peças é o integer PostgreSQL.
 Sem migração inferida ou total histórico dividido. Após adesão, items legado,
-projeção automática e confirmação livre não escrevem. T20/T21 e adapters
-T24/T26 seguem abertos. [Runbook](docs/runbooks/olist-phase3.md).
+projeção automática e confirmação livre não escrevem. Naquela entrega, T20/T21 e adapters
+T24/T26 ainda estavam abertos. [Runbook](docs/runbooks/olist-phase3.md).
 
 ## Olist — fundação da Fase 2 (05/11/2026)
 

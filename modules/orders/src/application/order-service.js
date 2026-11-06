@@ -17,7 +17,10 @@ import {
   validateObservations,
   validateSummary,
 } from '../domain/ficha.js';
-import { applySizePricingCommand } from '../domain/size-pricing-composition.js';
+import {
+  applySizePricingCommand,
+  sizePricingSummary,
+} from '../domain/size-pricing-composition.js';
 import { parseBrlAmount } from '../domain/money.js';
 import {
   confirmOrder,
@@ -107,9 +110,16 @@ const STORE_NUMBER_QUERY = /^#?lj-?([0-9a-f]{8})$/iu;
  * @returns {T & {totalPieces: number, missingFields: string[]}}
  */
 function withDerivedFields(order) {
-  return {
+  const next = {
     ...order,
-    missingFields: missingForConfirmation(order),
+    finalAmountCents:
+      order.ficha.sizePricing === undefined
+        ? order.finalAmountCents
+        : sizePricingSummary(order.ficha).totalCents,
+  };
+  return {
+    ...next,
+    missingFields: missingForConfirmation(next),
     totalPieces: orderTotal(order.ficha.items),
   };
 }
@@ -807,25 +817,19 @@ export function createOrderService(options) {
     },
 
     /**
-     * PCL-04..06: a blank amount counts as missing (reported with the other
-     * blockers); a malformed one is refused as INVALID_AMOUNT. The ficha is
+     * OLIST-T21: reviewed size subtotals determine the amount; an optional
+     * legacy declaration must match. Malformed declarations are INVALID_AMOUNT. The ficha is
      * written with the status, so the order keeps the client it showed when
      * it was generated, on screen and on paper (PCT-02, ADR 018).
      *
-     * @param {{orderId: string, amountText: unknown, paymentCondition: unknown, expectedVersion: number, actor: OrderActor, correlationId: string}} input
+     * @param {{orderId: string, amountText?: unknown, paymentCondition: unknown, expectedVersion: number, actor: OrderActor, correlationId: string}} input
      */
     async confirm(input) {
       const order = await loadForCommand(input);
-      if (order.ficha.sizePricing !== undefined) {
-        throw new OrderConflictError(
-          'A confirmação calculada depende de OLIST-T21.',
-          'SIZE_PRICING_CONFIRMATION_PENDING',
-        );
-      }
       const amountCents =
-        typeof input.amountText === 'string' && input.amountText.trim() !== ''
-          ? parseBrlAmount(input.amountText)
-          : 0;
+        input.amountText === undefined || input.amountText === null
+          ? undefined
+          : parseBrlAmount(/** @type {string} */ (input.amountText));
       return current(
         await repository.saveStatus(
           confirmOrder(order, {

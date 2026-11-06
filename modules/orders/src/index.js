@@ -1,3 +1,4 @@
+export { sizePricingSummary } from './domain/size-pricing-composition.js';
 // Orders module (ADR 006): the Pedido aggregate, its ficha and persistence.
 export {
   prepareExactCentExport,

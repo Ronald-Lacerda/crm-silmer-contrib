@@ -4,6 +4,7 @@ import test from 'node:test';
 import { InMemoryOrderRepository } from '../modules/orders/src/adapters/in-memory-order-repository.js';
 import { createOrderService } from '../modules/orders/src/application/order-service.js';
 import { syntheticItems } from './fixtures/order-items.js';
+import { priceDraft } from './fixtures/size-pricing.js';
 
 const OWNER = { id: 'seller-1', kind: 'human', capabilities: [] };
 const OTHER = { id: 'seller-2', kind: 'human', capabilities: [] };
@@ -119,6 +120,7 @@ async function confirmedManual(service, key, actor = OWNER) {
       value,
     });
   }
+  order = await priceDraft(service, order, 10000, actor);
   return service.confirm({
     actor,
     correlationId: key,

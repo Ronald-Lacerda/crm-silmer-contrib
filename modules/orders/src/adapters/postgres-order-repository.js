@@ -1,3 +1,4 @@
+import { sizePricingSummary } from '../domain/size-pricing-composition.js';
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -970,6 +971,7 @@ export class PostgresOrderRepository {
         `UPDATE crm.orders
          SET ficha_envelope = $2::jsonb, total_pieces = $3,
              missing_fields = $4::text[], updated_at = $5,
+             final_amount_cents = CASE WHEN $7::boolean THEN $6::bigint ELSE final_amount_cents END,
              version = version + 1
          WHERE id = $1
          RETURNING ${ORDER_COLUMNS}`,
@@ -981,6 +983,10 @@ export class PostgresOrderRepository {
           order.totalPieces,
           order.missingFields,
           order.updatedAt,
+          order.ficha.sizePricing === undefined
+            ? null
+            : sizePricingSummary(order.ficha).totalCents,
+          order.ficha.sizePricing !== undefined,
         ],
       );
     });

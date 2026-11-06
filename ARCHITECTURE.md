@@ -19,6 +19,17 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T21 — total calculado e confirmação
+
+T20/T21 concluídas no domínio/API: subtotais revisados determinam total/grupos,
+gravação cifrada e coluna monetária na mesma escrita. Confirmação recalcula e
+exige composição completa; amountText antigo só por igualdade, sem fallback.
+Preço ausente/revisão deixam total null; mudança invalida quitação/check e
+preserva histórico. Reabertura adotada mantém IDs; legado/loja dependem T26/T24.
+A API expõe pricing derivado no escopo existente do Pedido. UI/Fase 4 e adapters
+são gates de rollout: não voltar à API antiga com mutações comerciais liberadas.
+[Contrato, evidências e rollback](docs/runbooks/olist-phase3.md).
+
 ## OLIST-T20 — composição e edição por identidade
 
 Comandos por identidade completam edição de atributos, grupos e linhas,
@@ -26,17 +37,17 @@ inclusão/remoção, alteração de tamanho e reordenação. Grade e preços via
 mesma escrita cifrada com ACL comercial, versão e idempotência. Mudança real
 exige revisão; reordenação e atualização sem mudança preservam aprovação.
 Legado/loja continuam sem reescrita e a UI pertence à Fase 4. T20 concluída no
-domínio/API, com T21 ainda pendente. [Contrato](docs/runbooks/olist-phase3.md).
+domínio/API; a confirmação T21 está descrita acima. [Contrato](docs/runbooks/olist-phase3.md).
 
-## Olist — início da Fase 3 (05/11/2026)
+## Olist — início da Fase 3 (histórico T20b)
 
 OLIST-T20b persiste composição opcional no envelope da ficha, sem migration
 ou reescrita de legado. Comandos humanos por ID geram/preservam identidades,
 revisam subtotal, alteram quantidade, reordenam grupos e duplicam com revisão
 invalidada. ACL comercial, versão e idempotência existentes protegem a escrita.
 Cliente antigo/projeção automática não podem substituir composição adotada.
-Confirmação calculada, adapters loja/legado e UI continuam pendentes; T20/T21/F3
-não estão concluídos. [Contrato/limites e rollback](docs/runbooks/olist-phase3.md).
+Naquela entrega, confirmação calculada, adapters loja/legado e UI
+ainda estavam pendentes; T20/T21/F3 não estavam concluídos. [Contrato/limites e rollback](docs/runbooks/olist-phase3.md).
 
 ## Olist — fundação da Fase 2 (05/11/2026)
 

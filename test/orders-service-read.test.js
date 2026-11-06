@@ -5,6 +5,7 @@ import { InMemoryOrderRepository } from '../modules/orders/src/adapters/in-memor
 import { createOrderService } from '../modules/orders/src/application/order-service.js';
 import { confirmOrder } from '../modules/orders/src/domain/order.js';
 import { orderContextsFrom } from './fixtures/order-contexts.js';
+import { fixturePricing } from './fixtures/size-pricing.js';
 
 async function setup() {
   const repository = new InMemoryOrderRepository();
@@ -51,24 +52,27 @@ async function setup() {
     const withGrade = await repository.saveSection(
       {
         ...order,
-        ficha: {
-          ...order.ficha,
-          artwork: { ...order.ficha.artwork, sem_estampa: true },
-          summary: {
-            ...order.ficha.summary,
-            data_entrega_confirmada: '2026-10-24',
-          },
-          items: [
-            {
-              ...order.ficha.items[0],
-              cor: 'BRANCA',
-              gola: 'GOLA REDONDA',
-              grade: [{ quantidade: 1, tamanho: 'M' }],
-              malhas: ['ALGODÃO'],
-              tipo_servico: 'SEM ESTAMPA',
+        ficha: fixturePricing(
+          {
+            ...order.ficha,
+            artwork: { ...order.ficha.artwork, sem_estampa: true },
+            summary: {
+              ...order.ficha.summary,
+              data_entrega_confirmada: '2026-10-24',
             },
-          ],
-        },
+            items: [
+              {
+                ...order.ficha.items[0],
+                cor: 'BRANCA',
+                gola: 'GOLA REDONDA',
+                grade: [{ quantidade: 1, tamanho: 'M' }],
+                malhas: ['ALGODÃO'],
+                tipo_servico: 'SEM ESTAMPA',
+              },
+            ],
+          },
+          1000,
+        ),
         totalPieces: 1,
         updatedAt: clock().toISOString(),
       },
@@ -255,6 +259,7 @@ test('reads an order saved before ADR 016 under the current rules', async () => 
     'summary.data_entrega_confirmada',
     'finalAmount',
     'paymentCondition',
+    'sizePricing',
   ];
 
   const read = await service.get(stored.id);

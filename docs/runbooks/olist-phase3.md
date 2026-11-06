@@ -1,6 +1,7 @@
-# Olist — início da Fase 3: composição persistida
+# Olist — Fase 3: composição e total calculado
 
-OLIST-T20, composição persistida e edição completa por identidade. Requisitos OLIST-09, 29, 42–44;
+OLIST-T20/T21, composição persistida e confirmação calculada. Requisitos
+OLIST-09–10, 29, 34, 40–44;
 [ADR 057](../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
 
@@ -41,24 +42,44 @@ Campos extras, identidade alheia, coerção, centavos fracionários, somas com
 overflow e total de peças acima de 2147483647 são recusados antes da escrita.
 Subtotal 100/quantidade 3 é comercialmente válido; esta fatia não chama ERP.
 
-## Limites deliberados e próximo trabalho
+## Confirmação, total e compatibilidade
 
-T20 concluída no domínio/API; T21 e o gate F3 permanecem abertos. Não há UI de adoção, total monetário
-autoritativo publicado, confirmação calculada ou exportação. A confirmação de
-um pedido adotado responde `SIZE_PRICING_CONFIRMATION_PENDING` até T21.
-`finalAmountCents`, snapshots confirmados, status, pagamentos e gateway não
-são alterados por estes comandos.
+T20/T21 concluídas no domínio/API. A API publica `pricing` somente no pedido
+adotado, com total, soma por grupo e pendências por identidade; os subtotais
+continuam em `ficha.sizePricing`. A mesma soma inteira exata é persistida em
+`finalAmountCents` junto da ficha. Preço ausente ou revisão pendente deixa o
+total null: soma parcial nunca vira valor oficial.
 
-Após adoção, a substituição antiga de items é recusada com
-`SIZE_PRICING_ITEMS_MANAGED`. A edição completa usa os comandos por identidade acima.
-Não adotar pedidos operacionais: a UI de grade ainda pertence a T12/Fase 4. A projeção automática retorna applied=false e
-reason=size_pricing_managed antes de escrever, preservando a ficha humana.
-Outras seções humanas permanecem editáveis e preservam a composição.
+Confirmar recalcula a composição, valida alinhamento/grade e exige todos os
+campos principais, arte, previsão, condição e subtotais revisados. O navegador
+pode omitir `amountText`; se declarar valor pelo contrato antigo, só igualdade
+exata é aceita. Divergência é `SIZE_PRICING_AMOUNT_MISMATCH`, composição ausente
+ou incompleta é `ORDER_NOT_CONFIRMABLE`. Não há fallback de total livre,
+rateio histórico, alteração de quantidade nem compensação entre linhas.
+Subtotal 100/quantidade 3 confirma comercialmente; somente a futura exportação
+bloqueia representação unitária fracionária (ADR 062).
 
-Loja é `ORDER_LOCKED`; confirmado é `ORDER_STATUS_CONFLICT`; reaberto que já
-foi confirmado exige o adapter T26 (`SIZE_PRICING_LEGACY_REQUIRES_ADAPTER`).
-Não há divisão de total histórico ou inferência de preços. T24/T26 cuidam das
-origens específicas, e T21 ligará total calculado/pendências à confirmação.
+Uma mudança de total conhecido, inclusive para null após invalidar revisão,
+limpa quitação manual e invalida o check financeiro pelo trigger existente,
+preservando eventos/histórico. A memória reproduz a regra. Voltar ao preço
+antigo não restaura quitação/check. Reabrir sem mudar o total conserva a
+quitação; confirmação comercial continua separada de pagamento.
+
+A substituição antiga de items segue recusada (`SIZE_PRICING_ITEMS_MANAGED`)
+no pedido adotado; usar comandos por identidade. A projeção automática retorna
+applied=false/reason=size_pricing_managed antes de escrever. Outras seções
+humanas preservam a composição. Reabertura de pedido já adotado permite a
+edição por identidade; não remove as revisões necessárias.
+
+Loja permanece `ORDER_LOCKED`. Confirmados legados seguem legíveis com total e
+snapshot intactos; reaberto sem composição não pode adotá-la genericamente e
+depende de T26. Pendente nunca confirmado pode initialize/revisar. Não inferir
+subtotal nem modificar checkout/gateway. T24/T26 cuidam dessas origens.
+
+**Não liberar esta branch como rollout operacional antes da UI/Fase 4 e dos
+adapters T24/T26.** A UI antiga não registra subtotais: confirmação sem
+composição é recusada mesmo que ela envie amountText. Não há exportação,
+conexão real homologada, deploy ou piloto nesta entrega; gate F3 continua aberto.
 
 ## Verificação e rollback
 
@@ -74,15 +95,15 @@ npm audit --audit-level=high
 git diff --check
 ```
 
-Rollback: interromper comandos novos e projeção automática dos pedidos
-adotados antes de voltar a uma versão antiga que desconhece sizePricing.
-Preservar envelopes e backups; não apagar o campo nem regenerar IDs. Código
-antigo de projeção reconstruiria a ficha e perderia os metadados. Os pedidos
-sem adesão continuam no contrato anterior. Nenhum efeito externo exige
-compensação: geração Olist, OAuth real, deploy e piloto não são executados.
+Rollback: manter o guard T21 de confirmação calculada e os envelopes/IDs;
+rollback de frontend não pode recuperar preço livre. Para voltar a uma API
+anterior, bloquear antes todas as mutações comerciais (incluindo confirmação e
+projeção automática) no ambiente alvo e manter manutenção até um forward-fix
+compatível. Não basta desligar Olist: a confirmação pertence a Orders. Não
+apagar composição, regenerar IDs ou restaurar banco como primeiro recurso.
+Não há efeito remoto para compensar nesta entrega.
 
-
-## Evidência local de 05/11/2026
+## Evidência histórica T20b — 05/11/2026
 
 Node 24.20.0; revisão independente de Backend/QA sem finding bloqueante após
 corrigir limite agregado de quantidade. Não é evidência de produção.
@@ -115,3 +136,31 @@ posição/conteúdo. Mudança sem alteração real não invalida revisão. A evo
 em T26. As verificações incluem aplicação/API, roundtrip cifrado, concorrência
 e grade/linhas reordenadas. Interface de edição e confirmação calculada não
 são declaradas entregues por T20.
+
+
+## Fechamento T21 — 05/11/2026
+
+T20 foi publicada no commit 5528f4de (branch codex/olist-phase3). `validate`
+aprovado: 1791 testes/15 skips. E2E: 484 aprovados, 7 skips e um timeout no
+dispositivo sintético Firefox; o mesmo teste isolado passou (1/1), sem alteração
+de frontend ou flexibilização de teste. SQL T20: 26/26.
+
+T21 acrescenta confirmação omitida/igual/divergente, subtotais negociados não
+uniformes, fração unitária válida no CRM, versões concorrentes e invalidação de
+quitação/check sem apagar história. SQL de pedidos: 27/27, incluindo disputa
+real confirmar/revisar e consistência entre total API e coluna PostgreSQL.
+Revisão independente de Backend/QA não encontrou finding bloqueante. Fixtures
+antigas foram migradas para preços sintéticos explícitos, sem inferência em
+código de produção. A falha histórica financeira no SQLSTATE/PG18.6 registrada
+acima permanece fora desta entrega.
+
+
+Gate completo T21 aprovado: `npm run validate` com 1799 testes aprovados e
+15 skips explícitos, incluindo tipos/lint/fronteiras/formatação/build.
+Auditoria sem altas/críticas (um baixo/cinco moderados existentes). Regressão
+SQL ampliada refeita: 56/57, somente a mesma divergência financeira de SQLSTATE
+já reproduzida no baseline, sem regressão nova identificada.
+
+E2E final T21: 485 aprovados/7 skips previstos, sem falhas; servidor estático na
+porta 4187. Nenhum teste foi flexibilizado. `git diff --check` aprovado; o
+PostgreSQL sintético iniciado para esta verificação foi encerrado.

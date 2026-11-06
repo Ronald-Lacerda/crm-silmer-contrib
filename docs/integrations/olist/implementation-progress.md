@@ -108,3 +108,12 @@ API, com guardas de versão, ACL e idempotência. A preparação de domínio ago
 possui uma primeira integração cifrada, sem concluir T20/T21. O trecho
 “Integração ainda necessária” acima registra a entrega anterior; o estado
 atual e as restrições estão no [runbook da Fase 3](../../runbooks/olist-phase3.md).
+
+
+## T20/T21 concluídas no domínio/API
+
+T20 completa a edição por identidade de grupos/linhas. T21 publica e persiste
+somas exatas e confirma somente composição completa/revisada, com igualdade
+para a declaração antiga. Não há rateio de legado ou preço livre. Mudança de
+valor invalida quitação/check, preservando história. O estado atual, os gates
+de UI/legado/loja e as evidências estão no [runbook](../../runbooks/olist-phase3.md).

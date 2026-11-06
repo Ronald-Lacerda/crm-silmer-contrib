@@ -4,6 +4,7 @@ import test from 'node:test';
 import { InMemoryOrderRepository } from '../modules/orders/src/adapters/in-memory-order-repository.js';
 import { createOrderService } from '../modules/orders/src/application/order-service.js';
 import { syntheticItems } from './fixtures/order-items.js';
+import { priceDraft } from './fixtures/size-pricing.js';
 
 // ADR 018: the client of an order follows the contact while it is pending.
 const OWNER = Object.freeze({
@@ -80,7 +81,7 @@ function setup() {
       section: 'items',
       value: syntheticItems(),
     });
-    const ready = await service.patchSection({
+    let ready = await service.patchSection({
       actor: OWNER,
       correlationId: 'correlation-artwork',
       expectedVersion: items.version,
@@ -88,6 +89,7 @@ function setup() {
       section: 'artwork',
       value: { feito_pela_silmer: false, feito_pelo_cliente: true },
     });
+    ready = await priceDraft(service, ready, 15000, OWNER);
     beforeGenerating?.();
     return service.confirm({
       actor: OWNER,

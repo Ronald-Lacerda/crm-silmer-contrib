@@ -23,6 +23,7 @@ import {
   validateFichaPrintSwitch,
 } from '../scripts/ficha-pdf-review.mjs';
 import { syntheticItems } from './fixtures/order-items.js';
+import { priceDraft } from './fixtures/size-pricing.js';
 import { orderContextsFrom } from './fixtures/order-contexts.js';
 
 // PIM-10 (ADR 017): one switch decides the printed template. It names v3 since
@@ -150,6 +151,7 @@ async function confirmedOrder(runtime, summary) {
       value: { feito_pela_silmer: false, feito_pelo_cliente: true },
     }),
   );
+  order = await priceDraft(runtime, order, 482000, SELLER);
   order = await runtime.confirm(
     seed({
       amountText: '4.820,00',

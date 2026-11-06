@@ -141,16 +141,22 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 ## OLIST-T20b — Início da Fase 3 (05/11/2026)
 
+## OLIST-T20/T21 — Composição e confirmação calculada (05/11/2026)
+
 - [x] Persistir composição opt-in no envelope cifrado, com IDs emitidos pelo servidor.
 - [x] Comandos humanos com ACL/versão/idempotência/auditoria: revisão, quantidade,
       reordenação de grupos e duplicação; grade/composição na mesma escrita.
 - [x] Bloquear perda de identidade por cliente antigo/projeção automática,
       adoção de loja/confirmado/reaberto histórico e confirmação livre após adoção.
 - [x] Completar T20: edição de atributos, inclusão/remoção e reordenação de linhas.
-- [ ] T21: total calculado autoritativo e confirmação; T24/T26: loja/legado.
+- [x] T21: total calculado persistido e confirmação sem preço livre;
+      declaração antiga só por igualdade, incompleto bloqueia sem fallback.
+- [x] Quitação/check invalidados transacionalmente quando o total muda;
+      histórico e revisão de quantidade preservados.
+- [ ] T24/T26: adapters de loja e legado; Fase 4: interface de edição.
 
-Requisitos OLIST-09, 29, 42–44. [Contrato e limites](../../../docs/runbooks/olist-phase3.md).
-T20 completa no domínio/API; T21/F3 permanecem abertos. Nenhuma adoção operacional,
+Requisitos OLIST-09–10, 29, 34, 40–44. [Contrato e limites](../../../docs/runbooks/olist-phase3.md).
+T20/T21 completas no domínio/API; F3 permanece aberto. Nenhuma adoção operacional,
 UI, geração ERP, deploy ou piloto liberado.
 
 ## OLIST-F2 — Fase 2 concluída (05/11/2026)

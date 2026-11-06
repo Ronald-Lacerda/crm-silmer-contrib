@@ -9,6 +9,7 @@ import {
   reopenOrder,
 } from '../modules/orders/src/domain/order.js';
 import { assertOrderRepositoryContract } from '../modules/orders/src/ports/contracts.js';
+import { fixturePricing } from './fixtures/size-pricing.js';
 
 /**
  * @typedef {{
@@ -95,12 +96,15 @@ function pendingInput(conversationId, overrides = {}) {
 async function confirm(repository, order) {
   const now = nextNow();
   return repository.saveStatus(
-    confirmOrder(order, {
-      actorId: 'seller-contract',
-      amountCents: 150000,
-      now,
-      paymentCondition: 'pix',
-    }),
+    confirmOrder(
+      { ...order, ficha: fixturePricing(order.ficha, 150000) },
+      {
+        actorId: 'seller-contract',
+        amountCents: 150000,
+        now,
+        paymentCondition: 'pix',
+      },
+    ),
     {
       actor: CONTRACT_ACTOR,
       correlationId: `correlation-${randomUUID()}`,

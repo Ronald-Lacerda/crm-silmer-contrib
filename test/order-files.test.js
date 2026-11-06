@@ -19,6 +19,7 @@ import {
   sanitizeOrderFileName,
 } from '../modules/orders/src/domain/order-files.js';
 import { syntheticItems } from './fixtures/order-items.js';
+import { priceDraft } from './fixtures/size-pricing.js';
 import { orderContextsFrom } from './fixtures/order-contexts.js';
 import { SYNTHETIC_GIF } from './fixtures/inbound-raster.js';
 
@@ -197,6 +198,7 @@ async function confirm(runtime, order) {
       }),
     );
   }
+  current = await priceDraft(runtime, current, 482000, SELLER);
   return runtime.confirm(
     seed({
       amountText: '4.820,00',

@@ -1,3 +1,4 @@
+import { persistFixturePricing } from './fixtures/size-pricing.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -37,6 +38,7 @@ function harness() {
     authorizeRead: async () => ({ actor: OTHER }),
     authorizeWrite: async () => ({ actor: OWNER }),
   };
+  const repository = new InMemoryOrderRepository();
   const runtime = createOrderRuntime({
     access,
     auditTrail: {
@@ -72,9 +74,9 @@ function harness() {
     },
     fabCode: '01',
     idempotencyStore: new InMemoryIdempotencyRecordStore(),
-    repository: new InMemoryOrderRepository(),
+    repository,
   });
-  return { access, assignmentReads, assignments, audits, runtime };
+  return { access, assignmentReads, assignments, audits, runtime, repository };
 }
 
 test('a seller creates a manual contact order and its owner may edit it', async () => {
@@ -127,7 +129,7 @@ function create(runtime, actor, conversationId) {
 }
 
 test('the conversation owner creates, edits and confirms its order', async () => {
-  const { audits, runtime } = harness();
+  const { audits, runtime, repository } = harness();
   const created = await create(runtime, OWNER, 'conversation-1');
   assert.equal(created.created, true);
   const promised = await runtime.patchSection(
@@ -158,10 +160,11 @@ test('the conversation owner creates, edits and confirms its order', async () =>
       value: { feito_pela_silmer: true, feito_pelo_cliente: false },
     }),
   );
+  const priced = await persistFixturePricing(repository, edited, 482000, OWNER);
   const confirmed = await runtime.confirm(
     command(OWNER, {
       amountText: '4.820,00',
-      expectedVersion: edited.version,
+      expectedVersion: priced.version,
       orderId: edited.id,
       paymentCondition: 'pix',
     }),
@@ -344,6 +347,7 @@ test('a confirmation without amount or condition is a 422, not a crash', async (
         'summary.data_entrega_confirmada',
         'finalAmount',
         'paymentCondition',
+        'sizePricing',
       ],
       statusCode: 422,
     },

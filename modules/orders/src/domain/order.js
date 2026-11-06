@@ -1,3 +1,4 @@
+import { sizePricingSummary } from './size-pricing-composition.js';
 import {
   OrderConflictError,
   OrderInputError,
@@ -203,9 +204,9 @@ function isCalendarDay(value) {
  * the principal points of every item (technique included), who makes the
  * art, the promised delivery, the final amount and the payment method. The
  * other item fields, the rest of the summary and the other days of the trail
- * stay as the seller leaves them. Until the CRM handles payments,
- * generating the order means the payment is done, so the paid day never
- * blocks; the delivered day belongs to the after-sale.
+ * stay as the seller leaves them. Confirmation and settlement are separate;
+ * the paid day never blocks confirmation. OLIST-T21 additionally requires
+ * complete reviewed size subtotals; no caller-supplied total is authoritative.
  *
  * @param {{ficha: {items: readonly Record<string, any>[], summary: Record<string, unknown>, artwork?: Record<string, unknown>}}} order
  * @param {unknown} amountCents
@@ -249,26 +250,39 @@ function confirmationBlockers(order, amountCents, paymentCondition) {
  */
 export function missingForConfirmation(order) {
   if (order.status === 'confirmado') return [];
-  return confirmationBlockers(
+  return pricingConfirmationBlockers(order, order.paymentCondition);
+}
+
+/** @param {Pick<Order, 'ficha'|'finalAmountCents'>} order @param {unknown} condition */
+function pricingConfirmationBlockers(order, condition) {
+  const pricing =
+    order.ficha.sizePricing === undefined
+      ? null
+      : sizePricingSummary(order.ficha);
+  const fields = confirmationBlockers(
     order,
-    order.finalAmountCents,
-    order.paymentCondition,
+    pricing?.totalCents ?? null,
+    condition,
   );
+  if (!pricing) fields.push('sizePricing');
+  else
+    fields.push(
+      ...pricing.issues.map((issue) =>
+        ['sizePricing', issue.groupId, issue.lineId].filter(Boolean).join('.'),
+      ),
+    );
+  return [...new Set(fields)];
 }
 
 /**
  * @param {Order} order
- * @param {{amountCents: number, paymentCondition: PaymentCondition, actorId: string, now: Date}} input
+ * @param {{amountCents?: number, paymentCondition: PaymentCondition, actorId: string, now: Date}} input
  * @returns {Order}
  */
 export function confirmOrder(order, input) {
   requireActorAndClock(input);
   requireStatus(order, 'pendente', 'confirmed');
-  const blockers = confirmationBlockers(
-    order,
-    input.amountCents,
-    input.paymentCondition,
-  );
+  const blockers = pricingConfirmationBlockers(order, input.paymentCondition);
   if (blockers.length > 0) {
     throw new OrderValidationError(
       'The order is not ready to be confirmed',
@@ -276,20 +290,29 @@ export function confirmOrder(order, input) {
       blockers,
     );
   }
+  const amountCents = /** @type {number} */ (
+    sizePricingSummary(order.ficha).totalCents
+  );
+  if (input.amountCents !== undefined && input.amountCents !== amountCents) {
+    throw new OrderValidationError(
+      'O valor declarado difere da soma dos subtotais.',
+      'SIZE_PRICING_AMOUNT_MISMATCH',
+      ['finalAmount'],
+    );
+  }
   const confirmedAt = input.now.toISOString();
   return {
     ...structuredClone(order),
     confirmedAt,
     confirmedBy: input.actorId,
-    finalAmountCents: input.amountCents,
+    finalAmountCents: amountCents,
     // FINQ-18: an earlier settlement never proves payment of a new price.
     paidOn:
-      order.finalAmountCents !== null &&
-      order.finalAmountCents !== input.amountCents
+      order.finalAmountCents !== null && order.finalAmountCents !== amountCents
         ? null
         : order.paidOn,
     ...(order.finalAmountCents !== null &&
-    order.finalAmountCents !== input.amountCents
+    order.finalAmountCents !== amountCents
       ? { paymentReviewRequired: false }
       : {}),
     missingFields: [],

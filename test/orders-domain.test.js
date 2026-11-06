@@ -12,6 +12,8 @@ import {
 } from '../modules/orders/src/domain/order.js';
 import { briefingToFicha } from '../modules/orders/src/domain/ficha.js';
 import { syntheticArtwork, syntheticItems } from './fixtures/order-items.js';
+import { fixturePricing } from './fixtures/size-pricing.js';
+import { reviewSizePricingSubtotal } from '../modules/orders/src/domain/size-pricing.js';
 
 const CREATED = '2026-09-10T12:00:00.000Z';
 // 22:30 in São Paulo on 12/09, already 13/09 in UTC.
@@ -19,7 +21,7 @@ const CONFIRMED_AT = new Date('2026-09-13T01:30:00.000Z');
 
 /** @param {Record<string, any>} [overrides] @returns {any} */
 function pendingOrder(overrides = {}) {
-  return {
+  const order = {
     confirmedAt: null,
     confirmedBy: null,
     conversationId: 'conversation-1',
@@ -57,6 +59,8 @@ function pendingOrder(overrides = {}) {
     version: 3,
     ...overrides,
   };
+  order.ficha = fixturePricing(order.ficha, 482000);
+  return order;
 }
 
 const confirmation = Object.freeze({
@@ -107,7 +111,6 @@ test('every item needs a technique before confirmation (ADR 020)', () => {
   draft.ficha.items[1].tipo_servico = '';
   assert.deepEqual(missingForConfirmation(draft), [
     'items[1].tipo_servico',
-    'finalAmount',
     'paymentCondition',
   ]);
   assert.throws(() => confirmOrder(draft, confirmation), {
@@ -133,10 +136,7 @@ test('a complete briefing fills the technique of the item and who makes the art 
   assert.equal(ficha.summary.aplicacao, null);
   assert.equal(ficha.items[0].tipo_servico, 'DTF');
   assert.equal(ficha.artwork?.feito_pelo_cliente, true);
-  assert.deepEqual(missingForConfirmation(draft), [
-    'finalAmount',
-    'paymentCondition',
-  ]);
+  assert.deepEqual(missingForConfirmation(draft), ['paymentCondition']);
   assert.equal(confirmOrder(draft, confirmation).status, 'confirmado');
 });
 
@@ -156,7 +156,6 @@ test('generating needs who makes the art; "Sem estampa" is an answer (ADR 020)',
   delete stored.ficha.artwork;
   assert.deepEqual(missingForConfirmation(stored), [
     'artwork',
-    'finalAmount',
     'paymentCondition',
   ]);
   for (const origin of [
@@ -170,7 +169,7 @@ test('generating needs who makes the art; "Sem estampa" is an answer (ADR 020)',
   }
 });
 
-test('generating needs an item, the seven points of every item, amount and payment method (ADR 016)', () => {
+test('generating needs an item, the seven points, complete subtotals and payment method (ADR 016)', () => {
   assert.throws(
     () =>
       confirmOrder(
@@ -179,7 +178,6 @@ test('generating needs an item, the seven points of every item, amount and payme
         }),
         {
           actorId: 'seller-1',
-          amountCents: 0,
           now: CONFIRMED_AT,
           paymentCondition: /** @type {any} */ ('boleto'),
         },
@@ -191,6 +189,7 @@ test('generating needs an item, the seven points of every item, amount and payme
         'items',
         'finalAmount',
         'paymentCondition',
+        'sizePricing',
       ]);
       return true;
     },
@@ -208,9 +207,14 @@ test('generating needs an item, the seven points of every item, amount and payme
   ])) {
     const order = pendingOrder();
     order.ficha.items[1][field] = blank;
+    order.ficha = fixturePricing(order.ficha, 482000);
     assert.throws(
       () => confirmOrder(order, confirmation),
-      { code: 'ORDER_NOT_CONFIRMABLE', fields: [`items[1].${field}`] },
+      (/** @type {any} */ error) => {
+        assert.equal(error.code, 'ORDER_NOT_CONFIRMABLE');
+        assert.ok(error.fields.includes(`items[1].${field}`));
+        return true;
+      },
       `${field} = ${JSON.stringify(blank)}`,
     );
   }
@@ -279,10 +283,7 @@ test('generating needs a promised delivery written as a real day; the other trai
     { deliveredOn: '2026-09-11', paidOn: '2026-09-10' },
   ]) {
     const order = pendingOrder(days);
-    assert.deepEqual(missingForConfirmation(order), [
-      'finalAmount',
-      'paymentCondition',
-    ]);
+    assert.deepEqual(missingForConfirmation(order), ['paymentCondition']);
     assert.equal(confirmOrder(order, confirmation).status, 'confirmado');
   }
   // A promised day in the past still is a day: the seller decides.
@@ -314,6 +315,17 @@ test('a new confirmation overwrites author, time and order date (PCL-12)', () =>
     actorId: 'admin-1',
     now: new Date('2026-09-14T10:00:00.000Z'),
   });
+  const groups = reopened.ficha.sizePricing;
+  assert.ok(groups);
+  const group = groups[0];
+  const subtotal = group.lines[0].subtotalCents;
+  assert.ok(subtotal !== null);
+  reopened.ficha.sizePricing = reviewSizePricingSubtotal(
+    groups,
+    group.id,
+    group.lines[0].id,
+    subtotal + 18000,
+  );
   const secondAt = new Date('2026-09-20T15:00:00.000Z');
   const second = confirmOrder(reopened, {
     actorId: 'seller-2',
@@ -359,6 +371,17 @@ test('FINQ-18: reconfirming another amount requires a new full settlement, even 
     now: CONFIRMED_AT,
   });
   assert.equal(confirmOrder(reopened, confirmation).paidOn, '2026-09-12');
+  const groups = reopened.ficha.sizePricing;
+  assert.ok(groups);
+  const group = groups[0];
+  const subtotal = group.lines[0].subtotalCents;
+  assert.ok(subtotal !== null);
+  reopened.ficha.sizePricing = reviewSizePricingSubtotal(
+    groups,
+    group.id,
+    group.lines[0].id,
+    subtotal + 18000,
+  );
   const changed = confirmOrder(reopened, {
     ...confirmation,
     amountCents: 500000,
@@ -455,9 +478,8 @@ test('a trail day is a real calendar day that has already come in São Paulo (PL
   );
 });
 
-test('lists what is missing to generate: the points of each item, then amount and payment method', () => {
+test('lists what is missing to generate: principal fields, pricing issues and payment method', () => {
   assert.deepEqual(missingForConfirmation(pendingOrder()), [
-    'finalAmount',
     'paymentCondition',
   ]);
 
@@ -472,6 +494,8 @@ test('lists what is missing to generate: the points of each item, then amount an
     { ...sparse.ficha.items[0], cor: '', cor_costas: '', malhas: [] },
     { ...sparse.ficha.items[1], gola: '', grade: [], modelo: '' },
   ];
+  sparse.ficha = fixturePricing(sparse.ficha, 482000);
+  const emptyGroupId = sparse.ficha.sizePricing[1].id;
   assert.deepEqual(missingForConfirmation(sparse), [
     'items[0].cor',
     'items[0].malhas',
@@ -480,14 +504,17 @@ test('lists what is missing to generate: the points of each item, then amount an
     'summary.data_entrega_confirmada',
     'finalAmount',
     'paymentCondition',
+    `sizePricing.${emptyGroupId}`,
   ]);
 
   const empty = pendingOrder();
   empty.ficha.items = [];
+  empty.ficha = fixturePricing(empty.ficha, 482000);
   assert.deepEqual(missingForConfirmation(empty), [
     'items',
     'finalAmount',
     'paymentCondition',
+    'sizePricing',
   ]);
 
   // A reopened order keeps its amount and payment method.
@@ -501,4 +528,48 @@ test('lists what is missing to generate: the points of each item, then amount an
     missingForConfirmation(confirmOrder(pendingOrder(), confirmation)),
     [],
   );
+});
+
+test('OLIST-T21 direct domain confirmation derives the total and refuses a declared mismatch', () => {
+  const order = pendingOrder();
+  const calculatedConfirmation = {
+    actorId: confirmation.actorId,
+    now: confirmation.now,
+    paymentCondition: confirmation.paymentCondition,
+  };
+  assert.equal(
+    confirmOrder(order, calculatedConfirmation).finalAmountCents,
+    482000,
+  );
+  assert.equal(confirmOrder(order, confirmation).finalAmountCents, 482000);
+  assert.throws(
+    () => confirmOrder(order, { ...confirmation, amountCents: 500000 }),
+    { code: 'SIZE_PRICING_AMOUNT_MISMATCH' },
+  );
+  assert.equal(order.status, 'pendente');
+});
+
+test('OLIST-T21 no independent amount can confirm a draft without a complete price composition', () => {
+  const legacy = pendingOrder({ paymentCondition: 'pix' });
+  delete legacy.ficha.sizePricing;
+  assert.deepEqual(missingForConfirmation(legacy), [
+    'finalAmount',
+    'sizePricing',
+  ]);
+  assert.throws(() => confirmOrder(legacy, confirmation), {
+    code: 'ORDER_NOT_CONFIRMABLE',
+    fields: ['finalAmount', 'sizePricing'],
+  });
+  const unreviewed = pendingOrder();
+  const group = unreviewed.ficha.sizePricing[0];
+  group.lines[0].subtotalReviewed = false;
+  assert.throws(() => confirmOrder(unreviewed, confirmation), {
+    code: 'ORDER_NOT_CONFIRMABLE',
+    fields: ['finalAmount', `sizePricing.${group.id}.${group.lines[0].id}`],
+  });
+  const divergent = pendingOrder();
+  divergent.ficha.items[0].grade[0].quantidade += 1;
+  assert.throws(() => confirmOrder(divergent, confirmation), {
+    code: 'SIZE_PRICING_INVALID',
+  });
 });

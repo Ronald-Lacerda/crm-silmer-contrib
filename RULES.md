@@ -16,7 +16,8 @@ os gates de conexão/ACL/runtime/piloto continuam separados. Sem nova infraestru
 
 Decisão de 04/11/2026 na [ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md),
 OLIST-01–50 e OLIST-PLAN-02. Estes pontos supersedem os trechos antigos
-incompatíveis para o novo contrato; o código ainda não foi alterado.
+incompatíveis para o novo contrato; a implementação segue as fases e os
+gates registrados na RFC e no plano de tarefas.
 
 - Checkbox Habilitado Olist é ortogonal ao perfil e dono: usuário humano ativo
   habilitado opera Olist em qualquer Pedido com ficha/cadastro completos.

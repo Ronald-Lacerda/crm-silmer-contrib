@@ -31,6 +31,7 @@ import { createOrderService } from '../modules/orders/src/application/order-serv
 import { defineOrderRepositoryContract } from './orders-repository-contract.test.js';
 import { orderContextsFrom } from './fixtures/order-contexts.js';
 import { syntheticItems } from './fixtures/order-items.js';
+import { persistFixturePricing, priceDraft } from './fixtures/size-pricing.js';
 
 const connectionString = process.env.TEST_DATABASE_URL;
 const NOW = new Date('2026-09-12T12:00:00.000Z');
@@ -637,7 +638,7 @@ if (connectionString) {
         },
       ],
     });
-    const marked = await service.patchSection({
+    let marked = await service.patchSection({
       actor,
       correlationId: `correlation-follow-artwork-${tag}`,
       expectedVersion: ready.version,
@@ -649,6 +650,7 @@ if (connectionString) {
         sem_estampa: true,
       },
     });
+    marked = await priceDraft(service, marked, 15000, actor);
     await nameContact(`Cliente Na Geracao ${tag}`, 'manual');
     const generated = await service.confirm({
       actor,
@@ -830,13 +832,14 @@ if (connectionString) {
         },
       ],
     });
-    const ready = await runtime.patchSection({
+    let ready = await runtime.patchSection({
       ...patch,
       expectedVersion: withItems.version,
       idempotencyKey: `artwork-${runId}`,
       section: 'artwork',
       value: { feito_pela_silmer: false, feito_pelo_cliente: true },
     });
+    ready = await priceDraft(runtime, ready, 15000, actor);
     const outcomes = await Promise.allSettled(
       ['one', 'two'].map((suffix) =>
         runtime.confirm({
@@ -924,6 +927,7 @@ if (connectionString) {
       'summary.data_entrega_confirmada',
       'finalAmount',
       'paymentCondition',
+      'sizePricing',
     ]);
 
     // ...and projects the rest while it holds the conversation.
@@ -958,6 +962,7 @@ if (connectionString) {
       'summary.data_entrega_confirmada',
       'finalAmount',
       'paymentCondition',
+      'sizePricing',
     ]);
     const stored = await repository.findById(order.id);
     assert.deepEqual(stored?.missingFields, order.missingFields);
@@ -996,6 +1001,7 @@ if (connectionString) {
         'summary.data_entrega_confirmada',
         'finalAmount',
         'paymentCondition',
+        'sizePricing',
       ],
     });
 
@@ -1021,8 +1027,10 @@ if (connectionString) {
       'summary.data_entrega_confirmada',
       'finalAmount',
       'paymentCondition',
+      'sizePricing',
     ]);
-    await assert.rejects(confirm(complete, { amountText: '980,00' }), {
+    const priced = await priceDraft(service, complete, 98000, actor);
+    await assert.rejects(confirm(priced, { amountText: '980,00' }), {
       code: 'ORDER_NOT_CONFIRMABLE',
       fields: ['summary.data_entrega_confirmada', 'paymentCondition'],
     });
@@ -1038,7 +1046,7 @@ if (connectionString) {
         section: 'summary',
         value: { aplicacao: null, data_entrega_confirmada: day, nome: null },
       });
-    const typed = await promise(complete, '24/10/2026');
+    const typed = await promise(priced, '24/10/2026');
     await assert.rejects(
       confirm(typed, { amountText: '980,00', paymentCondition: 'pix' }),
       {
@@ -1047,7 +1055,7 @@ if (connectionString) {
       },
     );
     const ready = await promise(typed, '2026-10-24');
-    assert.deepEqual(ready.missingFields, ['finalAmount', 'paymentCondition']);
+    assert.deepEqual(ready.missingFields, ['paymentCondition']);
     // Generating means the order is paid until the CRM handles payments: no
     // paid day is needed, and none is invented.
     assert.equal(ready.paidOn, null);
@@ -1130,6 +1138,7 @@ if (connectionString) {
       'summary.data_entrega_confirmada',
       'finalAmount',
       'paymentCondition',
+      'sizePricing',
     ]);
   });
 
@@ -1183,7 +1192,7 @@ if (connectionString) {
       );
     await transfer(owner.id);
 
-    const created = await repository.createPending({
+    let created = await repository.createPending({
       conversationId,
       correlationId: `correlation-race-create-${tag}`,
       createdBy: null,
@@ -1212,6 +1221,7 @@ if (connectionString) {
       now: NOW,
       totalPieces: 32,
     });
+    created = await persistFixturePricing(repository, created, 15000, owner);
     const port = new PostgresOrderConversationPort({
       contactEnvelopeKey: CONTACT_KEY,
       contactLookupKey: Buffer.alloc(32, 66),
@@ -1553,6 +1563,7 @@ if (connectionString) {
         value,
       });
     }
+    order = await priceDraft(service, order, 10000, actor);
     order = await service.confirm({
       actor,
       correlationId: 'manual-delivery-confirm',
@@ -1753,5 +1764,180 @@ if (connectionString) {
       { code: 'FORBIDDEN' },
     );
     assert.equal((await restarted.get(order.id)).version, edited.version);
+  });
+
+  test('OLIST-T21 calculated totals and settlement/check invalidation share the encrypted PostgreSQL write', async () => {
+    const conversationId = await seedConversation(pool);
+    await pool.query(
+      "UPDATE crm.conversations SET assigned_user_id='seller-contract' WHERE id=$1",
+      [conversationId],
+    );
+    const actor = { id: 'seller-contract', kind: 'human', capabilities: [] };
+    const service = createOrderService({
+      repository,
+      authorizeOwnership: async () => {},
+      clock: () => NOW,
+      fabCode: '01',
+      conversations: {
+        readOrderContexts: orderContextsFrom(() => ({
+          briefing: null,
+          customerName: 'Sintético',
+        })),
+        searchConversationIds: async () => [],
+      },
+    });
+    let { order } = await service.ensurePendingFromIntent({
+      conversationId,
+      correlationId: 't21-sql',
+    });
+    const command = (/** @type {any} */ order) => ({
+      actor,
+      orderId: order.id,
+      expectedVersion: order.version,
+      correlationId: 't21-sql',
+    });
+    const apply = (/** @type {any} */ order, /** @type {unknown} */ value) =>
+      service.patchSection({
+        ...command(order),
+        section: 'size-pricing',
+        value,
+      });
+    for (const [section, value] of Object.entries({
+      items: syntheticItems().map((item, i) => ({
+        ...item,
+        grade: [{ tamanho: 'M', quantidade: i === 0 ? 10 : 20 }],
+      })),
+      summary: { nome: null, data_entrega_confirmada: '2026-10-24' },
+      artwork: { feito_pelo_cliente: true, feito_pela_silmer: false },
+    }))
+      order = await service.patchSection({ ...command(order), section, value });
+    order = await apply(order, { action: 'initialize' });
+    const groups = order.ficha.sizePricing;
+    assert.ok(groups);
+    const target = { groupId: groups[0].id, lineId: groups[0].lines[0].id };
+    for (const [index, subtotalCents] of [18000, 32000].entries()) {
+      order = await apply(order, {
+        action: 'review_subtotal',
+        groupId: groups[index].id,
+        lineId: groups[index].lines[0].id,
+        subtotalCents,
+      });
+    }
+    const rawTotal = async () =>
+      Number(
+        (
+          await pool.query(
+            'SELECT final_amount_cents FROM crm.orders WHERE id=$1',
+            [order.id],
+          )
+        ).rows[0].final_amount_cents,
+      );
+    assert.equal(order.finalAmountCents, 50000);
+    assert.equal(await rawTotal(), 50000);
+    order = await service.confirm({
+      ...command(order),
+      paymentCondition: 'pix',
+    });
+    order = await service.recordMilestones({
+      ...command(order),
+      paidOn: '2026-09-11',
+      deliveredOn: null,
+    });
+    // Seed a historical completed check; the existing trigger must append its
+    // invalidation rather than erase any event when commercial price changes.
+    await pool.query(
+      'INSERT INTO crm.order_finance(order_id, version, completed_at, completed_by) VALUES($1,1,$2,$3)',
+      [order.id, NOW, actor.id],
+    );
+    await pool.query(
+      "INSERT INTO crm.order_finance_events(id,order_id,version,order_version,action,actor_id,reason,occurred_at,correlation_id) VALUES($1,$2,1,$3,'completed',$4,'FINANCE_ROUTINE_COMPLETED',$5,'t21-sql')",
+      [randomUUID(), order.id, order.version, actor.id, NOW],
+    );
+    order = await service.reopen(command(order));
+    assert.equal(order.paidOn, '2026-09-11');
+    order = await apply(order, {
+      action: 'review_subtotal',
+      ...target,
+      subtotalCents: 17000,
+    });
+    assert.equal(order.finalAmountCents, 49000);
+    assert.equal(await rawTotal(), 49000);
+    assert.equal(order.paidOn, null);
+    const finance = (
+      await pool.query(
+        'SELECT completed_at, completed_by, version FROM crm.order_finance WHERE order_id=$1',
+        [order.id],
+      )
+    ).rows[0];
+    assert.equal(finance.completed_at, null);
+    assert.equal(finance.completed_by, null);
+    assert.equal(Number(finance.version), 2);
+    const history = (
+      await pool.query(
+        'SELECT action FROM crm.order_finance_events WHERE order_id=$1 ORDER BY version',
+        [order.id],
+      )
+    ).rows.map((row) => row.action);
+    assert.deepEqual(history, ['completed', 'invalidated']);
+    order = await apply(order, {
+      action: 'review_subtotal',
+      ...target,
+      subtotalCents: 18000,
+    });
+    assert.equal(order.finalAmountCents, 50000);
+    assert.equal(order.paidOn, null);
+    order = await service.recordMilestones({
+      ...command(order),
+      paidOn: '2026-09-11',
+      deliveredOn: null,
+    });
+    order = await apply(order, {
+      action: 'change_quantity',
+      ...target,
+      quantity: 15,
+    });
+    assert.equal(order.finalAmountCents, null);
+    assert.equal(order.paidOn, null);
+    const unpriced = (
+      await pool.query(
+        'SELECT final_amount_cents,paid_on FROM crm.orders WHERE id=$1',
+        [order.id],
+      )
+    ).rows[0];
+    assert.equal(unpriced.final_amount_cents, null);
+    assert.equal(unpriced.paid_on, null);
+    order = await apply(order, {
+      action: 'change_quantity',
+      ...target,
+      quantity: 10,
+    });
+    await assert.rejects(
+      service.confirm({ ...command(order), paymentCondition: 'pix' }),
+      { code: 'ORDER_NOT_CONFIRMABLE' },
+    );
+    order = await apply(order, {
+      action: 'review_subtotal',
+      ...target,
+      subtotalCents: 18000,
+    });
+    const results = await Promise.allSettled([
+      service.confirm({ ...command(order), paymentCondition: 'pix' }),
+      apply(order, {
+        action: 'review_subtotal',
+        ...target,
+        subtotalCents: 16000,
+      }),
+    ]);
+    assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
+    const failed = results.find((r) => r.status === 'rejected');
+    assert.ok(failed && failed.status === 'rejected');
+    assert.equal(failed.reason.code, 'VERSION_CONFLICT');
+    const persisted = await service.get(order.id);
+    assert.equal(persisted.version, order.version + 1);
+    assert.equal(await rawTotal(), persisted.finalAmountCents);
+    assert.equal(
+      persisted.finalAmountCents,
+      persisted.status === 'confirmado' ? 50000 : 48000,
+    );
   });
 }

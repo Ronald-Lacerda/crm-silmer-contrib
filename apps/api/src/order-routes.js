@@ -25,13 +25,13 @@ const DELIVERY_FILTERS = new Set(['overdue', 'due_soon']);
  * and identifiers never reach the client.
  */
 const PUBLIC_CODES = new Set([
+  'SIZE_PRICING_AMOUNT_MISMATCH',
   'SIZE_PRICING_INVALID',
   'SIZE_PRICING_OVERFLOW',
   'SIZE_PRICING_ALREADY_INITIALIZED',
   'SIZE_PRICING_NOT_INITIALIZED',
   'SIZE_PRICING_LEGACY_REQUIRES_ADAPTER',
   'SIZE_PRICING_ITEMS_MANAGED',
-  'SIZE_PRICING_CONFIRMATION_PENDING',
   'STORE_ORDER_CONFLICT',
   'AMOUNT_BELOW_PRICE',
   'CONTACT_NOT_FOUND',
@@ -394,8 +394,8 @@ export function registerOrderRoutes(
         'paymentCondition',
       ]);
       const expectedVersion = requireVersion(body.expectedVersion);
-      // A missing amount or condition is not malformed: the service answers
-      // 422 ORDER_NOT_CONFIRMABLE naming it, next to the other blockers.
+      // T21: the amount is optional; a supplied legacy declaration must equal
+      // the computed total. Payment condition and complete reviewed prices are required.
       for (const field of ['amountText', 'paymentCondition']) {
         if (body[field] !== undefined && typeof body[field] !== 'string') {
           throw new OrderRequestError(400, 'INVALID_REQUEST');
