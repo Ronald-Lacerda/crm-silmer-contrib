@@ -141,6 +141,21 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 ## OLIST-T20b — Início da Fase 3 (05/11/2026)
 
+## OLIST-T06 — prévia completa (06/11/2026)
+
+- [x] OLIST-T06: prévia por fonte atual/legado/loja com cadastro, preço exato,
+      parâmetros e plano somente leitura; recibo cifrado expirável/versionado.
+- [x] Negativos, ACL/CSRF, mudanças durante GET, fontes suplementares completas
+      e obsoletas e ausência de efeitos verificados no PostgreSQL dedicado.
+
+Prévia de API implementada para OLIST-06–12, 34–44: fonte gerenciada/legado/loja,
+cadastro fiscal, centavos exatos, configuração e descoberta somente leitura.
+Recibo cifrado por sessão/conta/fontes com validade de 15 minutos, revalidação
+e pendências explícitas. Gate local/evidências no
+[runbook](../../../docs/runbooks/olist-phase3.md#t06--prévia-completa-sem-escrita-erp).
+T22/T07 são os próximos itens independentes; gate F3, UI, deploy e piloto seguem
+abertos. Nenhuma criação ERP foi habilitada.
+
 ## OLIST-T24 — Fonte da loja sem alterar checkout (05/11/2026)
 
 - [x] Adaptador validado do snapshot pago com uma linha: subtotal igual ao total
@@ -154,7 +169,7 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 OLIST-01, 06–12, 19, 29, 34–35, 44. [ADR 067](../../../docs/adr/067-fontes-comerciais-suplementares-sem-reescrever-ficha.md),
 [runbook](../../../docs/runbooks/olist-phase3.md). T24/T26 concluídas no domínio/API;
-próxima tarefa T06. F3 permanece aberto, sem UI, deploy ou geração ERP.
+próximas tarefas T22/T07. F3 permanece aberto, sem UI, deploy ou geração ERP.
 
 ## OLIST-T26 — Legado sem reescrever ficha (05/11/2026)
 
@@ -166,7 +181,7 @@ próxima tarefa T06. F3 permanece aberto, sem UI, deploy ou geração ERP.
 - [x] Leitura/reconfirmação do legado usa prova interna fresca, sem migrar a ficha.
 
 OLIST-29, 42–44. [ADR 067](../../../docs/adr/067-fontes-comerciais-suplementares-sem-reescrever-ficha.md),
-[runbook](../../../docs/runbooks/olist-phase3.md). T24 concluída acima; T06 ainda pendente e F3 aberto.
+[runbook](../../../docs/runbooks/olist-phase3.md). T24 concluída acima; T06 descrita acima e F3 aberto.
 
 ## OLIST-T20/T21 — Composição e confirmação calculada (05/11/2026)
 

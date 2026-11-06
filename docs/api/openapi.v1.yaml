@@ -73,6 +73,89 @@ paths:
     $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1lookup'
   /integrations/n8n/billing/charges/{chargeId}/payment:
     $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1payment'
+  /orders/{orderId}/olist/preview:
+    post:
+      operationId: previewOlistOrder
+      summary: Conferir fonte comercial e plano de cadastros sem escrita ERP
+      description: >-
+        OLIST-T06 / OLIST-06–12,34–44. Humano ativo com checkbox Olist,
+        inclusive Financeiro e pedido de outro responsável, com sessão/CSRF/Origin.
+        Não concede edição comercial. Verifica ficha independentemente de status,
+        cadastro fiscal, fontes, parâmetros centrais e centavos exatos por linha.
+        GETs oficiais limitados a 64 por prévia, sem HTTP sob transação SQL.
+        Nenhuma inclusão ERP, reserva, job ou snapshot de exportação é criado.
+        Resposta private/no-store. Recibo opaco cifrado vinculado à sessão, conta,
+        fontes/configuração/autorização e validade de 15 minutos. Não autoriza envio.
+        Data ERP ausente é proposta do dia de São Paulo; T07 congelará no comando.
+        Dez consultas/minuto; corpo máximo 270000 bytes. Criação continua desligada.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OlistEmptyCommand' }
+      responses:
+        '200':
+          description: Prévia completa ou pendências explícitas, sem plano executável parcial
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistPreview' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /orders/{orderId}/olist/preview/check:
+    post:
+      operationId: checkOlistPreview
+      summary: Revalidar recibo de conferência sem reservar ou enviar
+      description: >-
+        Mesma autorização e limites da prévia. Releitura atual de todas as fontes
+        locais e da sessão antes de decifrar o recibo. Expiração inclusiva em
+        15 minutos, alteração ou troca de sessão/conta/pedido recusadas.
+        Não consulta o ERP; T07/T22 devem conferir novamente antes de qualquer efeito.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [previewToken]
+              properties:
+                previewToken:
+                  {
+                    type: string,
+                    maxLength: 262144,
+                    pattern: '^[A-Za-z0-9_-]+$',
+                  }
+      responses:
+        '200':
+          description: Conferência ainda válida; criação desabilitada
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [valid, creationEnabled, expiresAt]
+                properties:
+                  valid: { const: true }
+                  creationEnabled: { const: false }
+                  expiresAt: { type: string, format: date-time }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
   /integrations/olist/status:
     get:
       operationId: readOlistStatus
@@ -3351,6 +3434,161 @@ components:
       required: true
       schema: { type: string, minLength: 1, maxLength: 128 }
   schemas:
+    OlistPreviewResolution:
+      type: object
+      additionalProperties: false
+      required: [action, remoteId]
+      properties:
+        action: { enum: [reuse, create, blocked] }
+        remoteId: { type: [string, 'null'] }
+    OlistPreview:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          orderId,
+          number,
+          status,
+          eligible,
+          creationEnabled,
+          issues,
+          commercial,
+          customer,
+          registrations,
+          versions,
+          expiresAt,
+          previewToken,
+        ]
+      properties:
+        orderId: { type: string }
+        number: { type: string }
+        status: { enum: [pendente, confirmado] }
+        eligible: { type: boolean }
+        creationEnabled: { const: false }
+        issues:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [code, field]
+            properties:
+              code: { type: string }
+              field: { type: string }
+        customer:
+          oneOf:
+            - { type: 'null' }
+            - type: object
+              additionalProperties: false
+              required: [name, documentSuffix]
+              properties:
+                name: { type: string }
+                documentSuffix: { type: string, minLength: 4, maxLength: 4 }
+        commercial:
+          type: object
+          additionalProperties: false
+          required:
+            [groups, totalCents, orderDate, deliveryOn, paymentCondition]
+          properties:
+            totalCents: { type: [integer, 'null'], minimum: 1 }
+            orderDate: { type: [string, 'null'], format: date }
+            deliveryOn: { type: [string, 'null'], format: date }
+            paymentCondition: { type: [string, 'null'] }
+            groups:
+              type: array
+              items:
+                type: object
+                additionalProperties: false
+                required: [groupId, attributes, lines]
+                properties:
+                  groupId: { type: string, format: uuid }
+                  attributes:
+                    type: object
+                    additionalProperties: false
+                    required:
+                      [garment, color, fabric, application, collar, audience]
+                    properties:
+                      garment: { type: string }
+                      color: { type: string }
+                      fabric: { type: string }
+                      application: { type: string }
+                      collar: { type: string }
+                      audience: { type: string }
+                  lines:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required:
+                        [
+                          groupId,
+                          lineId,
+                          size,
+                          quantity,
+                          subtotalCents,
+                          unitCents,
+                          unitLexeme,
+                        ]
+                      properties:
+                        groupId: { type: string, format: uuid }
+                        lineId: { type: string, format: uuid }
+                        size: { type: string }
+                        quantity: { type: integer, minimum: 1 }
+                        subtotalCents: { type: integer, minimum: 1 }
+                        unitCents: { type: integer, minimum: 1 }
+                        unitLexeme:
+                          { type: string, pattern: '^[0-9]+\.[0-9]{2}$' }
+        registrations:
+          oneOf:
+            - { type: 'null' }
+            - type: object
+              additionalProperties: false
+              required: [customer, groups, issues]
+              properties:
+                customer:
+                  { $ref: '#/components/schemas/OlistPreviewResolution' }
+                issues:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [code, field]
+                    properties:
+                      code: { type: string }
+                      field: { type: string }
+                groups:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [groupId, action, remoteId, lines]
+                    properties:
+                      groupId: { type: string, format: uuid }
+                      action: { enum: [reuse, create, blocked] }
+                      remoteId: { type: [string, 'null'] }
+                      lines:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: false
+                          required: [lineId, action, remoteId]
+                          properties:
+                            lineId: { type: string, format: uuid }
+                            action: { enum: [reuse, create, blocked] }
+                            remoteId: { type: [string, 'null'] }
+        versions:
+          type: object
+          additionalProperties: false
+          required: [order, source, buyer, settings, connection, authorization]
+          properties:
+            order: { type: integer, minimum: 1 }
+            source: { type: integer, minimum: 0 }
+            buyer: { type: [integer, 'null'], minimum: 1 }
+            settings: { type: integer, minimum: 0 }
+            connection: { type: integer, minimum: 0 }
+            authorization: { type: integer, minimum: 0 }
+        expiresAt: { type: [string, 'null'], format: date-time }
+        previewToken: { type: [string, 'null'], maxLength: 262144 }
+
     OlistEmptyCommand:
       type: object
       additionalProperties: false

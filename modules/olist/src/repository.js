@@ -3,6 +3,43 @@ import { OlistError, integer, text, object } from './errors.js';
 import { seal, identityHash } from './crypto.js';
 import { normalizeDocument } from './configuration.js';
 import { lockOlistActor } from './access.js';
+/** Shared canonical identity for read-only plans and durable reservations.
+ * Existing valid identities keep exactly the same normalization and hashes.
+ * Public audience is optional; a combination of fabrics is not truncated.
+ * @param {Buffer} key @param {any} input */
+export function olistResourceIdentityHash(key, input) {
+  let identity;
+  if (input.kind === 'customer') identity = normalizeDocument(input.identity);
+  else if (input.kind === 'product') {
+    const fields = [
+      'garment',
+      'color',
+      'fabric',
+      'application',
+      'collar',
+      'audience',
+    ];
+    const value = object(input.identity, fields);
+    if (fields.some((field) => !Object.hasOwn(value, field)))
+      throw new OlistError('INVALID_REQUEST', 400);
+    identity = fields.map((field) => {
+      const raw = value[field];
+      const optionalAudience = field === 'audience' && raw === '';
+      const normalized = optionalAudience
+        ? ''
+        : text(raw, field === 'fabric' ? 12000 : 200);
+      return normalized.normalize('NFC').toLocaleLowerCase('pt-BR');
+    });
+  } else if (input.kind === 'variation')
+    identity = [
+      text(input.parentId, 36),
+      text(input.identity, 200).normalize('NFC').toLocaleLowerCase('pt-BR'),
+    ];
+  else throw new OlistError('INVALID_REQUEST', 400);
+  if (!/^[a-f0-9]{64}$/u.test(input.accountKey))
+    throw new OlistError('INVALID_REQUEST', 400);
+  return identityHash(key, input.kind, [input.accountKey, identity]);
+}
 /** Server-only persistence port. Every returned ID is account scoped.
  * @param {any} database @param {{envelopeKey:Buffer,hmacKey:Buffer,clock?:()=>Date}} options */
 export function createOlistRepository(database, options) {
@@ -57,33 +94,10 @@ export function createOlistRepository(database, options) {
         !/^[a-f0-9]{64}$/u.test(input.accountKey)
       )
         throw new OlistError('INVALID_REQUEST', 400);
-      let identity;
-      if (input.kind === 'customer')
-        identity = normalizeDocument(input.identity);
-      else if (input.kind === 'product') {
-        const fields = [
-          'garment',
-          'color',
-          'fabric',
-          'application',
-          'collar',
-          'audience',
-        ];
-        const value = object(input.identity, fields);
-        if (fields.some((key) => !Object.hasOwn(value, key)))
-          throw new OlistError('INVALID_REQUEST', 400);
-        identity = fields.map((key) =>
-          text(value[key], 200).normalize('NFC').toLocaleLowerCase('pt-BR'),
-        );
-      } else
-        identity = [
-          text(input.parentId, 36),
-          text(input.identity, 200).normalize('NFC').toLocaleLowerCase('pt-BR'),
-        ];
-      const protectedIdentity = identityHash(options.hmacKey, input.kind, [
-        input.accountKey,
-        identity,
-      ]);
+      const protectedIdentity = olistResourceIdentityHash(
+        options.hmacKey,
+        input,
+      );
       return database.transaction(async (/** @type {any} */ client) => {
         await lockOlistActor(client, input, 'olist.export', clock());
         if (input.kind === 'variation') {

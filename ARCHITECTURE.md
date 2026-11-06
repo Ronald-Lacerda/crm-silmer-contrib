@@ -19,6 +19,18 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T06 — prévia completa sem escrita ERP (06/11/2026)
+
+OLIST-06–12, 34–44: API dedicada com checkbox/sessão/CSRF lê fontes atuais,
+legado T26 e loja T24, revalida cadastro/ficha/subtotais/total independentemente
+de status e planeja cliente/pai/tamanhos por identidade verificável. Frações,
+ambiguidades, divergência remota, falta fiscal e incerteza bloqueiam exportação.
+GETs são limitados e executados fora de SQL; não há reserva, snapshot/job ou
+escrita ERP. Recibo AES-GCM vinculado à sessão e versões expira em 15 minutos;
+qualquer fonte alterada exige nova conferência. Criação permanece desligada.
+Natureza/origem/gatilhos e parâmetros fiscais reais continuam em T15/T22.
+[Contrato, limites e rollback](docs/runbooks/olist-phase3.md#t06--prévia-completa-sem-escrita-erp).
+
 ## OLIST-T24 — complementos da loja preservam o snapshot
 
 Adaptador da loja concluído no domínio/API conforme ADR 067/RFC 054: a única
@@ -28,7 +40,7 @@ suplemento cifrado; pendências não são inventadas e não há criação de Con
 Checkout, gateway, recibo, impressão, ficha e travas originais são preservados.
 Correção comercial invalida a fonte, com rebase explícito e novos IDs. A fonte
 interna para T06 é transitória; pricing.complete sozinho não prova cadastro ou
-completude ERP. T06, UI e sequência externa seguem pendentes.
+completude ERP. T06 está descrita acima; UI e sequência externa seguem pendentes.
 [Contrato e evidências](docs/runbooks/olist-phase3.md).
 
 ## OLIST-T26 — enriquecimento histórico separado da ficha
@@ -39,7 +51,7 @@ o valor e os pagamentos históricos. Comando comercial humano com versão e
 ACL atual, lote por identidade e soma exata ao total, mesma transação de evento,
 auditoria e idempotência. HMAC da fonte invalida composição obsoleta; rebase é
 explícito. Reserva Olist em qualquer conta bloqueia mudanças. Reconfirmação
-legada usa prova fresca sem mesclá-la à ficha. T24 está concluída acima; T06/UI/seqüência externa seguem
+legada usa prova fresca sem mesclá-la à ficha. T24 está concluída acima; T06 está descrita acima; UI e sequência externa seguem
 pendentes. [Runbook](docs/runbooks/olist-phase3.md).
 
 ## OLIST-T21 — total calculado e confirmação

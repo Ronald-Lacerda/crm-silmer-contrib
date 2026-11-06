@@ -1,9 +1,69 @@
-# Olist — Fase 3: composição e total calculado
+# Olist — Fase 3: composição, total e prévia
 
-OLIST-T20/T21/T26/T24, composição, confirmação e fontes suplementares. Requisitos
+OLIST-T20/T21/T26/T24/T06, composição, confirmação, fontes e prévia. Requisitos
 OLIST-09–10, 29, 34, 40–44;
 [ADR 057](../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
+
+## T06 — prévia completa sem escrita ERP
+
+OLIST-06–12, 34–44. `POST /api/v1/orders/:id/olist/preview` recebe somente `{}`.
+Exige humano ativo com checkbox Olist, sessão, CSRF e Origin, inclusive para
+Financeiro e Pedido de outro responsável. Não concede edição comercial. O GET
+mínimo anterior conserva o escopo comercial próprio quando o checkbox está
+inativo: responsável ou administrador, sem acesso alheio pelo fallback.
+
+A fonte é lida sob locks curtos de autorização, conexão, parâmetros, Pedido e
+comprador. Usa composição gerenciada ou revisão suplementar fresca T26/T24;
+status confirmado e missingFields vazio não comprovam completude. Ficha,
+previsão, arte, condição, cadastro fiscal com documento verificável/endereço/IE
+quando aplicável, grade/subtotais revisados e total são validados novamente.
+Uma fração unitária bloqueia toda a exportação, mantendo a validade comercial
+CRM. Nenhum preço, cadastro, conta ou total é recebido do navegador na prévia.
+
+Cliente comprador, produto pai e tamanhos são descobertos por identidade
+verificável e GETs oficiais limitados, fora de transação SQL. Vínculos antigos
+não dispensam conferir o detalhe atual: divergência fiscal, SKU, atributos,
+tamanho/pai, inatividade, ambiguidade ou enumeração incompleta bloqueiam.
+Recursos reservados/incertos/rejeitados exigem reconciliação, sem concluir
+que uma ausência autoriza outra inclusão. O mesmo M em dois grupos conserva
+suas identidades. Nome sozinho não associa produto. Preço de catálogo remoto
+não é sobrescrito nem usado para recalcular a negociação.
+
+A resposta mostra grupos/linhas, quantidades, subtotais e unitários exatos,
+plano reuse/create/blocked, pendências e revisões. Documento completo, endereço,
+telefone, mensagens, notas, arquivos e conteúdo de IA não são publicados. Nome
+fiscal e últimos quatro caracteres do documento identificam o comprador.
+Nenhum recurso, reserva, evento de exportação, snapshot, recibo idempotente ou
+job é criado. Quota e eventual renovação OAuth usam o contrato F2 existente.
+
+Quando elegível, a resposta inclui previewToken AES-GCM com propósito/AAD
+próprios, ligado a ator/sessão/Pedido/conta/contexto, versões de autorização,
+Pedido, fonte, comprador, configuração e conexão e hash dos conteúdos/vínculos.
+Expira inclusivamente em 15 minutos. `POST .../olist/preview/check` recebe
+somente `{previewToken}` e revalida autorização/fontes locais; adulteração,
+troca de sessão/Pedido ou mudança de fonte pede nova conferência. Não faz GET
+remoto nem autoriza efeito. Token acima de 262144 caracteres não é emitido.
+
+Sem orderDate, a data exibida é proposta do dia de São Paulo, sem salvar ou
+confirmar o Pedido. Virar o dia invalida a proposta. T07 deve congelar o dia do
+comando aceito e a fonte/conferência correspondente; replay não poderá mudá-lo.
+T07/T22 precisam revalidar o remoto antes dos efeitos e reservar cada criação.
+
+Limites: até 64 GETs reais por prévia; dez requests/minuto e no máximo 1000
+vínculos de conta na consulta conservadora atual. Mais vínculos pedem nova
+consulta especializada, sem assumir ausência. Vendedor, depósito, forma de
+pagamento e lista de preços, quando informada, são conferidos nos catálogos
+fechados suportados. Natureza/origem e gatilhos reais da conta continuam no
+gate operacional T15: esta entrega valida sua presença/formato/revisão, sem
+alegar homologação. Produto ausente mostra criação planejada e pendência
+fiscal explícita; não inventa NCM/unidade/origem/preço de cadastro. T22/T15
+completam essa parametrização antes de qualquer criação.
+
+Criação continua `false`, sem endpoint de envio. Recibo não é reserva nem
+prova de imutabilidade futura do ERP. Não houve acesso real ao ERP, deploy,
+ativação ou piloto. Rollback remove as novas rotas e mantém composição,
+fontes, locks e guardas comerciais anteriores; não exige down ou compensação.
 
 ## T24 — fonte suplementar da loja
 
@@ -215,7 +275,6 @@ corrigir limite agregado de quantidade. Não é evidência de produção.
 
 Os logs sintéticos ficam em var/olist-phase3-*.log, fora do versionamento.
 
-
 ## Fechamento T20 — 05/11/2026
 
 A composição vazia pode ser completada por comandos autorizados; IDs são
@@ -225,7 +284,6 @@ posição/conteúdo. Mudança sem alteração real não invalida revisão. A evo
 em T26. As verificações incluem aplicação/API, roundtrip cifrado, concorrência
 e grade/linhas reordenadas. Interface de edição e confirmação calculada não
 são declaradas entregues por T20.
-
 
 ## Fechamento T21 — 05/11/2026
 
@@ -243,7 +301,6 @@ antigas foram migradas para preços sintéticos explícitos, sem inferência em
 código de produção. A falha histórica financeira no SQLSTATE/PG18.6 registrada
 acima permanece fora desta entrega.
 
-
 Gate completo T21 aprovado: `npm run validate` com 1799 testes aprovados e
 15 skips explícitos, incluindo tipos/lint/fronteiras/formatação/build.
 Auditoria sem altas/críticas (um baixo/cinco moderados existentes). Regressão
@@ -253,7 +310,6 @@ já reproduzida no baseline, sem regressão nova identificada.
 E2E final T21: 485 aprovados/7 skips previstos, sem falhas; servidor estático na
 porta 4187. Nenhum teste foi flexibilizado. `git diff --check` aprovado; o
 PostgreSQL sintético iniciado para esta verificação foi encerrado.
-
 
 Gate T26: `npm run validate` aprovado, 1813 testes/16 skips explícitos,
 incluindo tipos, lint, fronteiras, formatação, validadores e build. O skip novo
@@ -278,3 +334,27 @@ incluindo os 13 cenários de fontes. E2E completo: 485 aprovados/7 skips previst
 sem falhas, em servidor dedicado na porta 4187 (4173 já ocupada por outro serviço).
 A revisão independente não encontrou finding bloqueante. PostgreSQL 18.6 local
 com dados sintéticos encerrado ao fim dos testes. Sem acesso ao ERP ou deploy.
+
+## Fechamento T06 — 06/11/2026
+
+T06 concluída no domínio/API, com OpenAPI e sínteses canônicas atualizados.
+A revisão independente de Backend/Integrações/QA confirmou correções de
+revalidação fiscal/atributos remotos, escopo comercial da projeção alternativa,
+comprador WhatsApp, configuração e virada do dia, sem findings altos/críticos
+restantes. Fonte de legado e loja completas/obsoletas foram exercitadas com
+revisões cifradas reais; snapshots e gateway preservados.
+
+- `npm run validate`: aprovado, 1855 testes/17 skips explícitos, incluindo
+  tipos, lint, fronteiras, formatação, validadores e build. A nova suíte SQL
+  omitida sem TEST_DATABASE_URL foi executada separadamente, sem skips.
+- Domínio/plano de recursos: 26/26 aprovados, sem skips.
+- PostgreSQL T06: 15/15 aprovados, sem skips, incluindo sessão/checkbox,
+  expiração/adulteração, mudanças de todas as fontes e parâmetros durante GET.
+- Regressão SQL integrada Pedidos/Loja/Olist/fontes: 102/102 aprovados, zero skips.
+- E2E completo: 485 aprovados/7 skips previstos, porta dedicada 4187.
+- Auditoria npm aprovada, zero altas/críticas; um baixo/cinco moderados existentes.
+
+Logs sintéticos em var/olist-t06-*.log, fora do versionamento. Entrega atômica
+identificada por OLIST-T06 na branch codex/olist-phase3; sem acesso autenticado
+ao ERP, deploy, migração adicional ou piloto. Próximas tarefas T22/T07; gate F3
+permanece aberto até sequência confiável e guardas posteriores.

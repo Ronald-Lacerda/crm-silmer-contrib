@@ -1,3 +1,4 @@
+import { createOlistPreview } from './olist-preview.js';
 import {
   PostgresIdempotencyRecordStore,
   fingerprintCommand,
@@ -90,18 +91,25 @@ export function createOlistApiRuntime(database, options) {
   /** @param {any} input */
   async function project(input) {
     return database.transaction(async (/** @type {any} */ client) => {
-      await lockOlistActor(
+      const actor = await lockOlistActor(
         client,
         input,
         input.action ?? 'olist.read',
         clock(),
       );
       const { rows } = await client.query(
-        'SELECT id,number,status FROM crm.orders WHERE id=$1',
+        'SELECT o.id,o.number,o.status,o.manual_owner_id,c.assigned_user_id FROM crm.orders o LEFT JOIN crm.conversations c ON c.id=o.conversation_id WHERE o.id=$1',
         [input.orderId],
       );
       const order = rows[0];
       if (!order) throw new OlistError('ORDER_NOT_FOUND', 404);
+      if (
+        input.action === 'order.read' &&
+        !actor.capabilities.includes('COMMERCIAL_ADMIN') &&
+        order.manual_owner_id !== actor.id &&
+        order.assigned_user_id !== actor.id
+      )
+        throw new OlistError('FORBIDDEN', 403);
       const exports = await client.query(
         'SELECT state,stage,remote_number FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2',
         [config.accountKey, order.id],
@@ -139,6 +147,14 @@ export function createOlistApiRuntime(database, options) {
     /** @param {any} input */ disconnect: (input) =>
       mutate(input, 'disconnect'),
     /** @param {any} input */ settings: (input) => mutate(input, 'settings'),
+    ...createOlistPreview(database, {
+      config,
+      connection,
+      environment: env,
+      clock,
+      fetch: options.fetch,
+      timeoutMs: options.timeoutMs,
+    }),
     project,
     /** @param {any} input */
     async lookup(input) {

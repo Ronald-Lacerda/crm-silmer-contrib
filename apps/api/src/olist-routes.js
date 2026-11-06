@@ -24,6 +24,9 @@ const CODES = new Set([
   'OLIST_RESOURCE_NOT_FOUND',
   'OLIST_ENVELOPE_INVALID',
   'OLIST_CREATION_DISABLED',
+  'OLIST_PREVIEW_STALE',
+  'OLIST_PREVIEW_EXPIRED',
+  'OLIST_PREVIEW_INVALID',
 ]);
 /** @param {any} reply @param {()=>Promise<any>} work */
 async function respond(reply, work) {
@@ -140,6 +143,32 @@ export function registerOlistRoutes(api, runtime, contextFor) {
             ...body,
             ...contextFor(request),
             idempotencyKey: request.headers['idempotency-key'],
+          });
+        }),
+    );
+  }
+  for (const [path, method, fields] of [
+    ['/preview', 'preview', []],
+    ['/preview/check', 'checkPreview', ['previewToken']],
+  ]) {
+    api.post(
+      '/api/v1/orders/:orderId/olist' + path,
+      {
+        bodyLimit: 270000,
+        config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+      },
+      (request, reply) =>
+        respond(reply, async () => {
+          const input = await principal(request, runtime, true, 'olist.export');
+          const body = strictBody(
+            request.body,
+            /** @type {string[]} */ (fields),
+          );
+          return runtime[/** @type {string} */ (method)]({
+            ...input,
+            ...body,
+            ...contextFor(request),
+            orderId: /** @type {any} */ (request.params).orderId,
           });
         }),
     );

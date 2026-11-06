@@ -10,4 +10,7 @@ export { lockOlistActor } from './access.js';
 export { createOlistConnection } from './connection.js';
 export { createOlistQuota } from './quota.js';
 export { createOlistClient } from './client.js';
-export { createOlistRepository } from './repository.js';
+export {
+  createOlistRepository,
+  olistResourceIdentityHash,
+} from './repository.js';
