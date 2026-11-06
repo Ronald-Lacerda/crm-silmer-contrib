@@ -265,7 +265,8 @@ Componentes de domínio devem compor os primitivos acima, sem duplicar estilo ou
 - `KanbanColumn`, `OpportunityCard` e `StageChangeDialog`;
 - `AgentActivity`, `HandoffSummary` e `AuditTimeline`;
 - `OrderSheetSection`, `OrderValidationSummary` e `OrderSendStatus`;
-- `SalesKpi`, `SalesFilterBar` e `SalesDataTable`.
+- `SalesKpi`, `SalesFilterBar`, `SalesDataTable`, `ActionRow`,
+  `ActionDetail`, `ReasonSheet` e `Meter` (regras na §18, ACT-T03).
 
 Cada componente precisa documentar: propósito, anatomia, variantes, estados, comportamento responsivo, teclado, ARIA e exemplos de uso/não uso.
 
@@ -695,3 +696,146 @@ o orçamento anterior do Dashboard informacional do vendedor.
 Performance e checkpoint apresentam estados de erro e cobertura explícitos.
 Prévia do checkpoint não equivale a envio; aceito pelo provedor não equivale
 a entregue. Sem indicadores artificiais de conversão entre coortes distintas.
+
+### Componentes e regras do Dashboard (ACT-T03) — 05/11/2026
+
+Escala o redesenho do Dashboard ao design system. Os componentes abaixo
+compõem os primitivos da §8 e não criam estilo novo de botão, badge ou
+painel (§15). Nada aqui altera ACT-01–12 ou PERF-01–08; onde um item
+depende de decisão ainda não registrada, isso está dito no próprio item.
+
+#### `SalesKpi`
+
+- **Propósito:** mostrar um número do período e levar à lista que o explica.
+- **Anatomia:** rótulo (`--text-xs`/`--text-sm`, peso 500, cor secundária),
+  valor (`--text-xl`, peso 600, `tabular-nums`) e contexto curto (período,
+  unidade ou regra de inclusão). Card `--radius-lg`, `level-1`.
+- **Estados:** carregando (skeleton com a mesma geometria), com valor, sem
+  dado (“—” + motivo, por exemplo “Sem atribuição registrada”), erro (“—” +
+  “Tentar novamente”, §16). Sem dado ou erro nunca mostram “0”; zero só
+  quando a apuração retornou zero.
+- **Responsivo:** grade de 2 colunas no celular, 4 no notebook; o valor não
+  trunca, o contexto quebra linha.
+- **Teclado/ARIA:** o card inteiro é um único link (`<a>`) para a lista
+  filtrada; o nome acessível reúne rótulo, valor e contexto. Sem botão
+  interno. Foco visível no card.
+- **Usar** para totais do período. **Não usar** para nota, meta ou ranking
+  (PERF-06), nem quando não há lista de destino.
+
+#### `StatusBadge`
+
+- **Propósito:** informar estado; não é botão nem filtro (§17).
+- **Anatomia:** ícone + texto, sempre os dois; raio `--radius-sm`, peso 500,
+  `--text-xs`. Tons `success`, `warning`, `error` e `info` usam apenas
+  `--status-*-surface` e `--status-*-text`.
+- **Estados:** estático; não tem hover, foco nem seleção.
+- **Responsivo:** não quebra linha; em espaço curto, o texto encurta para
+  um termo equivalente, nunca some.
+- **Teclado/ARIA:** ícone `aria-hidden="true"`; o texto é o significado.
+- **Variante “Proposta”** (borda tracejada): só em protótipo, para marcar
+  métrica que depende de RFC pendente. **Proibida em produção**; métrica
+  sem decisão não é entregue.
+- **Não usar** cor sozinha, ponto colorido ou badge como ação clicável.
+
+#### `ActionRow`
+
+- **Propósito:** uma linha da fila da central (ACT-01/02).
+- **Anatomia:** avatar (`--radius-pill`), quem, verbo + motivo (“Responder
+  — cliente aguarda”), selo de prazo/espera em `StatusBadge`.
+- **Estados:** padrão, hover, foco, selecionada (`--color-selected`, nunca
+  laranja), adiada vencida de volta à fila, desatualizada (ACT-09).
+- **Responsivo:** alvo ≥ 44 px em qualquer largura; no celular ocupa a
+  largura toda e abre o detalhe em outra região, com volta à mesma linha.
+- **Teclado/ARIA:** a linha inteira é um único `button` que abre o detalhe
+  (`aria-pressed` ou `aria-current` para a selecionada); sem botões, links
+  ou menus internos. Ordem de leitura: quem → motivo → prazo.
+- **Usar** para objeto real acionável. **Não usar** para executar a ação na
+  própria linha: a fila não tem `primary` (§3).
+
+#### `ActionDetail`
+
+- **Propósito:** resolver um objeto com uma pergunta.
+- **Anatomia:** título com quem/objeto, contexto mínimo (motivo, espera,
+  prazo prometido quando existir), uma pergunta, no máximo 1 `primary` e até
+  2 `quiet`; ações raras (dispensar, adiar por data) ficam em “Mais”.
+- **Estados:** carregando, pronto, enviando (`aria-busy`, envio único),
+  conflito 409 (pede atualizar, preserva rascunho), erro na região, sucesso
+  que devolve o foco à fila (ACT-08/09/11).
+- **Responsivo:** painel ao lado no notebook; tela própria com voltar no
+  celular.
+- **Teclado/ARIA:** região nomeada pelo título; foco vai ao título ao abrir;
+  ação indisponível usa `aria-disabled` com motivo (§16).
+- Reforça a regra da §18: **tarefa tem no máximo três ações no contexto**.
+- **Não usar** composer, chat paralelo ou segundo `primary`.
+
+#### `FilterChips` e `SegmentedControl`
+
+- **Propósito:** `FilterChips` filtra a fila por intenção (quatro, ACT-01);
+  `SegmentedControl` escolhe o período do desempenho: 7 ou 30 dias (PERF-02).
+- **Anatomia:** chip com rótulo + contagem real; segmento com rótulo curto.
+  Seleção neutra (`--color-selected`, peso), nunca laranja (§4).
+- **Estados:** padrão, hover, foco, pressionado; contagem indisponível
+  mostra “—”, não “0”.
+- **Responsivo:** chips rolam ou quebram sem truncar rótulo; 44 px no toque.
+- **Teclado/ARIA:** cada chip e cada segmento é `button` com `aria-pressed`;
+  a contagem entra no nome acessível; o resultado anuncia em `aria-live`.
+- **Não usar** para mais de quatro intenções (vira folha “Filtros”, §16)
+  nem para períodos fora de 7/30 dias sem decisão.
+
+#### `SalesDataTable`
+
+- **Propósito:** desempenho por pessoa e canal no período.
+- **Anatomia:** `<table>` com `<th scope="col">` reais, valores
+  `tabular-nums` alinhados à direita. Linhas de canal (“Loja do site”) e
+  “Sem atribuição” ficam separadas das pessoas, e o total reconcilia com a
+  soma (PERF-05).
+- **Papéis:** o vendedor recebe da API apenas a própria linha (PERF-07); a
+  linha própria destacada vale na visão do administrador, quando ele também
+  vende. Busca e “Ver todos (N)” aparecem com 8 pessoas ou mais.
+- **Estados:** carregando, vazio do período, erro com retry, cobertura
+  histórica limitada sinalizada (PERF-05).
+- **Responsivo:** no celular vira lista de cartões com os mesmos campos e a
+  mesma ordem; rolagem horizontal não é a única saída (§7).
+- **Teclado/ARIA:** cabeçalhos ordenáveis são `button` dentro do `th`, com
+  `aria-sort` no `th`; linha própria identificada em texto (“Você”).
+- **Não usar** para ranking punitivo ou nota única (PERF-06).
+
+#### `Meter`
+
+- **Propósito:** reforço visual de proporção dentro de uma linha.
+- **Anatomia:** barra de uma única cor (`--color-link` ou neutro; nunca o
+  laranja da ação), `aria-hidden="true"`; o valor fica sempre em texto ao
+  lado.
+- **Estados:** com valor, sem dado (barra ausente + “—”).
+- **Não usar** como única fonte do número, com várias cores ou como meta.
+
+#### `ReasonSheet`
+
+- **Propósito:** pedir um motivo explícito antes de uma decisão auditável.
+- **Anatomia:** `Drawer`/folha modal com título, `fieldset` + `legend`,
+  opções em `radio` obrigatório; “Outro” revela campo de texto curto
+  obrigatório; ações “Confirmar …” (verbo + objeto) e “Cancelar”.
+- **Estados:** confirmar fica `aria-disabled` com motivo até haver escolha
+  (e texto, se “Outro”); enviando; erro preserva a escolha.
+- **Teclado/ARIA:** foco contido, foco inicial na `legend`/primeira opção,
+  setas entre radios, Escape fecha sem salvar e devolve o foco ao acionador.
+- **Uso pendente:** o motivo de perda do lead ainda não tem decisão; até o
+  RFC complementar (ACT-T03), a spec proíbe inferir perda e não há status
+  novo. O componente não entra em produção para esse fluxo antes disso.
+
+#### `EmptyState` e limite
+
+- Vazio diz o motivo (“Nada para responder agora”, “Nenhum resultado para o
+  filtro” + “Limpar filtro”); erro não vira vazio (ACT-09).
+- A fila corta em 100 itens (`DASHBOARD_ACTION_LIMIT`); com `hasMore`, a
+  interface sempre anuncia que há mais itens fora da lista, sem total
+  inventado (ACT-01).
+
+#### Conformidade reforçada pelo redesenho
+
+- Nenhum texto abaixo de `--text-xs` (13 px); sem caixa alta nem eyebrow (§5).
+- Cards em `--radius-lg` (12 px); badge em `--radius-sm` (§6).
+- h1 em `--text-2xl`, com o ajuste de 20 px no celular previsto na §7.
+- Uma `primary` por região: a fila não tem botões; o detalhe tem uma.
+- O orçamento da §18 permanece: 9 controles em 390×844 e 14 em 1366×768
+  para o vendedor, com fixture de cinco objetos.

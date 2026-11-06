@@ -157,3 +157,19 @@ e notas e tratamento de duplicidade antes de qualquer implementação.
 - Capturas são da interface compilada com dados sintéticos e design do CRM;
   não constituem homologação operacional. FINQ-T06 continua aberta: conferir
   pagamentos reais e homologar com a pessoa do Financeiro antes de criar conta real.
+
+## FINQ-DEPREC-01 — Descontinuar o módulo Financeiro (05/11/2026)
+
+Decisão do PO em 05/11/2026. A cobrança InfinitePay ainda está em
+implementação (commit `9c729681`, fora do master); nada abaixo começa antes
+de a quitação conciliada estar disponível.
+
+- [ ] Registrar a decisão: novo ADR que supersede 040/041/042 e emenda o
+      058 e COB-01/09/10.
+- [ ] Remover a rota `/financeiro`, o perfil Financeiro e o item de menu.
+- [ ] Migração contract das tabelas `crm.order_finance` e
+      `crm.order_finance_events`, da coluna
+      `crm.orders.finance_payment_review_required` e do trigger
+      `invalidate_finance_amount` (expand 0043), somente após verificação.
+- [ ] Remover testes, CSS e runbook do Financeiro.
+- [ ] Quitação passa a vir só da cobrança InfinitePay conciliada.
