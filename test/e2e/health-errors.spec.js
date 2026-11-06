@@ -27,7 +27,7 @@ const occurrence = {
 
 /**
  * @param {import('@playwright/test').Page} page
- * @param {{viewer?: Record<string,any>, empty?: boolean, unavailable?: boolean, conflict?: boolean, collectionPending?: boolean, delay?: Promise<unknown>, identityEvent?: Promise<unknown>, legacy?: boolean, archiveConflict?: boolean, archiveRefreshFailure?: boolean}} [options]
+ * @param {{viewer?: Record<string,any>, empty?: boolean, unavailable?: boolean, conflict?: boolean, collectionPending?: boolean, delay?: Promise<unknown>, identityEvent?: Promise<unknown>, legacy?: boolean, archiveConflict?: boolean, archiveRefreshFailure?: boolean, operational?:{status:number,body:any}, operationalDelay?:Promise<unknown>}} [options]
  */
 async function setup(page, options = {}) {
   await mockPainel(page);
@@ -63,6 +63,24 @@ async function setup(page, options = {}) {
   let legacyCount = options.legacy ? 12 : 0;
   let unavailable = options.unavailable ?? false;
   let denied = 0;
+  let healthResponse = options.operational;
+  /** @type {string[]} */
+  const operationalReads = [];
+  await page.route('**/api/health/operations', async (route) => {
+    operationalReads.push('read');
+    await options.operationalDelay;
+    return route.fulfill({
+      status: healthResponse?.status ?? 200,
+      contentType: 'application/json',
+      body: JSON.stringify(
+        healthResponse?.body ?? {
+          status: 'ok',
+          checkedAt: new Date().toISOString(),
+          checks: { worker: 'ok', queue: 'ok', commands: 'ok' },
+        },
+      ),
+    });
+  });
   await page.context().addCookies([
     {
       name: 'crm_csrf',
@@ -173,6 +191,10 @@ async function setup(page, options = {}) {
     });
   });
   return {
+    operationalReads,
+    setOperational(/** @type {{status:number,body:any}} */ response) {
+      healthResponse = response;
+    },
     reads,
     writes,
     archives,
@@ -457,6 +479,15 @@ test('OPS-INBOX-ACK-04: review and archive only the 12 WAHA pendencies by keyboa
     page.getByText(
       /A mesma operação pode aparecer em Processamento e Automação n8n/u,
     ),
+  ).toBeHidden();
+  await page
+    .getByText('Como interpretar as ocorrências', { exact: true })
+    .focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByText(
+      /A mesma operação pode aparecer em Processamento e Automação n8n/u,
+    ),
   ).toBeVisible();
   await expect(
     page
@@ -566,4 +597,151 @@ test('a failed history query preserves the active view label and counts', async 
     'Pendências atuais1',
   );
   expect(mock.views).toEqual(['active', 'history']);
+});
+
+test('OPSUI-01: summary reads only on entry and Atualizar, never on filters, treatment or elapsed time', async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date() });
+  const mock = await setup(page);
+  await page.goto('/saude-erros');
+  const summary = page.getByRole('region', {
+    name: 'Resumo operacional',
+    exact: true,
+  });
+  await expect(summary).toContainText('Operação saudável');
+  await expect(summary).toContainText('Atualização manual');
+  await expect(summary).toContainText('Sem atraso');
+  expect(mock.operationalReads).toHaveLength(1);
+  await page
+    .getByRole('combobox', { name: 'Estado', exact: true })
+    .selectOption('new');
+  await expect.poll(() => mock.reads.length).toBe(2);
+  await page.getByRole('button', { name: 'Em análise', exact: true }).click();
+  await expect.poll(() => mock.writes.length).toBe(1);
+  await expect.poll(() => mock.reads.length).toBe(3);
+  await page.clock.fastForward(180_000);
+  expect(mock.operationalReads).toHaveLength(1);
+  await page.getByRole('button', { name: 'Atualizar', exact: true }).click();
+  await expect.poll(() => mock.operationalReads.length).toBe(2);
+});
+
+test('OPSUI-02/03: degraded 503 is useful, network failure never preserves green and incidents remain available', async ({
+  page,
+}) => {
+  const mock = await setup(page);
+  await page.goto('/saude-erros');
+  const summary = page.getByRole('region', {
+    name: 'Resumo operacional',
+    exact: true,
+  });
+  await expect(summary).toContainText('Operação saudável');
+  mock.setOperational({
+    status: 503,
+    body: {
+      status: 'degraded',
+      checkedAt: new Date().toISOString(),
+      checks: { worker: 'ok', queue: 'degraded', commands: 'ok' },
+    },
+  });
+  await page.getByRole('button', { name: 'Atualizar', exact: true }).click();
+  await expect(summary).toContainText('Operação precisa de atenção');
+  await expect(summary).toContainText('Atrasada');
+  await expect(summary).toContainText('mais de 5 minutos');
+  await expect(summary).toContainText('Ativo');
+  await page.screenshot({
+    path: 'var/health-summary-degraded.png',
+    fullPage: true,
+  });
+  await page.route('**/api/health/operations', (route) =>
+    route.abort('failed'),
+  );
+  await page.getByRole('button', { name: 'Atualizar', exact: true }).click();
+  await expect(summary).toContainText('Saúde operacional indisponível');
+  await expect(summary).not.toContainText('Operação saudável');
+  await expect(page.getByRole('article')).toBeVisible();
+  await page.getByRole('button', { name: 'Em análise', exact: true }).click();
+  await expect(page.locator('.health-error-status')).toHaveText('Em análise');
+  mock.deny();
+  await page.getByRole('button', { name: 'Atualizar', exact: true }).click();
+  await expect(summary).toHaveCount(0);
+});
+
+test('OPSUI-03: leaving the page cancels the pending health read', async ({
+  page,
+}) => {
+  await setup(page);
+  let release = () => {};
+  const pending = new Promise((resolve) => {
+    release = () => resolve(undefined);
+  });
+  await page.route('**/api/health/operations', async (route) => {
+    await pending;
+    await route
+      .fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          status: 'ok',
+          checkedAt: new Date().toISOString(),
+          checks: { worker: 'ok', queue: 'ok', commands: 'ok' },
+        }),
+      })
+      .catch(() => {});
+  });
+  const failed = page.waitForEvent('requestfailed', (request) =>
+    request.url().endsWith('/api/health/operations'),
+  );
+  await page.goto('/saude-erros');
+  await expect(page.getByRole('article')).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Resumo operacional' }),
+  ).toHaveAttribute('aria-busy', 'true');
+  await page
+    .getByRole('link', { name: 'Dashboard', exact: true })
+    .first()
+    .click();
+  await failed;
+  release();
+  await expect(
+    page.getByRole('region', { name: 'Resumo operacional' }),
+  ).toHaveCount(0);
+});
+
+test('OPSUI-04: compact prototype fits mobile and desktop and preserves keyboard disclosure and axe', async ({
+  page,
+}) => {
+  await setup(page, { empty: true });
+  await page.goto('/saude-erros');
+  await expect(
+    page.getByRole('region', { name: 'Resumo operacional' }),
+  ).toContainText('Operação saudável');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({
+    path: 'var/health-summary-desktop.png',
+    fullPage: true,
+  });
+  const disclosure = page.getByText('Sobre estes dados', { exact: true });
+  await disclosure.focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByText(/Pendências ativas e histórico dos últimos 14 dias/u),
+  ).toBeVisible();
+  await page.keyboard.press('Enter');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () =>
+        globalThis.document.documentElement.scrollWidth <=
+        globalThis.document.documentElement.clientWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: 'var/health-summary-mobile.png',
+    fullPage: true,
+  });
+  const accessibility = await new AxeBuilder({ page })
+    .include('#main-content')
+    .analyze();
+  expect(accessibility.violations).toEqual([]);
 });

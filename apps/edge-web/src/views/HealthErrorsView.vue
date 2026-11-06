@@ -1,6 +1,8 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import { ApiError, commandKey, request } from '../lib/api-client.js';
+import AppIcon from '../components/AppIcon.vue';
+import { operationalSummary } from '../lib/operational-summary.js';
 import {
   HEALTH_ERROR_STATUSES,
   HEALTH_ERROR_VIEWS,
@@ -31,7 +33,18 @@ const announcement = ref('');
 const denied = ref(false);
 const requiresRefresh = ref(false);
 const answer = ref(null);
+const operational = ref(null);
+const operationalFailed = ref(false);
+const operationalLoading = ref(true);
+const operationalReadAt = ref(Date.now());
+const operation = computed(() =>
+  operationalSummary(operational.value, {
+    now: operationalReadAt.value,
+    failed: operationalFailed.value,
+  }),
+);
 let listController;
+let operationalController;
 let actionController;
 let disposed = false;
 const base = '/api/v1/admin/health-errors';
@@ -63,6 +76,9 @@ const filterLabel = computed(
 
 function clearPrivateData() {
   answer.value = null;
+  operational.value = null;
+  listController?.abort();
+  operationalController?.abort();
   denied.value = true;
   actionError.value = '';
   archiveReview.value = null;
@@ -80,13 +96,46 @@ function accessFailure(cause) {
   return true;
 }
 
-/** @param {{announce?: boolean}} [options] */
-async function load({ announce = false } = {}) {
+async function loadOperational() {
+  operationalController?.abort();
+  const own = new AbortController();
+  operationalController = own;
+  const signal = own.signal;
+  operationalLoading.value = true;
+  try {
+    let data;
+    try {
+      data = (
+        await request('/api/health/operations', {
+          signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+        })
+      ).data;
+    } catch (cause) {
+      if (!(cause instanceof ApiError) || cause.status !== 503) throw cause;
+      data = cause.problem;
+    }
+    if (disposed || denied.value || signal.aborted) return;
+    operational.value = data;
+    operationalFailed.value = false;
+    operationalReadAt.value = Date.now();
+  } catch {
+    if (disposed || denied.value || signal.aborted) return;
+    operationalFailed.value = true;
+    operationalReadAt.value = Date.now();
+  } finally {
+    if (!disposed && own === operationalController)
+      operationalLoading.value = false;
+  }
+}
+
+/** @param {{announce?: boolean, refreshOperations?: boolean}} [options] */
+async function load({ announce = false, refreshOperations = false } = {}) {
   if (disposed || denied.value || busyId.value) return;
   listController?.abort();
   const own = new AbortController();
   listController = own;
   loading.value = true;
+  const operationalRead = refreshOperations ? loadOperational() : undefined;
   const requested = status.value;
   const requestedView = view.value;
   archiveReview.value = null;
@@ -104,13 +153,23 @@ async function load({ announce = false } = {}) {
     answeredView.value = requestedView;
     requiresRefresh.value = false;
     actionError.value = '';
-    if (announce) announcement.value = 'Ocorrências atualizadas.';
   } catch (cause) {
     if (disposed || own.signal.aborted || accessFailure(cause)) return;
     error.value = answer.value
       ? 'Não foi possível atualizar. Os dados abaixo são da última consulta bem-sucedida.'
       : 'Não foi possível consultar as ocorrências agora. Tente novamente.';
   } finally {
+    await operationalRead;
+    if (
+      announce &&
+      !disposed &&
+      !denied.value &&
+      !own.signal.aborted &&
+      !error.value
+    )
+      announcement.value = refreshOperations
+        ? `Ocorrências atualizadas. ${operation.value.title}.`
+        : 'Ocorrências atualizadas.';
     if (own === listController && !disposed) loading.value = false;
   }
 }
@@ -240,8 +299,10 @@ async function treat(item, nextStatus) {
 function dispose() {
   disposed = true;
   listController?.abort();
+  operationalController?.abort();
   actionController?.abort();
   answer.value = null;
+  operational.value = null;
   archiveReview.value = null;
 }
 
@@ -256,7 +317,7 @@ onMounted(() => {
       void load();
     },
   });
-  void load();
+  void load({ refreshOperations: true });
 });
 onBeforeUnmount(() => {
   dispose();
@@ -269,29 +330,85 @@ onBeforeUnmount(() => {
     <header class="page-heading">
       <div>
         <h1 ref="heading" tabindex="-1">Saúde e erros</h1>
-        <p>
-          Acompanhe as falhas registradas e organize o tratamento de cada
-          problema.
-        </p>
+        <p>Estado da operação e acompanhamento de falhas.</p>
       </div>
       <button
         v-if="!denied"
         type="button"
         class="secondary"
         :aria-disabled="loading || busyId ? 'true' : undefined"
-        @click="!loading && !busyId && load({ announce: true })"
+        @click="
+          !loading &&
+          !busyId &&
+          load({ announce: true, refreshOperations: true })
+        "
       >
         {{ loading ? 'Consultando…' : 'Atualizar' }}
       </button>
     </header>
 
-    <p class="health-errors-scope">
-      Pendências ativas e histórico dos últimos 14 dias são consultas distintas.
-      Arquivar uma pendência não confirma o resultado do envio. Erros da API são
-      registrados a partir da ativação desta central; falhas de tarefas e
-      comandos n8n são coletadas dos registros do CRM. Esta consulta não
-      substitui o monitoramento externo de disponibilidade.
-    </p>
+    <section
+      v-if="!denied"
+      class="surface operational-summary"
+      aria-labelledby="operational-summary-title"
+      :aria-busy="operationalLoading ? 'true' : undefined"
+    >
+      <div class="operational-summary-heading">
+        <h2 id="operational-summary-title">Resumo operacional</h2>
+        <span
+          class="operational-summary-state"
+          :data-state="operationalLoading ? 'loading' : operation.state"
+        >
+          <AppIcon
+            :name="
+              operationalLoading
+                ? 'info'
+                : operation.state === 'healthy'
+                  ? 'check'
+                  : 'alert'
+            "
+          />
+          {{ operationalLoading ? 'Consultando…' : operation.title }}
+        </span>
+      </div>
+      <p class="operational-summary-time">
+        {{
+          operation.checkedAt
+            ? `Última verificação: ${healthErrorInstant(operation.checkedAt)} (Brasília).`
+            : 'Aguardando uma verificação válida.'
+        }}
+        Atualização manual.
+      </p>
+      <ul class="operational-summary-signals" role="list">
+        <li v-for="signal in operation.signals" :key="signal.key">
+          <span>{{ signal.label }}</span>
+          <strong :data-state="operationalLoading ? 'loading' : signal.state">{{
+            operationalLoading ? 'Consultando…' : signal.value
+          }}</strong>
+        </li>
+      </ul>
+      <div
+        v-if="!operationalLoading && operation.guidance.length"
+        class="operational-summary-guidance"
+      >
+        <p v-for="guidance in operation.guidance" :key="guidance">
+          {{ guidance }}
+        </p>
+      </div>
+    </section>
+    <details
+      v-if="!denied"
+      class="health-errors-scope health-errors-explanation"
+    >
+      <summary>Sobre estes dados</summary>
+      <p>
+        Pendências ativas e histórico dos últimos 14 dias são consultas
+        distintas. Arquivar uma pendência não confirma o resultado do envio.
+        Erros da API são registrados a partir da ativação desta central; falhas
+        de tarefas e comandos n8n são coletadas dos registros do CRM. Esta
+        consulta não substitui o monitoramento externo de disponibilidade.
+      </p>
+    </details>
     <p v-if="announcement" class="sr-only" role="status">{{ announcement }}</p>
     <div v-if="error" class="audit-note" role="alert">
       <h2 v-if="denied">Acesso indisponível</h2>
@@ -327,7 +444,6 @@ onBeforeUnmount(() => {
           <li
             v-for="total in totals"
             :key="total.status"
-            class="surface"
             :data-state="total.status"
           >
             <span>{{ total.label }}</span
@@ -446,13 +562,19 @@ onBeforeUnmount(() => {
         {{ healthErrorInstant(answer.checkedAt) }} (Brasília). Até 100
         ocorrências agrupadas.
       </p>
-      <p v-if="answer" class="health-errors-checked">
-        {{
-          answeredView === 'active'
-            ? 'Somente fontes que ainda exigem tratamento. Falhas concluídas e pendências encerradas com evidência ficam no histórico, sem alterar o resultado original. A mesma operação pode aparecer em Processamento e Automação n8n; não some as contagens desses grupos.'
-            : 'Ocorrências e mudanças registradas, inclusive de pendências arquivadas. O estado de acompanhamento não comprova o resultado dos envios.'
-        }}
-      </p>
+      <details
+        v-if="answer"
+        class="health-errors-checked health-errors-explanation"
+      >
+        <summary>Como interpretar as ocorrências</summary>
+        <p>
+          {{
+            answeredView === 'active'
+              ? 'Somente fontes que ainda exigem tratamento. Falhas concluídas e pendências encerradas com evidência ficam no histórico, sem alterar o resultado original. A mesma operação pode aparecer em Processamento e Automação n8n; não some as contagens desses grupos.'
+              : 'Ocorrências e mudanças registradas, inclusive de pendências arquivadas. O estado de acompanhamento não comprova o resultado dos envios.'
+          }}
+        </p>
+      </details>
       <div v-if="answer && !items.length" class="empty-state">
         <h3>Nenhuma ocorrência nesta consulta</h3>
         <p>
@@ -608,8 +730,8 @@ onBeforeUnmount(() => {
         </li>
       </ul>
       <p class="health-errors-treatment-note">
-        Alterar o estado registra o acompanhamento. A correção deve ser feita no
-        serviço de origem; nenhum envio ou tarefa é repetido por esta tela.
+        Alterar o estado registra o acompanhamento, sem repetir envios ou
+        tarefas.
       </p>
     </section>
   </div>
