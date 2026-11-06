@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import test from 'node:test';
 import { Pool } from 'pg';
 
@@ -133,6 +134,7 @@ test(
     const sellerD = await user('d', 'Vendedor');
     const sellerE = await user('e', 'Vendedor');
     const sellerF = await user('f', 'Vendedor');
+    const sellerG = await user('g', 'Vendedor');
     const admin = await user('admin', 'Vendedor', true);
     const financial = await user('finance', 'Financeiro');
 
@@ -444,6 +446,49 @@ test(
     await message(answeredBefore, sp('2026-11-04T10:30'));
     await reply(answeredBefore, sellerF.id, sp('2026-11-04T10:34'));
 
+    // Episodes follow the human history, not today's state: one wait over 15
+    // minutes before the conversation went back to the bot, another before it
+    // was closed.
+    const backToBot = await conversation(sp('2026-11-02T08:30'), sellerG.id);
+    await audit(
+      'conversation.takeover',
+      backToBot,
+      sellerG.id,
+      sp('2026-11-02T09:00'),
+    );
+    await reply(backToBot, sellerG.id, sp('2026-11-02T09:05'));
+    await message(backToBot, sp('2026-11-02T10:00'));
+    await reply(backToBot, sellerG.id, sp('2026-11-02T10:30'));
+    await pool.query(
+      `UPDATE crm.conversations SET automation_state='assistant',assigned_user_id=NULL WHERE id=$1`,
+      [backToBot],
+    );
+    const closedLater = await conversation(sp('2026-11-02T13:30'), sellerG.id);
+    await audit(
+      'conversation.takeover',
+      closedLater,
+      sellerG.id,
+      sp('2026-11-02T14:00'),
+    );
+    await reply(closedLater, sellerG.id, sp('2026-11-02T14:05'));
+    await message(closedLater, sp('2026-11-02T14:10'));
+    await reply(closedLater, sellerG.id, sp('2026-11-02T14:40'));
+    await pool.query(
+      `UPDATE crm.conversations SET state='encerrada',terminal_at=$2,closure_outcome='concluido',closed_by=$3 WHERE id=$1`,
+      [closedLater, sp('2026-11-02T15:00'), sellerG.id],
+    );
+    // A request still pending on a conversation someone already took over
+    // directly is never omitted from the team view (MET-02).
+    const ownedPending = await conversation(sp('2026-11-05T14:35'), sellerG.id);
+    await audit(
+      'conversation.takeover',
+      ownedPending,
+      sellerG.id,
+      sp('2026-11-05T14:36'),
+    );
+    await reply(ownedPending, sellerG.id, sp('2026-11-05T14:38'));
+    await handoff(ownedPending, sp('2026-11-05T14:40'));
+
     // Seller C answered and was later disabled: authorship is preserved.
     const inactive = await conversation(sp('2026-11-03T10:00'), sellerC.id);
     await handoff(inactive, sp('2026-11-03T10:00'), {
@@ -538,6 +583,12 @@ test(
     assert.equal(row(sellerF).firstResponse.samples, 1);
     assert.equal(row(sellerF).firstResponse.medianMinutes, 4);
     assert.equal(row(sellerF).unansweredEpisodes.count, 0);
+    assert.equal(row(sellerG).unansweredEpisodes.count, 2);
+    assert.deepEqual(row(sellerG).unansweredNow, {
+      count: 0,
+      oldestWaitingMinutes: null,
+    });
+    assert.equal(row(sellerG).claim.samples, 0);
     assert.equal(row(sellerD).claim.samples, 1);
     assert.equal(row(sellerD).claim.medianMinutes, 0);
     assert.equal(row(sellerD).firstResponse.medianMinutes, 1);
@@ -545,7 +596,7 @@ test(
     assert.equal(row(admin).claim.medianMinutes, null);
     assert.equal(row(financial), undefined);
     assert.deepEqual(team.team, {
-      unclaimedHandoffs: { count: 1, oldestWaitingMinutes: 30 },
+      unclaimedHandoffs: { count: 2, oldestWaitingMinutes: 30 },
     });
 
     // The 29/10 request belongs to a window that includes that São Paulo day.
@@ -588,12 +639,182 @@ test(
     const managed = await runtime.service({ actor: admin, days: 30 });
     assert.equal(managed.scope, 'team');
     assert.equal(managed.from, '2026-10-07');
-    assert.equal(managed.team.unclaimedHandoffs.count, 1);
+    assert.equal(managed.team.unclaimedHandoffs.count, 2);
     await assert.rejects(runtime.service({ actor: financial }), {
       statusCode: 403,
     });
     await assert.rejects(runtime.service({ actor: sellerC }), {
       statusCode: 403,
     });
+  },
+);
+
+test(
+  'MET PostgreSQL volume: 1000 human conversations x 30 messages stay within budget',
+  { skip: !connectionString },
+  async (t) => {
+    assert.match(
+      new URL(/** @type {string} */ (connectionString)).pathname.slice(1),
+      /^crm_silmer_test(?:_[a-z0-9]+)?$/u,
+    );
+    const pool = new Pool({ connectionString, max: 4 });
+    t.after(() => pool.end());
+    await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+    await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+    await migrate(pool, { migrations: await loadMigrations() });
+    const seller = 'seller-volume';
+    await pool.query(
+      `INSERT INTO crm.users(id,email,password_hash,name)
+       VALUES($1,'seller-volume@example.test','$argon2id$synthetic','Pessoa Volume')`,
+      [seller],
+    );
+    await pool.query(
+      `INSERT INTO crm.user_functions(user_id,function_name) VALUES($1,'Vendedor')`,
+      [seller],
+    );
+    const contacts = createContactIdentityService({
+      auditPort: { append: async () => undefined },
+      clock: () => NOW,
+      repository: new PostgresContactIdentityRepository({
+        database: {
+          query: pool.query.bind(pool),
+          transaction: (/** @type {any} */ work) => withTransaction(pool, work),
+        },
+        envelopeKey: CONTACT_KEY,
+        lookupKey: Buffer.alloc(32, 114),
+      }),
+    });
+    const identity = await contacts.resolveInboundIdentity({
+      channel: 'instagram',
+      correlationId: 'contact-volume',
+      displayHandle: '@synthetic_volume',
+      externalIdentityId: 'identity-volume',
+      identityKind: 'handle',
+      occurredAt: '2026-10-01T12:00:00.000Z',
+      phoneStatus: 'pending',
+      provider: 'meta',
+      providerAccountId: 'account-volume',
+    });
+    // Fifteen customer messages and fifteen replies a day apart, 1 to 40
+    // minutes later, so some waits cross the threshold inside the window.
+    const base = sp('2026-10-15T09:00');
+    await pool.query(
+      `INSERT INTO crm.conversations
+         (id,contact_identity_id,provider,provider_account_id,external_conversation_id,
+          cycle_number,state,automation_state,assigned_user_id,opened_at,last_message_at)
+       SELECT 'volume-' || g, $1, 'meta', 'account-volume', 'volume-external-' || g, 1,
+              'em_atendimento', 'human', $2, $3::timestamptz - interval '1 hour',
+              $3::timestamptz + interval '15 days'
+       FROM generate_series(1, 1000) g`,
+      [identity.identity.id, seller, base],
+    );
+    await pool.query(
+      `INSERT INTO crm.audit_events(id,actor_id,action,target_type,target_id,version,reason,correlation_id,occurred_at)
+       SELECT 'volume-takeover-' || g, $1, 'conversation.takeover', 'conversation',
+              'volume-' || g, '1', 'Motivo sintético', 'volume',
+              $2::timestamptz - interval '30 minutes'
+       FROM generate_series(1, 1000) g`,
+      [seller, base],
+    );
+    await pool.query(
+      `INSERT INTO crm.messages
+         (id,conversation_id,provider,provider_account_id,external_message_id,command_id,
+          direction,author_kind,author_id,message_type,content_envelope,key_version,status,
+          delivery_status,delivery_status_at,sent_at,occurred_at,created_at)
+       SELECT 'volume-message-' || g || '-' || k, 'volume-' || g, 'meta', 'account-volume',
+              CASE WHEN k % 2 = 0 THEN 'volume-external-' || g || '-' || k END,
+              CASE WHEN k % 2 = 1 THEN 'volume-command-' || g || '-' || k END,
+              CASE WHEN k % 2 = 0 THEN 'inbound' ELSE 'outbound' END,
+              CASE WHEN k % 2 = 0 THEN 'contact' ELSE 'human' END,
+              CASE WHEN k % 2 = 0 THEN 'contact-volume' ELSE $1 END, 'text',
+              '{"algorithm":"AES-256-GCM","keyVersion":1,"version":1}'::jsonb, 1,
+              CASE WHEN k % 2 = 0 THEN 'received' ELSE 'sent' END,
+              CASE WHEN k % 2 = 1 THEN 'sent' END, CASE WHEN k % 2 = 1 THEN clock.at END,
+              CASE WHEN k % 2 = 1 THEN clock.at END, clock.at, clock.at
+       FROM generate_series(1, 1000) g CROSS JOIN generate_series(0, 29) k
+       CROSS JOIN LATERAL (
+         SELECT $2::timestamptz + (k / 2) * interval '1 day' + (g % 300) * interval '1 minute'
+                + CASE WHEN k % 2 = 1 THEN (1 + (g + k) % 40) * interval '1 minute'
+                       ELSE interval '0' END AS at
+       ) clock`,
+      [seller, base],
+    );
+    await pool.query(
+      `INSERT INTO crm.handoffs
+         (id,conversation_id,assigned_user_id,status,version,reason_code,summary_envelope,
+          due_at,sla_minutes,sla_policy_version,created_at,updated_at,target_role)
+       SELECT 'volume-handoff-' || g, 'volume-' || g, $1, 'accepted', 2,
+              'customer_requested_human', '{"algorithm":"AES-256-GCM","version":"1"}'::jsonb,
+              $2::timestamptz + interval '30 minutes', 30, 'v1', $2, $2, 'Vendedor'
+       FROM generate_series(1, 1000) g`,
+      [seller, sp('2026-10-28T10:00')],
+    );
+    await pool.query(
+      `INSERT INTO crm.handoff_history(handoff_id,resulting_version,from_status,to_status,
+         assigned_user_id,target_role,actor_id,reason_code,correlation_id,occurred_at)
+       SELECT 'volume-handoff-' || g, 2, 'pending', 'accepted', $1, 'Vendedor', $1,
+              'handoff_claimed', 'volume', $2::timestamptz + (g % 20) * interval '1 minute'
+       FROM generate_series(1, 1000) g`,
+      [seller, sp('2026-10-28T10:00')],
+    );
+    await pool.query('ANALYZE');
+
+    /** @type {{sql:string,values:unknown[]}[]} */
+    const captured = [];
+    const capturing = {
+      query: (
+        /** @type {string} */ sql,
+        /** @type {unknown[]} */ values = [],
+      ) => {
+        captured.push({ sql, values });
+        return pool.query(sql, values);
+      },
+    };
+    const input = {
+      from: '2026-10-07',
+      to: '2026-11-05',
+      actorId: seller,
+      manager: true,
+      now: NOW,
+    };
+    /** @type {number[]} */
+    const durations = [];
+    /** @type {any} */
+    let report;
+    for (let run = 0; run < 3; run += 1) {
+      const started = performance.now();
+      report = await readServiceMetrics(capturing, input);
+      durations.push(performance.now() - started);
+    }
+    durations.sort((a, b) => a - b);
+    const row = report.rows.find(
+      (/** @type {any} */ item) => item.userId === seller,
+    );
+    assert.equal(row.claim.samples, 1000);
+    assert.ok(row.unansweredEpisodes.count > 0);
+    const median = durations[1];
+    t.diagnostic(`service metrics median ${median.toFixed(0)} ms`);
+    assert.ok(median < 1500, `service metrics took ${median.toFixed(0)} ms`);
+    const statement = /** @type {{sql:string,values:unknown[]}} */ (
+      captured.at(-1)
+    );
+    const plan = (
+      await pool.query(
+        `EXPLAIN (ANALYZE, FORMAT JSON) ${statement.sql}`,
+        statement.values,
+      )
+    ).rows[0]['QUERY PLAN'];
+    /** @param {any} node @returns {any[]} */
+    const nodes = (node) => [
+      node,
+      ...(node.Plans ?? []).flatMap((/** @type {any} */ child) => nodes(child)),
+    ];
+    const looped = nodes(plan[0].Plan).filter(
+      (node) => node['Node Type'] === 'CTE Scan' && node['Actual Loops'] > 1,
+    );
+    assert.deepEqual(
+      looped.map((node) => `${node['CTE Name']} x${node['Actual Loops']}`),
+      [],
+    );
   },
 );

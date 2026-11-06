@@ -127,7 +127,8 @@ contato acontece sempre por iniciativa do cliente.
    notificações não contam), em minutos de expediente, com crédito a quem
    assumiu. Início: a tomada ou, sem mensagem do cliente pendente nesse
    instante, a primeira mensagem do cliente posterior. Espera sem resposta
-   aparece como aberta.
+   aparece como aberta. Resposta efetiva de outra pessoa (por exemplo, o
+   administrador) também encerra a espera, com crédito a quem assumiu.
 4. **MET-04 — Apresentação:** MET-02/03 mostram mediana, p90 e quantidade de
    amostras. p90 é nulo com menos de 5 amostras; sem amostra é nulo, não 0.
 5. **MET-05 — Sem resposta:** conversa do vendedor em modo humano com

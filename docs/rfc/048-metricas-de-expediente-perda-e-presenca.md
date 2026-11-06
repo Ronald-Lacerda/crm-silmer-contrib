@@ -62,6 +62,9 @@ confirmar na revisão do PO:
 - Um período de espera termina na primeira resposta humana efetiva. Bot,
   notificações administrativas e saídas sem envio confirmado não encerram a
   espera (PERF-03).
+- Resposta efetiva de outra pessoa (por exemplo, o administrador) também
+  encerra a 1ª resposta, porque o cliente foi respondido; o crédito continua
+  com quem assumiu.
 
 ### Retomada em 72h
 

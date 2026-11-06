@@ -5,6 +5,7 @@ import { createApi } from '../apps/api/src/app.js';
 import {
   BUSINESS_HOURS,
   createDashboardMetricsRuntime,
+  METRICS_STATEMENT_TIMEOUT,
 } from '../apps/api/src/dashboard-metrics-runtime.js';
 import { authorize } from '../modules/identity-access/src/authorization.js';
 import { createSafeLogger } from '../modules/shared/src/index.js';
@@ -108,8 +109,12 @@ test('MET: Financeiro is refused and a database failure is a 503 without detail'
 function fakeDatabase(actor, live = {}) {
   /** @type {any[][]} */
   const metricParams = [];
+  /** @type {string[]} */
+  const statements = [];
   const client = {
     query: async (/** @type {string} */ sql, /** @type {any[]} */ values) => {
+      statements.push(sql);
+      if (sql.startsWith('SET LOCAL')) return { rows: [] };
       if (sql.includes('FROM crm.users u JOIN crm.user_functions'))
         return {
           rows: live.rows ?? [
@@ -153,6 +158,7 @@ function fakeDatabase(actor, live = {}) {
   };
   return {
     metricParams,
+    statements,
     transaction: async (/** @type {any} */ work) => work(client),
   };
 }
@@ -168,6 +174,11 @@ test('PERF-07: a seller receives only its own row; the admin also receives the t
   assert.equal(seller.team, undefined);
   assert.equal(sellerDb.metricParams[0][2], SELLER.id);
   assert.equal(sellerDb.metricParams[0][3], false);
+  // Bounded before anything else runs in the read transaction.
+  assert.equal(
+    sellerDb.statements[0],
+    `SET LOCAL statement_timeout = '${METRICS_STATEMENT_TIMEOUT}'`,
+  );
   assert.equal(seller.from, '2026-10-30');
   assert.equal(seller.to, '2026-11-05');
   assert.equal(seller.days, 7);

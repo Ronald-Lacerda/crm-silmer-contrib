@@ -16,10 +16,50 @@ export const BUSINESS_HOURS = Object.freeze({
 });
 
 /** "Sem resposta agora" is a snapshot of open conversations with an owner
- * and no active declared loss (MET-08). */
-const UNANSWERED_NOW_CONVERSATION = `candidates.terminal_at IS NULL
-  AND candidates.archived_at IS NULL AND candidates.assigned_user_id IS NOT NULL
-  AND NOT ${activeLeadLossSql('candidates.id')}`;
+ * and no active declared loss (MET-08). Only this snapshot reads the current
+ * automation state; episodes follow the conversation's human history. */
+const UNANSWERED_NOW_CONVERSATION = `open_conversation.automation_state = 'human'
+  AND open_conversation.terminal_at IS NULL AND open_conversation.archived_at IS NULL
+  AND open_conversation.assigned_user_id IS NOT NULL
+  AND NOT ${activeLeadLossSql('open_conversation.id')}`;
+
+/** Ownership events of a conversation: claim/transfer of a handoff, takeover,
+ * panel transfer and any human send (sending assigns the conversation to its
+ * author). Limitation: a panel transfer stores its target only in the
+ * free-text audit reason ("... (repasse para <id>)"), parsed here; if that
+ * format changes or the id is unknown, the episode falls back to the current
+ * owner. Each branch is one indexed probe bounded by `until`.
+ * @param {string} conversation trusted SQL column @param {string} until trusted SQL expression
+ * @param {'ASC'|'DESC'} order
+ */
+const ownershipProbes = (conversation, until, order) => `
+  (SELECT history.assigned_user_id AS user_id, history.occurred_at
+   FROM crm.handoffs h JOIN crm.handoff_history history ON history.handoff_id = h.id
+   WHERE h.conversation_id = ${conversation} AND history.to_status = 'accepted'
+     AND history.assigned_user_id IS NOT NULL AND history.occurred_at <= ${until}
+   ORDER BY history.occurred_at ${order} LIMIT 1)
+  UNION ALL
+  (SELECT CASE WHEN event.action = 'conversation.takeover' THEN event.actor_id
+            ELSE substring(event.reason FROM '[(]repasse para ([^()]+)[)]$') END,
+          event.occurred_at
+   FROM crm.audit_events event
+   WHERE event.target_type = 'conversation' AND event.target_id = ${conversation}
+     AND event.action IN ('conversation.takeover','conversation.transferred')
+     AND event.occurred_at <= ${until}
+   ORDER BY event.occurred_at ${order} LIMIT 1)
+  UNION ALL
+  (SELECT m.author_id, m.occurred_at FROM crm.messages m
+   WHERE m.conversation_id = ${conversation} AND m.direction = 'outbound'
+     AND m.author_kind = 'human' AND m.occurred_at <= ${until}
+   ORDER BY m.occurred_at ${order} LIMIT 1)`;
+
+/** First instant of human mode (the earliest ownership event).
+ * @param {string} conversation @param {string} until */
+const humanStartSql = (conversation, until) =>
+  `(SELECT min(owned.occurred_at) FROM (${ownershipProbes(conversation, until, 'ASC')}) owned)`;
+
+/** Effective reply clock (sent time, else queue time). @param {string} m */
+const REPLY_CLOCK = (m) => `coalesce(${m}.sent_at, ${m}.occurred_at)`;
 
 /** @param {unknown} value */
 function minutes(value) {
@@ -37,8 +77,9 @@ function calendarDay(value) {
 /** Service metrics of a São Paulo calendar window, in business minutes.
  * Cohort = seller handoffs created in the window; credit goes to who claimed
  * it. Time to claim runs from the request to the claim; the first response
- * starts at the claim (or the next customer message) so they never overlap. Unanswered episodes are dated and credited at the instant the wait
- * crossed the threshold, using the conversation's ownership history.
+ * starts at the claim (or the next customer message) so they never overlap.
+ * Unanswered episodes are dated and credited at the instant the wait crossed
+ * the threshold, using the conversation's ownership history.
  * @param {{query:(sql:string,values?:unknown[])=>Promise<{rows:any[]}>}} database
  * @param {{from:string,to:string,actorId:string,manager:boolean,now:Date}} input
  */
@@ -48,10 +89,13 @@ export async function readServiceMetrics(database, input) {
   if (from > to) throw new DashboardError(400, 'INVALID_FILTER');
   const manager = input.manager === true;
   const result = await database.query(
-    `WITH bounds AS (
+    `WITH bounds AS NOT MATERIALIZED (
        SELECT ($1::date::timestamp AT TIME ZONE 'America/Sao_Paulo') AS from_at,
               (($2::date + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo') AS to_at,
-              $5::timestamptz AS now_at, $6::numeric AS threshold
+              $5::timestamptz AS now_at, $6::numeric AS threshold,
+              -- 15 business minutes elapse within 4 calendar days (weekend
+              -- included): no wait starting earlier can cross inside the window.
+              ($1::date::timestamp AT TIME ZONE 'America/Sao_Paulo') - interval '5 days' AS look_from
      ), cohort AS (
        SELECT h.id, h.conversation_id, h.created_at, c.terminal_at,
               claim.assigned_user_id AS claimer, claim.occurred_at AS claimed_at
@@ -123,109 +167,171 @@ export async function readServiceMetrics(database, input) {
               max(open_minutes) AS oldest_open,
               count(*) FILTER (WHERE closed_without_reply)::integer AS closed_without_reply
        FROM claimed GROUP BY user_id
-     ), candidates AS (
-       SELECT c.id, c.assigned_user_id, c.terminal_at, c.archived_at
+     ), scoped AS MATERIALIZED (
+       -- Conversations that can hold a wait crossing the threshold inside the
+       -- window, whatever their current automation state: any activity since
+       -- the lookback, or still open in human mode (a wait carried from
+       -- before the lookback that a later claim or takeover starts).
+       SELECT c.id, c.terminal_at, ${humanStartSql('c.id', 'bounds.now_at')} AS started_at
        FROM crm.conversations c CROSS JOIN bounds
-       WHERE c.automation_state = 'human' AND c.opened_at <= bounds.now_at
+       WHERE c.opened_at <= bounds.now_at
          AND (c.terminal_at IS NULL OR c.terminal_at >= bounds.from_at)
-     ), ownership AS (
-       -- Who owned the conversation from when: claim/transfer of a handoff,
-       -- takeover, panel transfer and any human send, which also assigns the
-       -- conversation to its author. Limitation: a panel transfer stores its
-       -- target only in the free-text audit reason ("... (repasse para <id>)"),
-       -- parsed below; if that format changes or the id is unknown, the
-       -- episode falls back to the current owner.
-       SELECT h.conversation_id, history.assigned_user_id AS user_id, history.occurred_at
-       FROM candidates JOIN crm.handoffs h ON h.conversation_id = candidates.id
-       JOIN crm.handoff_history history ON history.handoff_id = h.id
-       CROSS JOIN bounds
-       WHERE history.to_status = 'accepted' AND history.assigned_user_id IS NOT NULL
-         AND history.occurred_at <= bounds.now_at
-       UNION ALL
-       SELECT event.target_id,
-              CASE WHEN event.action = 'conversation.takeover' THEN event.actor_id
-                ELSE substring(event.reason FROM '[(]repasse para ([^()]+)[)]$') END,
-              event.occurred_at
-       FROM candidates JOIN crm.audit_events event
-         ON event.target_type = 'conversation' AND event.target_id = candidates.id
-        AND event.action IN ('conversation.takeover','conversation.transferred')
-       CROSS JOIN bounds WHERE event.occurred_at <= bounds.now_at
-       UNION ALL
-       SELECT m.conversation_id, m.author_id, m.occurred_at
-       FROM candidates JOIN crm.messages m ON m.conversation_id = candidates.id
-       CROSS JOIN bounds
-       WHERE m.direction = 'outbound' AND m.author_kind = 'human'
-         AND m.occurred_at <= bounds.now_at
-     ), human_start AS (
-       SELECT conversation_id, min(occurred_at) AS started_at
-       FROM ownership GROUP BY conversation_id
-     ), responses AS (
-       SELECT m.conversation_id, coalesce(m.sent_at, m.occurred_at) AS at
-       FROM candidates JOIN crm.messages m ON m.conversation_id = candidates.id
-       CROSS JOIN bounds
-       WHERE ${EFFECTIVE_HUMAN_SEND('m')} AND coalesce(m.sent_at, m.occurred_at) <= bounds.now_at
-     ), waits AS (
-       -- One wait per gap between effective human replies, however many
-       -- customer messages it holds.
-       SELECT inbound.conversation_id, min(inbound.occurred_at) AS first_at
-       FROM candidates JOIN crm.messages inbound ON inbound.conversation_id = candidates.id
-       CROSS JOIN bounds
-       LEFT JOIN LATERAL (
-         SELECT max(r.at) AS at FROM responses r
-         WHERE r.conversation_id = inbound.conversation_id AND r.at < inbound.occurred_at
-       ) previous ON true
+         AND (c.last_message_at >= bounds.look_from
+              OR (c.terminal_at IS NULL AND c.automation_state = 'human'))
+     ), human AS MATERIALIZED (
+       SELECT * FROM scoped WHERE started_at IS NOT NULL
+     ), events AS (
+       -- One pass over the lookback only: customer messages (kind 0) and
+       -- effective replies (kind 1). A wait still unanswered at the lookback
+       -- is carried in as a customer message just before it; it matters only
+       -- when the human mode started after the lookback.
+       SELECT human.id AS conversation_id, human.started_at, human.terminal_at,
+              inbound.occurred_at AS at, 0 AS kind
+       FROM human CROSS JOIN bounds
+       JOIN crm.messages inbound ON inbound.conversation_id = human.id
        WHERE inbound.direction = 'inbound' AND inbound.author_kind = 'contact'
-         AND inbound.occurred_at <= bounds.now_at
-       GROUP BY inbound.conversation_id, previous.at
+         AND inbound.occurred_at >= bounds.look_from AND inbound.occurred_at <= bounds.now_at
+       UNION ALL
+       SELECT human.id, human.started_at, human.terminal_at, ${REPLY_CLOCK('r')}, 1
+       FROM human CROSS JOIN bounds
+       JOIN crm.messages r ON r.conversation_id = human.id
+       WHERE ${EFFECTIVE_HUMAN_SEND('r')}
+         AND ${REPLY_CLOCK('r')} >= bounds.look_from AND ${REPLY_CLOCK('r')} <= bounds.now_at
+       UNION ALL
+       SELECT human.id, human.started_at, human.terminal_at,
+              bounds.look_from - interval '1 microsecond', 0
+       FROM human CROSS JOIN bounds
+       CROSS JOIN LATERAL (
+         SELECT (SELECT max(i.occurred_at) FROM crm.messages i
+                 WHERE i.conversation_id = human.id AND i.direction = 'inbound'
+                   AND i.author_kind = 'contact' AND i.occurred_at < bounds.look_from) AS inbound_at,
+                (SELECT max(${REPLY_CLOCK('b')}) FROM crm.messages b
+                 WHERE b.conversation_id = human.id AND ${EFFECTIVE_HUMAN_SEND('b')}
+                   AND ${REPLY_CLOCK('b')} < bounds.look_from) AS reply_at
+       ) carried
+       WHERE human.started_at >= bounds.look_from AND carried.inbound_at IS NOT NULL
+         AND (carried.reply_at IS NULL OR carried.reply_at < carried.inbound_at)
+     ), sequenced AS (
+       -- One wait per gap between effective replies, however many customer
+       -- messages it holds; a reply at the same instant follows the message.
+       SELECT conversation_id, started_at, terminal_at, at, kind,
+              count(*) FILTER (WHERE kind = 1) OVER (
+                PARTITION BY conversation_id ORDER BY at, kind
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS gap,
+              min(at) FILTER (WHERE kind = 1) OVER (
+                PARTITION BY conversation_id ORDER BY at DESC, kind DESC
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS next_reply_at
+       FROM events
      ), periods AS (
        -- A wait starts no earlier than the human mode (the time before a
        -- claim is measured by the claim metric) and ends at the next
-       -- effective human reply, at the closing of the cycle or now.
-       SELECT waits.conversation_id, started.at AS started_at,
-              reply.at IS NULL AND candidates.terminal_at IS NULL AS open,
-              least(coalesce(reply.at, 'infinity'::timestamptz),
-                    coalesce(candidates.terminal_at, 'infinity'::timestamptz),
+       -- effective reply, at the closing of the cycle or now.
+       SELECT sequenced.conversation_id,
+              greatest(min(sequenced.at), sequenced.started_at) AS started_at,
+              least(coalesce(min(sequenced.next_reply_at), 'infinity'::timestamptz),
+                    coalesce(sequenced.terminal_at, 'infinity'::timestamptz),
                     bounds.now_at) AS ended_at
-       FROM waits JOIN candidates ON candidates.id = waits.conversation_id
-       JOIN human_start ON human_start.conversation_id = waits.conversation_id
-       CROSS JOIN bounds
-       CROSS JOIN LATERAL (
-         SELECT greatest(waits.first_at, human_start.started_at) AS at
-       ) started
+       FROM sequenced CROSS JOIN bounds
+       WHERE sequenced.kind = 0
+       GROUP BY sequenced.conversation_id, sequenced.started_at, sequenced.terminal_at,
+                bounds.now_at, sequenced.gap
+     ), episodes AS MATERIALIZED (
+       SELECT crossing.conversation_id, crossing.crossed_at
+       FROM (
+         SELECT periods.conversation_id,
+                crm.business_deadline_v1(periods.started_at, bounds.threshold) AS crossed_at
+         FROM periods CROSS JOIN bounds
+         WHERE periods.started_at >= bounds.look_from AND periods.started_at < bounds.to_at
+           AND periods.ended_at >= bounds.from_at
+           -- Cheap prune: business minutes never exceed wall-clock minutes.
+           AND periods.ended_at - periods.started_at > bounds.threshold * interval '1 minute'
+           AND crm.business_minutes_v1(periods.started_at, periods.ended_at) > bounds.threshold
+       ) crossing CROSS JOIN bounds
+       WHERE crossing.crossed_at >= bounds.from_at AND crossing.crossed_at < bounds.to_at
+     ), episode_conversations AS MATERIALIZED (
+       SELECT DISTINCT conversation_id FROM episodes
+     ), owner_timeline AS (
+       -- Ownership events since the lookback plus the owner at the lookback
+       -- (one probe per conversation), merged with the crossings: each
+       -- episode takes the latest owner at or before its crossing.
+       SELECT e.conversation_id, bounds.look_from AS at, 0 AS kind, carried.user_id
+       FROM episode_conversations e CROSS JOIN bounds
        LEFT JOIN LATERAL (
-         SELECT min(r.at) AS at FROM responses r
-         WHERE r.conversation_id = waits.conversation_id AND r.at > waits.first_at
-       ) reply ON true
-     ), now_open AS (
-       SELECT candidates.assigned_user_id AS user_id, count(*)::integer AS count,
-              max(crm.business_minutes_v1(periods.started_at, bounds.now_at)) AS oldest
-       FROM periods JOIN candidates ON candidates.id = periods.conversation_id
-       CROSS JOIN bounds
-       WHERE periods.open AND ${UNANSWERED_NOW_CONVERSATION}
-         AND crm.business_minutes_v1(periods.started_at, bounds.now_at) > bounds.threshold
-       GROUP BY candidates.assigned_user_id
-     ), episodes AS (
-       SELECT periods.conversation_id,
-              crm.business_deadline_v1(periods.started_at, bounds.threshold) AS crossed_at
-       FROM periods CROSS JOIN bounds
-       WHERE crm.business_minutes_v1(periods.started_at, periods.ended_at) > bounds.threshold
+         SELECT owned.user_id
+         FROM (${ownershipProbes('e.conversation_id', 'bounds.look_from', 'DESC')}) owned
+         ORDER BY owned.occurred_at DESC LIMIT 1
+       ) carried ON true
+       UNION ALL
+       SELECT e.conversation_id, history.occurred_at, 0, history.assigned_user_id
+       FROM episode_conversations e CROSS JOIN bounds
+       JOIN crm.handoffs h ON h.conversation_id = e.conversation_id
+       JOIN crm.handoff_history history ON history.handoff_id = h.id
+       WHERE history.to_status = 'accepted' AND history.assigned_user_id IS NOT NULL
+         AND history.occurred_at > bounds.look_from AND history.occurred_at <= bounds.now_at
+       UNION ALL
+       SELECT e.conversation_id, event.occurred_at, 0,
+              CASE WHEN event.action = 'conversation.takeover' THEN event.actor_id
+                ELSE substring(event.reason FROM '[(]repasse para ([^()]+)[)]$') END
+       FROM episode_conversations e CROSS JOIN bounds
+       JOIN crm.audit_events event
+         ON event.target_type = 'conversation' AND event.target_id = e.conversation_id
+        AND event.action IN ('conversation.takeover','conversation.transferred')
+       WHERE event.occurred_at > bounds.look_from AND event.occurred_at <= bounds.now_at
+       UNION ALL
+       SELECT e.conversation_id, m.occurred_at, 0, m.author_id
+       FROM episode_conversations e CROSS JOIN bounds
+       JOIN crm.messages m ON m.conversation_id = e.conversation_id
+       WHERE m.direction = 'outbound' AND m.author_kind = 'human'
+         AND m.occurred_at > bounds.look_from AND m.occurred_at <= bounds.now_at
+       UNION ALL
+       SELECT conversation_id, crossed_at, 1, NULL FROM episodes
+     ), owner_runs AS (
+       SELECT conversation_id, at, kind, user_id,
+              count(*) FILTER (WHERE kind = 0) OVER (
+                PARTITION BY conversation_id ORDER BY at, kind
+                ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS run
+       FROM owner_timeline
+     ), credited AS (
+       SELECT conversation_id, kind,
+              first_value(user_id) OVER (
+                PARTITION BY conversation_id, run ORDER BY at, kind) AS owner_id
+       FROM owner_runs
      ), episode_counts AS (
-       SELECT credited.user_id, count(*)::integer AS count
-       FROM episodes JOIN candidates ON candidates.id = episodes.conversation_id
-       CROSS JOIN bounds
-       LEFT JOIN LATERAL (
-         SELECT o.user_id FROM ownership o
-         WHERE o.conversation_id = episodes.conversation_id
-           AND o.occurred_at <= episodes.crossed_at
-         ORDER BY o.occurred_at DESC LIMIT 1
-       ) owner_then ON true
+       SELECT owner.user_id, count(*)::integer AS count
+       FROM credited JOIN crm.conversations c ON c.id = credited.conversation_id
        CROSS JOIN LATERAL (
-         SELECT coalesce((SELECT u.id FROM crm.users u WHERE u.id = owner_then.user_id),
-                         candidates.assigned_user_id) AS user_id
-       ) credited
-       WHERE episodes.crossed_at >= bounds.from_at AND episodes.crossed_at < bounds.to_at
-         AND credited.user_id IS NOT NULL
-       GROUP BY credited.user_id
+         SELECT coalesce((SELECT u.id FROM crm.users u WHERE u.id = credited.owner_id),
+                         c.assigned_user_id) AS user_id
+       ) owner
+       WHERE credited.kind = 1 AND owner.user_id IS NOT NULL
+       GROUP BY owner.user_id
+     ), now_open AS (
+       -- Snapshot: the oldest customer message after the last effective
+       -- reply, no earlier than the human mode, read by indexed probes.
+       SELECT open_conversation.assigned_user_id AS user_id, count(*)::integer AS count,
+              max(waiting.minutes) AS oldest
+       FROM crm.conversations open_conversation CROSS JOIN bounds
+       CROSS JOIN LATERAL (
+         SELECT (SELECT max(${REPLY_CLOCK('r')}) FROM crm.messages r
+                 WHERE r.conversation_id = open_conversation.id AND ${EFFECTIVE_HUMAN_SEND('r')}
+                   AND ${REPLY_CLOCK('r')} <= bounds.now_at) AS at
+       ) last_reply
+       CROSS JOIN LATERAL (
+         SELECT (SELECT min(i.occurred_at) FROM crm.messages i
+                 WHERE i.conversation_id = open_conversation.id AND i.direction = 'inbound'
+                   AND i.author_kind = 'contact' AND i.occurred_at <= bounds.now_at
+                   AND i.occurred_at > coalesce(last_reply.at, '-infinity'::timestamptz)) AS at,
+                ${humanStartSql('open_conversation.id', 'bounds.now_at')} AS started_at
+       ) pending
+       CROSS JOIN LATERAL (
+         SELECT crm.business_minutes_v1(greatest(pending.at, pending.started_at),
+                                        bounds.now_at) AS minutes
+       ) waiting
+       WHERE ${UNANSWERED_NOW_CONVERSATION}
+         AND open_conversation.opened_at <= bounds.now_at
+         AND pending.at IS NOT NULL AND pending.started_at IS NOT NULL
+         AND waiting.minutes > bounds.threshold
+       GROUP BY open_conversation.assigned_user_id
      ), metric_users AS (
        SELECT user_id FROM service UNION SELECT user_id FROM now_open
        UNION SELECT user_id FROM episode_counts
@@ -250,9 +356,7 @@ export async function readServiceMetrics(database, input) {
        FROM crm.handoffs h JOIN crm.conversations c ON c.id = h.conversation_id
        CROSS JOIN bounds
        WHERE $4::boolean AND h.status = 'pending' AND h.target_role = 'Vendedor'
-         AND c.assigned_user_id IS NULL AND c.automation_state = 'human'
-         AND c.terminal_at IS NULL AND c.archived_at IS NULL
-         AND h.created_at <= bounds.now_at
+         AND c.terminal_at IS NULL AND h.created_at <= bounds.now_at
      )
      SELECT coalesce((SELECT jsonb_agg(to_jsonb(people) ORDER BY name, user_id)
                       FROM people), '[]'::jsonb) AS people,
@@ -438,6 +542,17 @@ export async function readLossMetrics(database, input) {
   };
 }
 
+/** Metric reads are bounded: a slow plan fails fast as 503 instead of
+ * holding a connection (the statement is cancelled by PostgreSQL). */
+export const METRICS_STATEMENT_TIMEOUT = '5s';
+
+/** @param {any} client */
+async function boundStatements(client) {
+  await client.query(
+    `SET LOCAL statement_timeout = '${METRICS_STATEMENT_TIMEOUT}'`,
+  );
+}
+
 /** @param {any} database @param {{access:any,clock?:()=>Date}} options */
 export function createDashboardMetricsRuntime(database, options) {
   const clock = options.clock ?? (() => new Date());
@@ -450,6 +565,7 @@ export function createDashboardMetricsRuntime(database, options) {
       const now = clock();
       const period = dashboardPeriod(now, input.days ?? 7);
       return database.transaction(async (/** @type {any} */ client) => {
+        await boundStatements(client);
         const reader = await lockDashboardReader(client, input.actor);
         const report = await readServiceMetrics(client, {
           from: period.from,
@@ -475,6 +591,7 @@ export function createDashboardMetricsRuntime(database, options) {
       const now = clock();
       const period = dashboardPeriod(now, input.days ?? 7);
       return database.transaction(async (/** @type {any} */ client) => {
+        await boundStatements(client);
         const reader = await lockDashboardReader(client, input.actor);
         const report = await readLossMetrics(client, {
           from: period.from,

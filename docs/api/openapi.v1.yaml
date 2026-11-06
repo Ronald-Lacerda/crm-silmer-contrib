@@ -2888,7 +2888,10 @@ components:
           items: { $ref: '#/components/schemas/DashboardServiceMetricsRow' }
         team:
           type: object
-          description: Somente para administrador (scope team).
+          description: >-
+            Somente para administrador (scope team). `unclaimedHandoffs` conta
+            todo pedido de atendimento pendente de ciclo aberto, inclusive em
+            conversa que já tem dono por tomada direta (MET-02, nunca omitido).
           additionalProperties: false
           required: [unclaimedHandoffs]
           properties:

@@ -68,8 +68,7 @@ async function respond(reply, work) {
   }
 }
 
-/** RFC 048 metric reads. `metrics/presence` joins this file with the same
- * period, scope and error contract.
+/** RFC 048 metric reads, sharing the period, scope and error contract.
  * @param {import('fastify').FastifyInstance} api @param {any} metrics
  */
 export function registerDashboardMetricsRoutes(api, metrics) {
