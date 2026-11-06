@@ -45,3 +45,33 @@ na leitura; a tela não reclassifica nem consulta automaticamente com o tempo,
 conforme a especificação e o rótulo de atualização manual. Falha de saúde tem
 timeout de 10s. Evidência limitada ao protótipo local com dados sintéticos;
 não valida produção, deploy ou disponibilidade real dos serviços.
+
+## Revisão complementar — estabilidade do CI / ACT-12
+
+**PASS**. Revisão independente da correção estreita em
+`test/dashboard-postgres-live.test.js:453`: somente comentários e
+`t.mock.timers.enable({ apis: ['Date'], now: NOW })` foram acrescentados.
+Nenhum código de produção ou assertiva foi alterado. O relógio da composição
+API usa `Date` por padrão; `apps/api/src/order-runtime.js:672` não expõe nem
+repassa `clock`, inclusive na composição transacional recursiva em `:755`.
+
+- A fixture fixa `NOW` em `2026-11-05T15:00:00.000Z` (`test/dashboard-postgres-live.test.js:28`).
+  O mock alinha o dia operacional da entrega à fixture, sem relaxar os asserts
+  de pagamento/entrega em `:533` e `:534`.
+- Corrida concorrente continua exigindo exatamente um sucesso e uma rejeição
+  (`:493` a `:504`); os dois marcos e versão 3 permanecem exigidos (`:533` a
+  `:536`). Revalidação de acesso no replay (`:541`), revogação de função
+  (`:555`) e usuário desativado (`:571`) continuam intactas, coerentes com
+  ACT-12 em `.specs/features/dashboard-actions/spec.md:54`.
+- O mock pertence ao contexto `t` do único teste deste arquivo e seleciona
+  apenas `Date`. Probe independente com `node:test`: primeiro teste habilitou
+  Date fixo e aguardou um `setTimeout` real; segundo confirmou restauração
+  da identidade de `Date`. Resultado: 2 passes, zero falhas. Não congela
+  timers de polling nem requer limpeza global manual.
+- Autor informou reprodução do defeito sem patch e execução local com
+  PostgreSQL 17 dedicado após o patch: 1 passe, zero skips. O Verifier revisou
+  o patch e o contrato; não repetiu a execução PostgreSQL.
+
+Sem achados bloqueantes ou risco novo de produção. O congelamento intencional
+de `Date` limita-se ao restante deste teste sintético e é restaurado pelo
+runner ao final.

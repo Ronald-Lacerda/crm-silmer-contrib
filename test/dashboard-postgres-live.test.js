@@ -451,6 +451,9 @@ test(
     );
 
     // ACT-12: milestone writes and receipts share the target lock and live ACL.
+    // The API composition uses Date directly; keep delivery's operational day
+    // aligned with the synthetic fixture, independently of the runner's date.
+    t.mock.timers.enable({ apis: ['Date'], now: NOW });
     const orders = createOrderApiRuntime(database, {
       access: {
         authorizeRead: async () => ({ actor: owner }),

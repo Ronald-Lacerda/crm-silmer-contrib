@@ -57,3 +57,13 @@ diff check e revisão independente. Branch codex/health-summary-prototype.
 - Helper: 3 testes passaram; revisão independente e sensor registrados em validation.md.
 - Capturas sintéticas desktop, mobile (390px) e estado degradado em var/health-summary-*.png.
 - Sem mudanças no backend, polling ou publicação em produção.
+
+## Correção do gate do PR — OPS-HEALTH-UI02
+
+O CI do PR 303 revelou um defeito preexistente em ACT-12: o teste PostgreSQL
+do dashboard usava fixture de 05/11/2026, mas a composição de pedidos lia Date
+real para a entrega. Fixar apenas Date no escopo desse teste mantém as
+asserções de data, concorrência, replay e autorização sem alterar produção.
+Gate: mesma falha reproduzida em PostgreSQL 17 dedicado antes da correção;
+mesmo teste aprovado após a correção (1 teste, sem skips). CI completo exigido
+antes do merge.
