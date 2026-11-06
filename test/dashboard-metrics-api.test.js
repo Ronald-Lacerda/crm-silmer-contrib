@@ -95,6 +95,16 @@ test('MET: Financeiro is refused and a database failure is a 503 without detail'
   t.after(() => broken.api.close());
   const failed = await broken.api.inject({ url: SERVICE_URL });
   assert.equal(failed.statusCode, 503);
+  const timedOut = apiHarness(SELLER, async () => {
+    throw Object.assign(
+      new Error('canceling statement due to statement timeout'),
+      { code: '57014' },
+    );
+  });
+  t.after(() => timedOut.api.close());
+  const cancelled = await timedOut.api.inject({ url: SERVICE_URL });
+  assert.equal(cancelled.statusCode, 503);
+  assert.equal(cancelled.json().code, 'SERVICE_UNAVAILABLE');
   assert.deepEqual(failed.json(), {
     type: 'about:blank',
     title: 'SERVICE_UNAVAILABLE',
@@ -109,12 +119,12 @@ test('MET: Financeiro is refused and a database failure is a 503 without detail'
 function fakeDatabase(actor, live = {}) {
   /** @type {any[][]} */
   const metricParams = [];
-  /** @type {string[]} */
+  /** @type {{sql:string,values:any[]}[]} */
   const statements = [];
   const client = {
     query: async (/** @type {string} */ sql, /** @type {any[]} */ values) => {
-      statements.push(sql);
-      if (sql.startsWith('SET LOCAL')) return { rows: [] };
+      statements.push({ sql, values });
+      if (sql.includes('set_config(')) return { rows: [] };
       if (sql.includes('FROM crm.users u JOIN crm.user_functions'))
         return {
           rows: live.rows ?? [
@@ -174,11 +184,12 @@ test('PERF-07: a seller receives only its own row; the admin also receives the t
   assert.equal(seller.team, undefined);
   assert.equal(sellerDb.metricParams[0][2], SELLER.id);
   assert.equal(sellerDb.metricParams[0][3], false);
-  // Bounded before anything else runs in the read transaction.
-  assert.equal(
-    sellerDb.statements[0],
-    `SET LOCAL statement_timeout = '${METRICS_STATEMENT_TIMEOUT}'`,
+  // Bounded (timeout, no JIT) before anything else runs in the transaction.
+  assert.match(
+    sellerDb.statements[0].sql,
+    /set_config\('statement_timeout', \$1, true\), set_config\('jit', 'off', true\)/u,
   );
+  assert.deepEqual(sellerDb.statements[0].values, [METRICS_STATEMENT_TIMEOUT]);
   assert.equal(seller.from, '2026-10-30');
   assert.equal(seller.to, '2026-11-05');
   assert.equal(seller.days, 7);

@@ -757,64 +757,122 @@ test(
        FROM generate_series(1, 1000) g`,
       [seller, sp('2026-10-28T10:00')],
     );
-    await pool.query('ANALYZE');
 
+    // Measured through the runtime, inside its read transaction and with its
+    // settings (statement timeout, JIT off), first with cold statistics right
+    // after the bulk load and then after ANALYZE, as autovacuum would do.
     /** @type {{sql:string,values:unknown[]}[]} */
     const captured = [];
     const capturing = {
-      query: (
-        /** @type {string} */ sql,
-        /** @type {unknown[]} */ values = [],
-      ) => {
-        captured.push({ sql, values });
-        return pool.query(sql, values);
-      },
+      transaction: (/** @type {any} */ work) =>
+        withTransaction(pool, (/** @type {any} */ client) =>
+          work({
+            query: (
+              /** @type {string} */ sql,
+              /** @type {unknown[]} */ values = [],
+            ) => {
+              captured.push({ sql, values });
+              return client.query(sql, values);
+            },
+          }),
+        ),
     };
-    const input = {
-      from: '2026-10-07',
-      to: '2026-11-05',
-      actorId: seller,
-      manager: true,
-      now: NOW,
+    const runtime = createDashboardMetricsRuntime(capturing, {
+      access: {},
+      clock: () => NOW,
+    });
+    const actor = {
+      id: seller,
+      kind: 'human',
+      functionName: 'Vendedor',
+      capabilities: [],
     };
-    /** @type {number[]} */
-    const durations = [];
-    /** @type {any} */
-    let report;
-    for (let run = 0; run < 3; run += 1) {
-      const started = performance.now();
-      report = await readServiceMetrics(capturing, input);
-      durations.push(performance.now() - started);
-    }
-    durations.sort((a, b) => a - b);
-    const row = report.rows.find(
-      (/** @type {any} */ item) => item.userId === seller,
-    );
-    assert.equal(row.claim.samples, 1000);
-    assert.ok(row.unansweredEpisodes.count > 0);
-    const median = durations[1];
-    t.diagnostic(`service metrics median ${median.toFixed(0)} ms`);
-    assert.ok(median < 1500, `service metrics took ${median.toFixed(0)} ms`);
-    const statement = /** @type {{sql:string,values:unknown[]}} */ (
-      captured.at(-1)
-    );
-    const plan = (
-      await pool.query(
-        `EXPLAIN (ANALYZE, FORMAT JSON) ${statement.sql}`,
-        statement.values,
-      )
-    ).rows[0]['QUERY PLAN'];
     /** @param {any} node @returns {any[]} */
     const nodes = (node) => [
       node,
       ...(node.Plans ?? []).flatMap((/** @type {any} */ child) => nodes(child)),
     ];
-    const looped = nodes(plan[0].Plan).filter(
-      (node) => node['Node Type'] === 'CTE Scan' && node['Actual Loops'] > 1,
-    );
-    assert.deepEqual(
-      looped.map((node) => `${node['CTE Name']} x${node['Actual Loops']}`),
-      [],
+    /** @param {string} label */
+    async function measure(label) {
+      /** @type {number[]} */
+      const durations = [];
+      /** @type {any} */
+      let report;
+      for (let run = 0; run < 3; run += 1) {
+        const started = performance.now();
+        report = await runtime.service({ actor, days: 30 });
+        durations.push(performance.now() - started);
+      }
+      durations.sort((a, b) => a - b);
+      const median = durations[1];
+      const row = report.rows[0];
+      assert.equal(row.userId, seller);
+      assert.equal(row.claim.samples, 1000);
+      assert.ok(row.unansweredEpisodes.count > 0);
+      const statement = /** @type {{sql:string,values:unknown[]}} */ (
+        captured.findLast((item) => item.sql.includes('WITH bounds'))
+      );
+      const [estimate, analyzed] = await withTransaction(
+        pool,
+        async (/** @type {any} */ client) => {
+          const cost = (
+            await client.query(
+              `EXPLAIN (FORMAT JSON) ${statement.sql}`,
+              statement.values,
+            )
+          ).rows[0]['QUERY PLAN'][0].Plan['Total Cost'];
+          await client.query(
+            `SELECT set_config('statement_timeout', '5s', true), set_config('jit', 'off', true)`,
+          );
+          const plan = (
+            await client.query(
+              `EXPLAIN (ANALYZE, FORMAT JSON) ${statement.sql}`,
+              statement.values,
+            )
+          ).rows[0]['QUERY PLAN'];
+          return [cost, plan];
+        },
+      );
+      t.diagnostic(
+        `${label}: median ${median.toFixed(0)} ms, estimated cost ${Math.round(estimate)}`,
+      );
+      // Generous for a shared CI runner, still far below a quadratic plan.
+      assert.ok(median < 3000, `${label}: service metrics took ${median} ms`);
+      const all = nodes(analyzed[0].Plan);
+      assert.deepEqual(
+        all
+          .filter(
+            (node) =>
+              node['Node Type'] === 'CTE Scan' && node['Actual Loops'] > 1,
+          )
+          .map((node) => `${node['CTE Name']} x${node['Actual Loops']}`),
+        [],
+        `${label}: CTE scanned in a loop`,
+      );
+      assert.deepEqual(
+        all
+          .filter((node) => (node['Rows Removed by Join Filter'] ?? 0) > 100000)
+          .map(
+            (node) =>
+              `${node['Node Type']} ${node['Rows Removed by Join Filter']}`,
+          ),
+        [],
+        `${label}: join filter discarding rows quadratically`,
+      );
+    }
+    await measure('cold statistics');
+    await pool.query('ANALYZE');
+    await measure('analyzed');
+
+    // The statement timeout is real: an impossible budget cancels the read
+    // (57014), which the route turns into 503.
+    await assert.rejects(
+      createDashboardMetricsRuntime(capturing, {
+        access: {},
+        clock: () => NOW,
+        statementTimeout: '1ms',
+      }).service({ actor, days: 30 }),
+      { code: '57014' },
     );
   },
 );

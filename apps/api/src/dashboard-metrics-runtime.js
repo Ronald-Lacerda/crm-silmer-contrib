@@ -185,18 +185,31 @@ export async function readServiceMetrics(database, input) {
        -- effective replies (kind 1). A wait still unanswered at the lookback
        -- is carried in as a customer message just before it; it matters only
        -- when the human mode started after the lookback.
+       --
+       -- Every read of a large table below is a per-conversation LATERAL
+       -- probe fenced with OFFSET 0: the plan stays a linear walk over the
+       -- conversations with index scans inside, whatever the statistics say
+       -- (a cold estimate of one row once turned a join into a quadratic
+       -- join filter).
        SELECT human.id AS conversation_id, human.started_at, human.terminal_at,
-              inbound.occurred_at AS at, 0 AS kind
+              inbound.at, 0 AS kind
        FROM human CROSS JOIN bounds
-       JOIN crm.messages inbound ON inbound.conversation_id = human.id
-       WHERE inbound.direction = 'inbound' AND inbound.author_kind = 'contact'
-         AND inbound.occurred_at >= bounds.look_from AND inbound.occurred_at <= bounds.now_at
+       CROSS JOIN LATERAL (
+         SELECT i.occurred_at AS at FROM crm.messages i
+         WHERE i.conversation_id = human.id AND i.direction = 'inbound'
+           AND i.author_kind = 'contact'
+           AND i.occurred_at >= bounds.look_from AND i.occurred_at <= bounds.now_at
+         OFFSET 0
+       ) inbound
        UNION ALL
-       SELECT human.id, human.started_at, human.terminal_at, ${REPLY_CLOCK('r')}, 1
+       SELECT human.id, human.started_at, human.terminal_at, reply.at, 1
        FROM human CROSS JOIN bounds
-       JOIN crm.messages r ON r.conversation_id = human.id
-       WHERE ${EFFECTIVE_HUMAN_SEND('r')}
-         AND ${REPLY_CLOCK('r')} >= bounds.look_from AND ${REPLY_CLOCK('r')} <= bounds.now_at
+       CROSS JOIN LATERAL (
+         SELECT ${REPLY_CLOCK('r')} AS at FROM crm.messages r
+         WHERE r.conversation_id = human.id AND ${EFFECTIVE_HUMAN_SEND('r')}
+           AND ${REPLY_CLOCK('r')} >= bounds.look_from AND ${REPLY_CLOCK('r')} <= bounds.now_at
+         OFFSET 0
+       ) reply
        UNION ALL
        SELECT human.id, human.started_at, human.terminal_at,
               bounds.look_from - interval '1 microsecond', 0
@@ -262,27 +275,39 @@ export async function readServiceMetrics(database, input) {
          ORDER BY owned.occurred_at DESC LIMIT 1
        ) carried ON true
        UNION ALL
-       SELECT e.conversation_id, history.occurred_at, 0, history.assigned_user_id
+       SELECT e.conversation_id, owned.occurred_at, 0, owned.user_id
        FROM episode_conversations e CROSS JOIN bounds
-       JOIN crm.handoffs h ON h.conversation_id = e.conversation_id
-       JOIN crm.handoff_history history ON history.handoff_id = h.id
-       WHERE history.to_status = 'accepted' AND history.assigned_user_id IS NOT NULL
-         AND history.occurred_at > bounds.look_from AND history.occurred_at <= bounds.now_at
+       CROSS JOIN LATERAL (
+         SELECT history.occurred_at, history.assigned_user_id AS user_id
+         FROM crm.handoffs h JOIN crm.handoff_history history ON history.handoff_id = h.id
+         WHERE h.conversation_id = e.conversation_id AND history.to_status = 'accepted'
+           AND history.assigned_user_id IS NOT NULL
+           AND history.occurred_at > bounds.look_from AND history.occurred_at <= bounds.now_at
+         OFFSET 0
+       ) owned
        UNION ALL
-       SELECT e.conversation_id, event.occurred_at, 0,
-              CASE WHEN event.action = 'conversation.takeover' THEN event.actor_id
-                ELSE substring(event.reason FROM '[(]repasse para ([^()]+)[)]$') END
+       SELECT e.conversation_id, owned.occurred_at, 0, owned.user_id
        FROM episode_conversations e CROSS JOIN bounds
-       JOIN crm.audit_events event
-         ON event.target_type = 'conversation' AND event.target_id = e.conversation_id
-        AND event.action IN ('conversation.takeover','conversation.transferred')
-       WHERE event.occurred_at > bounds.look_from AND event.occurred_at <= bounds.now_at
+       CROSS JOIN LATERAL (
+         SELECT event.occurred_at,
+                CASE WHEN event.action = 'conversation.takeover' THEN event.actor_id
+                  ELSE substring(event.reason FROM '[(]repasse para ([^()]+)[)]$') END AS user_id
+         FROM crm.audit_events event
+         WHERE event.target_type = 'conversation' AND event.target_id = e.conversation_id
+           AND event.action IN ('conversation.takeover','conversation.transferred')
+           AND event.occurred_at > bounds.look_from AND event.occurred_at <= bounds.now_at
+         OFFSET 0
+       ) owned
        UNION ALL
-       SELECT e.conversation_id, m.occurred_at, 0, m.author_id
+       SELECT e.conversation_id, owned.occurred_at, 0, owned.user_id
        FROM episode_conversations e CROSS JOIN bounds
-       JOIN crm.messages m ON m.conversation_id = e.conversation_id
-       WHERE m.direction = 'outbound' AND m.author_kind = 'human'
-         AND m.occurred_at > bounds.look_from AND m.occurred_at <= bounds.now_at
+       CROSS JOIN LATERAL (
+         SELECT m.occurred_at, m.author_id AS user_id FROM crm.messages m
+         WHERE m.conversation_id = e.conversation_id AND m.direction = 'outbound'
+           AND m.author_kind = 'human'
+           AND m.occurred_at > bounds.look_from AND m.occurred_at <= bounds.now_at
+         OFFSET 0
+       ) owned
        UNION ALL
        SELECT conversation_id, crossed_at, 1, NULL FROM episodes
      ), owner_runs AS (
@@ -546,16 +571,24 @@ export async function readLossMetrics(database, input) {
  * holding a connection (the statement is cancelled by PostgreSQL). */
 export const METRICS_STATEMENT_TIMEOUT = '5s';
 
-/** @param {any} client */
-async function boundStatements(client) {
+/** Transaction-local settings of a metric read. JIT is off: the estimated
+ * cost of these reports crosses the JIT thresholds, and compiling (with
+ * inlining and optimization) the large plan costs seconds on servers built
+ * with LLVM, far more than executing it.
+ * @param {any} client @param {string} statementTimeout
+ */
+async function boundStatements(client, statementTimeout) {
   await client.query(
-    `SET LOCAL statement_timeout = '${METRICS_STATEMENT_TIMEOUT}'`,
+    `SELECT set_config('statement_timeout', $1, true), set_config('jit', 'off', true)`,
+    [statementTimeout],
   );
 }
 
-/** @param {any} database @param {{access:any,clock?:()=>Date}} options */
+/** @param {any} database @param {{access:any,clock?:()=>Date,statementTimeout?:string}} options */
 export function createDashboardMetricsRuntime(database, options) {
   const clock = options.clock ?? (() => new Date());
+  const statementTimeout =
+    options.statementTimeout ?? METRICS_STATEMENT_TIMEOUT;
   const access = options.access;
   return Object.freeze({
     /** @param {any} input */
@@ -565,7 +598,7 @@ export function createDashboardMetricsRuntime(database, options) {
       const now = clock();
       const period = dashboardPeriod(now, input.days ?? 7);
       return database.transaction(async (/** @type {any} */ client) => {
-        await boundStatements(client);
+        await boundStatements(client, statementTimeout);
         const reader = await lockDashboardReader(client, input.actor);
         const report = await readServiceMetrics(client, {
           from: period.from,
@@ -591,7 +624,7 @@ export function createDashboardMetricsRuntime(database, options) {
       const now = clock();
       const period = dashboardPeriod(now, input.days ?? 7);
       return database.transaction(async (/** @type {any} */ client) => {
-        await boundStatements(client);
+        await boundStatements(client, statementTimeout);
         const reader = await lockDashboardReader(client, input.actor);
         const report = await readLossMetrics(client, {
           from: period.from,

@@ -22,6 +22,7 @@ import {
 } from '../modules/inbox-channels/src/index.js';
 import { encryptJson } from '../modules/orders/src/adapters/envelope.js';
 import { formatOrderNumber } from '../modules/orders/src/domain/order.js';
+import { operationalDay } from '../modules/orders/src/index.js';
 import { createOrderApiRuntime } from '../apps/api/src/order-runtime.js';
 
 const connectionString = process.env.TEST_DATABASE_URL;
@@ -528,7 +529,8 @@ test(
       )
     ).rows[0];
     assert.equal(bothMilestones.paid_on, '2026-11-05');
-    assert.equal(bothMilestones.delivered_on, '2026-11-05');
+    // Delivery takes the server's São Paulo day (real clock), not the fixture's.
+    assert.equal(bothMilestones.delivered_on, operationalDay(new Date()));
     assert.equal(bothMilestones.finance_payment_review_required, false);
     assert.equal(bothMilestones.version, 3);
     await pool.query(
