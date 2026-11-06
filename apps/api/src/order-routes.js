@@ -9,7 +9,13 @@ import { renderOrderPdf } from './order-pdf.js';
 
 const ORDER_STATUSES = new Set(['pendente', 'confirmado']);
 const ORDER_ORIGINS = new Set(['atendimento', 'loja']);
-const ORDER_SECTIONS = new Set(['summary', 'items', 'observations', 'artwork']);
+const ORDER_SECTIONS = new Set([
+  'summary',
+  'items',
+  'observations',
+  'artwork',
+  'size-pricing',
+]);
 const SUMMARY_PERIODS = new Set(['hoje', '7dias', 'mes']);
 const DELIVERY_FILTERS = new Set(['overdue', 'due_soon']);
 
@@ -19,6 +25,13 @@ const DELIVERY_FILTERS = new Set(['overdue', 'due_soon']);
  * and identifiers never reach the client.
  */
 const PUBLIC_CODES = new Set([
+  'SIZE_PRICING_INVALID',
+  'SIZE_PRICING_OVERFLOW',
+  'SIZE_PRICING_ALREADY_INITIALIZED',
+  'SIZE_PRICING_NOT_INITIALIZED',
+  'SIZE_PRICING_LEGACY_REQUIRES_ADAPTER',
+  'SIZE_PRICING_ITEMS_MANAGED',
+  'SIZE_PRICING_CONFIRMATION_PENDING',
   'STORE_ORDER_CONFLICT',
   'AMOUNT_BELOW_PRICE',
   'CONTACT_NOT_FOUND',

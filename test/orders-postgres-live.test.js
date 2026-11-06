@@ -1605,4 +1605,121 @@ if (connectionString) {
     );
     assert.equal(events.rows[0].count, 2);
   });
+
+  test('OLIST-T20b encrypted composition roundtrip, restart and concurrent version fencing', async () => {
+    const conversationId = await seedConversation(pool);
+    await pool.query(
+      "UPDATE crm.conversations SET assigned_user_id = 'seller-contract' WHERE id=$1",
+      [conversationId],
+    );
+    const serviceFor = (/** @type {PostgresOrderRepository} */ repository) =>
+      createOrderService({
+        repository,
+        authorizeOwnership: async () => {},
+        clock: () => NOW,
+        fabCode: '01',
+        conversations: {
+          readOrderContexts: orderContextsFrom(() => ({
+            briefing: null,
+            customerName: 'Sintético',
+          })),
+          searchConversationIds: async () => [],
+        },
+      });
+    const service = serviceFor(repository);
+    let { order } = await service.ensurePendingFromIntent({
+      conversationId,
+      correlationId: 'correlation-pricing-pg',
+    });
+    const actor = { id: 'seller-contract', kind: 'human', capabilities: [] };
+    order = await service.patchSection({
+      actor,
+      correlationId: 'correlation-pricing-pg',
+      orderId: order.id,
+      expectedVersion: order.version,
+      section: 'items',
+      value: syntheticItems().map((item) => ({
+        ...item,
+        grade: [{ tamanho: 'M', quantidade: 3 }],
+      })),
+    });
+    const apply = (
+      /** @type {any} */ service,
+      /** @type {any} */ order,
+      /** @type {unknown} */ value,
+    ) =>
+      service.patchSection({
+        actor,
+        correlationId: 'correlation-pricing-pg',
+        orderId: order.id,
+        expectedVersion: order.version,
+        section: 'size-pricing',
+        value,
+      });
+    const initialized = await apply(service, order, { action: 'initialize' });
+    const group = initialized.ficha.sizePricing[0];
+    const target = { groupId: group.id, lineId: group.lines[0].id };
+    const restarted = serviceFor(
+      new PostgresOrderRepository({
+        database: databaseFor(pool),
+        envelopeKey: ENVELOPE_KEY,
+      }),
+    );
+    assert.deepEqual(
+      (await restarted.get(order.id)).ficha.sizePricing,
+      initialized.ficha.sizePricing,
+    );
+    const raw = (
+      await pool.query(
+        'SELECT ficha_envelope::text AS envelope FROM crm.orders WHERE id=$1',
+        [order.id],
+      )
+    ).rows[0].envelope;
+    assert.ok(!raw.includes(group.id));
+    assert.ok(!raw.includes('subtotalCents'));
+    const results = await Promise.allSettled(
+      [service, restarted].map((service, i) =>
+        apply(service, initialized, {
+          action: 'review_subtotal',
+          ...target,
+          subtotalCents: 100 + i,
+        }),
+      ),
+    );
+    assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
+    const failed = results.find((r) => r.status === 'rejected');
+    assert.ok(failed && failed.status === 'rejected');
+    assert.equal(failed.reason.code, 'VERSION_CONFLICT');
+    const reviewed = await restarted.get(order.id);
+    const changed = await apply(restarted, reviewed, {
+      action: 'change_quantity',
+      ...target,
+      quantity: 5,
+    });
+    assert.equal(changed.totalPieces, 8);
+    assert.equal(changed.ficha.items[0].grade[0].quantidade, 5);
+    assert.equal(changed.ficha.sizePricing[0].lines[0].subtotalReviewed, false);
+    assert.equal(changed.finalAmountCents, null);
+    const events = (
+      await pool.query(
+        "SELECT payload FROM crm.domain_events WHERE aggregate_id=$1 AND event_type='order.section_saved'",
+        [order.id],
+      )
+    ).rows;
+    assert.equal(events.length, 4);
+    assert.ok(!JSON.stringify(events).includes('subtotal'));
+    await pool.query(
+      'UPDATE crm.conversations SET assigned_user_id = NULL WHERE id=$1',
+      [conversationId],
+    );
+    await assert.rejects(
+      apply(service, changed, {
+        action: 'review_subtotal',
+        ...target,
+        subtotalCents: 200,
+      }),
+      { code: 'FORBIDDEN' },
+    );
+    assert.equal((await restarted.get(order.id)).version, changed.version);
+  });
 }

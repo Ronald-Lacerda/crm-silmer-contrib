@@ -628,3 +628,294 @@ test('commands on an unknown order are refused as not found', async () => {
     { code: 'ORDER_NOT_FOUND' },
   );
 });
+
+// OLIST-T20b: explicit opt-in; existing orders keep their contract.
+async function pricedDraft() {
+  const context = await setup();
+  const order = await context.service.patchSection(
+    command({
+      orderId: context.order.id,
+      expectedVersion: context.order.version,
+      section: 'items',
+      value: syntheticItems().map((item) => ({
+        ...item,
+        grade: [{ tamanho: 'M', quantidade: 3 }],
+      })),
+    }),
+  );
+  return { ...context, order };
+}
+
+/** @param {any} service @param {any} order @param {Record<string, unknown>} value
+ * @returns {Promise<import('../modules/orders/src/domain/order.js').Order>} */
+function pricingCommand(service, order, value) {
+  return service.patchSection(
+    command({
+      orderId: order.id,
+      expectedVersion: order.version,
+      section: 'size-pricing',
+      value,
+    }),
+  );
+}
+
+test('OLIST-T20b persists server IDs; repeated M groups, reorder and duplicate retain distinct identity', async () => {
+  const { service, repository, order } = await pricedDraft();
+  const initialized = await pricingCommand(service, order, {
+    action: 'initialize',
+  });
+  const groups = initialized.ficha.sizePricing;
+  assert.ok(groups);
+  assert.equal(
+    new Set(groups.flatMap((g) => [g.id, ...g.lines.map((l) => l.id)])).size,
+    4,
+  );
+  for (const group of groups) {
+    assert.match(group.id, /^[0-9a-f-]{36}$/u);
+    assert.equal(group.lines[0].subtotalCents, null);
+    assert.equal(group.lines[0].subtotalReviewed, false);
+  }
+  assert.equal(initialized.finalAmountCents, order.finalAmountCents);
+  assert.deepEqual(
+    (await repository.findById(order.id))?.ficha.sizePricing,
+    groups,
+  );
+  const reviewed = await pricingCommand(service, initialized, {
+    action: 'review_subtotal',
+    groupId: groups[0].id,
+    lineId: groups[0].lines[0].id,
+    subtotalCents: 100,
+  });
+  const reordered = await pricingCommand(service, reviewed, {
+    action: 'reorder_groups',
+    groupIds: groups.map((g) => g.id).reverse(),
+  });
+  assert.deepEqual(reordered.ficha.items, [...order.ficha.items].reverse());
+  assert.equal(reordered.ficha.sizePricing?.[1].lines[0].subtotalCents, 100);
+  assert.equal(reordered.ficha.sizePricing?.[0].lines[0].subtotalCents, null);
+  const duplicated = await pricingCommand(service, reordered, {
+    action: 'duplicate_group',
+    groupId: groups[0].id,
+  });
+  const copy = duplicated.ficha.sizePricing?.[2];
+  assert.ok(copy);
+  assert.notEqual(copy.id, groups[0].id);
+  assert.notEqual(copy.lines[0].id, groups[0].lines[0].id);
+  assert.equal(copy.lines[0].subtotalCents, 100);
+  assert.equal(copy.lines[0].subtotalReviewed, false);
+  assert.deepEqual(duplicated.ficha.items[2], reordered.ficha.items[1]);
+});
+
+test('OLIST-T20b quantity changes require a fresh human review even on return to the old quantity', async () => {
+  const { service, order } = await pricedDraft();
+  let saved = await pricingCommand(service, order, { action: 'initialize' });
+  const group = saved.ficha.sizePricing?.[0];
+  assert.ok(group);
+  const target = { groupId: group.id, lineId: group.lines[0].id };
+  saved = await pricingCommand(service, saved, {
+    action: 'review_subtotal',
+    ...target,
+    subtotalCents: 100,
+  });
+  for (const quantity of [5, 3]) {
+    saved = await pricingCommand(service, saved, {
+      action: 'change_quantity',
+      ...target,
+      quantity,
+    });
+    assert.equal(saved.ficha.sizePricing?.[0].lines[0].quantity, quantity);
+    assert.equal(saved.ficha.sizePricing?.[0].lines[0].subtotalCents, 100);
+    assert.equal(saved.ficha.sizePricing?.[0].lines[0].subtotalReviewed, false);
+    assert.equal(saved.ficha.items[0].grade[0].quantidade, quantity);
+    assert.equal(saved.totalPieces, quantity + 3);
+  }
+  saved = await pricingCommand(service, saved, {
+    action: 'review_subtotal',
+    ...target,
+    subtotalCents: 100,
+  });
+  assert.equal(saved.ficha.sizePricing?.[0].lines[0].subtotalReviewed, true);
+});
+
+test('OLIST-T20b refuses forged state, wrong identities, overflow and stale concurrent reviews atomically', async () => {
+  const { service, repository, order } = await pricedDraft();
+  const initialized = await pricingCommand(service, order, {
+    action: 'initialize',
+  });
+  const groups = initialized.ficha.sizePricing;
+  assert.ok(groups);
+  const target = { groupId: groups[0].id, lineId: groups[0].lines[0].id };
+  for (const value of [
+    {
+      action: 'review_subtotal',
+      ...target,
+      subtotalCents: 10,
+      subtotalReviewed: true,
+    },
+    { action: 'review_subtotal', ...target, subtotalCents: '10' },
+    { action: 'review_subtotal', ...target, subtotalCents: -1 },
+    { action: 'review_subtotal', ...target, subtotalCents: 1.5 },
+    { action: 'review_subtotal', ...target, subtotalCents: 10, totalCents: 10 },
+    {
+      action: 'review_subtotal',
+      ...target,
+      lineId: groups[1].lines[0].id,
+      subtotalCents: 10,
+    },
+    { action: 'reorder_groups', groupIds: [groups[0].id, groups[0].id] },
+    { action: 'reorder_groups', groupIds: [groups[0].id] },
+    { action: 'change_quantity', ...target, quantity: 0 },
+  ]) {
+    await assert.rejects(pricingCommand(service, initialized, value), {
+      code: 'SIZE_PRICING_INVALID',
+    });
+    assert.equal(
+      (await repository.findById(order.id))?.version,
+      initialized.version,
+    );
+  }
+  const results = await Promise.allSettled(
+    [10, 20].map((subtotalCents) =>
+      pricingCommand(service, initialized, {
+        action: 'review_subtotal',
+        ...target,
+        subtotalCents,
+      }),
+    ),
+  );
+  assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
+  const rejected = results.find((r) => r.status === 'rejected');
+  assert.ok(rejected && rejected.status === 'rejected');
+  assert.equal(rejected.reason.code, 'VERSION_CONFLICT');
+  const latest = await service.get(order.id);
+  const maxed = await pricingCommand(service, latest, {
+    action: 'review_subtotal',
+    ...target,
+    subtotalCents: Number.MAX_SAFE_INTEGER,
+  });
+  await assert.rejects(
+    pricingCommand(service, maxed, {
+      action: 'review_subtotal',
+      groupId: groups[1].id,
+      lineId: groups[1].lines[0].id,
+      subtotalCents: 1,
+    }),
+    { code: 'SIZE_PRICING_OVERFLOW' },
+  );
+  await assert.rejects(
+    pricingCommand(service, maxed, {
+      action: 'duplicate_group',
+      groupId: groups[0].id,
+    }),
+    { code: 'SIZE_PRICING_OVERFLOW' },
+  );
+});
+
+test('OLIST-T20b preserves human composition against legacy replacement, automation and free amount confirmation', async () => {
+  const { service, repository, order } = await pricedDraft();
+  const saved = await pricingCommand(service, order, { action: 'initialize' });
+  await assert.rejects(
+    pricingCommand(service, saved, { action: 'initialize' }),
+    { code: 'SIZE_PRICING_ALREADY_INITIALIZED' },
+  );
+  await assert.rejects(
+    service.patchSection(
+      command({
+        orderId: saved.id,
+        expectedVersion: saved.version,
+        section: 'items',
+        value: syntheticItems(),
+      }),
+    ),
+    { code: 'SIZE_PRICING_ITEMS_MANAGED' },
+  );
+  const projected = await service.projectAgentBriefing({
+    conversationId: 'conversation-1',
+    correlationId: 'correlation-agent',
+    automationState: 'assistant',
+    briefing: { quantity: 200 },
+  });
+  assert.equal(projected.applied, false);
+  assert.equal(projected.reason, 'size_pricing_managed');
+  await assert.rejects(
+    service.confirm(
+      command({
+        orderId: saved.id,
+        expectedVersion: saved.version,
+        amountText: '500,00',
+        paymentCondition: 'pix',
+      }),
+    ),
+    { code: 'SIZE_PRICING_CONFIRMATION_PENDING' },
+  );
+  assert.deepEqual((await repository.findById(saved.id))?.ficha, saved.ficha);
+  assert.equal((await repository.findById(saved.id))?.version, saved.version);
+  await assert.rejects(
+    service.patchSection(
+      command({
+        actor: OTHER,
+        orderId: saved.id,
+        expectedVersion: saved.version,
+        section: 'size-pricing',
+        value: { action: 'initialize' },
+      }),
+    ),
+    { code: 'FORBIDDEN' },
+  );
+});
+
+test('OLIST-T20b confirmed historical composition is not enriched through draft adoption', async () => {
+  const { service, order } = await pricedDraft();
+  const confirmed = await service.confirm(
+    command({
+      orderId: order.id,
+      expectedVersion: order.version,
+      amountText: '500,00',
+      paymentCondition: 'pix',
+    }),
+  );
+  await assert.rejects(
+    pricingCommand(service, confirmed, { action: 'initialize' }),
+    { code: 'ORDER_STATUS_CONFLICT' },
+  );
+  const reopened = await service.reopen(
+    command({ orderId: confirmed.id, expectedVersion: confirmed.version }),
+  );
+  await assert.rejects(
+    pricingCommand(service, reopened, { action: 'initialize' }),
+    { code: 'SIZE_PRICING_LEGACY_REQUIRES_ADAPTER' },
+  );
+  assert.equal(reopened.finalAmountCents, confirmed.finalAmountCents);
+});
+
+test('OLIST-T20b quantities and duplicate totals fit the PostgreSQL integer contract', async () => {
+  const { service, repository, order } = await pricedDraft();
+  const saved = await pricingCommand(service, order, { action: 'initialize' });
+  const group = saved.ficha.sizePricing?.[0];
+  assert.ok(group);
+  const target = { groupId: group.id, lineId: group.lines[0].id };
+  for (const quantity of [2147483648, Number.MAX_SAFE_INTEGER, 2147483645]) {
+    await assert.rejects(
+      pricingCommand(service, saved, {
+        action: 'change_quantity',
+        ...target,
+        quantity,
+      }),
+      { code: 'SIZE_PRICING_INVALID' },
+    );
+    assert.equal((await repository.findById(saved.id))?.version, saved.version);
+  }
+  const large = await pricingCommand(service, saved, {
+    action: 'change_quantity',
+    ...target,
+    quantity: 2147483644,
+  });
+  assert.equal(large.totalPieces, 2147483647);
+  await assert.rejects(
+    pricingCommand(service, large, {
+      action: 'duplicate_group',
+      groupId: group.id,
+    }),
+    { code: 'SIZE_PRICING_INVALID' },
+  );
+});

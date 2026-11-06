@@ -510,3 +510,43 @@ test('fails fast without the ports it composes', () => {
     TypeError,
   );
 });
+
+test('OLIST-T20b adoption replays the same IDs once, audits no pricing payload and does not create on a new key', async () => {
+  const { runtime, audits } = harness();
+  const { order } = await create(runtime, OWNER, 'conversation-1');
+  const input = command(OWNER, {
+    orderId: order.id,
+    expectedVersion: order.version,
+    section: 'size-pricing',
+    value: { action: 'initialize' },
+  });
+  const adopted = await runtime.patchSection(input);
+  assert.deepEqual(await runtime.patchSection(input), adopted);
+  assert.deepEqual(
+    (await runtime.get(order.id)).order.ficha.sizePricing,
+    adopted.ficha.sizePricing,
+  );
+  assert.equal(audits.filter((a) => a.action === 'order.edit').length, 1);
+  assert.doesNotMatch(
+    JSON.stringify(audits),
+    /subtotal|sizePricing|initialize/u,
+  );
+  await assert.rejects(
+    runtime.patchSection(
+      command(OWNER, {
+        orderId: order.id,
+        expectedVersion: adopted.version,
+        section: 'size-pricing',
+        value: { action: 'initialize' },
+      }),
+    ),
+    { code: 'SIZE_PRICING_ALREADY_INITIALIZED' },
+  );
+  await assert.rejects(
+    runtime.patchSection({
+      ...input,
+      value: { action: 'duplicate_group', groupId: 'forged' },
+    }),
+    { code: 'IDEMPOTENCY_KEY_REUSED' },
+  );
+});

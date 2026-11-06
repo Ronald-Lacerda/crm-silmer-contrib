@@ -139,6 +139,20 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
       localmente, com limitação registrada no runbook. Integração e implantação
       acompanhadas na [PR 309](https://github.com/romulosutil/crm-silmer/pull/309).
 
+## OLIST-T20b — Início da Fase 3 (05/11/2026)
+
+- [x] Persistir composição opt-in no envelope cifrado, com IDs emitidos pelo servidor.
+- [x] Comandos humanos com ACL/versão/idempotência/auditoria: revisão, quantidade,
+      reordenação de grupos e duplicação; grade/composição na mesma escrita.
+- [x] Bloquear perda de identidade por cliente antigo/projeção automática,
+      adoção de loja/confirmado/reaberto histórico e confirmação livre após adoção.
+- [ ] Completar T20: edição de atributos, inclusão/remoção e reordenação de linhas.
+- [ ] T21: total calculado autoritativo e confirmação; T24/T26: loja/legado.
+
+Requisitos OLIST-09, 29, 42–44. [Contrato e limites](../../../docs/runbooks/olist-phase3.md).
+Fatia preparatória; T20/T21/F3 permanecem abertos. Nenhuma adoção operacional,
+UI, geração ERP, deploy ou piloto liberado.
+
 ## OLIST-F2 — Fase 2 concluída (05/11/2026)
 
 - [x] OLIST-T03: migrações expand 0063/0064, vínculos/snapshots cifrados,
@@ -163,7 +177,7 @@ Sem deploy, chamadas autenticadas ao ERP ou habilitação de conta real.
 Homologação da conexão/proxy/imagem e piloto continuam nos gates posteriores.
 Próxima fronteira: Fase 3, começando por T20/T21 e suas integrações de
 persistência, legado/loja e completude; o núcleo T20a/T21a não fecha essas tarefas.
-Este é o checkpoint atual de implementação; os registros datados abaixo
+Este é o checkpoint da Fase 2; os registros datados abaixo
 preservam o estado observado em cada entrega anterior.
 
 ## OLIST-T02/T06a — Escopo de centavos exatos (05/11/2026)

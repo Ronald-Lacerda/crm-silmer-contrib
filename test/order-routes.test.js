@@ -2002,3 +2002,56 @@ test('ACT: competing payment and delivery commands have one version winner witho
   assert.equal(completed.paidOn, '2026-09-11');
   assert.equal(completed.deliveredOn, '2026-09-12');
 });
+
+test('OLIST-T20b sections route applies write guards and exposes safe pricing errors', async (t) => {
+  const { api, runtime, guards } = orderHarness({ writeActor: SELLER });
+  t.after(() => api.close());
+  const order = await createPending(runtime, 'conversation-1');
+  const request = {
+    method: /** @type {const} */ ('PATCH'),
+    url: `/api/v1/orders/${order.id}/sections/size-pricing`,
+    headers: {
+      ...readHeaders,
+      'x-csrf-token': 'csrf-synthetic',
+      'idempotency-key': 'pricing-http-init',
+    },
+    payload: {
+      expectedVersion: order.version,
+      value: { action: 'initialize' },
+    },
+  };
+  const initialized = await api.inject(request);
+  assert.equal(initialized.statusCode, 200);
+  const saved = initialized.json().order;
+  assert.ok(Array.isArray(saved.ficha.sizePricing));
+  assert.equal(guards.at(-1)?.input.action, 'order.edit');
+  assert.deepEqual((await api.inject(request)).json(), initialized.json());
+  const invalid = await api.inject({
+    ...request,
+    headers: { ...request.headers, 'idempotency-key': 'pricing-http-forged' },
+    payload: {
+      expectedVersion: saved.version,
+      value: {
+        action: 'review_subtotal',
+        groupId: 'forged',
+        lineId: 'forged',
+        subtotalCents: 100,
+        subtotalReviewed: true,
+      },
+    },
+  });
+  assert.equal(invalid.statusCode, 422);
+  assert.equal(invalid.json().error.code, 'SIZE_PRICING_INVALID');
+  const nonOwner = orderHarness({ writeActor: OTHER });
+  t.after(() => nonOwner.api.close());
+  const otherOrder = await createPending(nonOwner.runtime, 'conversation-1');
+  const forbidden = await nonOwner.api.inject({
+    ...request,
+    url: `/api/v1/orders/${otherOrder.id}/sections/size-pricing`,
+    payload: {
+      expectedVersion: otherOrder.version,
+      value: { action: 'initialize' },
+    },
+  });
+  assert.equal(forbidden.statusCode, 403);
+});

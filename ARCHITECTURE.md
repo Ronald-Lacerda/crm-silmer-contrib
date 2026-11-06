@@ -19,6 +19,16 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## Olist — início da Fase 3 (05/11/2026)
+
+OLIST-T20b persiste composição opcional no envelope da ficha, sem migration
+ou reescrita de legado. Comandos humanos por ID geram/preservam identidades,
+revisam subtotal, alteram quantidade, reordenam grupos e duplicam com revisão
+invalidada. ACL comercial, versão e idempotência existentes protegem a escrita.
+Cliente antigo/projeção automática não podem substituir composição adotada.
+Confirmação calculada, adapters loja/legado e UI continuam pendentes; T20/T21/F3
+não estão concluídos. [Contrato/limites e rollback](docs/runbooks/olist-phase3.md).
+
 ## Olist — fundação da Fase 2 (05/11/2026)
 
 OLIST-F2 / OLIST-T03/T04/T19/T05 implementa dados expand, checkbox ortogonal

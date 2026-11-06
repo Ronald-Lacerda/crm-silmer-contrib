@@ -24,6 +24,17 @@ guardrail, abertura humana, transporte, reservas, epoch e revisão; preparação
 offline recusa drift e dados fixados. Sem migração ou infraestrutura nova.
 [Operação e rollback](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T20b — composição persistida opt-in
+
+OLIST-09, 29, 42–44: `ficha.sizePricing` opcional guarda grupos/linhas com IDs
+UUID e revisão humana no mesmo envelope AES-GCM da grade; alterações usam
+`sections/size-pricing`, ACL comercial, versão, idempotência e auditoria
+existentes. Reordenação move peça e grupo juntos; duplicação cria IDs novos;
+quantidade invalida revisão. Limite agregado de peças é o integer PostgreSQL.
+Sem migração inferida ou total histórico dividido. Após adesão, items legado,
+projeção automática e confirmação livre não escrevem. T20/T21 e adapters
+T24/T26 seguem abertos. [Runbook](docs/runbooks/olist-phase3.md).
+
 ## Olist — fundação da Fase 2 (05/11/2026)
 
 OLIST-F2 / OLIST-T03/T04/T19/T05 implementa dados expand, checkbox ortogonal

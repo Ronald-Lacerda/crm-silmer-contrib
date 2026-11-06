@@ -2554,7 +2554,13 @@ paths:
         Ação order.edit, restrita ao dono da conversa ou a COMMERCIAL_ADMIN.
         `value` substitui a seção inteira; total de peças e campos faltantes
         são recalculados. Pedido confirmado não aceita edição (409); é preciso
-        reabrir.
+        reabrir. OLIST-T20b: size-pricing recebe um comando fechado de
+        composição, não uma substituição. initialize adota explicitamente só
+        pendente nunca confirmado; não infere valores históricos. Demais ações
+        referenciam IDs emitidos pelo servidor. Após adoção, items legado e
+        confirmação livre são recusados até os adapters T20/T21; a projeção
+        automática não sobrescreve a composição humana. Sem interface de adoção
+        ou envio Olist nesta fatia.
       security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
       parameters:
         - $ref: '#/components/parameters/OrderId'
@@ -5532,7 +5538,7 @@ components:
       enum: [pix, cartao_credito, cartao_debito]
     OrderSection:
       type: string
-      enum: [summary, items, observations, artwork]
+      enum: [summary, items, observations, artwork, size-pricing]
     OrderActorRef:
       type: object
       additionalProperties: false
@@ -5660,6 +5666,12 @@ components:
       additionalProperties: false
       required: [summary, items, observations, artwork, serviceData]
       properties:
+        sizePricing:
+          type: array
+          maxItems: 50
+          readOnly: true
+          description: Composição opcional T20b, alinhada aos itens; sem rateio legado.
+          items: { $ref: '#/components/schemas/SizePricingGroup' }
         loja:
           $ref: '#/components/schemas/StoreFicha'
         summary: { $ref: '#/components/schemas/FichaSummary' }
@@ -6114,6 +6126,74 @@ components:
       required: [contactId]
       properties:
         contactId: { type: string, minLength: 1, maxLength: 128 }
+    SizePricingGroup:
+      type: object
+      additionalProperties: false
+      required: [id, lines]
+      properties:
+        id: { type: string, format: uuid }
+        lines:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, size, quantity, subtotalCents, subtotalReviewed]
+            properties:
+              id: { type: string, format: uuid }
+              size: { type: string, minLength: 1, maxLength: 200 }
+              quantity: { type: integer, minimum: 1, maximum: 2147483647 }
+              subtotalCents:
+                {
+                  type: [integer, 'null'],
+                  minimum: 1,
+                  maximum: 9007199254740991,
+                }
+              subtotalReviewed: { type: boolean, readOnly: true }
+    SizePricingCommand:
+      description: >-
+        Só humano com ACL comercial, versão, CSRF, Origin e idempotência.
+        IDs/revisão são emitidos pelo servidor; soma de peças limitada a
+        2147483647. Quantidade alterada invalida revisão e não recalcula preço.
+        Fração de centavo unitário não invalida subtotal comercial CRM.
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [action]
+          properties:
+            action: { const: initialize }
+        - type: object
+          additionalProperties: false
+          required: [action, groupId, lineId, subtotalCents]
+          properties:
+            action: { const: review_subtotal }
+            groupId: { type: string, format: uuid }
+            lineId: { type: string, format: uuid }
+            subtotalCents:
+              { type: [integer, 'null'], minimum: 1, maximum: 9007199254740991 }
+        - type: object
+          additionalProperties: false
+          required: [action, groupId, lineId, quantity]
+          properties:
+            action: { const: change_quantity }
+            groupId: { type: string, format: uuid }
+            lineId: { type: string, format: uuid }
+            quantity: { type: integer, minimum: 1, maximum: 2147483647 }
+        - type: object
+          additionalProperties: false
+          required: [action, groupIds]
+          properties:
+            action: { const: reorder_groups }
+            groupIds:
+              type: array
+              maxItems: 50
+              uniqueItems: true
+              items: { type: string, format: uuid }
+        - type: object
+          additionalProperties: false
+          required: [action, groupId]
+          properties:
+            action: { const: duplicate_group }
+            groupId: { type: string, format: uuid }
     OrderSectionPatchRequest:
       type: object
       additionalProperties: false
@@ -6127,13 +6207,15 @@ components:
           description: >-
             Seção inteira: FichaSummaryInput para summary, lista de FichaItem
             para items, FichaObservations para observations ou
-            FichaArtworkInput para artwork. Arquivos não são aceitos.
+            FichaArtworkInput para artwork; SizePricingCommand para size-pricing.
+            Arquivos não são aceitos.
           oneOf:
             - { $ref: '#/components/schemas/FichaSummaryInput' }
             - type: array
               items: { $ref: '#/components/schemas/FichaItem' }
             - { $ref: '#/components/schemas/FichaObservations' }
             - { $ref: '#/components/schemas/FichaArtworkInput' }
+            - { $ref: '#/components/schemas/SizePricingCommand' }
     OrderConfirmRequest:
       type: object
       additionalProperties: false
@@ -6385,6 +6467,13 @@ components:
                   ORDER_NOT_CONFIRMABLE,
                   INVALID_AMOUNT,
                   INVALID_GRADE,
+                  SIZE_PRICING_INVALID,
+                  SIZE_PRICING_OVERFLOW,
+                  SIZE_PRICING_ALREADY_INITIALIZED,
+                  SIZE_PRICING_NOT_INITIALIZED,
+                  SIZE_PRICING_LEGACY_REQUIRES_ADAPTER,
+                  SIZE_PRICING_ITEMS_MANAGED,
+                  SIZE_PRICING_CONFIRMATION_PENDING,
                   INVALID_DATE,
                   ORDER_STATUS_CONFLICT,
                   EMPTY_FILE,

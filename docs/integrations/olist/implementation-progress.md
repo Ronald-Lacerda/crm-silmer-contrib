@@ -99,3 +99,12 @@ A prova real C05–C07 foi concluída: 14 GETs, três POSTs e R$ 5,20 nominal.
 [API e tela nativa coincidiram](evidence/exact-cent-proof-result.json), com
 marcadores únicos preservados pela API. Coletor encerrado; F1/T02 fechados
 apenas para o subconjunto exato, sem ativação de piloto/produção.
+
+
+## Início da Fase 3 — T20b
+
+Composição opt-in persistida e comandos humanos por identidade integrados à
+API, com guardas de versão, ACL e idempotência. A preparação de domínio agora
+possui uma primeira integração cifrada, sem concluir T20/T21. O trecho
+“Integração ainda necessária” acima registra a entrega anterior; o estado
+atual e as restrições estão no [runbook da Fase 3](../../runbooks/olist-phase3.md).

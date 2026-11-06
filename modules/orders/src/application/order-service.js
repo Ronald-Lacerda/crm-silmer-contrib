@@ -17,6 +17,7 @@ import {
   validateObservations,
   validateSummary,
 } from '../domain/ficha.js';
+import { applySizePricingCommand } from '../domain/size-pricing-composition.js';
 import { parseBrlAmount } from '../domain/money.js';
 import {
   confirmOrder,
@@ -68,7 +69,13 @@ function requireId(value, name) {
 }
 
 export const ORDER_SECTIONS = Object.freeze(
-  /** @type {const} */ (['summary', 'items', 'observations', 'artwork']),
+  /** @type {const} */ ([
+    'summary',
+    'items',
+    'observations',
+    'artwork',
+    'size-pricing',
+  ]),
 );
 export const DEFAULT_ORDER_PAGE_SIZE = 25;
 const MAX_QUERY_LENGTH = 120;
@@ -582,6 +589,9 @@ export function createOrderService(options) {
           'Explicit projection requires epoch and revision',
         );
       }
+      if (pending.ficha.sizePricing !== undefined) {
+        return { applied: false, order: null, reason: 'size_pricing_managed' };
+      }
       // The projection writes the client the order shows now (ADR 018).
       const [shown] = await withCurrentClient([pending]);
       const next = withDerivedFields({
@@ -753,7 +763,10 @@ export function createOrderService(options) {
           'ORDER_STATUS_CONFLICT',
         );
       }
-      const ficha = structuredClone(order.ficha);
+      const ficha =
+        section === 'size-pricing'
+          ? applySizePricingCommand(order, input.value)
+          : structuredClone(order.ficha);
       if (section === 'summary') {
         ficha.summary = {
           ...validateSummary(input.value),
@@ -762,13 +775,19 @@ export function createOrderService(options) {
           cliente: ficha.summary.cliente,
         };
       } else if (section === 'items') {
+        if (ficha.sizePricing !== undefined) {
+          throw new OrderConflictError(
+            'Use os comandos por identidade.',
+            'SIZE_PRICING_ITEMS_MANAGED',
+          );
+        }
         ficha.items = validateItems(input.value);
       } else if (section === 'artwork') {
         ficha.artwork = {
           ...validateArtwork(input.value),
           files: ficha.artwork?.files ?? [],
         };
-      } else {
+      } else if (section === 'observations') {
         ficha.observations = validateObservations(input.value);
       }
       return current(
@@ -797,6 +816,12 @@ export function createOrderService(options) {
      */
     async confirm(input) {
       const order = await loadForCommand(input);
+      if (order.ficha.sizePricing !== undefined) {
+        throw new OrderConflictError(
+          'A confirmação calculada depende de OLIST-T21.',
+          'SIZE_PRICING_CONFIRMATION_PENDING',
+        );
+      }
       const amountCents =
         typeof input.amountText === 'string' && input.amountText.trim() !== ''
           ? parseBrlAmount(input.amountText)

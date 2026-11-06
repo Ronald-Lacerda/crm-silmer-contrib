@@ -490,3 +490,22 @@ test('manual delivery afazeres exclude normal and test store orders and delivery
     );
   }
 });
+
+test('OLIST-T20b adoption never bypasses store locks or rewrites gateway data', async () => {
+  const { orders, record, repository } = setup();
+  const { order } = await record(storeOrderBody());
+  await refuses(
+    orders.patchSection({
+      actor: ADMIN,
+      orderId: order.id,
+      expectedVersion: order.version,
+      correlationId: 'correlation-store-pricing',
+      section: 'size-pricing',
+      value: { action: 'initialize' },
+    }),
+    409,
+    'ORDER_LOCKED',
+  );
+  const saved = await repository.findById(order.id);
+  assert.deepEqual(saved, order);
+});
