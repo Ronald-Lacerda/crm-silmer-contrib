@@ -27,7 +27,7 @@ Evidências e limitações: [QA de 05/11](../../../docs/qa/dashboard-central-202
 Essa segunda tarefa distingue código entregue de ativação/homologação; não
 autoriza restauração de banco ou alteração de workflows comerciais existentes.
 
-## ACT-T03 — Refinamento do Dashboard por papel (proposta de design, 05/11/2026)
+## ACT-T04 — Refinamento do Dashboard por papel (proposta de design, 05/11/2026)
 
 Proposta de design; não autoriza implementação. Componentes e regras na §18
 do [design.md](../../../design.md). Decisões do PO em 05/11/2026, registradas

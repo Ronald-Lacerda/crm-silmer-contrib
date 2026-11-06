@@ -266,7 +266,7 @@ Componentes de domínio devem compor os primitivos acima, sem duplicar estilo ou
 - `AgentActivity`, `HandoffSummary` e `AuditTimeline`;
 - `OrderSheetSection`, `OrderValidationSummary` e `OrderSendStatus`;
 - `SalesKpi`, `SalesFilterBar`, `SalesDataTable`, `ActionRow`,
-  `ActionDetail`, `ReasonSheet` e `Meter` (regras na §18, ACT-T03).
+  `ActionDetail`, `ReasonSheet` e `Meter` (regras na §18, ACT-T04).
 
 Cada componente precisa documentar: propósito, anatomia, variantes, estados, comportamento responsivo, teclado, ARIA e exemplos de uso/não uso.
 
@@ -697,7 +697,7 @@ Performance e checkpoint apresentam estados de erro e cobertura explícitos.
 Prévia do checkpoint não equivale a envio; aceito pelo provedor não equivale
 a entregue. Sem indicadores artificiais de conversão entre coortes distintas.
 
-### Componentes e regras do Dashboard (ACT-T03) — 05/11/2026
+### Componentes e regras do Dashboard (ACT-T04) — 05/11/2026
 
 Escala o redesenho do Dashboard ao design system. Os componentes abaixo
 compõem os primitivos da §8 e não criam estilo novo de botão, badge ou
@@ -820,7 +820,7 @@ depende de decisão ainda não registrada, isso está dito no próprio item.
 - **Teclado/ARIA:** foco contido, foco inicial na `legend`/primeira opção,
   setas entre radios, Escape fecha sem salvar e devolve o foco ao acionador.
 - **Uso pendente:** o motivo de perda do lead ainda não tem decisão; até o
-  RFC complementar (ACT-T03), a spec proíbe inferir perda e não há status
+  RFC complementar (ACT-T04), a spec proíbe inferir perda e não há status
   novo. O componente não entra em produção para esse fluxo antes disso.
 
 #### `EmptyState` e limite
@@ -839,3 +839,95 @@ depende de decisão ainda não registrada, isso está dito no próprio item.
 - Uma `primary` por região: a fila não tem botões; o detalhe tem uma.
 - O orçamento da §18 permanece: 9 controles em 390×844 e 14 em 1366×768
   para o vendedor, com fixture de cinco objetos.
+
+## 19. Práticas adotadas no design (ACT-T04, 05/11/2026)
+
+Práticas usadas no redesenho do Dashboard e adotadas para qualquer nova
+superfície. Valem antes do código: um desenho que não cumpre estas práticas
+volta para revisão, não segue para implementação.
+
+### Partir do que existe
+
+- Desenhar sobre o que já está no `master` e nas specs, não sobre a memória
+  do produto. Antes da primeira prancheta, confirmar requisitos, contratos de
+  API e componentes entregues; o desenho não cria comportamento sem requisito.
+- Quando o desenho pede algo que a spec exclui ou não define, a proposta vira
+  pergunta ao PO e, se aceita, RFC/ADR antes do código.
+- Verificar se outra sessão está alterando os mesmos arquivos antes de
+  implementar; duas reescritas paralelas da mesma tela são proibidas.
+
+### Protótipo por papel e por momento
+
+- Uma prancheta por papel (gestor, vendedor) e por momento da tarefa (fila,
+  detalhe, folha de decisão), nos tamanhos de referência 390×844 e
+  1366–1440 px. Páginas são fluidas e precisam funcionar na largura do
+  celular.
+- Protótipos interativos só onde a interação decide o desenho (filtros,
+  período, escolha obrigatória); o resto é estático.
+
+### Dados de exemplo honestos
+
+- Dados sempre sintéticos, com nomes abreviados e sem PII ou mensagens
+  reais.
+- Os números fecham entre todas as telas: a soma por vendedor, loja e "sem
+  atribuição" é igual ao total; o período do gráfico bate com o indicador.
+  Números incoerentes escondem erro de modelo.
+- Métrica que ainda não existe no código aparece marcada como "Proposta"
+  (borda tracejada) até ter RFC; existente e proposta nunca se misturam sem
+  marca.
+
+### Carga cognitiva
+
+- Uma ação principal por região; listas não carregam botões. O padrão é fila
+  de linhas selecionáveis + detalhe com uma pergunta e uma ação principal.
+- Ações raras ficam em "Mais"; decisões auditáveis (como perda) abrem folha
+  com motivo obrigatório.
+- Tabela com muitas colunas vira visões alternáveis (Vendas, Atendimento,
+  Ritmo e perdas) em vez de rolagem lateral de 13 colunas.
+- Respeitar o orçamento de controles da §16 e da §18 na primeira tela.
+
+### Métricas de pessoas
+
+- Toda métrica tem definição visível ("Como medimos") com fonte, janela e
+  exclusões.
+- Sem nota única nem ranking punitivo (PERF-06): destaques nomeiam o fato
+  ("7 conversas sem resposta no expediente"), não um julgamento.
+- O vendedor vê só os próprios números (PERF-07). Medidas de presença ou
+  ritmo de colaboradores exigem finalidade declarada, transparência para a
+  equipe e retenção limitada.
+
+### Integrações refletem o provedor
+
+- A interface só oferece o que o provedor suporta: um link InfinitePay vence
+  em 24h e é de uso único, então a ação é "Gerar novo link", nunca
+  "Reenviar".
+- Estados do provedor aparecem com o rótulo do domínio (por exemplo,
+  "Resultado a conferir"); resultado incerto vai para conferência humana.
+- Integração ainda fora do `master` aparece como "Em breve", sem números
+  que pareçam operacionais.
+
+### Escala desde o desenho
+
+- Limites declarados na interface: a fila corta em 100 itens e anuncia o
+  corte; com 8 ou mais pessoas, a tabela da equipe ganha busca e "Ver
+  todos".
+- Nomes longos são cortados com reticências e o nome completo fica
+  acessível; tabelas largas rolam dentro do próprio quadro; valores grandes
+  usam `tabular-nums`.
+- Novos canais de venda entram como linhas próprias que reconciliam o total,
+  sem mudar a estrutura da tabela.
+
+### Revisão de conformidade antes de publicar
+
+- Piso de 13 px, sem caixa alta, raios da §6, uma `primary` por região, alvo
+  de 44 px, contraste 4,5:1 e status com texto e ícone.
+- Botões, links e campos reais mesmo no protótipo (`button`, `a href`,
+  `label`); ícone sem texto leva nome acessível.
+
+### Escalar ao design system no mesmo ciclo
+
+- Todo padrão novo vira componente documentado na §8 e na seção da superfície
+  (anatomia, estados, teclado/ARIA, uso e não uso) no mesmo ciclo do
+  desenho, e a prancheta "Componentes" do protótipo espelha este documento.
+- Decisões do PO entram com data no `tasks.md` da feature; numeração de
+  RFC, ADR e migração segue o maior número entre todas as branches remotas.
