@@ -118,9 +118,19 @@ function fixture(patch = {}) {
     'lookups',
     'mappings',
     'project',
+    'exportOrder',
   ]) {
     runtime[method] = async (/** @type {any} */ input) => {
       calls.push({ method, input });
+      if (method === 'exportOrder')
+        return {
+          operationId: 'synthetic-operation',
+          orderId: input.orderId,
+          number: '41-CRM',
+          state: 'queued',
+          stage: 'customer',
+          creationEnabled: false,
+        };
       if (method === 'authorize')
         return {
           authorizationUrl:
@@ -518,4 +528,81 @@ test('phase two publishes no route to create remote customer, product, variation
     assert.equal(response.statusCode, 404);
   }
   assert.deepEqual(calls, []);
+});
+
+test('T07 export command forwards only the encrypted preview under current Olist permission and returns 202', async (t) => {
+  const { api, calls, authCalls, logs } = fixture({
+    functionName: 'Financeiro',
+    capabilities: [],
+    olistEnabled: true,
+  });
+  t.after(() => api.close());
+  const response = await api.inject({
+    method: 'POST',
+    url: '/api/v1/orders/order-of-another-owner/olist/export',
+    headers,
+    payload: { previewToken: 'encrypted-preview-receipt' },
+  });
+  assert.equal(response.statusCode, 202, response.body);
+  assert.equal(response.json().state, 'queued');
+  assert.equal(response.json().creationEnabled, false);
+  assert.equal(response.headers['cache-control'], 'private, no-store');
+  assert.equal(response.headers['referrer-policy'], 'no-referrer');
+  assert.equal(calls[0].method, 'exportOrder');
+  assert.equal(calls[0].input.orderId, 'order-of-another-owner');
+  assert.equal(calls[0].input.previewToken, 'encrypted-preview-receipt');
+  assert.equal(calls[0].input.idempotencyKey, headers['idempotency-key']);
+  assert.equal(authCalls[0].write, true);
+  assert.equal(authCalls[0].input.action, 'olist.export');
+  assert.equal(
+    calls[0].input.sessionBinding,
+    createHash('sha256').update(session).digest('hex'),
+  );
+  assert.doesNotMatch(
+    response.body + logs.join(''),
+    /encrypted-preview-receipt/u,
+  );
+});
+test('T07 strict export body refuses commercial authority and only active enabled humans can command', async (t) => {
+  const valid = fixture({ olistEnabled: true });
+  t.after(() => valid.api.close());
+  for (const payload of [
+    {},
+    { previewToken: 'encrypted', snapshot: {} },
+    { previewToken: 'encrypted', totalCents: 1 },
+    { previewToken: 'encrypted', accountKey: 'forged' },
+    { previewToken: 'encrypted', settings },
+    { previewToken: 'encrypted', actorId: 'forged' },
+    [],
+    null,
+  ]) {
+    const response = await valid.api.inject({
+      method: 'POST',
+      url: '/api/v1/orders/order-of-another-owner/olist/export',
+      headers: { ...headers, 'content-type': 'application/json' },
+      payload: payload === null ? 'null' : payload,
+    });
+    assert.equal(response.statusCode, 400, response.body);
+  }
+  assert.deepEqual(valid.calls, []);
+  for (const patch of [
+    { olistEnabled: false },
+    { disabledAt: '2026-11-06T12:00:00Z' },
+    { kind: /** @type {const} */ ('assistant') },
+  ]) {
+    const f = fixture({ olistEnabled: true, ...patch });
+    t.after(() => f.api.close());
+    assert.equal(
+      (
+        await f.api.inject({
+          method: 'POST',
+          url: '/api/v1/orders/order-of-another-owner/olist/export',
+          headers,
+          payload: { previewToken: 'encrypted' },
+        })
+      ).statusCode,
+      403,
+    );
+    assert.deepEqual(f.calls, []);
+  }
 });

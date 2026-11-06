@@ -1,17 +1,88 @@
-# Olist — Fase 3: composição, prévia e cadastros
+# Olist — Fase 3: composição, prévia e comando Olist
 
-OLIST-T20/T21/T26/T24/T06/T22, composição, fontes, prévia e cadastros. Requisitos
+OLIST-T20/T21/T26/T24/T06/T22/T07, composição, fontes, cadastros e comando. Requisitos
 OLIST-09–10, 29, 34, 40–44;
 [ADR 057](../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
+
+## T07 — comando idempotente, snapshot e job
+
+OLIST-01–02, 06, 11–15, 30, 33. `POST /api/v1/orders/:id/olist/export` recebe
+somente `{previewToken}`. Exige humano ativo com checkbox Olist (incluindo
+Financeiro/Pedido alheio), sessão, CSRF, Origin e Idempotency-Key opaca válida.
+Não aceita conta, preço, total, vendedor, versões, cadastro ou payload ERP do
+navegador. A resposta 202 expõe somente operationId, orderId, number, state,
+stage e creationEnabled:false. Ela reconhece a operação local e não comprova
+qualquer inclusão ou despacho no provedor. Usar o GET Olist para estado atual.
+
+### Aceitação e concorrência
+
+O comando bloqueia autoridade atual, conversa antes do Pedido e Pedido desde a
+primeira leitura exclusiva, evitando upgrade SHARE→UPDATE entre duas abas.
+A prévia é autenticada por AAD de ator/sessão/Pedido/conta/contexto. Sua primeira
+aceitação revalida expiração, fontes e sourceVersions completos (inclusive
+identidade do Contato), parâmetros e conexão na mesma transação do comando.
+A prévia T07 passou a conter os parâmetros centrais cifrados para congelamento;
+recibo antigo/obsoleto exige nova conferência antes de uma primeira operação.
+Não há GET nem POST ao ERP nesse comando.
+
+Snapshot, reserva lógica por Pedido/conta, publicação outbox, evento, auditoria
+olist.export.request e conclusão do recibo idempotente compartilham exatamente
+o client da transação do PostgresIdempotencyRecordStore. Falha em qualquer uma
+dessas escritas reverte todas. O job carrega somente olist_export_id, na fila
+olist. A configuração/versões e os dados comerciais mínimos ficam no envelope
+AES-GCM do snapshot, sem sessão, ficha, arte, anexos, IA ou notas de atendimento.
+
+A chave é escopada por ator/contexto/ação e o fingerprint do request inclui
+Pedido, token e sessão. Preserve a mesma chave e token no retry. Mesma chave
+com outro corpo, sessão ou alvo é conflito. Chaves ou tokens de prévia distintos
+do mesmo plano convergem para a operação única, sem duplicar job/evento/auditoria
+ou mudar executor/época originais. O fingerprint semântico é HMAC de dados e
+versões oficiais, excluindo IV, tempo da prévia, sessão, ator e observações de
+recursos. Divergência real retorna OLIST_EXPORT_CONFLICT.
+
+### Replay, data e gates
+
+Replay da mesma chave retorna a resposta original mesmo após o token expirar,
+mas revalida sessão, usuário/checkbox/época, configuração e gates atuais antes
+de ler o recibo persistido. Nova chave para operação existente autentica o token
+e compara a semântica antes de devolver o vínculo; não recria, não exige fontes
+antigas ainda iguais e não recalcula o snapshot. Retorno de operação existente
+não renova a autorização do executor ou as versões congeladas para a T08.
+
+Com orderDate existente, o snapshot a preserva; sem ela, congela o dia de São
+Paulo do primeiro comando aceito. Virar o dia antes da primeira aceitação exige
+nova prévia. No fingerprint a data proposta ausente permanece null, permitindo
+consultar a mesma reserva em outro dia sem alterar a data efetiva congelada.
+Não altera status, quitação, Nota criada, datas, total, ficha ou métricas CRM.
+
+Conta exige creation_enabled=true e recovery_required=false, conexão atual
+válida e sem renovação/troca em curso. Esses controles continuam desligados por
+padrão e nenhum valor real foi modificado. A fila olist não é consumida pelo
+worker padrão: o despacho e a revalidação de cada efeito continuam em T08.
+Não ativar o piloto só porque o comando local devolveu 202.
+
+### Migração e rollback
+
+Aplicar 0067_olist_export_command.expand.sql antes do código. Acrescenta
+command_fingerprint imutável ao snapshot. Linhas antigas continuam com null;
+não são reinterpretadas, preenchidas ou substituídas para autorizar outra venda.
+Comando novo sobre reserva antiga sem fingerprint pede análise explícita.
+Não há nova infraestrutura ou dependência.
+
+Rollback desliga comandos novos e preserva fila/snapshots, chaves/envelopes,
+0066/0067, fingerprints, vínculos e auditoria. Não apagar operação, limpar job,
+restaurar backup ou excluir cadastro ERP para liberar outra tentativa. A ordem
+de locks de leitura Contacts/identidades ainda pode disputar com merge legado;
+um deadlock reverte o comando local inteiro, sem efeito externo. Nenhum retry
+cego de efeito ERP foi introduzido por esse tratamento.
 
 ## T22 — resolução e criação segura de cadastros
 
 OLIST-07–08, 12–17, 27, 35–39. `createOlistResourceResolver` é uma porta interna:
 recebe exportId e autoridade atual, carrega o snapshot cifrado/imutável do export
 e ignora qualquer plano comercial fornecido pelo caller. Não existe rota pública
-para cadastros nem handler de worker ativo. T07 ainda precisa aceitar/congelar o
-comando humano e T08 despachar a sequência/venda. Criação real continua desligada.
+para cadastros nem handler de worker ativo. T07 está descrita acima; T08 ainda precisa despachar a sequência/venda. Criação real continua desligada.
 
 ### Snapshot e parâmetros
 
@@ -472,3 +543,36 @@ corrigidas para sku, conforme schema oficial, sem aceitar codigo como prova.
 
 Logs sintéticos em var/olist-t22-*.log, não versionados. Entrega atômica OLIST-T22
 na branch codex/olist-phase3. Próximo item T07; gate F3 permanece aberto.
+
+## Fechamento T07 — 06/11/2026
+
+Comando idempotente e migration expand 0067 entregues. Uma operação por
+Pedido/conta, snapshot/job/evento/auditoria/recibo na mesma transação, com
+comando HTTP estrito e autoridade/época atuais inclusive antes do replay.
+Nenhum acesso autenticado ao ERP, despacho, deploy, habilitação ou piloto.
+Snapshot local é limitado a 128 KiB; falha de limite/persistência não publica
+artefatos parciais. Não há nova dependência ou infraestrutura.
+
+- `npm run validate`: aprovado, 1886 testes/20 skips explícitos, incluindo
+  tipos, lint, fronteiras, formatação, validadores e build.
+- SQL do comando/API: 12/12 aprovados, zero skips; confirma duas prévias/chaves/
+  runtimes, replay após expiração/dia seguinte, fontes obsoletas, revogação,
+  configuração ausente e rollback em três fronteiras de persistência.
+- SQL do repositório T07: 8/8 aprovados, zero skips; cobre conexões concorrentes,
+  plano divergente, outro executor, outer transaction sem nested commit e legado.
+- Regressão SQL ampliada Pedidos/Loja/Olist: 133/133 aprovados, zero skips.
+- API de fronteira: 15/15 aprovados; OpenAPI atualizado.
+- `npm audit --audit-level=high`: aprovado, zero altas/críticas; um baixo/cinco
+  moderados preexistentes, sem atualização de dependências.
+- Revisão independente Backend/QA sem findings altos/críticos restantes.
+
+E2E com seis workers teve 484 aprovados/7 skips e timeout de 30 segundos no
+mesmo dispositivo sintético Firefox, em duas execuções. O caso isolado passou
+1/1, sem alteração de teste, timeout ou código. A execução integral final usa
+dois workers e terminou com 485 aprovados/7 skips previstos, sem falhas e sem
+alterar testes ou limites de tempo. Log var/olist-t07-e2e-workers2.log.
+
+Logs sintéticos em var/olist-t07-*.log, fora do versionamento. As duas novas
+suítes PostgreSQL também entram em test:olist:live; os skips do gate unitário
+foram executados separadamente em banco dedicado. Entrega atômica OLIST-T07 na
+branch codex/olist-phase3. Próximo item T08; gate F3 permanece aberto.

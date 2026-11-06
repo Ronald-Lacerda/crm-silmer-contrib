@@ -24,6 +24,21 @@ guardrail, abertura humana, transporte, reservas, epoch e revisão; preparação
 offline recusa drift e dados fixados. Sem migração ou infraestrutura nova.
 [Operação e rollback](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T07 — comando idempotente com snapshot e job (06/11/2026)
+
+OLIST-01–02, 06, 11–15, 30, 33: POST /api/v1/orders/:id/olist/export recebe
+somente previewToken, com sessão/CSRF/Origin/Idempotency-Key e checkbox atual.
+A primeira aceitação revalida a fonte na mesma transação que grava snapshot
+cifrado, operação única por Pedido/conta, job, evento, auditoria e recibo.
+Request divergente com a mesma chave é conflito; prévias/chaves do mesmo plano
+convergem sem duplicar operação ou trocar executor/data. Migration expand 0067
+protege o fingerprint semântico imutável e preserva os snapshots antigos.
+
+A data ERP é congelada no comando sem confirmar ou mudar datas do Pedido.
+Gates atuais são obrigatórios inclusive no replay; a fila olist permanece sem
+consumidor nesta entrega. Conta segue desabilitada por padrão, sem despacho,
+acesso real ao ERP, deploy ou piloto. [Contrato e rollback](docs/runbooks/olist-phase3.md#t07--comando-idempotente-snapshot-e-job).
+
 ## OLIST-T22 — resolução e criação segura de cadastros (06/11/2026)
 
 OLIST-07–08, 12–17, 27, 35–39: resolvedor interno carrega somente o snapshot
@@ -37,7 +52,7 @@ busca vazia. Reconciliação positiva preserva o histórico anterior.
 Política fiscal opcional productFiscal nos parâmetros centrais é explícita e
 versionada, sem default. Prévia conhece a política e confirma situação/SKU nos
 catálogos; cliente não recebe codigo nem acesso ao ERP. Nenhuma rota criadora
-ou handler de worker foi habilitado: T07/T08, UI, operação e piloto continuam
+ou handler de worker foi habilitado: T07 está descrita acima; T08, UI, operação e piloto continuam
 pendentes. [Contrato e rollback](docs/runbooks/olist-phase3.md#t22--resolução-e-criação-segura-de-cadastros).
 
 ## OLIST-T06 — prévia completa sem escrita ERP (06/11/2026)

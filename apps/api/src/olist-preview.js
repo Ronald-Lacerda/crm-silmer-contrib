@@ -47,7 +47,7 @@ export function createOlistPreview(database, options) {
   );
   /** @param {any} input */
   async function snapshot(input) {
-    return database.transaction(async (/** @type {any} */ tx) => {
+    const work = async (/** @type {any} */ tx) => {
       const actor = await lockOlistActor(tx, input, 'olist.export', clock());
       if (
         !config.configured ||
@@ -188,6 +188,7 @@ export function createOlistPreview(database, options) {
         contents: identityHash(config.hmacKey, 'preview-source', [
           source,
           buyer,
+          [buyerContactId, buyerVersion, source.sourceRevision],
           settings,
           resources,
           operation,
@@ -208,7 +209,10 @@ export function createOlistPreview(database, options) {
           sourceRevision: source.sourceRevision,
         },
       };
-    });
+    };
+    return input.transaction
+      ? work(input.transaction)
+      : database.transaction(work);
   }
   /** @param {any} input */
   function entity(input) {
@@ -312,6 +316,7 @@ export function createOlistPreview(database, options) {
               expiresAt,
               commercial: plan.commercial,
               customer: plan.customer,
+              settings: before.settings,
               productFiscal: plan.productFiscal,
               policy: 'exact-cent-v1',
               sourceVersions: before.sourceVersions,
@@ -358,44 +363,15 @@ export function createOlistPreview(database, options) {
         previewToken,
       };
     },
+    // Server-only reader: the caller has already locked current authority.
+    readReceipt,
+    assertFreshReceipt,
     /** Re-read current authority and all local versions; no remote call or reservation.
      * @param {any} input */
     async checkPreview(input) {
-      // Authorization precedes decoding to avoid an envelope/identity oracle.
       const current = await snapshot(input);
-      if (
-        typeof input.previewToken !== 'string' ||
-        input.previewToken.length > 262144 ||
-        !/^[A-Za-z0-9_-]+$/u.test(input.previewToken)
-      )
-        throw new OlistError('INVALID_REQUEST', 400);
-      let receipt;
-      try {
-        receipt = open(
-          JSON.parse(
-            Buffer.from(input.previewToken, 'base64url').toString('utf8'),
-          ),
-          config.envelopeKey,
-          'preview',
-          config.accountKey,
-          entity(input),
-        );
-      } catch {
-        throw new OlistError('OLIST_PREVIEW_INVALID', 409);
-      }
-      const issued = Date.parse(receipt.createdAt),
-        expires = Date.parse(receipt.expiresAt);
-      if (
-        !Number.isFinite(issued) ||
-        !Number.isFinite(expires) ||
-        expires - issued !== TTL ||
-        issued > clock().getTime()
-      )
-        throw new OlistError('OLIST_PREVIEW_INVALID', 409);
-      if (clock().getTime() >= expires)
-        throw new OlistError('OLIST_PREVIEW_EXPIRED', 409);
-      if (fingerprint(current.binding) !== fingerprint(receipt.binding))
-        throw new OlistError('OLIST_PREVIEW_STALE', 409);
+      const receipt = readReceipt(input);
+      validateFresh(current, receipt);
       return {
         valid: true,
         creationEnabled: false,
@@ -403,4 +379,57 @@ export function createOlistPreview(database, options) {
       };
     },
   });
+  /** @param {any} input */
+  function readReceipt(input) {
+    if (
+      typeof input.previewToken !== 'string' ||
+      input.previewToken.length > 262144 ||
+      !/^[A-Za-z0-9_-]+$/u.test(input.previewToken)
+    )
+      throw new OlistError('INVALID_REQUEST', 400);
+    let receipt;
+    try {
+      receipt = open(
+        JSON.parse(
+          Buffer.from(input.previewToken, 'base64url').toString('utf8'),
+        ),
+        config.envelopeKey,
+        'preview',
+        config.accountKey,
+        entity(input),
+      );
+    } catch {
+      throw new OlistError('OLIST_PREVIEW_INVALID', 409);
+    }
+    const issued = Date.parse(receipt.createdAt),
+      expires = Date.parse(receipt.expiresAt);
+    if (
+      !Number.isFinite(issued) ||
+      !Number.isFinite(expires) ||
+      expires - issued !== TTL ||
+      issued > clock().getTime() ||
+      receipt.binding?.account !== config.accountKey ||
+      receipt.binding?.context !== config.contextKey
+    )
+      throw new OlistError('OLIST_PREVIEW_INVALID', 409);
+    return receipt;
+  }
+  /** @param {any} current @param {any} receipt */
+  function validateFresh(current, receipt) {
+    if (clock().getTime() >= Date.parse(receipt.expiresAt))
+      throw new OlistError('OLIST_PREVIEW_EXPIRED', 409);
+    if (
+      fingerprint(current.binding) !== fingerprint(receipt.binding) ||
+      fingerprint(current.sourceVersions) !==
+        fingerprint(receipt.sourceVersions)
+    )
+      throw new OlistError('OLIST_PREVIEW_STALE', 409);
+  }
+  /** Inside the export command's transaction: no HTTP or separate connection.
+   * @param {any} input @param {any} receipt */
+  async function assertFreshReceipt(input, receipt) {
+    const current = await snapshot(input);
+    validateFresh(current, receipt);
+    return current;
+  }
 }

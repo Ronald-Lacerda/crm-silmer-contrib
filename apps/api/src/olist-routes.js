@@ -28,6 +28,8 @@ const CODES = new Set([
   'OLIST_PREVIEW_STALE',
   'OLIST_PREVIEW_EXPIRED',
   'OLIST_PREVIEW_INVALID',
+  'OLIST_EXPORT_CONFLICT',
+  'IDEMPOTENCY_RECORD_PENDING',
 ]);
 /** @param {any} reply @param {()=>Promise<any>} work */
 async function respond(reply, work) {
@@ -151,6 +153,7 @@ export function registerOlistRoutes(api, runtime, contextFor) {
   for (const [path, method, fields] of [
     ['/preview', 'preview', []],
     ['/preview/check', 'checkPreview', ['previewToken']],
+    ['/export', 'exportOrder', ['previewToken']],
   ]) {
     api.post(
       '/api/v1/orders/:orderId/olist' + path,
@@ -165,10 +168,12 @@ export function registerOlistRoutes(api, runtime, contextFor) {
             request.body,
             /** @type {string[]} */ (fields),
           );
+          if (method === 'exportOrder') reply.code(202);
           return runtime[/** @type {string} */ (method)]({
             ...input,
             ...body,
             ...contextFor(request),
+            idempotencyKey: request.headers['idempotency-key'],
             orderId: /** @type {any} */ (request.params).orderId,
           });
         }),

@@ -1,3 +1,4 @@
+import { createOlistExportCommand } from './olist-export-command.js';
 import { createOlistPreview } from './olist-preview.js';
 import {
   PostgresIdempotencyRecordStore,
@@ -136,6 +137,14 @@ export function createOlistApiRuntime(database, options) {
       };
     });
   }
+  const preview = createOlistPreview(database, {
+    config,
+    connection,
+    environment: env,
+    clock,
+    fetch: options.fetch,
+    timeoutMs: options.timeoutMs,
+  });
   return Object.freeze({
     /** @param {any} input */ authorizeRead: (input) =>
       options.access.authorizeRead(input),
@@ -147,13 +156,13 @@ export function createOlistApiRuntime(database, options) {
     /** @param {any} input */ disconnect: (input) =>
       mutate(input, 'disconnect'),
     /** @param {any} input */ settings: (input) => mutate(input, 'settings'),
-    ...createOlistPreview(database, {
+    preview: preview.preview,
+    checkPreview: preview.checkPreview,
+    ...createOlistExportCommand(database, {
       config,
-      connection,
+      preview,
       environment: env,
       clock,
-      fetch: options.fetch,
-      timeoutMs: options.timeoutMs,
     }),
     project,
     /** @param {any} input */

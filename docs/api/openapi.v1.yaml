@@ -73,6 +73,59 @@ paths:
     $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1lookup'
   /integrations/n8n/billing/charges/{chargeId}/payment:
     $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1payment'
+  /orders/{orderId}/olist/export:
+    post:
+      operationId: requestOlistExport
+      summary: Reservar uma operação Olist com snapshot e job locais
+      description: >-
+        OLIST-T07 / OLIST-01–02,13–15,30,33. Humano ativo com checkbox Olist,
+        incluindo Financeiro e Pedido de outro responsável/origem/status. Sessão,
+        CSRF, Origin e Idempotency-Key obrigatórios. Recebe somente o recibo cifrado
+        da prévia; nenhum preço, total, conta, vendedor, payload ou versão do navegador.
+        Primeira inclusão revalida a prévia/fonte/configuração sob os mesmos locks
+        que persistem operação, snapshot cifrado, job, evento, auditoria e recibo.
+        Uma operação por Pedido/conta; chaves/prévias distintas do mesmo plano
+        convergem sem duplicar jobs ou alterar o executor original. Mesma chave
+        com corpo/sessão/alvo divergentes é conflito; preserve chave e token no retry.
+        Replay mantém snapshot/data/resposta originais mesmo após expiração, com
+        autoridade, época e gates atuais. Nova chave com mesma operação confere
+        autenticidade e semântica antes de retornar o vínculo, sem novo envio.
+        Sem data ERP, congela o dia de São Paulo do primeiro comando aceito.
+        Não confirma nem muda pagamento/entrega do CRM. Conta permanece desabilitada
+        por padrão; exige creation_enabled e ausência de recovery. Sem HTTP ERP e
+        sem consumidor da fila olist nesta tarefa; despacho permanece T08.
+        Resposta private/no-store; dez comandos/minuto, corpo máximo 270000 bytes.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+        - { in: path, name: orderId, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [previewToken]
+              properties:
+                previewToken:
+                  {
+                    type: string,
+                    maxLength: 262144,
+                    pattern: '^[A-Za-z0-9_-]+$',
+                  }
+      responses:
+        '202':
+          description: Recibo da operação local, nova ou já aceita; não comprova despacho ERP
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistExportCommandReceipt' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
   /orders/{orderId}/olist/preview:
     post:
       operationId: previewOlistOrder
@@ -3434,6 +3487,31 @@ components:
       required: true
       schema: { type: string, minLength: 1, maxLength: 128 }
   schemas:
+    OlistExportCommandReceipt:
+      type: object
+      additionalProperties: false
+      required: [operationId, orderId, number, state, stage, creationEnabled]
+      properties:
+        operationId: { type: string, format: uuid }
+        orderId: { type: string }
+        number: { type: string }
+        state:
+          {
+            enum:
+              [
+                queued,
+                resolving,
+                ready,
+                reserved,
+                confirmed,
+                linked,
+                uncertain,
+                rejected,
+                invalidated,
+              ],
+          }
+        stage: { enum: [customer, product, variation, sale, complete] }
+        creationEnabled: { const: false }
     OlistPreviewResolution:
       type: object
       additionalProperties: false

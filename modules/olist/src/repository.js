@@ -113,6 +113,34 @@ export function createOlistRepository(database, options) {
       throw new OlistError('OLIST_CONNECTION_CHANGED');
     return connection;
   }
+  /** Final local command gate. It never performs HTTP and is also applied
+   * before an existing operation is returned through a new idempotency key.
+   * @param {any} client @param {any} input */
+  async function exportCommandGuard(client, input) {
+    await lockOlistActor(client, input, 'olist.export', clock());
+    const connection = (
+      await client.query(
+        'SELECT c.*,a.creation_enabled,a.recovery_required FROM crm.olist_connections c JOIN crm.olist_accounts a USING(account_key) WHERE c.context_key=$1 AND c.account_key=$2 FOR SHARE OF c,a',
+        [input.contextKey, input.accountKey],
+      )
+    ).rows[0];
+    if (!connection?.creation_enabled || connection.recovery_required)
+      throw new OlistError('OLIST_CREATION_DISABLED');
+    if (
+      connection.reconnect_required ||
+      !connection.token_envelope ||
+      connection.refresh_nonce ||
+      connection.exchange_nonce ||
+      !connection.expires_at ||
+      new Date(connection.expires_at) <= clock() ||
+      (input.connectionGeneration !== undefined &&
+        Number(connection.generation) !== input.connectionGeneration) ||
+      (input.connectionVersion !== undefined &&
+        Number(connection.version) !== input.connectionVersion)
+    )
+      throw new OlistError('OLIST_CONNECTION_CHANGED');
+    return connection;
+  }
   /** @param {any} client @param {any} input @param {string} code @param {any} row */
   async function resourceAudit(client, input, code, row) {
     await event(
@@ -812,19 +840,87 @@ export function createOlistRepository(database, options) {
         ).rows[0];
       });
     },
-    /** This is not exposed by F2 HTTP. New effects require the account recovery gate.
+    /** Lock a logical command target before comparing a new preview receipt.
+     * Server-only result includes its authenticated snapshot, never a public spread.
+     * @param {any} input */
+    async findExport(input) {
+      text(input.orderId, 200);
+      const work = async (/** @type {any} */ client) => {
+        await exportCommandGuard(client, input);
+        const order = await client.query(
+          'SELECT id FROM crm.orders WHERE id=$1 FOR UPDATE',
+          [input.orderId],
+        );
+        if (!order.rows[0]) throw new OlistError('ORDER_NOT_FOUND', 404);
+        const row = (
+          await client.query(
+            'SELECT * FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2',
+            [input.accountKey, input.orderId],
+          )
+        ).rows[0];
+        return row
+          ? {
+              ...row,
+              snapshot: open(
+                row.snapshot_envelope,
+                options.envelopeKey,
+                'export-snapshot',
+                input.accountKey,
+                row.id,
+              ),
+            }
+          : null;
+      };
+      return input.transaction
+        ? work(input.transaction)
+        : database.transaction(work);
+    },
+    /** The caller may own the idempotency/audit transaction. The operation,
+     * encrypted snapshot, queue publication and audit use that exact client.
      * @param {any} input */
     async prepareExport(input) {
       integer(input.orderVersion);
       integer(input.settingsVersion, true);
       integer(input.authorizationVersion, true);
-      return database.transaction(async (/** @type {any} */ client) => {
-        await effectGuard(client, input);
+      integer(input.connectionGeneration, true);
+      if (input.connectionVersion !== undefined)
+        integer(input.connectionVersion, true);
+      const snapshot = requestPayload(input.snapshot);
+      const fingerprint =
+        input.snapshotFingerprint ??
+        identityHash(options.hmacKey, 'export-command', [
+          input.accountKey,
+          input.contextKey,
+          input.connectionGeneration,
+          input.orderId,
+          input.orderVersion,
+          input.settingsVersion,
+          snapshot,
+        ]);
+      if (
+        typeof fingerprint !== 'string' ||
+        !/^[a-f0-9]{64}$/u.test(fingerprint)
+      )
+        throw new OlistError('INVALID_REQUEST', 400);
+      const work = async (/** @type {any} */ client) => {
+        await exportCommandGuard(client, input);
         const order = await client.query(
           'SELECT version FROM crm.orders WHERE id=$1 FOR UPDATE',
           [input.orderId],
         );
-        if (Number(order.rows[0]?.version) !== input.orderVersion)
+        if (!order.rows[0]) throw new OlistError('ORDER_NOT_FOUND', 404);
+        const existing = (
+          await client.query(
+            'SELECT * FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2',
+            [input.accountKey, input.orderId],
+          )
+        ).rows[0];
+        if (existing) {
+          if (existing.command_fingerprint !== fingerprint)
+            throw new OlistError('OLIST_EXPORT_CONFLICT');
+          return existing;
+        }
+        if (Number(order.rows[0].version) !== input.orderVersion)
           throw new OlistError('VERSION_CONFLICT');
         const settings = await client.query(
           'SELECT version FROM crm.olist_settings WHERE account_key=$1 FOR SHARE',
@@ -834,44 +930,53 @@ export function createOlistRepository(database, options) {
           throw new OlistError('VERSION_CONFLICT');
         const id = randomUUID();
         const reference = 'CRM-' + id;
-        const { rows } = await client.query(
-          'INSERT INTO crm.olist_exports(id,account_key,context_key,connection_generation,order_id,order_version,settings_version,actor_id,authorization_version,reference,snapshot_envelope) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb) ON CONFLICT(account_key,order_id) DO NOTHING RETURNING *',
-          [
-            id,
-            input.accountKey,
-            input.contextKey,
-            input.connectionGeneration,
-            input.orderId,
-            input.orderVersion,
-            input.settingsVersion,
-            input.actor.id,
-            input.authorizationVersion,
-            reference,
-            JSON.stringify(
-              seal(
-                input.snapshot,
-                options.envelopeKey,
-                'export-snapshot',
-                input.accountKey,
-                id,
+        const row = (
+          await client.query(
+            'INSERT INTO crm.olist_exports(id,account_key,context_key,connection_generation,order_id,order_version,settings_version,actor_id,authorization_version,reference,snapshot_envelope,command_fingerprint) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12) RETURNING *',
+            [
+              id,
+              input.accountKey,
+              input.contextKey,
+              input.connectionGeneration,
+              input.orderId,
+              input.orderVersion,
+              input.settingsVersion,
+              input.actor.id,
+              input.authorizationVersion,
+              reference,
+              JSON.stringify(
+                seal(
+                  snapshot,
+                  options.envelopeKey,
+                  'export-snapshot',
+                  input.accountKey,
+                  id,
+                ),
               ),
-            ),
-          ],
-        );
-        if (!rows[0]) {
-          const current = await client.query(
-            'SELECT * FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2',
-            [input.accountKey, input.orderId],
-          );
-          return current.rows[0];
-        }
+              fingerprint,
+            ],
+          )
+        ).rows[0];
         await client.query(
           "INSERT INTO crm.outbox_jobs(id,job_type,idempotency_key,olist_export_id,status,queue,effect_policy,available_at,created_at,updated_at) VALUES($1,'olist.export',$2,$3,'pending','olist','queryable',$4,$4,$4)",
           [randomUUID(), id, id, clock()],
         );
         await event(client, input, 'OLIST_EXPORT_QUEUED', 1, id);
-        return rows[0];
-      });
+        await client.query(
+          "INSERT INTO crm.audit_events(id,actor_id,action,target_type,target_id,version,reason,correlation_id,occurred_at) VALUES($1,$2,'olist.export.request','olist-export',$3,'1','OLIST_EXPORT_QUEUED',$4,$5)",
+          [
+            randomUUID(),
+            input.actor.id,
+            id,
+            text(input.correlationId, 128),
+            clock(),
+          ],
+        );
+        return row;
+      };
+      return input.transaction
+        ? work(input.transaction)
+        : database.transaction(work);
     },
     /** One globally reserved effect per shared resource or sale. No HTTP under locks.
      * @param {any} input */
