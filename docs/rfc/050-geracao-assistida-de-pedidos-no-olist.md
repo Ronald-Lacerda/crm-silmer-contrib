@@ -18,7 +18,7 @@ implementada e validada localmente em 05/11/2026, no
 [commit 6a79cc8a](https://github.com/romulosutil/crm-silmer/commit/6a79cc8aecc3111dbfad5b8b14220f3b3df860aa).
 Fase 3 iniciada pela fatia T20b de composição persistida opt-in
 ([contrato e limites](../runbooks/olist-phase3.md)); T20/T21/T26/T24 concluídas em
-domínio/API; T06/T22/T07/T08 concluídas em 06/11/2026, com o gate F3 ainda aberto. As fases 4–6 permanecem pendentes.
+domínio/API; T06/T22/T07/T08/T09 concluídas em 06/11/2026, com o gate F3 ainda aberto. As fases 4–6 permanecem pendentes.
 A geração real continua desligada, sem deploy, conexão real homologada ou
 piloto nesta entrega. A revisão substitui
 as recomendações iniciais de preço unitário digitado, cadastro apenas existente, posse do pedido e edição após
@@ -823,9 +823,11 @@ geração e handlers de exportação continuam desligados nesta fase.
       revogação entre cadastros/venda e subtotal errado com total global igual.
       Dispatcher/worker opt-in e migration 0068 entregues; [contrato e evidências](../runbooks/olist-phase3.md#t08--despacho-reservado-e-comparação-remota).
       Despacho real desligado; gate F3 aberto.
-- [ ] **OLIST-T09** Vínculo existente/reconciliação administrativa de recurso
+- [x] **OLIST-T09** Vínculo existente/reconciliação administrativa de recurso
       e venda só por leitura. OLIST-13–18, 25, 30, 32, 36–39.
       Dono Backend. Depende T08. Evidência: zero/múltiplos/divergentes sem POST extra.
+      Vínculo com recibo cifrado/reconsulta e worker administrativo isolado
+      entregues em 0069; [contrato e gates locais](../runbooks/olist-phase3.md#t09--vínculo-existente-e-reconciliação-administrativa).
 - [ ] **OLIST-T23** Cancelamento local pré-exportação, ACL/motivo/auditoria,
       filtros de vendas/valor/filas/Financeiro e preservação de história/pagamento.
       OLIST-19, 21, 30, 45–47. Dono Backend. Depende T03/T07.
@@ -1047,7 +1049,7 @@ duplicar checkboxes. Decisão aceita não marca implementação como concluída.
 | OLIST-PLAN-02            | Tech Lead                                        | ADR 057, OLIST-01–50, T01–T26 e emendas canônicas                                                                                                     | Registrar no handoff                                                                                                              | Documental                                                                |
 | F1 / T01–T02             | Tech Lead; Integrações                           | [T01 revisada](../integrations/olist/contract-review.md); [T02 concluída no escopo exato](../integrations/olist/phase1-report.md), frações bloqueadas | Ver histórico OLIST-T01/T02                                                                                                       | F1 fechado no escopo exact-cent-v1; frações fora da exportação automática |
 | F2 / T03–T05/T19         | Tech Lead + Backend/Integrações/Frontend/A11y/QA | [Implementação e gates locais concluídos](../integrations/olist/phase2-implementation.md); 36 SQL e 485 E2E aprovados                                 | [6a79cc8a](https://github.com/romulosutil/crm-silmer/commit/6a79cc8aecc3111dbfad5b8b14220f3b3df860aa), push em codex/olist-phase2 | F2 local concluída; geração desligada, sem deploy/piloto                  |
-| F3 / T06–T10/T20–T24/T26 | Tech Lead + Backend/Integrações/QA               | T20/T21/T26/T24/T06/T22/T07/T08 concluídas; [comando e gates locais](../runbooks/olist-phase3.md#fechamento-t08--06112026)                                | Branch codex/olist-phase3, entregas OLIST-T06/T22/T07/T08                                                                             | F3 parcial; sem geração/deploy/piloto                                     |
+| F3 / T06–T10/T20–T24/T26 | Tech Lead + Backend/Integrações/QA               | T20/T21/T26/T24/T06/T22/T07/T08/T09 concluídas; [comando e gates locais](../runbooks/olist-phase3.md#fechamento-t09--06112026)                                | Branch codex/olist-phase3, entregas OLIST-T06/T22/T07/T08/T09                                                                             | F3 parcial; sem geração/deploy/piloto                                     |
 | F4 / T11–T13/T25         | A designar                                       | A preencher                                                                                                                                           | A preencher                                                                                                                       | UI/ficha v7                                                               |
 | F5 / T14–T15             | A designar                                       | A preencher                                                                                                                                           | A preencher                                                                                                                       | QA/operação                                                               |
 | F6 / T16–T18             | A designar                                       | A preencher                                                                                                                                           | A preencher                                                                                                                       | Piloto/ampliação                                                          |
@@ -1083,7 +1085,7 @@ Riscos, bloqueios e próximo item desbloqueado:
 ```
 
 Próximos itens: F1/T02 e F2/T03–T05/T19 concluídos para o escopo aprovado;
-continuar a Fase 3 por T09/T23/T10 após T20/T21/T26/T24/T06/T22/T07/T08 concluídas. O rollout depende também da interface na Fase 4.
+continuar a Fase 3 por T23/T10 após T20/T21/T26/T24/T06/T22/T07/T08/T09 concluídas. O rollout depende também da interface na Fase 4.
 As preparações anteriores T20a/T21a não fechavam essas tarefas; o fechamento
 de T20/T21 está registrado no runbook. A limitação fracionária da ADR 062 permanece registrada. Não liberar
 geração real antes de cadastro automático seguro, precisão por linha, filtros

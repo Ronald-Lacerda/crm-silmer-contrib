@@ -141,6 +141,22 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 ## OLIST-T20b — Início da Fase 3 (05/11/2026)
 
+## OLIST-T09 — vínculo e reconciliação administrativos (06/11/2026)
+
+- [x] Admin atual sem checkbox, rotas estritas, sessão/CSRF/Origin, recibo cifrado
+      por sessão/fontes e link idempotente com reconsulta e transação atômica.
+- [x] Legado sem referência/marcador exige bijeção inequívoca e prova completa;
+      referência alheia, divergência de linha e total compensado são recusados.
+- [x] Fila isolada de leituras e requests cifrados em 0069, guarda administrativa
+      atual/época/conexão/lease; nenhuma inclusão, retry de POST ou avanço automático.
+- [x] SKU/ID conferidos congelados para reuso, constraints comuns, histórico
+      incerto preservado e motivo cifrado, sem PII na auditoria/diagnóstico.
+- [x] Concorrência, fontes obsoletas, revogação, falhas de persistência e vertical
+      API→fila→worker somente GET verificadas em PostgreSQL dedicado.
+
+OLIST-13–18, 25, 30, 32, 36–39. [Contrato e gates](../../../docs/runbooks/olist-phase3.md#t09--vínculo-existente-e-reconciliação-administrativa).
+Próximos T23/T10; F3 aberto, despacho real/deploy/piloto desligados.
+
 ## OLIST-T08 — despacho reservado e venda (06/11/2026)
 
 - [x] Consumidor dedicado opt-in com snapshot/executor originais, lease antes de
@@ -152,7 +168,7 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
       exercitados com PostgreSQL dedicado e provedor sintético.
 
 OLIST-13–17, 20, 25–27, 36–41. [Contrato e gates](../../../docs/runbooks/olist-phase3.md#t08--despacho-reservado-e-comparação-remota).
-Próximos T09/T23/T10; F3 aberto, despacho real/deploy/piloto desligados.
+Próximos T23/T10; F3 aberto, despacho real/deploy/piloto desligados.
 
 ## OLIST-T07 — comando idempotente, snapshot e job (06/11/2026)
 
@@ -183,7 +199,7 @@ interface, deploy e piloto não foram habilitados.
       comprovados com fixtures sintéticas e PostgreSQL dedicado.
 
 OLIST-07–08, 12–17, 27, 35–39. [Contrato e evidências](../../../docs/runbooks/olist-phase3.md#t22--resolução-e-criação-segura-de-cadastros).
-T07 está concluída acima; próximos T09/T23/T10; F3 permanece aberto. Não há rota/worker criador
+T07 está concluída acima; próximos T23/T10; F3 permanece aberto. Não há rota/worker criador
 ativo, integração real, deploy ou piloto nesta entrega.
 
 ## OLIST-T06 — prévia completa (06/11/2026)
@@ -198,7 +214,7 @@ cadastro fiscal, centavos exatos, configuração e descoberta somente leitura.
 Recibo cifrado por sessão/conta/fontes com validade de 15 minutos, revalidação
 e pendências explícitas. Gate local/evidências no
 [runbook](../../../docs/runbooks/olist-phase3.md#t06--prévia-completa-sem-escrita-erp).
-T22/T07 estão concluídas acima; o próximo item é T09; gate F3, UI, deploy e piloto seguem
+T22/T07 estão concluídas acima; o próximo item é T23; gate F3, UI, deploy e piloto seguem
 abertos. Nenhuma criação ERP foi habilitada.
 
 ## OLIST-T24 — Fonte da loja sem alterar checkout (05/11/2026)
@@ -214,7 +230,7 @@ abertos. Nenhuma criação ERP foi habilitada.
 
 OLIST-01, 06–12, 19, 29, 34–35, 44. [ADR 067](../../../docs/adr/067-fontes-comerciais-suplementares-sem-reescrever-ficha.md),
 [runbook](../../../docs/runbooks/olist-phase3.md). T24/T26 concluídas no domínio/API;
-próxima tarefa T09. F3 permanece aberto, sem UI, deploy ou geração ERP.
+próxima tarefa T23. F3 permanece aberto, sem UI, deploy ou geração ERP.
 
 ## OLIST-T26 — Legado sem reescrever ficha (05/11/2026)
 

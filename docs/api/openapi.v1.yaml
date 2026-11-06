@@ -73,6 +73,170 @@ paths:
     $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1lookup'
   /integrations/n8n/billing/charges/{chargeId}/payment:
     $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1payment'
+  /orders/{orderId}/olist/existing/previews:
+    post:
+      operationId: previewExistingOlistSale
+      summary: Conferir venda existente por ID para vínculo administrativo
+      description: >-
+        OLIST-T09. Admin ativo sem exigência de checkbox; sessão/CSRF/Origin. Somente GETs oficiais, no máximo 64. Confere comprador, pai/grade/fiscal e cada linha/total. Referência e marcadores ausentes em legado exigem bijeção inequívoca; referência divergente bloqueia. Outras condições, origem e datas continuam obrigatórias. Recibo cifrado por ator/sessão/Pedido/conta/fontes/configuração expira em 15 minutos. Não cria export, job, cadastro ou venda. Dez comandos/minuto, 270000 bytes.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [saleId]
+              properties:
+                saleId:
+                  {
+                    type: string,
+                    pattern: '^[1-9][0-9]{0,15}$',
+                    description: ID ERP positivo e inteiro seguro; nunca URL.,
+                  }
+      responses:
+        '200':
+          description: Conferir venda existente por ID para vínculo administrativo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistExistingPreview' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '401': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '422': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /orders/{orderId}/olist/links:
+    post:
+      operationId: linkExistingOlistSale
+      summary: Vincular venda existente após reconsulta
+      description: >-
+        Admin atual sem checkbox. Exige motivo e recibo de conferência; não recebe preços, totais, conta ou mapping arbitrários. Reconsulta remoto fora de SQL e revalida ACL/sessão/fontes/versões na transação final com snapshot/vínculos/prova/auditoria/recibo. Uma venda por Pedido/conta e um Pedido por venda/conta. Tentativa de venda iniciada não admite exceção legada. Mesma chave/corpo preserva resposta após expiração com acesso atual; divergência conflita. Motivo fica cifrado; nenhum POST ERP, edição, exclusão ou avanço de dependentes. Dez comandos/minuto, 270000 bytes.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [previewToken, reason]
+              properties:
+                previewToken:
+                  {
+                    type: string,
+                    maxLength: 262144,
+                    pattern: '^[A-Za-z0-9_-]+$',
+                  }
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        '200':
+          description: Vincular venda existente após reconsulta
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistExistingLinkReceipt' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '401': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '422': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /orders/{orderId}/olist/reconcile:
+    post:
+      operationId: requestOlistReconciliation
+      summary: Enfileirar leitura administrativa de uma etapa
+      description: >-
+        Admin atual; motivo/versionamento/idempotência. Publica apenas olist.reconcile na fila isolada olist_reconcile. Funciona com criação desligada e executor original revogado. O worker lê snapshot/request congelados, revalida administrador/época/conexão/lease e grava prova; não instancia resolvedor criador nem writers e não avança dependentes. Zero/múltiplos/divergência conservam reservas. resourceId é null somente para sale, UUID obrigatório nas demais etapas. ExpectedVersion usa versão atual do alvo no diagnóstico. Dez comandos/minuto, 270000 bytes.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [stage, resourceId, expectedVersion, reason]
+              properties:
+                stage: { enum: [customer, product, variation, sale] }
+                resourceId: { type: [string, 'null'], format: uuid }
+                expectedVersion: { type: integer, minimum: 0 }
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        '202':
+          description: Enfileirar leitura administrativa de uma etapa
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistReadRequest' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '401': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '422': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /orders/{orderId}/olist/administration:
+    get:
+      operationId: readOlistAdministration
+      summary: Diagnóstico administrativo mínimo
+      description: Admin atual com sessão, independente de checkbox. Trinta leituras/minuto; no-store/no-referrer. Somente IDs, versões, estados e códigos, sem motivo, snapshot, cadastro fiscal, corpo remoto ou URL ERP adivinhada.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/HumanReadOrigin'
+      responses:
+        '200':
+          description: Diagnóstico administrativo mínimo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistAdministration' }
+        '401': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /orders/{orderId}/olist/reconciliations/{requestId}:
+    get:
+      operationId: readOlistReconciliation
+      summary: Consultar resultado persistido de reconciliação
+      description: Admin atual com sessão, independente de checkbox. Trinta leituras/minuto; no-store/no-referrer. Somente IDs, versões, estados e códigos, sem motivo, snapshot, cadastro fiscal, corpo remoto ou URL ERP adivinhada.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/HumanReadOrigin'
+        - {
+            in: path,
+            name: requestId,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      responses:
+        '200':
+          description: Consultar resultado persistido de reconciliação
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistReadRequest' }
+        '401': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
   /orders/{orderId}/olist/export:
     post:
       operationId: requestOlistExport
@@ -3487,6 +3651,153 @@ components:
       required: true
       schema: { type: string, minLength: 1, maxLength: 128 }
   schemas:
+    OlistExistingPreview:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          orderId,
+          eligible,
+          sale,
+          versions,
+          expiresAt,
+          previewToken,
+          creationEnabled,
+        ]
+      properties:
+        orderId: { type: string }
+        eligible: { const: true }
+        creationEnabled: { const: false }
+        sale:
+          type: object
+          additionalProperties: false
+          required: [id, number]
+          properties:
+            id: { type: string, pattern: '^[1-9][0-9]{0,15}$' }
+            number: { type: string }
+        versions:
+          type: object
+          additionalProperties: false
+          required: [order, operation, settings, connection, authorization]
+          properties:
+            order: { type: integer, minimum: 1 }
+            operation: { type: integer, minimum: 0 }
+            settings: { type: integer, minimum: 0 }
+            connection: { type: integer, minimum: 0 }
+            authorization: { type: integer, minimum: 0 }
+        expiresAt: { type: string, format: date-time }
+        previewToken:
+          { type: string, maxLength: 262144, pattern: '^[A-Za-z0-9_-]+$' }
+    OlistExistingLinkReceipt:
+      type: object
+      additionalProperties: false
+      required: [operationId, orderId, state, stage, number, creationEnabled]
+      properties:
+        operationId: { type: string, format: uuid }
+        orderId: { type: string }
+        state: { enum: [linked, confirmed] }
+        stage: { const: complete }
+        number:
+          {
+            type: string,
+            description: Número ERP conferido; nenhum link compartilhável é inferido.,
+          }
+        creationEnabled: { const: false }
+    OlistReadRequest:
+      type: object
+      additionalProperties: false
+      required: [id, requestId, exportId, resourceId, stage, status, version]
+      properties:
+        id: { type: string, format: uuid }
+        requestId: { type: string, format: uuid }
+        exportId: { type: string, format: uuid }
+        resourceId: { type: [string, 'null'], format: uuid }
+        stage: { enum: [customer, product, variation, sale] }
+        status: { enum: [queued, succeeded, blocked] }
+        version: { type: integer, minimum: 1 }
+        code: { type: string, pattern: '^[A-Z][A-Z0-9_]{0,63}$' }
+        actorId:
+          { type: string, description: Presente no diagnóstico administrativo. }
+    OlistAdministration:
+      type: object
+      additionalProperties: false
+      required:
+        [operation, resources, requests, attempts, attemptHistoryTruncated]
+      properties:
+        operation:
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [id, actorId, version, state, stage, number]
+              properties:
+                id: { type: string, format: uuid }
+                actorId: { type: string }
+                version: { type: integer, minimum: 1 }
+                state:
+                  {
+                    enum:
+                      [
+                        queued,
+                        resolving,
+                        ready,
+                        reserved,
+                        confirmed,
+                        linked,
+                        uncertain,
+                        rejected,
+                        invalidated,
+                      ],
+                  }
+                stage: { enum: [customer, product, variation, sale, complete] }
+                number: { type: [string, 'null'] }
+                errorCode: { type: string, pattern: '^[A-Z][A-Z0-9_]{0,63}$' }
+        resources:
+          type: array
+          maxItems: 1000
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, kind, state, version, remoteId, parentId]
+            properties:
+              id: { type: string, format: uuid }
+              kind: { enum: [customer, product, variation] }
+              state:
+                { enum: [pending, reserved, confirmed, uncertain, rejected] }
+              version: { type: integer, minimum: 0 }
+              remoteId: { type: [string, 'null'] }
+              parentId: { type: [string, 'null'], format: uuid }
+        requests:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/OlistReadRequest' }
+        attemptHistoryTruncated: { type: boolean }
+        attempts:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              [
+                id,
+                resourceId,
+                stage,
+                outcome,
+                observedRemoteId,
+                code,
+                createdAt,
+                finishedAt,
+              ]
+            properties:
+              id: { type: string, format: uuid }
+              resourceId: { type: [string, 'null'], format: uuid }
+              stage: { enum: [customer, product, variation, sale] }
+              outcome: { enum: [reserved, uncertain, confirmed, rejected] }
+              observedRemoteId: { type: [string, 'null'] }
+              code: { type: [string, 'null'] }
+              createdAt: { type: string, format: date-time }
+              finishedAt: { type: [string, 'null'], format: date-time }
     OlistExportCommandReceipt:
       type: object
       additionalProperties: false

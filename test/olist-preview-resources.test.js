@@ -522,3 +522,26 @@ test('customer reuse revalidates legal name, explicit IE and fiscal address with
   });
   assert.equal(result.customer.action, 'reuse');
 });
+
+test('T09 a legacy parent uses only its frozen verified SKU and exact confirmed ID', async () => {
+  const { plan, client, parent } = fixture();
+  parent.sku = 'SYNTHETIC-LEGACY-SKU';
+  const resources = [
+    {
+      account_key: config.accountKey,
+      kind: 'product',
+      identity_hash: productHash(attrs),
+      id: 'local-parent',
+      state: 'confirmed',
+      remote_id: '10',
+      verified_remote_sku: 'SYNTHETIC-LEGACY-SKU',
+    },
+  ];
+  const before = await planOlistResources({ config, plan, client, resources });
+  assert.equal(before.groups[0].action, 'reuse');
+  assert.equal(before.groups[0].lines[0].action, 'reuse');
+  parent.sku = 'REMOTE-CHANGED-SKU';
+  const after = await planOlistResources({ config, plan, client, resources });
+  assert.equal(after.groups[0].action, 'blocked');
+  assert.equal(after.groups[0].lines[0].action, 'blocked');
+});

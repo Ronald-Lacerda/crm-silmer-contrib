@@ -1,9 +1,100 @@
-# Olist — Fase 3: composição, prévia, comando e despacho Olist
+# Olist — Fase 3: composição, prévia, comando, despacho e reconciliação Olist
 
-OLIST-T20/T21/T26/T24/T06/T22/T07/T08, composição, fontes, cadastros e venda. Requisitos
+OLIST-T20/T21/T26/T24/T06/T22/T07/T08/T09, composição, fontes, cadastros, venda e vínculo. Requisitos
 OLIST-09–10, 29, 34, 40–44;
 [ADR 057](../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
+
+## T09 — vínculo existente e reconciliação administrativa
+
+OLIST-13–18, 25, 30, 32, 36–39. Somente Admin atual pode vincular ou reconciliar;
+checkbox Olist de vendedor/Financeiro não concede esse poder, e Admin não precisa
+do checkbox para estas ações. Sessão/CSRF/Origin são obrigatórios nos comandos.
+Todo acesso revalida o Admin real, inclusive replay e gravação após GET remoto.
+Não habilita criação, não permite URL arbitrária e não adivinha doc.view: a
+projeção administrativa mostra o número ERP enquanto não houver URL confiável.
+
+### Venda existente
+
+POST /api/v1/orders/:orderId/olist/existing/previews recebe somente saleId, ID
+positivo seguro em texto. Confere fonte comercial/cadastro atuais e parâmetros
+centrais sem depender do status confirmado. GETs oficiais limitados verificam
+comprador completo, pai, fiscal, descrição composta e grade/filho independente.
+Cada linha precisa corresponder a produto, quantidade e unitário/subtotal exato;
+ambos os totais devem coincidir. Sem referência/marcador em venda antiga, só
+aceita bijeção inequívoca; marcador errado, referência de outro Pedido, fusão,
+linha omitida/repetida ou compensação de valores bloqueiam. Ausência da referência
+não dispensa origem, datas, situação aberta e demais condições conferíveis T08.
+
+Recibo AES-GCM vincula Admin/sessão/Pedido/conta/contexto, fontes, versões,
+parâmetros, ID/número e HMAC das leituras. Expira em 15 minutos e é limitado a
+262144 caracteres; snapshot conserva limite de 128 KiB. POST /links recebe
+previewToken e motivo, com Idempotency-Key. Reconsulta remoto fora de SQL e
+revalida sessão/fontes/versões dentro da transação final. Snapshot/vínculos/
+prova/motivo cifrados, evento, auditoria e recibo compartilham o mesmo client.
+Duas prévias/chaves convergem para um vínculo; conflito de ID ou conteúdo não
+sobrescreve histórico. Mesma chave/corpo retorna resposta original após TTL,
+mas exige acesso atual; corpo/sessão/alvo divergentes conflitam.
+
+As constraints por Pedido/conta e venda/conta são as mesmas da criação.
+Qualquer tentativa de venda existente, inclusive incerta/reservada, nega o
+modo legado. Operação prévia conserva snapshot/executor e só aceita semântica
+igual; uma reserva que surgir durante GET vence o link. Worker de criação que
+observar linked conclui sem POST. Nenhum link publica job de exportação.
+Cadastros incertos também não são liberados pelo link de uma venda antiga.
+
+SKU legado é verificado junto com ID/atributos/fiscal/grade e congelado em
+verified_remote_sku, protegido contra mudança ou troca de ID. Prévia T06 e
+resolvedor T22 só o reutilizam pelo ID já confirmado e igualdade com o SKU
+conferido. Sem essa evidência, a referência determinística continua estrita.
+Mudança remota posterior é divergência; nenhum cadastro ERP é atualizado.
+
+### Reconciliação enfileirada
+
+GET /administration fornece operação/recursos, versões para CAS, requests e
+até 100 tentativas recentes, com indicação de truncamento. Só expõe IDs,
+atores, estados, horários e códigos; motivo, snapshot e corpo ERP ficam cifrados.
+POST /reconcile recebe stage, resourceId (null apenas em sale), expectedVersion
+do alvo e motivo. Comando idempotente grava request/auditoria/job atomicamente,
+sem HTTP. GET /reconciliations/:requestId acompanha queued/succeeded/blocked.
+
+Fila PostgreSQL própria olist_reconcile usa job interno olist.reconcile e
+requestId persistido; consumidor exige OLIST_ENABLED/configuração completa e
+independe de OLIST_DISPATCH_ENABLED. Não importa dispatcher, resolvedor criador
+ou writers. creation_enabled=false/recovery_required=true e executor original
+revogado não impedem a leitura administrativa; Admin/época/conexão atuais e
+heartbeat são verificados antes dos HTTP e da confirmação. Credenciais usam a
+porta OAuth fixa; nenhuma chamada de inclusão/edição/exclusão ERP é feita.
+
+Recurso usa base e tentativa imutáveis, documento/SKU/ID observados e confirmação
+independente de pai/grade/filho. ID-pai observado em POST de variação continua
+preservado e só permite confirmar o filho canônico provado pela grade. Venda
+com tentativa exige bytes do request congelado iguais e comparação T08 estrita,
+sem exceção legada nem troca de ID/número observado. Vínculo legado já aprovado
+pode ser reconferido somente pelo mesmo ID/número, mapping de comprador/pai/filhos
+e SKUs congelados; a ausência de referência não é reinterpretada como novo efeito. Zero/múltiplos/divergência
+conservam reserva e bloqueiam dependentes. Resultado positivo atualiza somente
+o alvo pedido e ledger; não avança nem publica novas inclusões. Tentativa incerta
+anterior não é reescrita quando chega prova positiva. Snapshot e executor não
+são substituídos por configuração ou pessoa atuais.
+
+Revogação/lease/conexão perdida antes da confirmação só registra erro seguro no
+ledger do request autenticado; nunca confirma alvo. Jobs de leitura não fazem
+retry automático por resultado; eventual recuperação de lease repete somente
+GETs e CAS. Nova análise exige novo comando administrativo, nunca liberar POST
+por consulta vazia, tempo decorrido ou reset da fila.
+
+### Migração e rollback
+
+Aplicar 0069_olist_administrative_reads.expand.sql após 0068 e antes do código.
+Ela congela SKU/ID conferidos, adiciona requests cifrados imutáveis e compõe
+constraints de outbox preservando os tipos/targets anteriores. Nenhuma nova
+infraestrutura, dependência externa, conta habilitada ou URL compartilhável.
+
+Rollback pausa a fila olist_reconcile e comandos novos, drena leituras e conserva
+requests/jobs/recibos, chaves/envelopes, mapping, SKUs, reservas, observações e
+auditoria. Não apagar vínculo, limpar tentativa ou executar down destrutivo.
+Despacho real segue desligado; T23/T10 e gates operacionais ainda abertos.
 
 ## T08 — despacho reservado e comparação remota
 
@@ -57,7 +148,7 @@ confirmar readback na porta atual. Nunca arredondar ou repetir inclusão.
 
 O job marca efeito antes do dispatcher e não faz retry automático. Erros expõem
 somente códigos seguros; GET Olist pode projetar errorCode sem request, resposta
-remota ou PII. Reconciliação administrativa completa é T09; guardas posteriores/
+remota ou PII. Reconciliação administrativa completa está em T09 acima; guardas posteriores/
 restore são T10. A fase 3 permanece aberta.
 
 ### Migração e rollback
@@ -675,3 +766,39 @@ PostgreSQL sintético 18.6 foi encerrado após os gates SQL. Logs sintéticos em
 var/olist-t08-*.log, fora do versionamento. Despacho e conta continuam desligados
 por padrão, sem acesso real ao ERP, deploy ou piloto. Entrega atômica OLIST-T08
 na branch codex/olist-phase3. Próximos T09/T23/T10; gate F3 permanece aberto.
+
+
+## Fechamento T09 — 06/11/2026
+
+Vínculo existente e reconciliação administrativa concluídos no domínio/API e
+worker isolado, com migration expand 0069 e OpenAPI atualizado. Admin sem
+checkbox pode conferir/vincular, sem herdar geração. Venda legada sem referência
+usa prova completa e bijeção inequívoca; efeito iniciado continua estrito.
+Mapping, SKU/ID, número, snapshot, tentativas e ledger conservam sua história.
+Não há POST adicional de cadastro/venda, atualização ou exclusão ERP, avanço
+automático de dependentes ou configuração real alterada.
+
+- npm run validate: aprovado, 1962 testes/23 skips explícitos, incluindo tipos,
+  lint, formatação, fronteiras, validadores e build.
+- PostgreSQL integrado Pedidos/Loja/Olist: 178/178 aprovados, zero skips. Inclui
+  16 testes do repositório administrativo e 16 da vertical API/comando/fila/worker.
+- Inspector final: 25/25; worker isolado: 6/6; fronteira API: 8/8. Cobertos
+  legado/ausência, zero/múltiplos/divergência, soma compensada, revogação, fonte
+  obsoleta, adulteração/expiração, concorrência, rollback e perda de lease.
+- Regressão T06 preserva SKU determinístico sem evidência legada; provas novas
+  congelam SKU e ID e recusam mudança posterior. Vínculo legado já aprovado
+  reconcilia só os mesmos comprador/pai/filhos/SKU/número, sem novo POST.
+- E2E completo: 485 aprovados/7 skips previstos, dois workers e porta 4187,
+  sem alterar assertions, timeouts ou código da interface.
+- npm audit --audit-level=high: aprovado, zero altas/críticas; um baixo/cinco
+  moderados preexistentes, sem atualização de dependências.
+- Revisão independente Backend/Integrações/QA sem findings altos/médios após os
+  fechamentos de SKU, reconferência de vínculo legado, pai por grupo e número
+  em corrida. git diff --check aprovado.
+
+Os skips SQL do gate unitário foram executados separadamente em banco dedicado;
+as duas suítes administrativas entram em test:olist:live. PostgreSQL 18.6
+sintético encerrado após a regressão final. Logs em var/olist-t09-*.log, fora do
+versionamento. Nenhuma nova dependência externa ou infraestrutura. Entrega
+atômica OLIST-T09 na branch codex/olist-phase3; despacho real/deploy/piloto
+continuam desligados. Próximos T23/T10; gate F3 permanece aberto.

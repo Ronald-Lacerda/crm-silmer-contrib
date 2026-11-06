@@ -30,3 +30,6 @@ export { buildOlistSalePayload, reconcileOlistSale } from './sale-payload.js';
 export { createOlistSaleWriter } from './sale-writer.js';
 
 export { createOlistDispatcher } from './dispatcher.js';
+
+export { createOlistAdminRepository } from './admin-repository.js';
+export { createOlistReadonlyInspector } from './readonly-inspector.js';

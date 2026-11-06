@@ -35,7 +35,7 @@ export async function lockOlistActor(client, input, action, now) {
     );
     if (!session.rows[0]) throw new OlistError('FORBIDDEN', 403);
   } else if (
-    action !== 'olist.export' ||
+    !['olist.export', 'olist.reconcile'].includes(action) ||
     !Number.isSafeInteger(input.authorizationVersion)
   )
     throw new OlistError('FORBIDDEN', 403);

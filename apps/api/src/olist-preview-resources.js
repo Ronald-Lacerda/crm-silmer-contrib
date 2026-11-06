@@ -267,7 +267,11 @@ export async function planOlistResources({ client, config, plan, resources }) {
             .filter((value) => value !== '')
             .join(' | ');
           if (
-            parent.sku !== (link.row?.reference ?? sku) ||
+            parent.sku !==
+              (link.row?.state === 'confirmed' &&
+              String(link.row.remote_id) === String(parent.id)
+                ? (link.row.verified_remote_sku ?? link.row.reference ?? sku)
+                : (link.row?.reference ?? sku)) ||
             normalize(parent.descricao) !== normalize(description)
           ) {
             parent = null;

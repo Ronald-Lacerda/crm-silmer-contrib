@@ -22,7 +22,7 @@ function remoteNumber(value) {
   return number;
 }
 /** @param {any} found @param {any} expected */
-function verifyCustomer(found, expected) {
+export function verifyCustomer(found, expected) {
   if (
     !found ||
     remoteNumber(found.id) < 1 ||
@@ -58,13 +58,33 @@ function verifyCustomer(found, expected) {
   return found;
 }
 /** @param {any} found @param {any} node @param {any} fiscal */
-function verifyProduct(found, node, fiscal) {
+export function verifyProduct(found, node, fiscal) {
+  // A legacy SKU is accepted only when the administrative link froze that
+  // exact value for this confirmed remote ID. Older links and uncertain effects
+  // retain deterministic references; a later SKU edit is always divergent.
+  const confirmedIdentity =
+    node.row.state === 'confirmed' &&
+    node.row.remote_id !== null &&
+    node.row.remote_id !== undefined &&
+    String(node.row.remote_id) === String(found?.id);
+  const expectedSku =
+    confirmedIdentity &&
+    node.row.verified_remote_sku !== null &&
+    node.row.verified_remote_sku !== undefined
+      ? node.row.verified_remote_sku
+      : node.row.reference;
+  const validExpectedSku =
+    typeof expectedSku === 'string' &&
+    expectedSku.trim() !== '' &&
+    expectedSku.length <= 100 &&
+    !/[\u0000-\u001f\u007f]/u.test(expectedSku);
   if (
     !found ||
     remoteNumber(found.id) < 1 ||
     found.tipo !== 'V' ||
     found.situacao !== 'A' ||
-    found.sku !== node.row.reference ||
+    !validExpectedSku ||
+    found.sku !== expectedSku ||
     normalized(found.descricao) !==
       normalized(productDescription(node.attributes)) ||
     !Array.isArray(found.variacoes)
@@ -90,7 +110,7 @@ function verifyProduct(found, node, fiscal) {
  * never-dispatched size may reuse a unique existing SKU. An uncertain effect
  * requires its own deterministic SKU; zero never permits a new POST.
  * @param {any} parent @param {any} child @param {boolean} strict */
-function childCandidate(parent, child, strict) {
+export function childCandidate(parent, child, strict) {
   const matches = parent.variacoes.filter(
     (/** @type {any} */ value) =>
       Array.isArray(value.grade) &&

@@ -1,3 +1,4 @@
+import { createOlistAdministration } from './olist-administration.js';
 import { createOlistExportCommand } from './olist-export-command.js';
 import { createOlistPreview } from './olist-preview.js';
 import {
@@ -166,6 +167,15 @@ export function createOlistApiRuntime(database, options) {
       preview,
       environment: env,
       clock,
+    }),
+    ...createOlistAdministration(database, {
+      config,
+      connection,
+      preview,
+      environment: env,
+      clock,
+      fetch: options.fetch,
+      timeoutMs: options.timeoutMs,
     }),
     project,
     /** @param {any} input */

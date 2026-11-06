@@ -30,6 +30,24 @@ const CODES = new Set([
   'OLIST_PREVIEW_INVALID',
   'OLIST_EXPORT_CONFLICT',
   'IDEMPOTENCY_RECORD_PENDING',
+  'OLIST_ORDER_INCOMPLETE',
+  'OLIST_PREVIEW_TOO_LARGE',
+  'OLIST_RECONCILIATION_REQUIRED',
+  'OLIST_RECONCILIATION_NOT_FOUND',
+  'OLIST_SALE_READBACK_MISMATCH',
+  'OLIST_SALE_REQUEST_CHANGED',
+  'OLIST_SALE_REFERENCE_CONFLICT',
+  'OLIST_SALE_DIVERGENT',
+  'OLIST_RESOURCE_DIVERGENT',
+  'OLIST_CUSTOMER_DIVERGENT',
+  'OLIST_PRODUCT_DIVERGENT',
+  'OLIST_PRODUCT_FISCAL_DIVERGENT',
+  'OLIST_VARIATION_DIVERGENT',
+  'OLIST_SALE_UNCERTAIN',
+  'OLIST_RESOURCE_RECONCILIATION_REQUIRED',
+  'OLIST_EXPORT_UNAVAILABLE',
+  'OLIST_SALE_RECONCILIATION_REQUIRED',
+  'OLIST_RECONCILE_FAILED',
 ]);
 /** @param {any} reply @param {()=>Promise<any>} work */
 async function respond(reply, work) {
@@ -177,6 +195,67 @@ export function registerOlistRoutes(api, runtime, contextFor) {
             orderId: /** @type {any} */ (request.params).orderId,
           });
         }),
+    );
+  }
+  for (const [path, method, fields, action] of [
+    ['/existing/previews', 'existingPreview', ['saleId'], 'olist.link'],
+    ['/links', 'linkExisting', ['previewToken', 'reason'], 'olist.link'],
+    [
+      '/reconcile',
+      'reconcile',
+      ['stage', 'resourceId', 'expectedVersion', 'reason'],
+      'olist.reconcile',
+    ],
+  ]) {
+    api.post(
+      '/api/v1/orders/:orderId/olist' + path,
+      {
+        bodyLimit: 270000,
+        config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+      },
+      (request, reply) =>
+        respond(reply, async () => {
+          const input = await principal(
+            request,
+            runtime,
+            true,
+            /** @type {string} */ (action),
+          );
+          const body = strictBody(
+            request.body,
+            /** @type {string[]} */ (fields),
+          );
+          if (method === 'reconcile') reply.code(202);
+          return runtime[/** @type {string} */ (method)]({
+            ...input,
+            ...body,
+            ...contextFor(request),
+            idempotencyKey: request.headers['idempotency-key'],
+            orderId: /** @type {any} */ (request.params).orderId,
+          });
+        }),
+    );
+  }
+  for (const [path, method, action] of [
+    ['/administration', 'administration', 'olist.link'],
+    ['/reconciliations/:requestId', 'readReconciliation', 'olist.reconcile'],
+  ]) {
+    api.get(
+      '/api/v1/orders/:orderId/olist' + path,
+      {
+        config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+      },
+      (request, reply) =>
+        respond(reply, async () =>
+          runtime[method]({
+            ...(await principal(request, runtime, false, action)),
+            ...contextFor(request),
+            orderId: /** @type {any} */ (request.params).orderId,
+            ...(method === 'readReconciliation'
+              ? { requestId: /** @type {any} */ (request.params).requestId }
+              : {}),
+          }),
+        ),
     );
   }
   api.get(

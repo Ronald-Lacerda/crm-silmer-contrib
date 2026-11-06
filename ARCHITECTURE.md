@@ -19,6 +19,24 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T09 — vínculo e reconciliação por leitura (06/11/2026)
+
+OLIST-13–18, 25, 30, 32, 36–39: Admin atual, sem herdar checkbox, confere venda
+existente por ID e vincula com recibo cifrado de 15 minutos, motivo e idempotência.
+GETs verificam comprador, fiscal, pai/grade e cada linha/total; legado sem
+referência/marcadores só passa com correspondência inequívoca. Referência de
+outro Pedido bloqueia. Link reconsulta fora de SQL e grava snapshot, recursos,
+prova, auditoria e recibo atomicamente, com as constraints da criação.
+
+Migration expand 0069 congela SKU remoto conferido e publica requests cifrados
+na fila interna olist_reconcile. Consumidor administrativo separado usa somente
+leituras do ERP e funciona com criação desligada/executor original revogado.
+Revalida Admin/época/conexão/lease; incerteza nunca libera POST nem dependentes.
+Snapshot/request/IDs e história anteriores são preservados. Diagnóstico expõe
+IDs/estados/versões/tentativas mínimos; mostrar número ERP, sem URL inferida.
+[Contrato, evidências e rollback](docs/runbooks/olist-phase3.md#t09--vínculo-existente-e-reconciliação-administrativa).
+Próximos T23/T10; F3 aberto, despacho real/deploy/piloto permanecem desligados.
+
 ## OLIST-T08 — despacho reservado e comparação exata (06/11/2026)
 
 OLIST-13–17, 20, 25–27, 36–41: consumidor dedicado opt-in da fila olist lê
@@ -32,7 +50,7 @@ monetário; incerteza nunca libera novo POST.
 paymentDueOn explícito define uma parcela do total, sem dedução pelo texto de
 prazo ou confirmação de pagamento. OLIST_DISPATCH_ENABLED e conta seguem
 desligados por padrão. [Contrato e rollback](docs/runbooks/olist-phase3.md#t08--despacho-reservado-e-comparação-remota).
-Próximos T09/T23/T10; F3 aberto, sem ERP real, deploy ou piloto nesta entrega.
+Próximos T23/T10; F3 aberto, sem ERP real, deploy ou piloto nesta entrega.
 
 ## OLIST-T07 — comando idempotente com snapshot e job (06/11/2026)
 

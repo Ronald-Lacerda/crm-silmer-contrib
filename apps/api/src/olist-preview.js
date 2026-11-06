@@ -46,9 +46,13 @@ export function createOlistPreview(database, options) {
     'base64',
   );
   /** @param {any} input */
-  async function snapshot(input) {
+  async function snapshot(
+    input,
+    action = 'olist.export',
+    includeResources = true,
+  ) {
     const work = async (/** @type {any} */ tx) => {
-      const actor = await lockOlistActor(tx, input, 'olist.export', clock());
+      const actor = await lockOlistActor(tx, input, action, clock());
       if (
         !config.configured ||
         orderKey.length !== 32 ||
@@ -141,12 +145,14 @@ export function createOlistPreview(database, options) {
           buyerContactId = contact.id;
         }
       }
-      const resources = (
-        await tx.query(
-          'SELECT id,account_key,kind,identity_hash,reference,parent_id,state,version,remote_id FROM crm.olist_resources WHERE account_key=$1 ORDER BY id LIMIT 1001 FOR SHARE',
-          [config.accountKey],
-        )
-      ).rows;
+      const resources = includeResources
+        ? (
+            await tx.query(
+              'SELECT id,account_key,kind,identity_hash,reference,parent_id,state,version,remote_id,verified_remote_sku FROM crm.olist_resources WHERE account_key=$1 ORDER BY id LIMIT 1001 FOR SHARE',
+              [config.accountKey],
+            )
+          ).rows
+        : [];
       const operation =
         (
           await tx.query(
@@ -364,6 +370,9 @@ export function createOlistPreview(database, options) {
         previewToken,
       };
     },
+    // Server-only administration reads share the source fence, not export authority.
+    snapshotForAdministration: (/** @type {any} */ input) =>
+      snapshot(input, 'olist.link', false),
     // Server-only reader: the caller has already locked current authority.
     readReceipt,
     assertFreshReceipt,
