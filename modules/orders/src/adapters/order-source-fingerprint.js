@@ -22,6 +22,18 @@ export function orderSourceFingerprint(order, key) {
     origin: order.origin,
     items: ficha.items,
     total: order.finalAmountCents,
+    ...(order.origin === 'loja'
+      ? {
+          storeFacts: {
+            deliveryOn: ficha.summary.data_entrega_confirmada ?? null,
+            artwork: {
+              feito_pelo_cliente: ficha.artwork?.feito_pelo_cliente === true,
+              feito_pela_silmer: ficha.artwork?.feito_pela_silmer === true,
+              sem_estampa: ficha.artwork?.sem_estampa === true,
+            },
+          },
+        }
+      : {}),
     buyer:
       order.origin === 'loja'
         ? {

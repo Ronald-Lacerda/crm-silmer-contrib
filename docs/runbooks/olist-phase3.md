@@ -1,9 +1,51 @@
 # Olist — Fase 3: composição e total calculado
 
-OLIST-T20/T21, composição persistida e confirmação calculada. Requisitos
+OLIST-T20/T21/T26/T24, composição, confirmação e fontes suplementares. Requisitos
 OLIST-09–10, 29, 34, 40–44;
 [ADR 057](../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
+
+## T24 — fonte suplementar da loja
+
+T24 concluída no domínio/API, OLIST-01, 06–12, 19, 29, 34–35, 44, usando a
+migration 0065 e os mesmos locks/envelopes da [ADR 067](../adr/067-fontes-comerciais-suplementares-sem-reescrever-ficha.md).
+GET/POST price-breakdown exigem Admin comercial atual para loja; habilitação
+Olist, função Financeiro ou automação não concedem edição nem leitura comercial.
+A autoridade é revalidada inclusive antes de servir replay idempotente.
+
+initialize verifica o snapshot pago: origem/status, uma grade, quantidade/total,
+comprador e pagamento InfinitePay válidos. A única linha recebe exatamente o
+finalAmountCents armazenado, sem rateio ou consulta ao catálogo atual. O total
+pago pelo gateway não substitui o total comercial após correção autorizada.
+Não aceita set_subtotals nem permite edição, reabertura ou confirmação genérica.
+
+set_store_details exige deliveryOn, applications (groupId/application para cada
+grupo) e registration, permitindo null/rascunho. Previsão deve ser data real;
+Aplicação deve ser texto válido; cadastro usa o normalizador fiscal existente,
+CPF/CNPJ por dígito verificador e endereço explícito. Empresa incompleta sem IE
+fica pendente; ISENTO só vale quando declarado. Nome/telefone permanecem os do
+checkout. Não inferir dados, criar Contato nem substituir campo original presente.
+Não incluir documento/endereço em logs, eventos ou auditoria.
+
+A projeção store inclui details, buyer e issues. pricing.complete informa apenas
+composição monetária: previsão, Aplicação, atributos/tecidos, arte ou cadastro
+incompletos ainda bloqueiam a fonte interna. OrderService.sourceForOlist fornece
+uma cópia transitória apenas quando a fonte está fresca e sem essas pendências.
+T06 ainda deve validar comprador/conta/configuração, schema oficial e precisão
+exact-cent-v1; esse método não libera geração nem cria endpoint para Financeiro.
+
+O HMAC da loja inclui também previsão e flags de arte originais; impressão e
+recibo não o alteram. Correção autorizada de quantidade torna a revisão obsoleta;
+initialize explícito emite IDs novos, sem reciclar preço/revisão anteriores.
+Revisão do complemento e correção disputam a mesma versão/lock; reserva Olist
+bloqueia novas revisões. Checkout, ficha/envelope, gateway, fingerprint de ingestão,
+recibo e primeira impressão permanecem byte a byte, exceto a versão/data técnica.
+Rollback mantém 0065 e revisões; não libera mutações pela API antiga.
+
+Evidências locais: domínio da loja 11/11, API com ACL real 5/5 e suíte PostgreSQL
+integrada legado/loja 13/13 sem skips. Incluem kit, unitário e pedido de teste,
+rascunho fiscal, campos forjados, sessão revogada, PII cifrada, concorrência com
+correção, reserva Olist, rebase e autenticação do envelope por revisão.
 
 ## T26 — fonte histórica suplementar
 
@@ -120,11 +162,11 @@ edição por identidade; não remove as revisões necessárias.
 
 Loja permanece `ORDER_LOCKED`. Confirmados legados seguem legíveis com total e
 snapshot intactos; reaberto sem composição não pode adotá-la genericamente e
-depende de T26. Pendente nunca confirmado pode initialize/revisar. Não inferir
-subtotal nem modificar checkout/gateway. T24/T26 cuidam dessas origens.
+usa T26 acima. Pendente nunca confirmado pode initialize/revisar. Não inferir
+subtotal nem modificar checkout/gateway. T24/T26 acima cuidam dessas origens.
 
-**Não liberar esta branch como rollout operacional antes da UI/Fase 4 e dos
-adapters T24/T26.** A UI antiga não registra subtotais: confirmação sem
+**Não liberar esta branch como rollout operacional antes da prévia T06 e da
+UI/Fase 4.** A UI antiga não registra subtotais: confirmação sem
 composição é recusada mesmo que ela envie amountText. Não há exportação,
 conexão real homologada, deploy ou piloto nesta entrega; gate F3 continua aberto.
 
@@ -217,3 +259,22 @@ Gate T26: `npm run validate` aprovado, 1813 testes/16 skips explícitos,
 incluindo tipos, lint, fronteiras, formatação, validadores e build. O skip novo
 é a suíte PostgreSQL que exige TEST_DATABASE_URL; ela foi executada separada
 com 8/8 aprovados em banco dedicado.
+
+E2E T26: 485 aprovados/7 skips previstos, sem falhas. Entrega atômica em
+[3b72aa0a](https://github.com/romulosutil/crm-silmer/commit/3b72aa0abb226d00cee5f1f1a0cb48b1adaeef45), com push na branch codex/olist-phase3.
+
+## Fechamento T24 — 05/11/2026
+
+`npm run validate` aprovado: 1829 testes aprovados/16 skips explícitos, tipos,
+lint, formatação, fronteiras, validadores e build. `npm audit --audit-level=high`
+aprovado: zero altas/críticas, mantendo um baixo/cinco moderados existentes.
+O comando `npm run test:olist:live` inclui agora as fontes suplementares para
+que a suíte SQL não seja omitida nos próximos gates. O teste de upgrade verifica
+0064 e 0065 com jobs e constraints anteriores preservados e replay sem reapply.
+Logs sintéticos em var/olist-t24-*.log, fora do versionamento.
+
+Regressão SQL integrada Pedidos/Loja/Olist/fontes: 87/87 aprovados, zero skips,
+incluindo os 13 cenários de fontes. E2E completo: 485 aprovados/7 skips previstos,
+sem falhas, em servidor dedicado na porta 4187 (4173 já ocupada por outro serviço).
+A revisão independente não encontrou finding bloqueante. PostgreSQL 18.6 local
+com dados sintéticos encerrado ao fim dos testes. Sem acesso ao ERP ou deploy.

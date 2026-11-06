@@ -19,6 +19,18 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T24 — complementos da loja preservam o snapshot
+
+Adaptador da loja concluído no domínio/API conforme ADR 067/RFC 054: a única
+linha validada recebe o total persistido, sem rateio ou catálogo atual.
+Admin comercial fornece previsão, Aplicação e cadastro fiscal explícitos no
+suplemento cifrado; pendências não são inventadas e não há criação de Contato.
+Checkout, gateway, recibo, impressão, ficha e travas originais são preservados.
+Correção comercial invalida a fonte, com rebase explícito e novos IDs. A fonte
+interna para T06 é transitória; pricing.complete sozinho não prova cadastro ou
+completude ERP. T06, UI e sequência externa seguem pendentes.
+[Contrato e evidências](docs/runbooks/olist-phase3.md).
+
 ## OLIST-T26 — enriquecimento histórico separado da ficha
 
 [ADR 067](docs/adr/067-fontes-comerciais-suplementares-sem-reescrever-ficha.md)
@@ -27,7 +39,7 @@ o valor e os pagamentos históricos. Comando comercial humano com versão e
 ACL atual, lote por identidade e soma exata ao total, mesma transação de evento,
 auditoria e idempotência. HMAC da fonte invalida composição obsoleta; rebase é
 explícito. Reserva Olist em qualquer conta bloqueia mudanças. Reconfirmação
-legada usa prova fresca sem mesclá-la à ficha. T24/UI/seqüência externa seguem
+legada usa prova fresca sem mesclá-la à ficha. T24 está concluída acima; T06/UI/seqüência externa seguem
 pendentes. [Runbook](docs/runbooks/olist-phase3.md).
 
 ## OLIST-T21 — total calculado e confirmação
@@ -36,8 +48,8 @@ T20/T21 concluídas no domínio/API: subtotais revisados determinam total/grupos
 gravação cifrada e coluna monetária na mesma escrita. Confirmação recalcula e
 exige composição completa; amountText antigo só por igualdade, sem fallback.
 Preço ausente/revisão deixam total null; mudança invalida quitação/check e
-preserva histórico. Reabertura adotada mantém IDs; legado/loja dependem T26/T24.
-A API expõe pricing derivado no escopo existente do Pedido. UI/Fase 4 e adapters
+preserva histórico. Reabertura adotada mantém IDs; legado/loja usam os adapters T26/T24 acima.
+A API expõe pricing derivado no escopo existente do Pedido. UI/Fase 4 e prévia T06
 são gates de rollout: não voltar à API antiga com mutações comerciais liberadas.
 [Contrato, evidências e rollback](docs/runbooks/olist-phase3.md).
 

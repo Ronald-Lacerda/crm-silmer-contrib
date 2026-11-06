@@ -1,3 +1,10 @@
+import { createStoreOrderService } from '../modules/orders/src/application/store-order-service.js';
+import { createOrderService } from '../modules/orders/src/application/order-service.js';
+import {
+  STORE_NOW,
+  STORE_RECEIPT_URL,
+  storeOrderBody,
+} from './fixtures/store-order.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
@@ -94,7 +101,10 @@ else
         'INSERT INTO crm.contacts(id,created_at,updated_at) VALUES($1,$2,$2)',
         [contact, NOW],
       );
-      sequence++;
+      sequence = Number(
+        (await pool.query("SELECT nextval('crm.order_number_seq') AS value"))
+          .rows[0].value,
+      );
       await pool.query(
         `INSERT INTO crm.orders(id,number_sequence,number,conversation_id,contact_id,manual_owner_id,manual_create_key,
       status,fab_code,ficha_envelope,total_pieces,final_amount_cents,payment_condition,order_date,confirmed_at,confirmed_by,
@@ -171,6 +181,70 @@ else
       );
       return { id, account };
     }
+    const store = createStoreOrderService({
+      repository,
+      fabCode: '01',
+      hmacKey: Buffer.alloc(32, 95),
+      acceptTest: true,
+      clock: () => STORE_NOW,
+    });
+    async function storeFixture(unit = false, isTest = false) {
+      const id = randomUUID();
+      const body = storeOrderBody((body) => {
+        body.pedido_id = id;
+        body.numero_loja = 'LJ-' + id.slice(0, 8).toUpperCase();
+        body.pagamento.transaction_nsu = 'source-nsu-' + id;
+        body.pagamento.invoice_slug = 'source-invoice-' + id;
+        if (unit) {
+          body.produto.slug = 'bloquinho-22';
+          body.item.cor_id = 'branca-amarela';
+          body.item.prazo_dias = 1;
+          body.item.quantidade = 2;
+          body.valor_centavos = 6000;
+          body.pagamento.valor_pago_centavos = 6000;
+        }
+        if (isTest) {
+          body.teste = true;
+          body.valor_centavos = 100;
+          body.pagamento.valor_pago_centavos = 100;
+        }
+      });
+      const result = await store.record({
+        actor: 'AUTOMATION_EXECUTOR',
+        correlationId: 'store-source-fixture',
+        record: store.parse(body),
+      });
+      return { order: result.order, body };
+    }
+    /** @param {any} source @param {any} [overrides] */
+    const details = (source, overrides = {}) => ({
+      action: 'set_store_details',
+      deliveryOn: '2026-11-20',
+      applications: source.groups.map((/** @type {any} */ group) => ({
+        groupId: group.id,
+        application: 'SUBLIMAÇÃO',
+      })),
+      registration: {
+        personType: 'individual',
+        document: '52998224725',
+        legalName: 'Comprador Sintético',
+        postalCode: '29010-000',
+        city: 'Vitória',
+        state: 'ES',
+        street: 'Rua Sintética',
+        district: 'Centro',
+        number: '10',
+      },
+      ...overrides,
+    });
+    /** @param {string} id */
+    const frozenStore = async (id) =>
+      (
+        await pool.query(
+          "SELECT to_jsonb(orders)-'version'-'updated_at' AS row FROM crm.orders WHERE id=$1",
+          [id],
+        )
+      ).rows[0].row;
     try {
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
@@ -409,6 +483,17 @@ else
             "INSERT INTO crm.user_capabilities(user_id,capability) VALUES($1,'COMMERCIAL_ADMIN')",
             [ADMIN.id],
           );
+          await assert.rejects(
+            pool.query(
+              "UPDATE crm.user_functions SET function_name='Financeiro' WHERE user_id=$1",
+              [ADMIN.id],
+            ),
+            { code: '23514' },
+          );
+          await pool.query(
+            "DELETE FROM crm.user_capabilities WHERE user_id=$1 AND capability='COMMERCIAL_ADMIN'",
+            [ADMIN.id],
+          );
           await pool.query(
             "UPDATE crm.user_functions SET function_name='Financeiro' WHERE user_id=$1",
             [ADMIN.id],
@@ -418,6 +503,10 @@ else
           });
           await pool.query(
             "UPDATE crm.user_functions SET function_name='Vendedor' WHERE user_id=$1",
+            [ADMIN.id],
+          );
+          await pool.query(
+            "INSERT INTO crm.user_capabilities(user_id,capability) VALUES($1,'COMMERCIAL_ADMIN')",
             [ADMIN.id],
           );
         },
@@ -575,6 +664,368 @@ else
           );
           await assert.rejects(
             runtime.priceBreakdown(second.id),
+            /authenticate/u,
+          );
+        },
+      );
+      await t.test(
+        'T24 store supplements preserve checkout, gateway, receipt, print and fiscal privacy in the database',
+        async () => {
+          for (const [unit, isTest] of [
+            [false, false],
+            [true, false],
+            [false, true],
+          ]) {
+            const f = await storeFixture(unit, isTest),
+              before = await frozenStore(f.order.id);
+            const receipt = (
+              await pool.query(
+                'SELECT * FROM crm.store_order_receipts WHERE order_id=$1',
+                [f.order.id],
+              )
+            ).rows[0];
+            const init = await runtime.savePriceBreakdown(
+              command(f.order.id, 1, { action: 'initialize' }, ADMIN),
+            );
+            assert.equal(init.mode, 'store');
+            assert.equal(init.pricing?.totalCents, f.order.finalAmountCents);
+            assert.equal(
+              init.groups[0].lines[0].subtotalCents,
+              f.order.finalAmountCents,
+            );
+            assert.ok(
+              init.issues.some(
+                (/** @type {any} */ issue) =>
+                  issue.code === 'STORE_BUYER_FIELD_REQUIRED',
+              ),
+            );
+            const saved = await runtime.savePriceBreakdown(
+              command(f.order.id, 2, details(init), ADMIN),
+            );
+            assert.deepEqual(saved.issues, []);
+            assert.equal(saved.groups[0].id, init.groups[0].id);
+            assert.deepEqual(await frozenStore(f.order.id), before);
+            assert.deepEqual(
+              (
+                await pool.query(
+                  'SELECT * FROM crm.store_order_receipts WHERE order_id=$1',
+                  [f.order.id],
+                )
+              ).rows[0],
+              receipt,
+            );
+            const rows = (
+              await pool.query(
+                'SELECT data_envelope::text AS value FROM crm.order_olist_source_revisions WHERE order_id=$1',
+                [f.order.id],
+              )
+            ).rows;
+            assert.ok(
+              rows.every(
+                (row) =>
+                  !row.value.includes('52998224725') &&
+                  !row.value.includes('Rua Sintética'),
+              ),
+            );
+            const service = createOrderService({
+              repository,
+              fabCode: '01',
+              authorizeOwnership: async () => {},
+              conversations: {
+                readOrderContexts: async () => new Map(),
+                searchConversationIds: async () => [],
+              },
+            });
+            const view = await service.sourceForOlist(f.order.id);
+            assert.ok(view.order);
+            assert.equal(
+              view.order.ficha.sizePricing?.[0].lines[0].subtotalCents,
+              f.order.finalAmountCents,
+            );
+            assert.equal(
+              view.order.ficha.summary.data_entrega_confirmada,
+              '2026-11-20',
+            );
+            assert.equal(view.order.ficha.items[0].tipo_servico, 'SUBLIMAÇÃO');
+            assert.equal(view.order.contactId, null);
+            assert.equal(
+              (await repository.findById(f.order.id))?.ficha.summary
+                .data_entrega_confirmada,
+              null,
+            );
+          }
+        },
+      );
+
+      await t.test(
+        'T24 current Admin is required even for replay and incomplete/invalid data never fabricate buyer facts',
+        async () => {
+          const f = await storeFixture(),
+            input = command(f.order.id, 1, { action: 'initialize' }, ADMIN);
+          for (const actor of [
+            OWNER,
+            {
+              id: OTHER.id,
+              kind: 'human',
+              capabilities: [],
+              olistEnabled: true,
+              functionName: 'Financeiro',
+            },
+            {
+              id: 'AUTOMATION_EXECUTOR',
+              kind: 'automation',
+              capabilities: ['COMMERCIAL_ADMIN'],
+            },
+          ]) {
+            await assert.rejects(
+              runtime.savePriceBreakdown({ ...input, actor }),
+              { code: 'FORBIDDEN' },
+            );
+          }
+          const init = await runtime.savePriceBreakdown(input);
+          await assert.rejects(
+            pool.query(
+              "UPDATE crm.user_functions SET function_name='Financeiro' WHERE user_id=$1",
+              [ADMIN.id],
+            ),
+            { code: '23514' },
+          );
+          await pool.query(
+            "DELETE FROM crm.user_capabilities WHERE user_id=$1 AND capability='COMMERCIAL_ADMIN'",
+            [ADMIN.id],
+          );
+          await pool.query(
+            "UPDATE crm.user_functions SET function_name='Financeiro' WHERE user_id=$1",
+            [ADMIN.id],
+          );
+          await assert.rejects(runtime.savePriceBreakdown(input), {
+            code: 'FORBIDDEN',
+          });
+          await pool.query(
+            "UPDATE crm.user_functions SET function_name='Vendedor' WHERE user_id=$1",
+            [ADMIN.id],
+          );
+          await pool.query(
+            "INSERT INTO crm.user_capabilities(user_id,capability) VALUES($1,'COMMERCIAL_ADMIN')",
+            [ADMIN.id],
+          );
+          for (const value of [
+            details(init, { deliveryOn: '2026-02-30' }),
+            details(init, {
+              registration: {
+                personType: 'individual',
+                document: '12345678900',
+              },
+            }),
+            { action: 'set_subtotals', lines: lines(init) },
+            details(init, { finalAmountCents: 1 }),
+          ]) {
+            await assert.rejects(
+              runtime.savePriceBreakdown(command(f.order.id, 2, value, ADMIN)),
+            );
+            assert.equal((await repository.findById(f.order.id))?.version, 2);
+          }
+          const partial = await runtime.savePriceBreakdown(
+            command(
+              f.order.id,
+              2,
+              details(init, {
+                registration: {
+                  personType: 'company',
+                  document: '04252011000110',
+                  legalName: 'Empresa Sintética',
+                },
+              }),
+              ADMIN,
+            ),
+          );
+          assert.ok(
+            partial.issues.some(
+              (/** @type {any} */ issue) =>
+                issue.field === 'registration.stateRegistration',
+            ),
+          );
+          const service = createOrderService({
+            repository,
+            fabCode: '01',
+            authorizeOwnership: async () => {},
+            conversations: {
+              readOrderContexts: async () => new Map(),
+              searchConversationIds: async () => [],
+            },
+          });
+          assert.equal((await service.sourceForOlist(f.order.id)).order, null);
+        },
+      );
+
+      await t.test(
+        'T24 first print and late receipt keep freshness; authorized quantity correction invalidates source without rewriting gateway',
+        async () => {
+          const f = await storeFixture(true),
+            gateway = f.order.gatewayPayment;
+          let source = await runtime.savePriceBreakdown(
+            command(f.order.id, 1, { action: 'initialize' }, ADMIN),
+          );
+          source = await runtime.savePriceBreakdown(
+            command(f.order.id, 2, details(source), ADMIN),
+          );
+          await repository.recordFirstPrint({
+            orderId: f.order.id,
+            actorId: ADMIN.id,
+            correlationId: 'source-first-print',
+            now: NOW,
+          });
+          assert.equal(
+            (await runtime.priceBreakdown(f.order.id)).sourceValid,
+            true,
+          );
+          await repository.attachStoreReceipt({
+            orderId: f.order.id,
+            receiptUrl: STORE_RECEIPT_URL,
+            audit: {
+              actor: 'AUTOMATION_EXECUTOR',
+              correlationId: 'source-late-receipt',
+            },
+            now: NOW,
+          });
+          assert.equal(
+            (await runtime.priceBreakdown(f.order.id)).sourceValid,
+            true,
+          );
+          const current = await repository.findById(f.order.id);
+          assert.ok(current);
+          const corrected = await runtime.correctStoreOrder({
+            ...command(f.order.id, current.version, null, ADMIN),
+            expectedQuantity: 2,
+            expectedAmountCents: 6000,
+            quantity: 1,
+            reason: 'USER_CONFIRMED_QUANTITY',
+          });
+          assert.deepEqual(corrected.gatewayPayment, {
+            ...gateway,
+            receiptUrl: STORE_RECEIPT_URL,
+          });
+          assert.equal(corrected.finalAmountCents, 3000);
+          const stale = await runtime.priceBreakdown(f.order.id);
+          assert.equal(stale.sourceValid, false);
+          assert.equal(stale.pricing, null);
+          assert.ok('buyer' in stale && stale.buyer === null);
+          const renewed = await runtime.savePriceBreakdown(
+            command(
+              f.order.id,
+              corrected.version,
+              { action: 'initialize' },
+              ADMIN,
+            ),
+          );
+          assert.equal(renewed.pricing?.totalCents, 3000);
+          assert.notEqual(renewed.groups[0].id, source.groups[0].id);
+          const replay = await store.record({
+            actor: 'AUTOMATION_EXECUTOR',
+            correlationId: 'source-store-replay',
+            record: store.parse(f.body),
+          });
+          assert.equal(replay.created, false);
+          assert.equal(replay.order.id, f.order.id);
+          assert.deepEqual(replay.order.gatewayPayment, gateway);
+        },
+      );
+      await t.test(
+        'T24 correction and source revision race with one winning commercial version; reserved store snapshots stay frozen',
+        async () => {
+          const f = await storeFixture(true);
+          const source = await runtime.savePriceBreakdown(
+            command(f.order.id, 1, { action: 'initialize' }, ADMIN),
+          );
+          const results = await Promise.allSettled([
+            runtime.savePriceBreakdown(
+              command(f.order.id, 2, details(source), ADMIN),
+            ),
+            runtime.correctStoreOrder({
+              ...command(f.order.id, 2, null, ADMIN),
+              expectedQuantity: 2,
+              expectedAmountCents: 6000,
+              quantity: 1,
+              reason: 'USER_CONFIRMED_QUANTITY',
+            }),
+          ]);
+          assert.equal(
+            results.filter((r) => r.status === 'fulfilled').length,
+            1,
+          );
+          const failed = results.find((r) => r.status === 'rejected');
+          assert.ok(failed && failed.status === 'rejected');
+          assert.equal(failed.reason.code, 'VERSION_CONFLICT');
+          const stored = await repository.findById(f.order.id);
+          assert.ok(stored);
+          assert.equal(stored.version, 3);
+          const projected = await runtime.priceBreakdown(f.order.id);
+          assert.equal(
+            projected.sourceValid,
+            results[0].status === 'fulfilled',
+          );
+          assert.equal(
+            stored.finalAmountCents,
+            results[0].status === 'fulfilled' ? 6000 : 3000,
+          );
+          const locked = await storeFixture();
+          await exportFixture(locked.order.id);
+          await assert.rejects(
+            runtime.savePriceBreakdown(
+              command(locked.order.id, 1, { action: 'initialize' }, ADMIN),
+            ),
+            { code: 'ORDER_SOURCE_LOCKED' },
+          );
+        },
+      );
+
+      await t.test(
+        'T24 source binds original forecast/artwork and authenticates each revision separately',
+        async () => {
+          for (const change of ['delivery', 'artwork']) {
+            const f = await storeFixture();
+            const source = await runtime.savePriceBreakdown(
+              command(f.order.id, 1, { action: 'initialize' }, ADMIN),
+            );
+            await runtime.savePriceBreakdown(
+              command(f.order.id, 2, details(source), ADMIN),
+            );
+            const changed = structuredClone(f.order.ficha);
+            if (change === 'delivery')
+              changed.summary.data_entrega_confirmada = '2026-11-21';
+            else {
+              assert.ok(changed.artwork);
+              changed.artwork.sem_estampa = false;
+              changed.artwork.feito_pelo_cliente = true;
+            }
+            await pool.query(
+              'UPDATE crm.orders SET ficha_envelope=$2::jsonb,version=version+1 WHERE id=$1',
+              [
+                f.order.id,
+                JSON.stringify(
+                  encryptJson(changed, 'order-ficha:' + f.order.id, KEY),
+                ),
+              ],
+            );
+            const stale = await runtime.priceBreakdown(f.order.id);
+            assert.equal(stale.sourceValid, false);
+            assert.equal(stale.pricing, null);
+            const rebased = await runtime.savePriceBreakdown(
+              command(f.order.id, 4, { action: 'initialize' }, ADMIN),
+            );
+            assert.equal(rebased.revision, 3);
+          }
+          const f = await storeFixture();
+          await runtime.savePriceBreakdown(
+            command(f.order.id, 1, { action: 'initialize' }, ADMIN),
+          );
+          await pool.query(
+            `INSERT INTO crm.order_olist_source_revisions(order_id,revision,order_version,source_hmac,data_envelope,updated_by,updated_at)
+          SELECT order_id,2,order_version,source_hmac,data_envelope,updated_by,updated_at FROM crm.order_olist_source_revisions WHERE order_id=$1 AND revision=1`,
+            [f.order.id],
+          );
+          await assert.rejects(
+            runtime.priceBreakdown(f.order.id),
             /authenticate/u,
           );
         },

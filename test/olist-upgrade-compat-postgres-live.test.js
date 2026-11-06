@@ -71,7 +71,9 @@ if (connectionString) {
         'migration accepts existing billing jobs and preserves both preexisting and new billing inserts',
         async () => {
           const result = await migrate(pool, { migrations });
-          assert.deepEqual(result.applied, [foundation.version]);
+          // Supplemental source expansion follows the Olist foundation without
+          // changing any preexisting outbox row or target predicate.
+          assert.deepEqual(result.applied, [foundation.version, '0065']);
           const before = await pool.query(
             'SELECT job_type,status,olist_export_id FROM crm.outbox_jobs WHERE id=$1',
             [beforeId],

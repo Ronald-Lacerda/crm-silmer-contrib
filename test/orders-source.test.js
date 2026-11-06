@@ -200,7 +200,7 @@ test('T26 refuses non-historical drafts, shop, managed orders and missing/duplic
       applyOrderSourceCommand(order({ origin: 'loja' }), null, {
         action: 'initialize',
       }),
-    { code: 'ORDER_LOCKED' },
+    { code: 'ORDER_SOURCE_INVALID' },
   );
   assert.throws(
     () =>

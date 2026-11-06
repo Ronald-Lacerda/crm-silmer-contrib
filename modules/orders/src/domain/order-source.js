@@ -1,4 +1,9 @@
 import {
+  applyStoreSourceCommand,
+  projectStoreSource,
+  storeSourceView,
+} from './store-order-source.js';
+import {
   OrderConflictError,
   OrderInputError,
   OrderValidationError,
@@ -14,7 +19,8 @@ import { sizePricingSummary } from './size-pricing-composition.js';
  * Application/repository boundaries authorize the human, fence order/source
  * revisions and validate the source fingerprint before applying commands.
  * @typedef {import('./size-pricing.js').SizePriceGroup} SizePriceGroup
- * @typedef {{mode: 'legacy', groups: SizePriceGroup[]}} OrderSourceData
+ * @typedef {{mode: 'legacy', groups: SizePriceGroup[]}} LegacySourceData
+ * @typedef {LegacySourceData|import('./store-order-source.js').StoreSourceData} OrderSourceData
  * @typedef {{data: OrderSourceData, revision: number, sourceValid: boolean,
  *   orderVersion: number, updatedBy: string, updatedAt: string}} OrderSourceRecord
  * @typedef {{code: string, field: string}} OrderSourceIssue
@@ -84,7 +90,7 @@ function requireLegacy(order) {
 }
 
 /** A temporary projection validates alignment; never write it to the order.
- * @param {import('./order.js').Order} order @param {OrderSourceData} data */
+ * @param {import('./order.js').Order} order @param {LegacySourceData} data */
 function legacySummary(order, data) {
   record(data, ['mode', 'groups']);
   if (data.mode !== 'legacy') invalid();
@@ -111,6 +117,15 @@ function legacySummary(order, data) {
  * @param {unknown} value @returns {OrderSourceData}
  */
 export function applyOrderSourceCommand(order, currentData, value) {
+  if (order.origin === 'loja')
+    return applyStoreSourceCommand(
+      order,
+      /** @type {import('./store-order-source.js').StoreSourceData|null} */ (
+        currentData
+      ),
+      value,
+    );
+  if (currentData !== null && currentData.mode !== 'legacy') invalid();
   const raw =
     value && typeof value === 'object' && !Array.isArray(value)
       ? /** @type {Record<string, unknown>} */ (value)
@@ -212,6 +227,13 @@ export function applyOrderSourceCommand(order, currentData, value) {
  * @param {OrderSourceRecord|null} source
  */
 export function projectOrderSource(order, source) {
+  if (order.origin === 'loja')
+    return projectStoreSource(
+      order,
+      /** @type {import('./store-order-source.js').StoreSourceRecord|null} */ (
+        source
+      ),
+    );
   const managed = order.ficha.sizePricing !== undefined;
   const groups = structuredClone(
     order.ficha.sizePricing ?? source?.data.groups ?? [],
@@ -228,7 +250,10 @@ export function projectOrderSource(order, source) {
     ];
   else if (!source.sourceValid)
     issues = [{ code: 'ORDER_SOURCE_STALE', field: 'priceBreakdown' }];
-  else pricing = legacySummary(order, source.data);
+  else {
+    if (source.data.mode !== 'legacy') invalid();
+    pricing = legacySummary(order, source.data);
+  }
   if (pricing)
     issues = pricing.issues.map((issue) => ({
       code: issue.code,
@@ -250,4 +275,39 @@ export function projectOrderSource(order, source) {
     updatedBy: managed ? null : (source?.updatedBy ?? null),
     updatedAt: managed ? null : (source?.updatedAt ?? null),
   };
+}
+
+/** A temporary source view for T06, never a persistence command. Origin-specific
+ * supplements are used only after freshness and local completeness checks.
+ * Account/customer schema/configuration and precision gates still belong to T06.
+ * @param {import('./order.js').Order} order @param {OrderSourceRecord|null} source */
+export function orderSourceView(order, source) {
+  const projection = projectOrderSource(order, source);
+  if (
+    !projection.sourceValid ||
+    !projection.pricing?.complete ||
+    projection.issues.length
+  ) {
+    return {
+      order: null,
+      sourceRevision: projection.revision,
+      issues: projection.issues,
+    };
+  }
+  const view =
+    order.origin === 'loja'
+      ? storeSourceView(
+          order,
+          /** @type {import('./store-order-source.js').StoreSourceData} */ (
+            source?.data
+          ),
+        )
+      : {
+          ...structuredClone(order),
+          ficha: {
+            ...structuredClone(order.ficha),
+            sizePricing: structuredClone(projection.groups),
+          },
+        };
+  return { order: view, sourceRevision: projection.revision, issues: [] };
 }

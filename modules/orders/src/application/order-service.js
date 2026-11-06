@@ -1,4 +1,4 @@
-import { projectOrderSource } from '../domain/order-source.js';
+import { projectOrderSource, orderSourceView } from '../domain/order-source.js';
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -678,6 +678,17 @@ export function createOrderService(options) {
         ? await repository.readPriceBreakdowns([order])
         : new Map();
       return projectOrderSource(order, records.get(order.id) ?? null);
+    },
+
+    /** Internal reader for the authorized Olist preview boundary; not an HTTP route.
+     * @param {string} orderId */
+    async sourceForOlist(orderId) {
+      const order = await repository.findById(requireId(orderId, 'orderId'));
+      if (!order) throw new OrderNotFoundError();
+      const sources = repository.readPriceBreakdowns
+        ? await repository.readPriceBreakdowns([order])
+        : new Map();
+      return orderSourceView(order, sources.get(order.id) ?? null);
     },
 
     /** @param {any} input @param {unknown} transaction */

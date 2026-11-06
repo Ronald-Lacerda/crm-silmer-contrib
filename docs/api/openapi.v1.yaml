@@ -2589,11 +2589,14 @@ paths:
   /orders/{orderId}/price-breakdown:
     get:
       operationId: getOrderPriceBreakdown
-      summary: Consulta composição suplementar do pedido histórico
+      summary: Consulta composição suplementar de legado ou loja
       description: >-
-        OLIST-T26. Ação order.read no escopo comercial existente. Retorna
-        revisão/autor e IDs estáveis, com pendências explícitas se ausente,
-        incompleta ou obsoleta. Não altera ficha nem total. Cache privado no-store.
+        OLIST-T26/T24. Ação order.read no escopo comercial existente; loja exige
+        Admin comercial. Retorna revisão/autor e IDs estáveis, com pendências
+        explícitas se ausente, incompleta ou obsoleta. Na loja inclui cadastro
+        suplementar cifrado em repouso, sem criar Contato nem alterar checkout,
+        ficha, total ou gateway. Cache privado no-store. pricing.complete indica
+        só preços; issues ainda pode conter pendências fiscais e comerciais.
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/OrderId'
@@ -2607,7 +2610,7 @@ paths:
         '404': { $ref: '#/components/responses/OrderNotFound' }
     post:
       operationId: saveOrderPriceBreakdown
-      summary: Enriquece preços históricos sem regravar a ficha
+      summary: Enriquece legado ou loja sem regravar a ficha
       description: >-
         OLIST-T26. Humano responsável/Admin com order.edit, sessão, CSRF,
         Origin, Idempotency-Key e expectedVersion. Autoridade atual é revalidada
@@ -2615,8 +2618,14 @@ paths:
         preços; set_subtotals exige cobertura completa por identidade e soma
         igual ao total preservado quando completo. Preços null salvam rascunho.
         Alteração comercial da fonte exige initialize explícito e nova revisão.
-        Composição T21 e loja não usam esta mutação genérica. Reserva/efeito
-        Olist em qualquer conta bloqueia. Revisão cifrada append-only, incremento
+        Loja exige Admin comercial ativo: initialize toma o total persistido da
+        única linha validada, sem rateio ou catálogo atual; set_store_details
+        salva previsão, Aplicação por groupId e cadastro fiscal explícitos.
+        Campos ausentes permanecem pendência; dados originais presentes não
+        podem ser substituídos por valores diferentes. Loja recusa set_subtotals
+        e mantém suas travas de edição/reabertura/confirmação. Composição T21
+        não usa esta mutação. Reserva/efeito Olist em qualquer conta bloqueia.
+        Revisão cifrada append-only, incremento
         da versão do Pedido, evento, auditoria e recibo compartilham transação.
       security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
       parameters:
@@ -6439,6 +6448,46 @@ components:
                       minimum: 1,
                       maximum: 9007199254740991,
                     }
+        - type: object
+          additionalProperties: false
+          required: [action, deliveryOn, applications, registration]
+          properties:
+            action: { const: set_store_details }
+            deliveryOn: { type: [string, 'null'], format: date }
+            applications:
+              type: array
+              description: Cobertura exata dos grupos da loja emitidos pelo servidor.
+              items:
+                { $ref: '#/components/schemas/StoreOrderSourceApplication' }
+            registration:
+              oneOf:
+                - $ref: '#/components/schemas/ContactRegistrationUpdateRequest/properties/registration'
+                - { type: 'null' }
+              description: >-
+                Cadastro explícito parcial ou null. Documento válido por tipo;
+                cadastro incompleto salva rascunho e retorna issues. Empresa exige
+                IE ou ISENTO declarado para completude. Não aceita nome/telefone
+                substitutos nem vincula Contato.
+    StoreOrderSourceApplication:
+      type: object
+      additionalProperties: false
+      required: [groupId, application]
+      properties:
+        groupId: { type: string, format: uuid }
+        application: { type: [string, 'null'], minLength: 1, maxLength: 200 }
+    StoreOrderSourceDetails:
+      type: object
+      additionalProperties: false
+      required: [deliveryOn, applications, registration]
+      properties:
+        deliveryOn: { type: [string, 'null'], format: date }
+        applications:
+          type: array
+          items: { $ref: '#/components/schemas/StoreOrderSourceApplication' }
+        registration:
+          oneOf:
+            - { $ref: '#/components/schemas/ContactRegistration' }
+            - { type: 'null' }
     OrderPriceBreakdown:
       type: object
       additionalProperties: false
@@ -6456,7 +6505,7 @@ components:
           updatedAt,
         ]
       properties:
-        mode: { type: string, enum: [legacy, managed] }
+        mode: { type: string, enum: [legacy, managed, store] }
         orderId: { type: string }
         orderVersion: { type: integer, minimum: 1 }
         revision: { type: integer, minimum: 0 }
@@ -6480,6 +6529,25 @@ components:
               field: { type: string }
         updatedBy: { type: [string, 'null'] }
         updatedAt: { type: [string, 'null'], format: date-time }
+        details:
+          description: Apenas no modo store; revisão obsoleta pode exibir rascunho sem validá-lo.
+          oneOf:
+            - { $ref: '#/components/schemas/StoreOrderSourceDetails' }
+            - { type: 'null' }
+        buyer:
+          description: Apenas no modo store; null quando ausente/obsoleto. Nome/telefone vêm do checkout.
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [name, phone, registration]
+              properties:
+                name: { type: string }
+                phone: { type: string }
+                registration:
+                  oneOf:
+                    - { $ref: '#/components/schemas/ContactRegistration' }
+                    - { type: 'null' }
+            - { type: 'null' }
     OrderConfirmRequest:
       type: object
       additionalProperties: false

@@ -141,6 +141,21 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 ## OLIST-T20b — Início da Fase 3 (05/11/2026)
 
+## OLIST-T24 — Fonte da loja sem alterar checkout (05/11/2026)
+
+- [x] Adaptador validado do snapshot pago com uma linha: subtotal igual ao total
+      persistido, sem rateio, consulta de catálogo atual ou edição de preço.
+- [x] Complementos explícitos de previsão, Aplicação e cadastro fiscal cifrado,
+      com pendências por campo, sem criar Contato ou sobrescrever dados originais.
+- [x] Admin comercial atual, versão/ACL/idempotência transacionais, fonte obsoleta
+      após correção comercial e rebase explícito; checkout/gateway/travas preservados.
+- [x] Fonte interna transitória para T06; preços completos não eliminam pendências
+      fiscais nem substituem os gates de prévia/configuração/precisão ERP.
+
+OLIST-01, 06–12, 19, 29, 34–35, 44. [ADR 067](../../../docs/adr/067-fontes-comerciais-suplementares-sem-reescrever-ficha.md),
+[runbook](../../../docs/runbooks/olist-phase3.md). T24/T26 concluídas no domínio/API;
+próxima tarefa T06. F3 permanece aberto, sem UI, deploy ou geração ERP.
+
 ## OLIST-T26 — Legado sem reescrever ficha (05/11/2026)
 
 - [x] Fonte suplementar cifrada append-only, IDs estáveis, autoria/versão e HMAC.
@@ -151,7 +166,7 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 - [x] Leitura/reconfirmação do legado usa prova interna fresca, sem migrar a ficha.
 
 OLIST-29, 42–44. [ADR 067](../../../docs/adr/067-fontes-comerciais-suplementares-sem-reescrever-ficha.md),
-[runbook](../../../docs/runbooks/olist-phase3.md). T24 e T06 ainda pendentes; F3 aberto.
+[runbook](../../../docs/runbooks/olist-phase3.md). T24 concluída acima; T06 ainda pendente e F3 aberto.
 
 ## OLIST-T20/T21 — Composição e confirmação calculada (05/11/2026)
 
@@ -165,7 +180,8 @@ OLIST-29, 42–44. [ADR 067](../../../docs/adr/067-fontes-comerciais-suplementar
       declaração antiga só por igualdade, incompleto bloqueia sem fallback.
 - [x] Quitação/check invalidados transacionalmente quando o total muda;
       histórico e revisão de quantidade preservados.
-- [ ] T24/T26: adapters de loja e legado; Fase 4: interface de edição.
+- [x] T24/T26: adapters de loja e legado (fechamentos acima).
+- [ ] Fase 4: interface de edição.
 
 Requisitos OLIST-09–10, 29, 34, 40–44. [Contrato e limites](../../../docs/runbooks/olist-phase3.md).
 T20/T21 completas no domínio/API; F3 permanece aberto. Nenhuma adoção operacional,
