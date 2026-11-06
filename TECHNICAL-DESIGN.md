@@ -24,6 +24,26 @@ guardrail, abertura humana, transporte, reservas, epoch e revisão; preparação
 offline recusa drift e dados fixados. Sem migração ou infraestrutura nova.
 [Operação e rollback](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T10 — guardas comerciais e recuperação (06/11/2026)
+
+OLIST-02, 06, 16, 19, 21, 27–30, 39, 45–47: toda escrita de ficha,
+projeção automática, reabertura, arte e correção de quantidade da loja consulta
+o ledger Olist sob o mesmo lock do Pedido usado por exportação/cancelamento.
+Reserva ativa ou efeito/ID remoto sobrevivente bloqueia alterações, inclusive
+se a operação foi invalidada/rejeitada. Fontes suplementares usam a mesma guarda.
+
+Pendente exportado/vinculado só confirma com ficha, total, quantidade e condição
+idênticos; preserva os bytes do envelope e o snapshot Olist, sem seguir o nome
+atual do Contato. Confirmação mantém sua autoria/data humanas. Operação em curso
+ou incerta exige aguardar/reconciliar. Pagamento/entrega continuam comandos
+independentes; exportação não os declara nem altera o check financeiro.
+
+Cadastros compartilhados preservam resultados de efeitos iniciados após
+cancelamento/revogação, sem liberar dependentes. Restore mantém criação desligada
+com recovery_required; consultas administrativas continuam separadas. Nenhum
+lease vencido ou resultado ausente autoriza novo POST. Sem migration adicional,
+dependência ou infraestrutura. [Contrato e evidências](docs/runbooks/olist-phase3.md#t10--guardas-comerciais-e-recuperação).
+
 ## OLIST-T09 — vínculo e reconciliação por leitura (06/11/2026)
 
 OLIST-13–18, 25, 30, 32, 36–39: Admin atual, sem herdar checkbox, confere venda

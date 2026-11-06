@@ -136,6 +136,7 @@ import { ORDER_ORIGINS } from '../domain/store-order.js';
  * }} CancelOrderInput
  *
  * @typedef {{
+ *   readFrozenOrderIds?(orders: Order[]): Promise<Set<string>>,
  *   readPriceBreakdowns?(orders: Order[]): Promise<Map<string, any>>,
  *   assertCancellationAccess?(input: CancelOrderInput, transaction?: any): Promise<Order>,
  *   cancelOrder?(input: CancelOrderInput, transaction?: any): Promise<Order>,

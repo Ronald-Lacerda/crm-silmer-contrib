@@ -1,7 +1,7 @@
-# Olist — Fase 3: composição, prévia, comando, despacho e reconciliação Olist
+# Olist — Fase 3: composição, exportação, cancelamento e guardas
 
-OLIST-T20/T21/T26/T24/T06/T22/T07/T08/T09/T23, composição, fontes, cadastros, venda, vínculo e cancelamento. Requisitos
-OLIST-09–10, 29, 34, 40–44;
+OLIST-T20/T21/T26/T24/T06/T22/T07/T08/T09/T23/T10, composição, fontes,
+cadastros, venda, vínculo, cancelamento e guardas. Requisitos por fatia abaixo;
 [ADR 057](../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
 
@@ -899,3 +899,85 @@ rascunho cancelado não gera substituto: somente outro comando humano explícito
 pode abrir um novo, preservando o anterior. Sem chamada cancelar ERP/gateway,
 sem despacho real, deploy, conta ou piloto habilitados. Próximo item T10; UI e
 aviso de pedido pago/loja permanecem na F4. A fase 3 não está encerrada.
+
+## T10 — guardas comerciais e recuperação
+
+Tarefa OLIST-T10; requisitos OLIST-02, 06, 16, 19, 21, 27–30, 39, 45–47.
+Integra T08/T09/T23 sem nova migration, contrato externo ou infraestrutura.
+
+A aceitação da exportação e os escritores comerciais serializam no Pedido.
+Edição de seção/grade/subtotal, projeção automática, reabertura, fontes
+suplementares, catálogo de arte e correção de quantidade da loja recusam
+snapshot reservado/enviado/vinculado/incerto. Invalidado/rejeitado só libera
+edição se não sobreviver ID remoto ou tentativa não rejeitada de venda/cadastro.
+A regra consulta todas as contas, sem depender do checkbox do vendedor.
+
+Pedido pendente exportado/vinculado pode ser confirmado pelo responsável/Admin
+com os mesmos valores e condição. A ficha persistida, inclusive o nome congelado,
+e seu envelope permanecem iguais; mudanças posteriores do Contato não são
+projetadas. Confirmação grava somente seus metadados/status/versão e preserva
+o snapshot/IDs/data ERP. Operação ainda em curso/incerta bloqueia confirmação
+até conclusão/reconciliação. Divergência é ORDER_OLIST_SNAPSHOT_MISMATCH;
+editar/reabrir conteúdo reservado é ORDER_OLIST_LOCKED.
+
+Pagamento/entrega permanecem independentes e com ACL/versão próprias. Alterar
+metadados antes do despacho pode tornar sua versão obsoleta: isso bloqueia o
+próximo efeito e exige análise; nunca atualiza o snapshot para continuar.
+Cancelados conservam a terminalidade T23 e históricos financeiros.
+
+Após perda de lease, revogação ou cancelamento, persistir/reconciliar tickets
+já emitidos conserva resultados de cadastros compartilhados. Outro pedido
+não recebe autorização pelo executor revogado e deve passar seus próprios
+gates. Nunca apagar vínculo compartilhado, compensar cadastro ou repetir POST.
+
+No restore, manter OLIST_DISPATCH_ENABLED desligado e marcar recovery_required
+antes de reativar consumidores. Inclusões possivelmente posteriores ao backup
+exigem inventário/reconciliação de cliente/pais/variações/venda. Zero em busca
+não prova inexistência. Leituras administrativas podem confirmar entidade
+conhecida sem habilitar criação nem avançar pedidos automaticamente. O ensaio
+local usa estado remoto sintético externo à fotografia SQL; backup/restore no
+EasyPanel e autorização real permanecem gates da T15.
+
+Rollback mantém estas guardas e as da T23 em qualquer versão compatível. Não
+apagar snapshots/tickets/recursos, restaurar backup para tentar de novo ou usar
+uma versão anterior com mutações comerciais liberadas. Conexão, criação e
+consumidores reais permanecem desligados; interface/Fase 4 continua separada.
+
+## Fechamento T10 — 06/11/2026
+
+T23 integrada por fast-forward do commit 68aff226, preservando sua entrega
+atômica. T10 conclui o gate F3 local com guardas na transação comercial,
+confirmação de pendente exportado/vinculado sem mudar conteúdo/envelope e
+matriz de revogação, cadastro compartilhado, concorrência, lease e restore.
+Sem nova migration, dependência ou infraestrutura.
+
+- `npm run validate`: aprovado, 1977 testes/26 skips condicionais, incluindo
+  tipos, lint, formatação, fronteiras, validadores e build. Tipos/lint e
+  formatação dos testes reforçados também aprovados após sua última edição.
+- PostgreSQL 18.6 integrado: 234/234 aprovados, zero skips. Inclui Pedidos,
+  Loja/correção, Financeiro, Olist, fila genérica e integração n8n. A matriz T10
+  isolada soma 17/17, com conexões independentes e reserva/transporte reais
+  contra provedor exclusivamente sintético.
+- Guardas: ficha/grade/subtotais, projeção automática, reabertura, arte e
+  correção de loja bloqueadas; confirmação preserva bytes do envelope,
+  snapshot ERP, total e condição mesmo após alteração do cadastro. Checkout,
+  gateway, quitação, entrega e história financeira conservam seus contratos.
+- Recuperação: cancelamento/revogação durante POST compartilhado retêm
+  resultado tardio/ID; revogação após cliente/pai/variação bloqueia próximo
+  efeito. Lease expirado após POST fica `outcome_unknown`, sem redispatch.
+  Restore lógico conserva criação bloqueada e usa inspector administrativo
+  real somente com leituras para provar entidade remota fora da fotografia SQL.
+- E2E completo final: 485 aprovados/7 skips previstos, um worker e porta 4187.
+  A primeira execução, com dois workers, teve 484 aprovados e um timeout no
+  teste existente de permissão tardia de áudio. O caso isolado passou 1/1;
+  a execução serial integral passou sem alterar assertions, testes ou timeouts.
+- `npm audit --audit-level=high`: aprovado, zero altas/críticas; um baixo e
+  cinco moderados preexistentes, sem atualização de dependências.
+- Revisão independente QA/Integrações sem finding bloqueante. `git diff --check`
+  aprovado; grafo e alterações de terceiros preservados.
+
+Node 24.20.0/npm 11.19.0. PostgreSQL sintético encerrado após os gates. Logs
+em var/olist-t10-*.log, fora do versionamento. Entrega identificada por
+OLIST-T10 na branch codex/olist-phase3. Sem ERP real, deploy, habilitação ou
+piloto. F3 concluída localmente; próximas T11/T12/T13/T25 (Fase 4), mantendo
+os gates operacionais das Fases 5–6.

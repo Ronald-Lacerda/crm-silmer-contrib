@@ -1,3 +1,4 @@
+import { assertOlistCommercialWrite } from './olist-commercial-lock.js';
 import { OrderConflictError, OrderNotFoundError } from '../domain/errors.js';
 import { MAX_ORDER_REFERENCE_FILES } from '../domain/order-files.js';
 import { decryptJson, encryptJson } from './envelope.js';
@@ -214,6 +215,12 @@ export class PostgresOrderFileRepository {
         'ORDER_CANCELLED',
       );
     }
+    await assertOlistCommercialWrite(
+      transaction,
+      { id: orderId, status: current.status },
+      null,
+      'order.files_changed',
+    );
     if (current.status !== 'pendente') {
       throw new OrderConflictError(
         'Only pending orders accept file changes',

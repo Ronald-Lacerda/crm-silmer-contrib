@@ -18,7 +18,8 @@ implementada e validada localmente em 05/11/2026, no
 [commit 6a79cc8a](https://github.com/romulosutil/crm-silmer/commit/6a79cc8aecc3111dbfad5b8b14220f3b3df860aa).
 Fase 3 iniciada pela fatia T20b de composição persistida opt-in
 ([contrato e limites](../runbooks/olist-phase3.md)); T20/T21/T26/T24 concluídas em
-domínio/API; T06/T22/T07/T08/T09 concluídas em 06/11/2026, com o gate F3 ainda aberto. As fases 4–6 permanecem pendentes.
+domínio/API; T06/T22/T07/T08/T09/T23/T10 concluídas em 06/11/2026.
+Gate F3 concluído localmente; [guardas e evidências T10](../runbooks/olist-phase3.md#t10--guardas-comerciais-e-recuperação). As fases 4–6 permanecem pendentes.
 A geração real continua desligada, sem deploy, conexão real homologada ou
 piloto nesta entrega. A revisão substitui
 as recomendações iniciais de preço unitário digitado, cadastro apenas existente, posse do pedido e edição após
@@ -834,12 +835,13 @@ geração e handlers de exportação continuam desligados nesta fase.
       Evidência: cancelamento idempotente, paginação/métricas corretas e corrida
       com worker; exportado/vinculado/incerto negados, nenhuma chamada cancelar ERP.
       Migration 0070, API e guardas entregues; [contrato e evidências](../runbooks/olist-phase3.md#t23--cancelamento-local-terminal).
-- [ ] **OLIST-T10** Integrar guardas pós-exportação/cancelamento, confirmação
+- [x] **OLIST-T10** Integrar guardas pós-exportação/cancelamento, confirmação
       sem alterar snapshot, cadastro compartilhado/revogação/lease/restore.
       OLIST-02, 06, 16, 19, 21, 27–30, 39, 45–47. Dono Backend.
       Depende T08/T09/T23. Evidência: matriz de corridas e regressão de outros workers.
+      [Guardas transacionais, confirmação imutável e recuperação verificadas](../runbooks/olist-phase3.md#t10--guardas-comerciais-e-recuperação).
 
-Gate F3: subtotal é autoridade CRM; nenhuma etapa incerta é recriada; alterações
+Gate F3 concluído localmente em 06/11/2026: subtotal é autoridade CRM; nenhuma etapa incerta é recriada; alterações
 pós-envio bloqueadas; cancelar localmente não cancela ERP nem apaga finanças.
 Loja/legado têm contratos explícitos, sem excluir qualquer origem silenciosamente.
 
@@ -1050,7 +1052,7 @@ duplicar checkboxes. Decisão aceita não marca implementação como concluída.
 | OLIST-PLAN-02            | Tech Lead                                        | ADR 057, OLIST-01–50, T01–T26 e emendas canônicas                                                                                                     | Registrar no handoff                                                                                                              | Documental                                                                |
 | F1 / T01–T02             | Tech Lead; Integrações                           | [T01 revisada](../integrations/olist/contract-review.md); [T02 concluída no escopo exato](../integrations/olist/phase1-report.md), frações bloqueadas | Ver histórico OLIST-T01/T02                                                                                                       | F1 fechado no escopo exact-cent-v1; frações fora da exportação automática |
 | F2 / T03–T05/T19         | Tech Lead + Backend/Integrações/Frontend/A11y/QA | [Implementação e gates locais concluídos](../integrations/olist/phase2-implementation.md); 36 SQL e 485 E2E aprovados                                 | [6a79cc8a](https://github.com/romulosutil/crm-silmer/commit/6a79cc8aecc3111dbfad5b8b14220f3b3df860aa), push em codex/olist-phase2 | F2 local concluída; geração desligada, sem deploy/piloto                  |
-| F3 / T06–T10/T20–T24/T26 | Tech Lead + Backend/Integrações/QA               | T20/T21/T26/T24/T06/T22/T07/T08/T09/T23 concluídas; [comando e gates locais](../runbooks/olist-phase3.md#fechamento-t23--06112026)                    | Branch codex/olist-phase3, entregas OLIST-T06/T22/T07/T08/T09; T23 em codex/olist-t23                                             | F3 parcial; sem geração/deploy/piloto                                     |
+| F3 / T06–T10/T20–T24/T26 | Tech Lead + Backend/Integrações/QA               | T20/T21/T26/T24/T06/T22/T07/T08/T09/T23/T10 concluídas; [guardas e gates locais](../runbooks/olist-phase3.md#t10--guardas-comerciais-e-recuperação)                    | Branch codex/olist-phase3, entrega OLIST-T10 e integração do commit T23 68aff226                                             | F3 local concluída; sem geração/deploy/piloto                                     |
 | F4 / T11–T13/T25         | A designar                                       | A preencher                                                                                                                                           | A preencher                                                                                                                       | UI/ficha v7                                                               |
 | F5 / T14–T15             | A designar                                       | A preencher                                                                                                                                           | A preencher                                                                                                                       | QA/operação                                                               |
 | F6 / T16–T18             | A designar                                       | A preencher                                                                                                                                           | A preencher                                                                                                                       | Piloto/ampliação                                                          |
@@ -1086,7 +1088,8 @@ Riscos, bloqueios e próximo item desbloqueado:
 ```
 
 Próximos itens: F1/T02 e F2/T03–T05/T19 concluídos para o escopo aprovado;
-continuar a Fase 3 por T10 após T20/T21/T26/T24/T06/T22/T07/T08/T09/T23 concluídas. O rollout depende também da interface na Fase 4.
+Fase 3 concluída após T20/T21/T26/T24/T06/T22/T07/T08/T09/T23/T10.
+Continuar pela Fase 4 (T11/T12/T13/T25); o rollout depende também das Fases 5–6.
 As preparações anteriores T20a/T21a não fechavam essas tarefas; o fechamento
 de T20/T21 está registrado no runbook. A limitação fracionária da ADR 062 permanece registrada. Não liberar
 geração real antes de cadastro automático seguro, precisão por linha, filtros

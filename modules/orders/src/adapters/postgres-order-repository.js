@@ -5,6 +5,10 @@ import {
 import { orderSourceFingerprint } from './order-source-fingerprint.js';
 import { sizePricingSummary } from '../domain/size-pricing-composition.js';
 import { randomUUID } from 'node:crypto';
+import {
+  assertOlistCommercialWrite,
+  readOlistCommercialLocks,
+} from './olist-commercial-lock.js';
 
 import {
   OrderConflictError,
@@ -670,6 +674,12 @@ export class PostgresOrderRepository {
         current.finalAmountCents !== input.expectedAmountCents
       )
         throw new StoreOrderError(409, 'STORE_ORDER_CONFLICT');
+      await assertOlistCommercialWrite(
+        transaction,
+        current,
+        null,
+        'store.order.quantity_corrected',
+      );
       const ficha = structuredClone(current.ficha);
       ficha.items[0].grade[0].quantidade = input.quantity;
       const updated = await transaction.query(
@@ -1144,7 +1154,19 @@ export class PostgresOrderRepository {
     return transaction ? work(transaction) : this.#database.transaction(work);
   }
 
-  /** @param {Order[]} orders @returns {Promise<Map<string, any>>} */
+  /** @param {Order[]} orders @returns {Promise<Set<string>>} */
+  async readFrozenOrderIds(orders) {
+    return new Set(
+      (
+        await readOlistCommercialLocks(
+          this.#database,
+          orders.map((order) => order.id),
+        )
+      ).map((row) => row.order_id),
+    );
+  }
+
+  /** @param {Order[]} orders */
   async readPriceBreakdowns(orders) {
     if (orders.length === 0) return new Map();
     const rows = (
@@ -1193,16 +1215,8 @@ export class PostgresOrderRepository {
       if (order.version !== input.expectedVersion)
         throw new OrderConflictError('The order version changed');
       // prepareExport locks this same order before inserting its snapshot.
-      const effect = await tx.query(
-        `SELECT 1 FROM crm.olist_exports AS export
-        WHERE export.order_id=$1 AND (
-          export.state NOT IN ('invalidated','rejected') OR export.remote_id IS NOT NULL OR
-          EXISTS (SELECT 1 FROM crm.olist_attempts AS attempt WHERE attempt.export_id=export.id AND attempt.outcome<>'rejected') OR
-          EXISTS (SELECT 1 FROM crm.olist_export_resources AS dependency JOIN crm.olist_attempts AS attempt ON attempt.resource_id=dependency.resource_id
-                  WHERE dependency.export_id=export.id AND attempt.outcome<>'rejected')) LIMIT 1`,
-        [order.id],
-      );
-      if (effect.rows[0])
+      const locks = await readOlistCommercialLocks(tx, [order.id]);
+      if (locks.length)
         throw new OrderConflictError(
           'The Olist snapshot is reserved',
           'ORDER_SOURCE_LOCKED',
@@ -1366,7 +1380,8 @@ export class PostgresOrderRepository {
             JSON.stringify(
               encryptJson(order.ficha, fichaAad(order.id), this.#envelopeKey),
             ),
-            order.legacySizePricing !== undefined,
+            order.legacySizePricing !== undefined ||
+              current.olistLocked === true,
           ],
         );
       },
@@ -1406,7 +1421,7 @@ export class PostgresOrderRepository {
    * @param {Order} order
    * @param {OrderWriteOptions} options
    * @param {string} eventType
-   * @param {(current: {status: string}, transaction: Queryable) => Promise<{rows: any[]}>} change
+   * @param {(current: {status: string, olistLocked?: boolean}, transaction: Queryable) => Promise<{rows: any[]}>} change
    */
   async #write(order, options, eventType, change) {
     // ADR 027: store orders are locked. Manual attendance orders have their
@@ -1669,6 +1684,12 @@ export class PostgresOrderRepository {
           'ORDER_CHANGED_SINCE_EVENT',
         );
       }
+      current.olistLocked = await assertOlistCommercialWrite(
+        transaction,
+        this.#map(current),
+        order,
+        eventType,
+      );
       const updated = await change(current, transaction);
       const saved = this.#map(updated.rows[0]);
       if (options.agentTarget) {

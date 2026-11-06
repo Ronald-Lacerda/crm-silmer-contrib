@@ -141,6 +141,20 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 ## OLIST-T20b — Início da Fase 3 (05/11/2026)
 
+## OLIST-T10 — guardas comerciais e recuperação (06/11/2026)
+
+- [x] T23 integrada à branch da Fase 3; escritores comerciais consultam o ledger
+      sob lock do Pedido, incluindo ficha, automação, arte e correção da loja.
+- [x] Pendente exportado/vinculado confirma somente com conteúdo/valores iguais,
+      envelope e snapshot intactos, sem atualizar cliente a partir do Contato.
+- [x] Revogação/cancelamento em cadastro compartilhado preservam tickets/resultados;
+      perda de lease e restore não autorizam novo POST nem avanço de dependentes.
+- [x] Matriz SQL com conexões independentes, reconciliação administrativa e
+      regressão de Pedidos/Loja/Financeiro/filas/n8n executadas.
+
+OLIST-02, 06, 16, 19, 21, 27–30, 39, 45–47. [Contrato e evidências](../../../docs/runbooks/olist-phase3.md#t10--guardas-comerciais-e-recuperação).
+F3 concluída localmente; próximas T11/T12/T13/T25, sem despacho real/deploy/piloto.
+
 ## OLIST-T23 — cancelamento local pré-exportação (06/11/2026)
 
 - [x] Marcador terminal separado dos dois status, motivo cifrado, versão e ACL

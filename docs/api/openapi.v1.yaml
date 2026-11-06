@@ -2869,7 +2869,8 @@ paths:
         Ação order.edit, restrita ao dono da conversa ou a COMMERCIAL_ADMIN.
         `value` substitui a seção inteira; total de peças e campos faltantes
         são recalculados. Pedido confirmado não aceita edição (409); é preciso
-        reabrir. OLIST-T20/T21: size-pricing recebe um comando fechado de
+        reabrir. OLIST-T10: snapshot Olist reservado, enviado, vinculado ou com
+        efeito incerto bloqueia alteração (409 ORDER_OLIST_LOCKED). OLIST-T20/T21: size-pricing recebe um comando fechado de
         composição, não uma substituição. initialize adota explicitamente só
         pendente nunca confirmado; não infere valores históricos. Demais ações
         referenciam IDs emitidos pelo servidor. Após adoção, items legado é
@@ -2980,6 +2981,8 @@ paths:
         e valores anteriores exatos. Calcula subtotal pelo catalogo, recusa
         pagamento insuficiente (422 AMOUNT_BELOW_PRICE). Preserva IDs, pagamento,
         confirmacao, primeira impressao e fingerprint original. Audita sem PII.
+        Snapshot Olist reservado, enviado/vinculado ou incerto bloqueia a
+        correção com 409 ORDER_OLIST_LOCKED.
         Mesma chave/corpo retorna o resultado. Outra chave com snapshot obsoleto
         retorna 409 VERSION_CONFLICT ou STORE_ORDER_CONFLICT. Chave reutilizada
         com outro corpo retorna 409 IDEMPOTENCY_KEY_REUSED. Campos invalidos
@@ -3039,7 +3042,11 @@ paths:
         autor, horário e data do pedido. Numa nova confirmação depois
         de reabrir, autor, horário e data passam a ser os da nova confirmação.
         Confirmações concorrentes sobre a mesma versão: uma vence e a outra
-        recebe 409. Confirmação não declara quitação nem inicia exportação Olist.
+        recebe 409. OLIST-T10: pendente já exportado/vinculado só confirma com
+        ficha, cliente congelado, total e condição idênticos; o envelope original
+        e o snapshot Olist permanecem intactos. Divergência recebe 409
+        ORDER_OLIST_SNAPSHOT_MISMATCH; operação ainda em curso/incerta recebe
+        ORDER_OLIST_LOCKED. Confirmação não declara quitação nem inicia exportação Olist.
       security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
       parameters:
         - $ref: '#/components/parameters/OrderId'
@@ -3118,6 +3125,8 @@ paths:
         Só a partir de confirmado. Volta a pendente mantendo número, valor e
         condição, registra autor e horário da reabertura e bloqueia a
         impressão. Pedido cancelado é terminal e recebe 409 ORDER_CANCELLED.
+        Snapshot Olist reservado, enviado/vinculado ou com efeito incerto
+        impede reabertura (409 ORDER_OLIST_LOCKED).
       security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
       parameters:
         - $ref: '#/components/parameters/OrderId'
@@ -7543,6 +7552,8 @@ components:
                   ORDER_SOURCE_INVALID,
                   ORDER_SOURCE_STALE,
                   ORDER_SOURCE_LOCKED,
+                  ORDER_OLIST_LOCKED,
+                  ORDER_OLIST_SNAPSHOT_MISMATCH,
                   SIZE_PRICING_INVALID,
                   SIZE_PRICING_OVERFLOW,
                   SIZE_PRICING_ALREADY_INITIALIZED,

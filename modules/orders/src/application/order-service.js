@@ -173,6 +173,8 @@ export function createOrderService(options) {
    * @returns {Promise<Order[]>}
    */
   async function withCurrentClient(orders) {
+    const frozenIds =
+      (await repository.readFrozenOrderIds?.(orders)) ?? new Set();
     // A pending order always has a conversation; a store order (ADR 027)
     // is born confirmed and never reads one.
     const pendingConversations = [
@@ -210,7 +212,12 @@ export function createOrderService(options) {
         : new Map(),
     ]);
     return orders.map((order) => {
-      if (order.status !== 'pendente' || order.cancelledAt) return order;
+      if (
+        order.status !== 'pendente' ||
+        order.cancelledAt ||
+        frozenIds.has(order.id)
+      )
+        return order;
       if (!order.conversationId && order.contactId) {
         return {
           ...order,
