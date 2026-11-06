@@ -364,7 +364,10 @@ test('Painel: the Inbox summary is read for the session user and takes no query'
   assert.deepEqual(response.json(), { mine: { count: 2 } });
   assert.equal(calls[0][1].action, 'conversation.read');
   // The queue is always the reader's own: the actor comes from the session.
-  assert.deepEqual(calls[1], ['summary', { actorId: 'operator-1' }]);
+  assert.deepEqual(calls[1], [
+    'summary',
+    { actorId: 'operator-1', capabilities: [] },
+  ]);
 
   const forged = await api.inject({
     headers,
@@ -389,8 +392,31 @@ test('Painel: the Inbox summary is read for the session user and takes no query'
   });
   assert.equal(blocked.statusCode, 403);
   assert.equal(denied.calls.length, 0);
+  // PNL-06: the session's capabilities, not the query, ask for the team.
+  const manager = harness({
+    async authorizeRead() {
+      return {
+        actor: {
+          capabilities: ['COMMERCIAL_ADMIN'],
+          functionName: 'Vendedor',
+          id: 'manager-1',
+        },
+      };
+    },
+  });
+  const managerRead = await manager.api.inject({
+    headers: manager.headers,
+    method: 'GET',
+    url: '/api/v1/inbox/summary',
+  });
+  assert.equal(managerRead.statusCode, 200);
+  assert.deepEqual(manager.calls[0], [
+    'summary',
+    { actorId: 'manager-1', capabilities: ['COMMERCIAL_ADMIN'] },
+  ]);
   await api.close();
   await denied.api.close();
+  await manager.api.close();
 });
 
 test('INBOX-HANDOFF-01: publishes the open handoff summary under handoff.read, never cached', async () => {

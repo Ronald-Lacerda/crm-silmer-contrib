@@ -100,11 +100,18 @@ test('LOJ-39: correction preserves the gateway, identifiers, print and original 
   assert.equal(replay.order.totalPieces, 2);
   assert.equal(replay.order.finalAmountCents, 9000);
   const summary = await repository.summary({
+    dailyFrom: '2026-10-01',
+    dailyTo: '2026-10-31',
     from: '2026-10-01',
     to: '2026-10-31',
   });
   assert.equal(summary.totalPiecesSold, 2);
   assert.equal(summary.soldAmountCents, 9000);
+  // PNL-05: the corrected amount is the one in "Vendido por dia".
+  assert.deepEqual(
+    summary.daily.map((day) => day.soldAmountCents),
+    [9000],
+  );
   assert.equal(
     repository
       .audits()

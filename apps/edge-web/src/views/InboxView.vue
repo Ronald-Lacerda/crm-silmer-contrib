@@ -186,7 +186,8 @@ const closeError = ref('');
 let contactController;
 const query = ref('');
 // Painel: each indicator opens the Inbox already filtered
-// (`?fila=minhas|sem-responsavel`, `?situacao=aguardando|agente|vendedor`).
+// (`?fila=minhas|sem-responsavel`, `?situacao=aguardando|agente|vendedor`,
+// `?responsavel=<userId>` for one seller's conversations, PNL-06).
 const route = useRoute();
 const ROUTE_STATE_TAB = Object.freeze({
   atender: 'attention',
@@ -203,6 +204,13 @@ const stateTab = ref(
   ROUTE_STATE_TAB[String(route.query.situacao ?? '')] ?? 'all',
 );
 const queueFilter = ref(ROUTE_QUEUE[String(route.query.fila ?? '')] ?? 'all');
+// PNL-06: the manager's "Ver conversas de <vendedor>" lists that person's
+// conversations. It only applies while no owner queue is chosen.
+const ownerFilter = ref(
+  queueFilter.value === 'all' && typeof route.query.responsavel === 'string'
+    ? route.query.responsavel.trim()
+    : '',
+);
 const filtersButton = ref(null);
 const filterSheet = ref(null);
 const filtersOpen = ref(false);
@@ -609,21 +617,32 @@ const createOrderInMore = computed(
 );
 const showArchived = computed(() => stateTab.value === 'archived');
 /** PCX-14: the shortcut the two filters add up to, if any. */
-const activeShortcut = computed(
-  () =>
-    SHORTCUTS.find(
-      (shortcut) =>
-        shortcut.tab === stateTab.value && shortcut.queue === queueFilter.value,
-    )?.value ?? '',
+const activeShortcut = computed(() =>
+  ownerFilter.value
+    ? ''
+    : (SHORTCUTS.find(
+        (shortcut) =>
+          shortcut.tab === stateTab.value &&
+          shortcut.queue === queueFilter.value,
+      )?.value ?? ''),
 );
 /**
  * PCX-14: a pair no shortcut covers is named, one removable filter per axis.
  * Empty while a shortcut is pressed: the shortcut already says it.
  */
 const activeFilters = computed(() => {
-  /** @type {Array<{key: 'queue'|'tab', label: string}>} */
+  /** @type {Array<{key: 'owner'|'queue'|'tab', label: string}>} */
   const filters = [];
   if (activeShortcut.value) return filters;
+  if (ownerFilter.value) {
+    const name = assignableUsers.value.find(
+      (user) => user.id === ownerFilter.value,
+    )?.name;
+    filters.push({
+      key: 'owner',
+      label: name ? `Conversas de ${name}` : 'Conversas do vendedor',
+    });
+  }
   const tab = STATE_TABS.find((item) => item.value === stateTab.value);
   if (tab && tab.value !== 'all')
     filters.push({ key: 'tab', label: tab.label });
@@ -634,7 +653,10 @@ const activeFilters = computed(() => {
   return filters;
 });
 const filteredByChoice = computed(
-  () => stateTab.value !== 'all' || queueFilter.value !== 'all',
+  () =>
+    stateTab.value !== 'all' ||
+    queueFilter.value !== 'all' ||
+    Boolean(ownerFilter.value),
 );
 const canArchiveActive = computed(
   () => canArchive.value && !active.value?.archivedAt,
@@ -722,13 +744,18 @@ function shortcutCount(value) {
 }
 
 /**
- * @param {{tab?: string, queue?: string}} [filter] the situation and the
- *   owner; the ones on screen by default
+ * @param {{tab?: string, queue?: string, owner?: string}} [filter] the
+ *   situation, the owner queue and one person's id; the ones on screen by
+ *   default
  * @param {number} [limit] 1 when only the total is wanted
  * @param {string} [cursor] opaque cursor returned by the same official scope
  */
 function listUrl(
-  { tab: tabValue = stateTab.value, queue = queueFilter.value } = {},
+  {
+    tab: tabValue = stateTab.value,
+    queue = queueFilter.value,
+    owner = ownerFilter.value,
+  } = {},
   limit = 100,
   cursor = '',
 ) {
@@ -750,6 +777,7 @@ function listUrl(
   if (queue === 'unassignedHumanHandoff') {
     params.set('unassignedHumanHandoff', 'true');
   }
+  if (queue === 'all' && owner) params.set('assignedUserId', owner);
   return `/api/v1/inbox/conversations?${params.toString()}`;
 }
 
@@ -759,6 +787,7 @@ function listUrl(
  * @param {(typeof SHORTCUTS)[number]} shortcut
  */
 function selectShortcut(shortcut) {
+  ownerFilter.value = '';
   stateTab.value = shortcut.tab;
   queueFilter.value = shortcut.queue;
 }
@@ -774,6 +803,8 @@ function openFilters(event) {
 }
 
 function applySheetFilters() {
+  // An owner queue chosen in the sheet replaces one person's conversations.
+  if (draftQueue.value !== 'all') ownerFilter.value = '';
   stateTab.value = draftTab.value;
   queueFilter.value = draftQueue.value;
 }
@@ -792,10 +823,11 @@ async function toggleConversationWidth() {
  * PCX-14: removes one filter of the summary. The focus stays in the summary
  * while it has a filter left, and goes to "Filtros" once it is gone.
  *
- * @param {'queue'|'tab'} key
+ * @param {'owner'|'queue'|'tab'} key
  */
 async function removeFilter(key) {
   if (key === 'tab') stateTab.value = 'all';
+  else if (key === 'owner') ownerFilter.value = '';
   else queueFilter.value = 'all';
   await nextTick();
   focusAfterFilterChange();
@@ -803,6 +835,7 @@ async function removeFilter(key) {
 
 /** Back to every conversation; the focus lands on "Filtros". */
 async function clearFilters() {
+  ownerFilter.value = '';
   stateTab.value = 'all';
   queueFilter.value = 'all';
   await nextTick();
@@ -1440,7 +1473,9 @@ async function loadCounts() {
     others.map((shortcut) =>
       shortcut.queue === 'mine' && !currentUserId.value
         ? Promise.reject(new Error('Sessão sem usuário'))
-        : request(listUrl(shortcut, 1), { signal: controller.signal }),
+        : request(listUrl({ ...shortcut, owner: '' }, 1), {
+            signal: controller.signal,
+          }),
     ),
   );
   if (controller !== countController) return;
@@ -2208,7 +2243,7 @@ function scheduleLiveRefresh() {
 
 watch(query, () => void selectVisibleConversation(false));
 // A shortcut or the sheet may change both filters at once: one read.
-watch([stateTab, queueFilter], () => void refreshInbox());
+watch([stateTab, queueFilter, ownerFilter], () => void refreshInbox());
 watch(
   () => props.conversationId,
   async (id, previous) => {

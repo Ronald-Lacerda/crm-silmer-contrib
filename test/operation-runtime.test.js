@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   ASSISTANT_STALL_MINUTES,
+  SELLER_UNANSWERED_MINUTES,
   createOperationReadService,
 } from '../apps/api/src/operation-runtime.js';
 import { PostgresInboxReadRepository } from '../modules/inbox-channels/src/index.js';
@@ -405,6 +406,107 @@ test('an empty restored event stream resets to zero, while a current cursor does
   });
 });
 
+test('PNL-06: only a COMMERCIAL_ADMIN reads who has conversations unanswered for 15 minutes', async () => {
+  /** @type {Array<{sql: string, values: unknown[]}>} */
+  const queries = [];
+  const now = new Date('2026-10-15T15:00:00.000Z');
+  const repository = new PostgresInboxReadRepository({
+    contactEnvelopeKey: Buffer.alloc(32, 2),
+    database: {
+      query: async (
+        /** @type {string} */ sql,
+        /** @type {unknown[]} */ values,
+      ) => {
+        queries.push({ sql, values });
+        if (/unanswered_count/u.test(sql)) {
+          // The database order is not trusted: the repository sorts.
+          return {
+            rows: [
+              { name: 'Pedro M.', unanswered_count: 1, user_id: 'seller-p' },
+              { name: 'ana', unanswered_count: 1, user_id: 'seller-a' },
+              { name: 'Bruno T.', unanswered_count: 3, user_id: 'seller-b' },
+            ],
+          };
+        }
+        if (/pending_count/u.test(sql)) return { rows: [{ pending_count: 0 }] };
+        return { rows: [{}] };
+      },
+    },
+    messageEnvelopeKey: Buffer.alloc(32, 3),
+  });
+  const service = createOperationReadService({
+    clock: () => now,
+    contactRepository: {},
+    cursorKey: Buffer.alloc(32, 1),
+    handoffRepository: {},
+    inboxRepository: repository,
+  });
+  const manager = await service.summarizeInbox({
+    actorId: 'manager-1',
+    capabilities: ['COMMERCIAL_ADMIN'],
+  });
+  assert.equal(SELLER_UNANSWERED_MINUTES, 15);
+  assert.deepEqual(manager.unanswered, {
+    bySeller: [
+      { count: 3, name: 'Bruno T.', userId: 'seller-b' },
+      { count: 1, name: 'ana', userId: 'seller-a' },
+      { count: 1, name: 'Pedro M.', userId: 'seller-p' },
+    ],
+    count: 5,
+    thresholdMinutes: 15,
+  });
+  const unanswered = queries.find(({ sql }) => /unanswered_count/u.test(sql));
+  assert.ok(unanswered);
+  // 15 minutes before the server clock, bound, never inlined.
+  assert.deepEqual(unanswered.values, ['2026-10-15T14:45:00.000Z']);
+  assert.match(unanswered.sql, /last_message\.direction='inbound'/u);
+  assert.match(
+    unanswered.sql,
+    /last_message\.occurred_at <= \$1::timestamptz/u,
+  );
+  assert.match(unanswered.sql, /conversation\.assigned_user_id IS NOT NULL/u);
+  assert.match(unanswered.sql, /conversation\.archived_at IS NULL/u);
+  assert.match(
+    unanswered.sql,
+    /state NOT IN\s+\('convertida_em_lead','sem_lead','encerrada'\)/u,
+  );
+  // Seller ids, names and counts only: nothing about the customer.
+  assert.doesNotMatch(unanswered.sql, /envelope|contact|phone|text/u);
+  // The other existing fields keep their shape.
+  assert.equal(manager.mine.count, 0);
+  assert.equal(typeof manager.assistant.stallMinutes, 'number');
+
+  queries.length = 0;
+  for (const capabilities of [undefined, [], ['SOMETHING_ELSE']]) {
+    const seller = await service.summarizeInbox({
+      actorId: 'seller-1',
+      ...(capabilities ? { capabilities } : {}),
+    });
+    assert.equal(seller.unanswered, null);
+  }
+  assert.equal(
+    queries.filter(({ sql }) => /unanswered_count/u.test(sql)).length,
+    0,
+  );
+
+  // A repository that ignores the request still never leaks the team.
+  const leaky = createOperationReadService({
+    clock: () => now,
+    contactRepository: {},
+    cursorKey: Buffer.alloc(32, 1),
+    handoffRepository: {},
+    inboxRepository: {
+      async summary() {
+        return { unanswered: { bySeller: [], count: 0, thresholdMinutes: 15 } };
+      },
+    },
+  });
+  assert.equal(
+    (await leaky.summarizeInbox({ actorId: 'seller-1' })).unanswered,
+    null,
+  );
+});
+
 test('Painel: the Inbox summary reads the server clock and maps counts without envelopes', async () => {
   /** @type {Array<{sql: string, values: unknown[]}>} */
   const queries = [];
@@ -467,12 +569,16 @@ test('Painel: the Inbox summary reads the server clock and maps counts without e
       oldestAwaitingSince: '2026-10-15T14:20:00.000Z',
       pendingOrderCount: 2,
     },
+    // PNL-06: a reader without COMMERCIAL_ADMIN never gets the team.
+    unanswered: null,
     waitingHandoff: {
       count: 4,
       oldestSince: '2026-10-15T09:00:00.000Z',
       overdueCount: 1,
     },
   });
+  // ...and the per-seller query never runs for them.
+  assert.equal(queries.length, 3);
   const [queue, myOrders, sends] = queries;
   // The seller's orders follow the rule that names the seller.
   assert.deepEqual(myOrders.values, ['seller-1']);

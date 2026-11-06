@@ -2,7 +2,8 @@
 // `const mock = await mockPainel(page, { manager: false })` antes de
 // `page.goto(...)`; `mock.periods`, `mock.orderLists` e `mock.inboxLists`
 // registram o que a tela pediu. `QUEUE` e `ordersSummary(key)` são as
-// respostas da fila e do resumo de pedidos por período.
+// respostas da fila e do resumo de pedidos por período; `queue` em
+// `mockPainel` troca a resposta da fila (PNL-06).
 
 /** Dashboard reads for fixtures whose primary subject is another screen.
  * @param {import('@playwright/test').Route} route
@@ -23,19 +24,6 @@ export async function mockDashboardRead(route, manager = true) {
       manager,
       Number(url.searchParams.get('days') ?? 7),
     );
-  if (url.pathname === '/api/v1/dashboard/checkpoint')
-    body = {
-      day: '2026-10-14',
-      timezone: 'America/Sao_Paulo',
-      scheduledAt: '08:00',
-      enabled: false,
-      configured: false,
-      snapshot: false,
-      generatedAt: '2026-10-15T15:00:00Z',
-      previewText: 'Resumo sintético.',
-      recipients: [],
-      totals: { soldAmountCents: 0, confirmedCount: 0 },
-    };
   if (!body) return false;
   await route.fulfill({
     contentType: 'application/json',
@@ -59,12 +47,32 @@ export const QUEUE = Object.freeze({
     oldestAwaitingSince: '2026-10-15T14:35:00.000Z',
     pendingOrderCount: 2,
   },
+  // PNL-06: only a COMMERCIAL_ADMIN reading gets the breakdown.
+  unanswered: {
+    bySeller: [
+      { count: 3, name: 'Vendedor Sintético', userId: 'seller-2' },
+      { count: 1, name: 'Atendente Sintética', userId: 'seller-1' },
+    ],
+    count: 4,
+    thresholdMinutes: 15,
+  },
   waitingHandoff: {
     count: 3,
     oldestSince: '2026-10-15T09:00:00.000Z',
     overdueCount: 1,
   },
 });
+
+/** PNL-05: the last seven São Paulo days, oldest first, today last. */
+export const DAILY = Object.freeze([
+  { confirmedCount: 10, day: '2026-10-09', soldAmountCents: 412_000 },
+  { confirmedCount: 6, day: '2026-10-10', soldAmountCents: 200_000 },
+  { confirmedCount: 2, day: '2026-10-11', soldAmountCents: 85_000 },
+  { confirmedCount: 14, day: '2026-10-12', soldAmountCents: 570_000 },
+  { confirmedCount: 18, day: '2026-10-13', soldAmountCents: 650_000 },
+  { confirmedCount: 16, day: '2026-10-14', soldAmountCents: 720_000 },
+  { confirmedCount: 1, day: '2026-10-15', soldAmountCents: 180_000 },
+]);
 
 /** @returns {Record<string, any>[]} */
 export function actionItems() {
@@ -216,6 +224,7 @@ export function ordersSummary(key) {
   return {
     averageTicketCents: 0,
     confirmedCount: 40,
+    daily: DAILY.map((day) => ({ ...day })),
     deliveries: {
       dueSoonCount: 4,
       dueSoonUntil: '2026-10-21',
@@ -241,9 +250,15 @@ export function ordersSummary(key) {
 
 /**
  * @param {import('@playwright/test').Page} page
- * @param {{manager?: boolean}} [options]
+ * @param {{manager?: boolean, queue?: Record<string, any>}} [options]
  */
-export async function mockPainel(page, { manager = true } = {}) {
+export async function mockPainel(
+  page,
+  {
+    manager = true,
+    queue = { ...QUEUE, unanswered: manager ? QUEUE.unanswered : null },
+  } = {},
+) {
   /** @type {string[]} */
   const periods = [];
   /** @type {URLSearchParams[]} */
@@ -283,7 +298,7 @@ export async function mockPainel(page, { manager = true } = {}) {
       periods.push(key);
       return json(ordersSummary(key));
     }
-    if (url.pathname === '/api/v1/inbox/summary') return json(QUEUE);
+    if (url.pathname === '/api/v1/inbox/summary') return json(queue);
     if (url.pathname === '/api/v1/dashboard/actions') {
       actionReads += 1;
       return json({
@@ -297,19 +312,6 @@ export async function mockPainel(page, { manager = true } = {}) {
       return json(
         performanceSummary(manager, Number(url.searchParams.get('days') ?? 7)),
       );
-    if (url.pathname === '/api/v1/dashboard/checkpoint')
-      return json({
-        day: '2026-10-14',
-        timezone: 'America/Sao_Paulo',
-        scheduledAt: '08:00',
-        enabled: false,
-        configured: false,
-        snapshot: false,
-        generatedAt: QUEUE.generatedAt,
-        previewText: 'Resumo sintético de pedidos confirmados.',
-        recipients: [],
-        totals: { soldAmountCents: 420000, confirmedCount: 3 },
-      });
     if (
       /^\/api\/v1\/(?:orders\/[^/]+\/(?:payment|delivery)-confirmation|dashboard\/actions\/[^/]+\/decision)$/u.test(
         url.pathname,
@@ -382,7 +384,12 @@ export async function mockPainel(page, { manager = true } = {}) {
       return json({ hasMore: false, items: [], totalCount: 0 });
     }
     if (url.pathname === '/api/v1/users/assignable') {
-      return json({ items: [] });
+      return json({
+        users: [
+          { id: 'seller-1', name: 'Atendente Sintética' },
+          { id: 'seller-2', name: 'Vendedor Sintético' },
+        ],
+      });
     }
     return json({ error: { code: 'NOT_FOUND' } }, 404);
   });

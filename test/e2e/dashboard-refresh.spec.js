@@ -11,6 +11,7 @@ const QUEUE_SUMMARY = Object.freeze({
   },
   generatedAt: '2026-10-15T15:00:00.000Z',
   mine: { awaitingReplyCount: 0, count: 0, oldestAwaitingSince: null },
+  unanswered: { bySeller: [], count: 0, thresholdMinutes: 15 },
   waitingHandoff: { count: 0, oldestSince: null, overdueCount: 0 },
 });
 
@@ -68,19 +69,6 @@ async function mockDashboard(page, options = {}) {
         today: '2026-10-15',
         items: [],
         hasMore: false,
-      });
-    if (path === '/api/v1/dashboard/checkpoint')
-      return json({
-        day: '2026-10-14',
-        timezone: 'America/Sao_Paulo',
-        scheduledAt: '08:00',
-        enabled: false,
-        configured: false,
-        snapshot: false,
-        generatedAt: QUEUE_SUMMARY.generatedAt,
-        previewText: 'Resumo sintético.',
-        recipients: [],
-        totals: { soldAmountCents: 0, confirmedCount: 0 },
       });
     if (path === '/api/v1/orders/delivery-tasks') return json({ items: [] });
     if (path === '/api/v1/orders/summary') {
@@ -163,20 +151,26 @@ test('keeps sales visible when the queue read fails and recovers', async ({
 
   await expect(page.getByText('R$ 2.500,00')).toBeVisible();
   const attendance = page.getByRole('region', {
-    name: 'Atendimento',
+    name: 'Atendimento agora',
     exact: true,
   });
   await expect(attendance).toBeVisible();
   await expect(attendance.getByRole('alert')).toContainText(
     'Não foi possível consultar a fila agora.',
   );
-  await expect(attendance.locator('.metric-value')).toHaveText(['—', '—', '—']);
+  // PNL-03: without a queue read every number is unknown, never "0".
+  await expect(attendance.locator('.attendance-value')).toHaveText([
+    '—',
+    '—',
+    '—',
+  ]);
+  await expect(attendance.getByRole('link', { name: /^—/u })).toHaveCount(3);
   await attendance.getByRole('button', { name: 'Tentar novamente' }).focus();
   await page.keyboard.press('Enter');
   await expect(attendance.getByRole('heading')).toBeFocused();
-  await expect(attendance.locator('.metric-value')).toHaveText([
+  await expect(attendance.locator('.attendance-value')).toHaveText([
     '0',
-    'Respondendo',
+    '3',
     '0',
   ]);
   await expect(page.getByRole('alert')).toHaveCount(0);
@@ -189,18 +183,22 @@ test('keeps the queue visible without inventing sales when orders fail and recov
   await page.goto('/dashboard');
 
   const attendance = page.getByRole('region', {
-    name: 'Atendimento',
+    name: 'Atendimento agora',
     exact: true,
   });
   await expect(attendance).toBeVisible();
-  await expect(attendance.locator('.metric-value')).toHaveText([
+  await expect(attendance.locator('.attendance-value')).toHaveText([
     '0',
-    'Respondendo',
+    '3',
     '0',
   ]);
   await expect(page.getByRole('alert')).toContainText(
     'Não foi possível carregar os indicadores.',
   );
+  // FIN-02 / T130: no sales read, no week of zeros.
+  const daily = page.getByRole('region', { name: 'Vendido por dia' });
+  await expect(daily).toContainText('Sem dados de vendas agora');
+  await expect(daily.getByRole('img')).toHaveCount(0);
   const orders = page.getByRole('region', { name: 'Vendas e entregas' });
   await expect(orders.locator('.metric-value')).toHaveText([
     '—',
@@ -235,7 +233,7 @@ test('keeps retry focused when only the queue recovers after a total failure', a
   await retry.focus();
   await page.keyboard.press('Enter');
   await expect(
-    page.getByRole('region', { name: 'Atendimento', exact: true }),
+    page.getByRole('region', { name: 'Atendimento agora', exact: true }),
   ).toBeVisible();
   await expect(retry).toBeFocused();
   await page.keyboard.press('Enter');

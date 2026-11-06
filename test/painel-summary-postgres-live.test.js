@@ -228,6 +228,8 @@ if (connectionString) {
           oldestAwaitingSince: '2026-09-08T12:10:00.000Z',
           pendingOrderCount: 0,
         },
+        // PNL-06: a seller never reads the team's breakdown.
+        unanswered: null,
         waitingHandoff: {
           count: 2,
           oldestSince: '2026-09-08T11:30:00.000Z',
@@ -240,6 +242,60 @@ if (connectionString) {
         0,
       );
       assert.ok(stalled);
+
+      // PNL-06: "sem resposta há mais de 15 minutos" per seller, read only
+      // for a COMMERCIAL_ADMIN. The Painel reads at 12:30, so a client
+      // message at 12:15 or earlier counts. A second seller has two such
+      // conversations, a fresh one and one already closed.
+      const secondSellerId = `seller-painel-b-${runId}`;
+      await pool.query(
+        `INSERT INTO crm.users (id, email, password_hash, name)
+         VALUES ($1, $2, '$argon2id$synthetic', 'Ana Painel')`,
+        [secondSellerId, `${secondSellerId}@example.test`],
+      );
+      /** @param {string} conversationId */
+      const assignToSecond = (conversationId) =>
+        pool.query(
+          `UPDATE crm.conversations
+           SET assigned_user_id = $2, automation_state = 'human'
+           WHERE id = $1`,
+          [conversationId, secondSellerId],
+        );
+      await assignToSecond(await open('anaold', '2026-09-08T11:40:00.000Z'));
+      // Exactly 15 minutes old still counts.
+      await assignToSecond(await open('anaedge', '2026-09-08T12:15:00.000Z'));
+      await assignToSecond(await open('anafresh', '2026-09-08T12:16:00.000Z'));
+      const closed = await open('anaclosed', '2026-09-08T11:00:00.000Z');
+      await assignToSecond(closed);
+      await pool.query(
+        `UPDATE crm.conversations
+         SET state = 'encerrada', closure_outcome = 'sem_pedido',
+             closed_by = $2, terminal_at = $3
+         WHERE id = $1`,
+        [closed, secondSellerId, NOW],
+      );
+      const managerSummary = await reads.summarizeInbox({
+        actorId: sellerId,
+        capabilities: ['COMMERCIAL_ADMIN'],
+      });
+      // The seller's "awaiting" (12:10) counts; "answered" ends on the
+      // seller, "archived" is out and "stalled" belongs to nobody.
+      assert.deepEqual(managerSummary.unanswered, {
+        bySeller: [
+          { count: 2, name: 'Ana Painel', userId: secondSellerId },
+          { count: 1, name: 'Vendedora Painel', userId: sellerId },
+        ],
+        count: 3,
+        thresholdMinutes: 15,
+      });
+      assert.deepEqual(
+        { ...managerSummary, unanswered: null },
+        await reads.summarizeInbox({ actorId: sellerId }),
+      );
+      assert.doesNotMatch(
+        JSON.stringify(managerSummary.unanswered),
+        /Mensagem|identity|@/u,
+      );
 
       /**
        * @param {{conversationId: string, status?: 'pendente'|'confirmado',
@@ -357,13 +413,27 @@ if (connectionString) {
       });
       assert.equal(today.confirmedCount, 7);
       assert.equal(today.pendingCount, 1);
+      // PNL-05: one bar per São Paulo day, 02/09 to today, empty days at 0;
+      // the pending order and the older sales are in no bar.
+      const lastSevenDays = [
+        { confirmedCount: 1, day: '2026-09-02', soldAmountCents: 50_000 },
+        { confirmedCount: 0, day: '2026-09-03', soldAmountCents: 0 },
+        { confirmedCount: 0, day: '2026-09-04', soldAmountCents: 0 },
+        { confirmedCount: 0, day: '2026-09-05', soldAmountCents: 0 },
+        { confirmedCount: 0, day: '2026-09-06', soldAmountCents: 0 },
+        { confirmedCount: 0, day: '2026-09-07', soldAmountCents: 0 },
+        { confirmedCount: 2, day: '2026-09-08', soldAmountCents: 80_000 },
+      ];
+      assert.deepEqual(today.daily, lastSevenDays);
       const week = await orders.summary({ period: '7dias' });
       assert.equal(week.period.from, '2026-09-02');
       assert.equal(week.period.confirmedCount, 3);
+      assert.deepEqual(week.daily, lastSevenDays);
       const month = await orders.summary({ period: 'mes' });
       assert.equal(month.period.from, '2026-09-01');
       // 01/09 counts in the month, not in the last seven days.
       assert.equal(month.period.confirmedCount, 4);
+      assert.deepEqual(month.daily, lastSevenDays);
 
       const overdue = await orders.list({ delivery: 'overdue' });
       assert.deepEqual(

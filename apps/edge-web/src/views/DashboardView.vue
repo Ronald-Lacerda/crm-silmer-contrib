@@ -12,14 +12,13 @@ import { RouterLink } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
 import DashboardActions from '../components/DashboardActions.vue';
 import DashboardPerformance from '../components/DashboardPerformance.vue';
-import DashboardCheckpoint from '../components/DashboardCheckpoint.vue';
 import { request } from '../lib/api-client.js';
 import {
   PERIODS,
-  assistantIndicator,
+  attendanceRows,
+  dailySalesChart,
   dueSoonIndicator,
   longDay,
-  mineIndicator,
   myOrdersIndicator,
   nextStep,
   overdueIndicator,
@@ -93,7 +92,9 @@ const soldLabel = computed(
 const step = computed(() =>
   error.value
     ? {
+        key: 'orders-unavailable',
         label: 'Os pedidos não responderam; tente de novo mais abaixo.',
+        action: '',
         to: null,
       }
     : nextStep({
@@ -120,20 +121,10 @@ const fromSummary = (indicator) =>
         detail: 'Sem dados de vendas e entregas agora',
       };
 const cards = computed(() => ({
-  assistant: {
-    ...fromQueue(() => assistantIndicator(queue.value?.assistant, now.value)),
-    label: 'Assistente',
-    to: { path: '/inbox', query: { situacao: 'agente' } },
-  },
   dueSoon: {
     ...fromSummary(() => dueSoonIndicator(summary.value.deliveries)),
     label: 'Próximas entregas',
     to: { path: '/pedidos', query: { entrega: 'proxima' } },
-  },
-  mine: {
-    ...fromQueue(() => mineIndicator(queue.value?.mine, now.value)),
-    label: 'Minhas conversas',
-    to: { path: '/inbox', query: { fila: 'minhas' } },
   },
   myOrders: {
     ...fromQueue(() => myOrdersIndicator(queue.value?.mine?.pendingOrderCount)),
@@ -172,7 +163,8 @@ const cards = computed(() => ({
 // Mobile-first (PO, 15/10/2026): the seller works from the phone, so their
 // home is "Minha fila" — what to answer now, what is stalled waiting for a
 // seller and their own pending orders — then the deliveries. The manager
-// reads the day first: sales of the period, deliveries, then attendance.
+// reads the day first: sales of the period and deliveries, then the week by
+// day next to "Atendimento agora" (PNL-05/06), then the team.
 const sections = computed(() =>
   isManager.value
     ? [
@@ -181,12 +173,6 @@ const sections = computed(() =>
           id: 'orders',
           period: true,
           title: 'Vendas e entregas',
-        },
-        {
-          cards: ['waiting', 'assistant', 'mine'],
-          id: 'attendance',
-          queue: true,
-          title: 'Atendimento',
         },
       ]
     : [
@@ -199,6 +185,13 @@ const sections = computed(() =>
         { cards: ['overdue', 'dueSoon'], id: 'orders', title: 'Entregas' },
       ],
 );
+
+// PNL-05: the week by day; FIN-02 / T130, no bars without a sales read.
+const salesChart = computed(() =>
+  dailySalesChart(summary.value.daily, { loaded: summaryLoaded.value }),
+);
+// PNL-06 / PNL-03: three links into the Inbox; "—" without a queue read.
+const attendance = computed(() => attendanceRows(queue.value));
 
 async function loadDashboard({ announce = false } = {}) {
   controller?.abort();
@@ -351,8 +344,6 @@ onBeforeUnmount(() => {
         <DashboardPerformance compact :revision="dashboardRevision" />
       </template>
     </DashboardActions>
-    <DashboardPerformance v-else manager :revision="dashboardRevision" />
-    <DashboardCheckpoint v-if="isManager" />
 
     <component
       :is="isManager ? 'div' : 'details'"
@@ -380,16 +371,18 @@ onBeforeUnmount(() => {
       </div>
       <template v-else>
         <!-- PNL-01: one next step for the role, no heading of its own (the
-           section titles stay the page outline); one link at most. -->
+           section titles stay the page outline); one button-like link at
+           most, after the sentence it acts on. -->
         <section class="next-step" aria-labelledby="dashboard-next-step-label">
-          <p id="dashboard-next-step-label" class="next-step-label">
-            Próximo passo
-          </p>
+          <div class="next-step-body">
+            <p id="dashboard-next-step-label" class="next-step-label">
+              Próximo passo
+            </p>
+            <p class="next-step-text">{{ step.label }}</p>
+          </div>
           <RouterLink v-if="step.to" class="next-step-link" :to="step.to">
-            {{ step.label }}
-            <AppIcon name="chevron" class="next-step-go" />
+            {{ step.action || 'Ver' }}
           </RouterLink>
-          <p v-else class="next-step-text">{{ step.label }}</p>
         </section>
 
         <div v-if="error" class="audit-note" role="alert">
@@ -481,22 +474,100 @@ onBeforeUnmount(() => {
                   {{ cards[key].detail }}
                 </span>
               </RouterLink>
-              <!-- AGENTE-OBS-01: the agent's numbers over days, next to its
-                 card; a link of its own, never nested in the card's link. -->
-              <RouterLink
-                v-if="key === 'assistant'"
-                class="metric-more"
-                to="/dashboard/agente"
-                >{{ performanceLinkLabel }}</RouterLink
-              >
             </li>
           </ul>
         </section>
+
+        <div v-if="isManager" class="dashboard-insights">
+          <!-- PNL-05: the last seven days; the figure speaks every day and
+             full value, the drawn labels are only for the eye. -->
+          <section
+            class="dashboard-card sales-by-day"
+            aria-labelledby="dashboard-daily-title"
+          >
+            <h2 id="dashboard-daily-title">Vendido por dia</h2>
+            <p class="dashboard-card-subtitle">{{ salesChart.summary }}</p>
+            <div
+              v-if="salesChart.available"
+              class="sales-chart"
+              role="img"
+              :aria-label="salesChart.description"
+            >
+              <ol class="sales-chart-plot" aria-hidden="true">
+                <li
+                  v-for="bar in salesChart.bars"
+                  :key="bar.day"
+                  class="sales-chart-column"
+                  :data-current="bar.current || undefined"
+                  :style="{ '--bar': bar.ratio }"
+                >
+                  <span class="sales-chart-track">
+                    <span class="sales-chart-value">{{ bar.value }}</span>
+                    <span class="sales-chart-bar"></span>
+                  </span>
+                  <span class="sales-chart-day">{{ bar.label }}</span>
+                </li>
+              </ol>
+            </div>
+            <p v-else class="sales-chart-empty">Sem dados de vendas agora</p>
+          </section>
+
+          <!-- PNL-06 / PNL-03: three links into the Inbox; without a queue
+             read every number is "—" and the retry stays here. -->
+          <section
+            class="dashboard-card attendance-now"
+            aria-labelledby="dashboard-attendance-title"
+          >
+            <h2
+              id="dashboard-attendance-title"
+              :ref="setQueueHeading"
+              tabindex="-1"
+            >
+              Atendimento agora
+            </h2>
+            <div v-if="queueError" class="audit-note" role="alert">
+              <p>{{ queueError }}</p>
+              <button
+                type="button"
+                :aria-disabled="loading ? 'true' : undefined"
+                @click="retryQueue()"
+              >
+                {{ loading ? 'Consultando…' : 'Tentar novamente' }}
+              </button>
+            </div>
+            <ul class="attendance-list" role="list">
+              <li v-for="row in attendance" :key="row.key">
+                <RouterLink
+                  class="attendance-row"
+                  :to="row.to"
+                  :data-tone="row.tone || undefined"
+                >
+                  <span class="attendance-value">{{ row.value }}</span>
+                  <span class="attendance-text">
+                    <span class="attendance-label">{{ row.label }}</span>
+                    <span
+                      class="attendance-detail"
+                      :data-tone="row.detailTone || undefined"
+                      >{{ row.detail }}</span
+                    >
+                  </span>
+                  <AppIcon name="chevron" class="attendance-go" />
+                </RouterLink>
+              </li>
+            </ul>
+            <!-- AGENTE-OBS-01: the agent's numbers over days. -->
+            <RouterLink class="metric-more" to="/dashboard/agente">{{
+              performanceLinkLabel
+            }}</RouterLink>
+          </section>
+        </div>
       </template>
     </component>
-    <details v-if="isManager" class="dashboard-secondary-sources">
-      <summary>Minhas providências</summary>
-      <DashboardActions @changed="dashboardChanged" />
-    </details>
+    <!-- The team after the day and the week, as in the manager's design. -->
+    <DashboardPerformance
+      v-if="isManager"
+      manager
+      :revision="dashboardRevision"
+    />
   </div>
 </template>

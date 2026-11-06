@@ -416,9 +416,11 @@ fazer agora, sem ler todos os indicadores.
 
 Decisão do PO de 15/10/2026 no [RFC 024](../../../docs/rfc/024-jornadas-com-menos-botoes.md),
 registrada no [ADR 036](../../../docs/adr/036-padroes-de-jornada.md). FIN-02 e
-REV-06 continuam valendo. Nada aqui muda API, contrato de dados ou migração: o
-Painel usa os resumos que já lê. Tarefas T130 e T131 em
-[Pedidos MVP](../pedidos-mvp/tasks.md).
+REV-06 continuam valendo. PNL-01..04 não mudam API, contrato de dados ou
+migração: o Painel usa os resumos que já lê. Tarefas T130 e T131 em
+[Pedidos MVP](../pedidos-mvp/tasks.md). PNL-05 e PNL-06 (pedido do PO de
+06/11/2026, tarefa PNL-T05) acrescentam `daily` ao resumo de pedidos e
+`unanswered` ao resumo da Inbox, sem migração.
 
 **Critérios de aceite:**
 
@@ -428,7 +430,8 @@ Painel usa os resumos que já lê. Tarefas T130 e T131 em
    papel. Vendedor: conversas suas a responder → conversas aguardando vendedor
    para assumir → seus pedidos pendentes a completar → entregas atrasadas →
    "Nada urgente agora", sem link. Gestor: conversas fora do SLA (Esperando
-   vendedor) → entregas atrasadas → agente parado → pedidos a confirmar. WHEN
+   vendedor) → vendedor com conversas sem resposta há mais de 15 min
+   (PNL-06) → entregas atrasadas → agente parado → pedidos a confirmar. WHEN
    a fonte de uma condição falhou THEN o cartão SHALL NOT pular essa condição
    nem dizer "Nada urgente agora": SHALL dizer que não conseguiu ler aquela
    informação, com "Tentar novamente".
@@ -445,6 +448,24 @@ Painel usa os resumos que já lê. Tarefas T130 e T131 em
    (pergunta D3 do RFC 024): não implementar; o login continua levando ao
    Painel ou à rota pedida (LOJ-24). A tarefa T131 fica sem implementação
    ativa até nova decisão.
+5. **PNL-05:** WHEN o gestor abre o Painel THEN o sistema SHALL mostrar
+   "Vendido por dia": uma barra por dia dos últimos 7 dias de São Paulo,
+   terminando em hoje (destacado), com o valor confirmado de cada dia e o
+   total da semana em valor e pedidos, no mesmo universo de FIN-02
+   (confirmados, sem pedidos de teste, por data do pedido). O gráfico SHALL
+   ter descrição textual com cada dia e valor. WHEN o resumo de pedidos
+   falhou THEN SHALL dizer que não há dados, nunca mostrar zeros.
+6. **PNL-06:** WHEN o gestor abre o Painel THEN o sistema SHALL mostrar
+   "Atendimento agora" com três linhas, cada uma um link para a Inbox
+   filtrada: esperando vendedor (com a espera da mais antiga), com o
+   assistente (com a saúde dele) e conversas de um vendedor sem resposta há
+   mais de 15 minutos (última mensagem do cliente), com a quebra por
+   vendedor. A quebra por vendedor SHALL vir só para quem tem
+   `COMMERCIAL_ADMIN`. No Próximo passo do gestor, a regra "<vendedor> tem N
+   conversas sem resposta há mais de 15 minutos" entra logo depois das
+   conversas fora do SLA e abre a Inbox com as conversas desse vendedor. Com a
+   fila em falha valem as regras de PNL-03. O Painel do gestor deixa de
+   mostrar o "Checkpoint dos sócios" e "Minhas providências".
 
 **Teste independente:** como vendedor com uma conversa a responder, ver o
 cartão apontar para "Minhas conversas"; derrubar a leitura da fila e ver "—"
@@ -557,10 +578,10 @@ tarefa OPS-ERR-T01. Complementa PRV-01 e a observabilidade da issue #11.
 | Financeiro         | FIN-01 a FIN-03         | Confirmados e valor vendido implementados; UAT pendente                                                        |
 | Privacidade        | PRV-01 a PRV-03         | Coberta no contrato; homologação pendente                                                                      |
 | PIX e boas-vindas  | PAY-01 a PAY-05         | Diferidos pela ADR 006; datas manuais não implementam cobrança                                                 |
-| Painel por papel   | PNL-01 a PNL-04         | PNL-01..03 cobertos em `ux/jornadas` (T130, `069ae76`); PNL-04 adiado pelo PO (D3, T131)                       |
+| Painel por papel   | PNL-01 a PNL-06         | PNL-01..03 cobertos em `ux/jornadas` (T130, `069ae76`); PNL-04 adiado pelo PO (D3, T131); PNL-05..06 em PNL-T05 |
 | Saúde e erros      | OPS-ERR-01 a OPS-ERR-11 | Central restrita à conta operadora; implementação e gates em OPS-ERR-T01, OPS-INBOX-ACK-04 e OPS-INBOX-SEND-08 |
 
-**Cobertura:** 45 IDs preservados, incluindo 5 PAY diferidos e o PNL-04 adiado; implementação, homologação e aprovação externa têm estados distintos. Essa cobertura não representa aprovação humana dos gates operacionais. A decomposição em tarefas pertence ao Tech Lead.
+**Cobertura:** 47 IDs preservados, incluindo 5 PAY diferidos e o PNL-04 adiado; implementação, homologação e aprovação externa têm estados distintos. Essa cobertura não representa aprovação humana dos gates operacionais. A decomposição em tarefas pertence ao Tech Lead.
 
 ### Evidência do Painel por papel (RFC 024, T133)
 
@@ -575,6 +596,8 @@ PR para o `master`.
 | PNL-02 | T130   | `dashboard-next-step.spec.js` “the manager starts from the SLA and the period says it is for Vendido”; `dashboard-roles.spec.js` “the manager reads the day first, with the period on the server”                                                                                                                                                                                                                                                                                                                                                                                        | Coberto em `ux/jornadas`              |
 | PNL-03 | T130   | `dashboard-next-step.spec.js` “a failing queue keeps Atendimento with dashes and retries by keyboard” e “the seller queue failure says the step could not be read”                                                                                                                                                                                                                                                                                                                                                                                                                       | Coberto em `ux/jornadas`              |
 | PNL-04 | T131   | Sem implementação: adiado pelo PO (D3)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Adiado                                |
+| PNL-05 | PNL-T05 | `orders-summary.test.js` “PNL-05: "Vendido por dia" is the last seven São Paulo days, today last, whatever the period”; `dashboard-format.test.js` “Painel: the week by day labels each day and speaks every value”, “Painel: a week without sales is a flat baseline, a failed read has no bars” e “Painel: bar values are compact reais”; `test:orders:live` | Coberto |
+| PNL-06 | PNL-T05 | `operation-runtime.test.js` “PNL-06: only a COMMERCIAL_ADMIN reads who has conversations unanswered for 15 minutes”; `dashboard-format.test.js` “Painel: "Atendimento agora" links three rows into the Inbox”, “Painel: a failed queue reads "—" in every attendance row, never "0"” e “Painel: the manager hears about a late seller right after the SLA”; `dashboard-next-step.spec.js` “PNL-06: a seller with unanswered conversations opens the Inbox on their conversations”; `test:operation-read:live` | Coberto |
 
 Divergência de PNL-01: com a fila em falha, o cartão do gestor pula as
 condições que dependem da fila e mostra a próxima que conseguiu ler (por

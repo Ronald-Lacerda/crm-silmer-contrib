@@ -456,6 +456,23 @@ export class InMemoryOrderRepository {
         order.orderDate >= query.from &&
         order.orderDate <= query.to,
     );
+    // PNL-05: the same universe grouped by order day, only days that sold.
+    /** @type {Map<string, {day: string, confirmedCount: number, soldAmountCents: number}>} */
+    const byDay = new Map();
+    for (const order of confirmed) {
+      const day = order.orderDate;
+      if (day === null || day < query.dailyFrom || day > query.dailyTo) {
+        continue;
+      }
+      const entry = byDay.get(day) ?? {
+        day,
+        confirmedCount: 0,
+        soldAmountCents: 0,
+      };
+      entry.confirmedCount += 1;
+      entry.soldAmountCents += order.finalAmountCents ?? 0;
+      byDay.set(day, entry);
+    }
     // ADR 031: store orders whose ficha nobody printed yet.
     const storeNew = orders.filter(
       (order) => order.origin === 'loja' && !order.fichaFirstPrintedAt,
@@ -484,6 +501,9 @@ export class InMemoryOrderRepository {
           0,
         ),
       },
+      daily: [...byDay.values()].sort((left, right) =>
+        left.day.localeCompare(right.day),
+      ),
     };
   }
 

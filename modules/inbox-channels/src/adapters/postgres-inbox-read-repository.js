@@ -2,6 +2,10 @@ import { decryptSiteContactClaim } from '@crm-silmer/contacts';
 import { decryptContactIdentityEnvelope } from '@crm-silmer/contacts/identity-envelope';
 import { decryptInboxMessageEnvelope } from './postgres-inbox-repository.js';
 
+// PNL-06: sellers with the same count read in alphabetical order, the same
+// on every server whatever the database collation.
+const SELLER_NAME_ORDER = new Intl.Collator('pt-BR', { sensitivity: 'base' });
+
 const DOCUMENT_IMAGE_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -546,17 +550,28 @@ export class PostgresInboxReadRepository {
    *   client message got no answer for `stallMinutes`, conversations with a
    *   failed or unknown send in the last 24 hours and the assistant's last
    *   reply in that window.
+   * - `unanswered` (PNL-06, manager only): open conversations assigned to a
+   *   seller whose last message is the client's and is `unansweredMinutes`
+   *   old or older, per seller. Only the caller decides who may read it: a
+   *   null `unansweredMinutes` returns null and runs no query. Seller ids,
+   *   seller names and counts only; nothing about the customer.
    *
-   * @param {{actorId: string, now: Date, stallMinutes: number}} input
+   * @param {{actorId: string, now: Date, stallMinutes: number, unansweredMinutes?: number|null}} input
    */
-  async summary({ actorId, now, stallMinutes }) {
+  async summary({ actorId, now, stallMinutes, unansweredMinutes = null }) {
     const at = now.toISOString();
     const stalledBefore = new Date(
       now.getTime() - stallMinutes * 60_000,
     ).toISOString();
     const dayAgo = new Date(now.getTime() - 24 * 60 * 60_000).toISOString();
+    if (
+      unansweredMinutes !== null &&
+      (!Number.isSafeInteger(unansweredMinutes) || unansweredMinutes < 1)
+    ) {
+      throw new TypeError('unansweredMinutes must be a positive integer');
+    }
     return this.#snapshot(async (database) => {
-      const [queue, myOrders, sends] = await Promise.all([
+      const [queue, myOrders, sends, unanswered] = await Promise.all([
         database.query(
           `SELECT
              count(*) FILTER (WHERE handoff.status='pending')::integer waiting_count,
@@ -620,9 +635,58 @@ export class PostgresInboxReadRepository {
              AND message.occurred_at <= $2::timestamptz`,
           [dayAgo, at],
         ),
+        unansweredMinutes === null
+          ? null
+          : database.query(
+              `SELECT conversation.assigned_user_id user_id, seller.name,
+                      count(*)::integer unanswered_count
+               FROM crm.conversations conversation
+               JOIN crm.users seller
+                 ON seller.id = conversation.assigned_user_id
+               JOIN LATERAL (
+                 SELECT message.direction, message.occurred_at
+                 FROM crm.messages message
+                 WHERE message.conversation_id=conversation.id
+                 ORDER BY message.occurred_at DESC, message.id DESC LIMIT 1
+               ) last_message ON true
+               WHERE conversation.archived_at IS NULL
+                 AND conversation.state NOT IN
+                   ('convertida_em_lead','sem_lead','encerrada')
+                 AND conversation.assigned_user_id IS NOT NULL
+                 AND last_message.direction='inbound'
+                 AND last_message.occurred_at <= $1::timestamptz
+               GROUP BY conversation.assigned_user_id, seller.name`,
+              [
+                new Date(
+                  now.getTime() - unansweredMinutes * 60_000,
+                ).toISOString(),
+              ],
+            ),
       ]);
       const row = queue.rows[0] ?? {};
       const sent = sends.rows[0] ?? {};
+      /** @type {Array<{userId: string, name: string, count: number}>} */
+      const bySeller = (unanswered?.rows ?? [])
+        .map((/** @type {any} */ seller) =>
+          Object.freeze({
+            userId: String(seller.user_id),
+            name: String(seller.name),
+            count: Number(seller.unanswered_count),
+          }),
+        )
+        .sort(
+          (
+            /** @type {{userId: string, name: string, count: number}} */ left,
+            /** @type {{userId: string, name: string, count: number}} */ right,
+          ) =>
+            right.count - left.count ||
+            SELLER_NAME_ORDER.compare(left.name, right.name) ||
+            (left.userId < right.userId
+              ? -1
+              : left.userId > right.userId
+                ? 1
+                : 0),
+        );
       return Object.freeze({
         assistant: Object.freeze({
           activeCount: Number(row.assistant_active_count ?? 0),
@@ -634,6 +698,17 @@ export class PostgresInboxReadRepository {
           stallMinutes,
         }),
         generatedAt: at,
+        unanswered:
+          unansweredMinutes === null
+            ? null
+            : Object.freeze({
+                bySeller: Object.freeze(bySeller),
+                count: bySeller.reduce(
+                  (/** @type {number} */ total, seller) => total + seller.count,
+                  0,
+                ),
+                thresholdMinutes: unansweredMinutes,
+              }),
         mine: Object.freeze({
           awaitingReplyCount: Number(row.mine_awaiting_count ?? 0),
           count: Number(row.mine_count ?? 0),

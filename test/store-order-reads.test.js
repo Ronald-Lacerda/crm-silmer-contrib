@@ -410,7 +410,7 @@ test('LOJ-09: the summary counts a store sale like any sale and skips tests', as
     method: 'GET',
     url: '/api/v1/orders/summary',
   });
-  const { deliveries, period, today, ...totals } = response.json();
+  const { daily, deliveries, period, today, ...totals } = response.json();
   assert.deepEqual(totals, {
     averageTicketCents: 18000,
     confirmedCount: 1,
@@ -424,6 +424,17 @@ test('LOJ-09: the summary counts a store sale like any sale and skips tests', as
   assert.equal(deliveries.overdueCount, 0);
   assert.equal(typeof today, 'string');
   assert.equal(period.key, 'hoje');
+  // PNL-05: seven days ending today; the test order sold nothing.
+  assert.equal(daily.length, 7);
+  assert.equal(daily.at(-1).day, today);
+  assert.equal(
+    daily.reduce(
+      (/** @type {number} */ total, /** @type {any} */ day) =>
+        total + day.confirmedCount,
+      0,
+    ),
+    period.confirmedCount,
+  );
   await api.close();
 });
 

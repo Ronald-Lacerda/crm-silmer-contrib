@@ -119,10 +119,12 @@ test('the manager opens the agent performance from its card, by keyboard', async
   await page.goto('/dashboard');
   const link = page.getByRole('link', { name: 'Ver desempenho do agente' });
   await expect(link).toBeVisible();
-  // The card stays one link of its own; the new link is not inside it.
+  // The row stays one link of its own; the new link is not inside it.
   await expect(
-    page.getByRole('link', { name: /^Assistente Pede atenção/u }),
-  ).toBeVisible();
+    page
+      .getByRole('region', { name: 'Atendimento agora' })
+      .getByRole('link', { name: /^4 Com o assistente/u }),
+  ).toHaveAttribute('href', '/inbox?situacao=agente');
   await link.focus();
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL('/dashboard/agente');

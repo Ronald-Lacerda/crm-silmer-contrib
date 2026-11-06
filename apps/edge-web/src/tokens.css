@@ -199,6 +199,23 @@
       var(--brand-primary) 70%,
       #ffffff
     );
+    /* The one action on an emphasis block (Próximo passo): a light button. */
+    --color-emphasis-action: #ffffff;
+    --color-emphasis-action-text: var(--brand-ink);
+    --color-emphasis-action-hover: color-mix(
+      in srgb,
+      var(--brand-ink) 8%,
+      #ffffff
+    );
+    /* Bar charts: past values in a quiet secondary tint, the current one in
+       the brand color (PNL-05). */
+    --color-chart-bar: color-mix(
+      in srgb,
+      var(--brand-secondary-light) 70%,
+      #ffffff
+    );
+    --color-chart-bar-current: var(--brand-primary);
+    --color-chart-baseline: var(--color-border);
   }
 
   html[data-theme='dark'] {
@@ -286,5 +303,15 @@
       var(--brand-primary) 70%,
       #ffffff
     );
+    --color-emphasis-action: color-mix(in srgb, #ffffff 94%, var(--brand-ink));
+    --color-emphasis-action-text: var(--brand-ink);
+    --color-emphasis-action-hover: #ffffff;
+    --color-chart-bar: color-mix(
+      in srgb,
+      var(--brand-secondary-light) 55%,
+      var(--brand-ink)
+    );
+    --color-chart-bar-current: var(--brand-primary);
+    --color-chart-baseline: var(--color-border);
   }
 }

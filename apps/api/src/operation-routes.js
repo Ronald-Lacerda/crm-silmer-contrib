@@ -197,9 +197,14 @@ export function registerOperationRoutes(api, operations, contextFor) {
         'conversation.read',
       );
       privateReadHeaders(reply);
-      return reply
-        .code(200)
-        .send(await operations.summarizeInbox({ actorId: access.actor.id }));
+      // PNL-06: the session's capabilities decide whether the per-seller
+      // breakdown is read; the client never asks for it.
+      return reply.code(200).send(
+        await operations.summarizeInbox({
+          actorId: access.actor.id,
+          capabilities: [...(access.actor.capabilities ?? [])],
+        }),
+      );
     }),
   );
 

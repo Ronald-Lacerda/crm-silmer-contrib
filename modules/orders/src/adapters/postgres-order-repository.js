@@ -706,10 +706,21 @@ export class PostgresOrderRepository {
          count(*) FILTER (WHERE status = 'pendente')::integer AS pending_count,
          coalesce(sum(total_pieces) FILTER (WHERE status = 'confirmado'), 0)::bigint AS total_pieces_sold,
          count(*) FILTER (WHERE origin = 'loja' AND ficha_first_printed_at IS NULL)::integer AS store_new_count,
-         min(payment_confirmed_at) FILTER (WHERE origin = 'loja' AND ficha_first_printed_at IS NULL) AS store_new_oldest_paid_at
+         min(payment_confirmed_at) FILTER (WHERE origin = 'loja' AND ficha_first_printed_at IS NULL) AS store_new_oldest_paid_at,
+         (SELECT coalesce(jsonb_agg(jsonb_build_object(
+                    'day', to_char(sold.order_date, 'YYYY-MM-DD'),
+                    'confirmedCount', sold.confirmed_count,
+                    'soldAmountCents', sold.sold_amount_cents)
+                  ORDER BY sold.order_date), '[]'::jsonb)
+          FROM (SELECT order_date, count(*)::integer AS confirmed_count,
+                       coalesce(sum(final_amount_cents), 0)::bigint AS sold_amount_cents
+                FROM crm.orders
+                WHERE NOT is_test AND status = 'confirmado'
+                  AND order_date BETWEEN $3::date AND $4::date
+                GROUP BY order_date) sold) AS daily
        FROM crm.orders
        WHERE NOT is_test`,
-      [query.from, query.to],
+      [query.from, query.to, query.dailyFrom, query.dailyTo],
     );
     const row = result.rows[0];
     const confirmedCount = Number(row.confirmed_count);
@@ -729,6 +740,14 @@ export class PostgresOrderRepository {
         confirmedCount: Number(row.period_confirmed_count ?? 0),
         soldAmountCents: Number(row.period_sold_amount_cents ?? 0),
       },
+      // PNL-05: only the days that sold, grouped in the same statement.
+      daily: (Array.isArray(row.daily) ? row.daily : []).map(
+        (/** @type {any} */ day) => ({
+          day: String(day.day),
+          confirmedCount: Number(day.confirmedCount),
+          soldAmountCents: Number(day.soldAmountCents),
+        }),
+      ),
     };
   }
 

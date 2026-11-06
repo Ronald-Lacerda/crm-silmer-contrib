@@ -1,5 +1,6 @@
+import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
-import { actionItems, mockPainel } from './support/painel-mock.js';
+import { QUEUE, actionItems, mockPainel } from './support/painel-mock.js';
 
 test('the manager keeps a single next step and the sales selector names its scope', async ({
   page,
@@ -7,7 +8,9 @@ test('the manager keeps a single next step and the sales selector names its scop
   await mockPainel(page);
   await page.goto('/dashboard');
   const step = page.getByRole('region', { name: 'Próximo passo' });
+  await expect(step).toContainText('Atender 1 conversa fora do prazo');
   await expect(step.getByRole('link')).toHaveCount(1);
+  await expect(step.getByRole('link')).toHaveText('Ver conversas');
   await expect(step.getByRole('link')).toHaveAttribute(
     'href',
     '/inbox?situacao=aguardando',
@@ -23,6 +26,49 @@ test('the manager keeps a single next step and the sales selector names its scop
     team.getByRole('combobox', { name: 'Período do desempenho' }),
   ).toHaveValue('7');
   await expect(team).toContainText('R$ 16.400,00');
+});
+
+test('PNL-06: a seller with unanswered conversations opens the Inbox on their conversations', async ({
+  page,
+}) => {
+  const mock = await mockPainel(page, {
+    queue: {
+      ...QUEUE,
+      waitingHandoff: { ...QUEUE.waitingHandoff, overdueCount: 0 },
+    },
+  });
+  await page.goto('/dashboard');
+  const step = page.getByRole('region', { name: 'Próximo passo' });
+  await expect(step).toContainText(
+    'Vendedor S. tem 3 conversas sem resposta há mais de 15 minutos.',
+  );
+  const link = step.getByRole('link', {
+    name: 'Ver conversas de Vendedor',
+    exact: true,
+  });
+  await expect(link).toHaveAttribute('href', '/inbox?responsavel=seller-2');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await link.focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL('/inbox?responsavel=seller-2');
+  await expect
+    .poll(() => mock.inboxLists.at(-1)?.get('assignedUserId'))
+    .toBe('seller-2');
+  // The filter is visible and removable by keyboard.
+  const chip = page.getByRole('button', {
+    name: 'Remover filtro Conversas de Vendedor Sintético',
+  });
+  await expect(chip).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Filtro:' })).toContainText(
+    'Conversas de Vendedor Sintético',
+  );
+  const lists = mock.inboxLists.length;
+  await chip.focus();
+  await page.keyboard.press('Enter');
+  await expect(chip).toHaveCount(0);
+  await expect.poll(() => mock.inboxLists.length).toBeGreaterThan(lists);
+  expect(mock.inboxLists.at(-1)?.has('assignedUserId')).toBe(false);
+  await expect(page.getByRole('button', { name: 'Filtros' })).toBeFocused();
 });
 
 test('unavailable actions are unknown, never an empty queue or zero, while own performance remains readable', async ({

@@ -20,7 +20,21 @@ const connectionString = process.env.TEST_DATABASE_URL;
 const ENVELOPE_KEY = Buffer.alloc(32, 61);
 const HMAC_KEY = Buffer.alloc(32, 27);
 // Painel: the repository counts a period's sales between two São Paulo days.
-const SUMMARY_PERIOD = Object.freeze({ from: '2026-10-01', to: '2026-10-31' });
+const SUMMARY_PERIOD = Object.freeze({
+  dailyFrom: '2026-10-01',
+  dailyTo: '2026-10-31',
+  from: '2026-10-01',
+  to: '2026-10-31',
+});
+/** @param {{daily: Array<{confirmedCount: number, soldAmountCents: number}>}} summary */
+const soldByDay = (summary) =>
+  summary.daily.reduce(
+    (total, day) => ({
+      confirmedCount: total.confirmedCount + day.confirmedCount,
+      soldAmountCents: total.soldAmountCents + day.soldAmountCents,
+    }),
+    { confirmedCount: 0, soldAmountCents: 0 },
+  );
 
 if (connectionString) {
   const databaseName = new URL(connectionString).pathname.slice(1);
@@ -306,6 +320,15 @@ if (connectionString) {
     const summary = await repository.summary(SUMMARY_PERIOD);
     assert.equal(summary.confirmedCount, previous.confirmedCount + 1);
     assert.equal(summary.soldAmountCents, previous.soldAmountCents + 18000);
+    // PNL-05: "Vendido por dia" counts the same sale and skips the test.
+    assert.deepEqual(soldByDay(summary), {
+      confirmedCount: soldByDay(previous).confirmedCount + 1,
+      soldAmountCents: soldByDay(previous).soldAmountCents + 18000,
+    });
+    assert.deepEqual(
+      summary.daily.map((day) => day.day),
+      [...summary.daily.map((day) => day.day)].sort(),
+    );
   });
 
   test('LOJ-26/LOJ-27/LOJ-29: the first print records one person once, with its event and audit', async () => {

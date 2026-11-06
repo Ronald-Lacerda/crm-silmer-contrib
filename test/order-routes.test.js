@@ -273,6 +273,21 @@ test('summary aggregates all confirmed orders and requires a read session', asyn
       timeZone: 'America/Sao_Paulo',
       to: '2026-09-12',
     },
+    // PNL-05: the last seven São Paulo days, oldest first, empty days at 0.
+    daily: [
+      '2026-09-06',
+      '2026-09-07',
+      '2026-09-08',
+      '2026-09-09',
+      '2026-09-10',
+      '2026-09-11',
+    ]
+      .map((day) => ({ confirmedCount: 0, day, soldAmountCents: 0 }))
+      .concat({
+        confirmedCount: 1,
+        day: '2026-09-12',
+        soldAmountCents: 482000,
+      }),
     deliveries: {
       dueSoonCount: 0,
       dueSoonUntil: '2026-09-18',

@@ -851,8 +851,8 @@ test('exposes the CRM screens as authenticated Vue routes', async ({
     page.getByRole('link', { name: /^Vendido hoje R\$\s2\.500,00/u }),
   ).toHaveAttribute('href', '/pedidos?status=confirmado');
   await expect(
-    page.getByRole('link', { name: /^Minhas conversas 1/u }),
-  ).toHaveAttribute('href', '/inbox?fila=minhas');
+    page.getByRole('link', { name: /^1 Com o assistente/u }),
+  ).toHaveAttribute('href', '/inbox?situacao=agente');
 
   await page
     .getByRole('navigation', { name: 'Navegação principal' })

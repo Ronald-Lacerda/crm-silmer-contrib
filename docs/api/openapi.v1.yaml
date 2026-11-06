@@ -810,6 +810,8 @@ paths:
         esperando vendedor (e os fora do SLA), as conversas abertas do próprio
         leitor e a saúde do assistente. Conversas arquivadas ou encerradas
         ficam fora. Não aceita parâmetros: a fila é sempre a da sessão.
+        `unanswered` (PNL-06) só é lido para quem tem COMMERCIAL_ADMIN; para os
+        demais é sempre nulo e a consulta não roda.
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/HumanReadOrigin'
@@ -1935,8 +1937,9 @@ paths:
         do mais antigo deles, nulo quando não há (ADR 031). `period` soma as
         vendas confirmadas cujo dia do pedido cai no período escolhido;
         `deliveries` conta as entregas prometidas vencidas sem "Entregue em" e
-        as dos próximos sete dias. Os dias são de São Paulo e calculados no
-        servidor.
+        as dos próximos sete dias. `daily` (PNL-05) traz as vendas confirmadas
+        de cada um dos últimos sete dias, terminando hoje, independente de
+        `period`. Os dias são de São Paulo e calculados no servidor.
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/HumanReadOrigin'
@@ -5082,6 +5085,7 @@ components:
           storeNewCount,
           storeNewOldestPaidAt,
           period,
+          daily,
           deliveries,
           today,
         ]
@@ -5115,6 +5119,22 @@ components:
             timeZone: { type: string, const: America/Sao_Paulo }
             confirmedCount: { type: integer, minimum: 0 }
             soldAmountCents: { type: integer, minimum: 0 }
+        daily:
+          type: array
+          minItems: 7
+          maxItems: 7
+          description: >-
+            PNL-05, "Vendido por dia": sete dias de São Paulo, do mais antigo a
+            hoje (o último), com os dias sem venda em zero. Mesmo universo de
+            `period` (confirmados, sem teste, por dia do pedido).
+          items:
+            type: object
+            additionalProperties: false
+            required: [day, confirmedCount, soldAmountCents]
+            properties:
+              day: { type: string, format: date }
+              confirmedCount: { type: integer, minimum: 0 }
+              soldAmountCents: { type: integer, minimum: 0 }
         deliveries:
           type: object
           additionalProperties: false
@@ -5127,9 +5147,32 @@ components:
     InboxSummary:
       type: object
       additionalProperties: false
-      required: [generatedAt, waitingHandoff, mine, assistant]
+      required: [generatedAt, waitingHandoff, mine, assistant, unanswered]
       properties:
         generatedAt: { type: string, format: date-time }
+        unanswered:
+          type: [object, 'null']
+          additionalProperties: false
+          required: [thresholdMinutes, count, bySeller]
+          description: >-
+            PNL-06: conversas abertas atribuídas a um vendedor cuja última
+            mensagem é do cliente e tem `thresholdMinutes` ou mais. Nulo para
+            quem não tem COMMERCIAL_ADMIN. Só ids, nomes de vendedores e
+            contagens; nenhum dado do cliente.
+          properties:
+            thresholdMinutes: { type: integer, const: 15 }
+            count: { type: integer, minimum: 0 }
+            bySeller:
+              type: array
+              description: Maior contagem primeiro; empate pelo nome.
+              items:
+                type: object
+                additionalProperties: false
+                required: [userId, name, count]
+                properties:
+                  userId: { type: string }
+                  name: { type: string }
+                  count: { type: integer, minimum: 1 }
         waitingHandoff:
           type: object
           additionalProperties: false

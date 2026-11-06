@@ -21,6 +21,7 @@ import {
   normalizeContactPhone,
   normalizeContactRegistration,
 } from '@crm-silmer/contacts';
+import { CAPABILITIES } from '@crm-silmer/identity-access';
 import { PostgresInboxReadRepository } from '@crm-silmer/inbox-channels';
 import {
   ASSISTANT_STALL_MINUTES as ASSISTANT_STALL_RANGE,
@@ -48,6 +49,9 @@ const AUTOMATION_STATES = new Set(['assistant', 'human']);
 // `ASSISTANT_STALL_MINUTES` the worker sweep uses (default 5), so the Painel
 // card and the sweep never disagree.
 export const ASSISTANT_STALL_MINUTES = ASSISTANT_STALL_RANGE.default;
+// PNL-06: a seller's conversation whose last message is the client's and is
+// this old is "sem resposta" in the manager's "Atendimento agora".
+export const SELLER_UNANSWERED_MINUTES = 15;
 
 export class OperationReadError extends Error {
   /** @param {number} statusCode @param {string} code @param {string} [field] */
@@ -96,16 +100,27 @@ export function createOperationReadService({
   return Object.freeze({
     /**
      * Painel: the reader's queue, the handoffs past their SLA and the
-     * assistant's health, all worked out on the server clock.
+     * assistant's health, all worked out on the server clock. PNL-06: the
+     * per-seller "sem resposta" breakdown names team members, so it is read
+     * only for a COMMERCIAL_ADMIN reader; anyone else gets `unanswered:
+     * null` and the query never runs.
      *
-     * @param {{actorId: string}} input
+     * @param {{actorId: string, capabilities?: readonly string[]}} input
      */
     async summarizeInbox(input) {
       const now = clock();
-      const summary = await inboxRepository.summary({
+      const manager =
+        Array.isArray(input?.capabilities) &&
+        input.capabilities.includes(CAPABILITIES.COMMERCIAL_ADMIN);
+      const read = await inboxRepository.summary({
         actorId: requireId(input?.actorId, 'ACTOR_ID'),
         now,
         stallMinutes,
+        unansweredMinutes: manager ? SELLER_UNANSWERED_MINUTES : null,
+      });
+      const summary = Object.freeze({
+        ...read,
+        unanswered: manager ? (read.unanswered ?? null) : null,
       });
       if (!countStalled) return summary;
       // The sweep's own rule (revision fence and failed replies).

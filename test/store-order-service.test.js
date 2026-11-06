@@ -388,6 +388,7 @@ test('LOJ-09: a store sale counts like any sale; a test order does not', async (
   await record(testOrderBody());
   /** @param {any} summary */
   const totals = ({
+    daily: _daily,
     deliveries: _deliveries,
     period: _period,
     today: _today,
@@ -425,6 +426,13 @@ test('LOJ-09: a store sale counts like any sale; a test order does not', async (
     timeZone: 'America/Sao_Paulo',
     to: '2026-10-07',
   });
+  // PNL-05: the store sale is today's bar; the test order is in no bar.
+  assert.deepEqual(summary.daily.at(-1), {
+    confirmedCount: 1,
+    day: '2026-10-07',
+    soldAmountCents: 18000,
+  });
+  assert.equal(summary.daily[0].day, '2026-10-01');
   // A store order promises no delivery day, so it is never late.
   assert.equal(summary.deliveries.overdueCount, 0);
   await assert.rejects(orders.summary({ period: 'ano' }), {

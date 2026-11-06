@@ -31,12 +31,69 @@ test('the manager reads reconciled human performance and keeps operational desti
     page.getByRole('link', { name: /^Vendido em 7 dias/u }),
   ).toContainText('R$ 12.300,00');
   expect(mock.periods).toEqual(['hoje', '7dias']);
+  // PNL-05: the week by day is one described figure, same week any period.
+  const daily = page.getByRole('region', { name: 'Vendido por dia' });
+  await expect(daily).toContainText(
+    /Últimos 7 dias · R\$\s28\.170,00 em 67 pedidos/u,
+  );
+  await expect(daily.getByRole('img')).toHaveAccessibleName(
+    /^Vendido por dia: sexta R\$\s4\.120,00, sábado R\$\s2\.000,00, .*, hoje R\$\s1\.800,00$/u,
+  );
+  await expect(daily.locator('.sales-chart-day')).toHaveText([
+    'Sex',
+    'Sáb',
+    'Dom',
+    'Seg',
+    'Ter',
+    'Qua',
+    'Hoje',
+  ]);
+  // PNL-06: three whole-row links into the filtered Inbox.
+  const attendance = page.getByRole('region', { name: 'Atendimento agora' });
+  const rows = attendance.locator('.attendance-row');
+  await expect(rows).toHaveCount(3);
+  await expect(rows.nth(0)).toHaveAttribute(
+    'href',
+    '/inbox?situacao=aguardando',
+  );
+  await expect(rows.nth(0)).toContainText('3Esperando vendedor');
+  await expect(rows.nth(0)).toContainText('O primeiro espera há 6 h');
+  await expect(rows.nth(1)).toHaveAttribute('href', '/inbox?situacao=agente');
+  await expect(rows.nth(1)).toContainText(
+    '1 sem resposta há 10 min ou mais; 1 com envio falho em 24 h',
+  );
+  await expect(rows.nth(2)).toHaveAttribute('href', '/inbox?situacao=vendedor');
+  await expect(rows.nth(2)).toContainText('Sem resposta há mais de 15 min');
+  await expect(rows.nth(2)).toContainText(
+    '3 de Vendedor S. · 1 de Atendente S.',
+  );
+  for (const row of await rows.all()) {
+    expect((await row.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+  }
   await expect(
-    page.getByRole('link', { name: /^Esperando vendedor 3/u }),
-  ).toContainText('1 fora do prazo');
+    attendance.getByRole('link', { name: 'Ver desempenho do agente' }),
+  ).toHaveAttribute('href', '/dashboard/agente');
+  // PNL-06: the partners' checkpoint and the manager's own actions left.
+  await expect(page.getByText('Checkpoint dos sócios')).toHaveCount(0);
+  await expect(page.getByText('Minhas providências')).toHaveCount(0);
   await expect(
-    page.getByRole('link', { name: /^Assistente Pede atenção/u }),
-  ).toBeVisible();
+    page.getByRole('region', { name: 'O que precisa de você' }),
+  ).toHaveCount(0);
+  // The team reads after the day and the week.
+  const chartNode = await daily.elementHandle();
+  const teamNode = await team.elementHandle();
+  expect(
+    await page.evaluate(
+      ([chart, people]) =>
+        Boolean(
+          chart &&
+          people &&
+          chart.compareDocumentPosition(people) &
+            globalThis.Node.DOCUMENT_POSITION_FOLLOWING,
+        ),
+      [chartNode, teamNode],
+    ),
+  ).toBe(true);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(team.getByRole('columnheader')).toHaveCount(6);
@@ -49,6 +106,19 @@ test('the manager reads reconciled human performance and keeps operational desti
     path: test.info().outputPath('team-mobile-390.png'),
     fullPage: true,
   });
+  // The two cards stack on the phone without horizontal scrolling.
+  const chartBox = await daily.boundingBox();
+  const attendanceBox = await attendance.boundingBox();
+  expect(attendanceBox?.y).toBeGreaterThan(
+    (chartBox?.y ?? 0) + (chartBox?.height ?? 0) - 1,
+  );
+  expect(
+    await page.evaluate(
+      () =>
+        globalThis.document.documentElement.scrollWidth -
+        globalThis.document.documentElement.clientWidth,
+    ),
+  ).toBeLessThanOrEqual(0);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByRole('link', { name: /^Entregas atrasadas/u }).focus();
   await page.keyboard.press('Enter');

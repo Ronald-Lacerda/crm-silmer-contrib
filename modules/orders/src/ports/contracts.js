@@ -84,15 +84,20 @@ import { ORDER_ORIGINS } from '../domain/store-order.js';
  * (null when there is none).
  * `period` (Painel) counts the confirmed orders whose order day falls in
  * `from`..`to` (São Paulo days, inclusive) and the amount they sold.
+ * `daily` (PNL-05, "Vendido por dia") is the same universe grouped by order
+ * day over `dailyFrom`..`dailyTo`, oldest first, with only the days that
+ * sold: the service fills the empty ones.
+ * @typedef {{day: string, confirmedCount: number, soldAmountCents: number}} OrdersSoldDay
  * @typedef {{
  *   confirmedCount: number, soldAmountCents: number,
  *   averageTicketCents: number, pendingCount: number,
  *   totalPiecesSold: number, storeNewCount: number,
  *   storeNewOldestPaidAt: string|null,
  *   period: {confirmedCount: number, soldAmountCents: number},
+ *   daily: OrdersSoldDay[],
  * }} OrdersSummary
  *
- * @typedef {{from: string, to: string}} OrdersSummaryQuery
+ * @typedef {{from: string, to: string, dailyFrom: string, dailyTo: string}} OrdersSummaryQuery
  *
  * ADR 031: the first print of a store order's ficha, signed by a person.
  * @typedef {{

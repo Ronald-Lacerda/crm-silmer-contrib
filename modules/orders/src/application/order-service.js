@@ -85,6 +85,8 @@ const LIST_KEYS = new Set([
 // entregas" (today and the six days after), on São Paulo days.
 const DELIVERY_FILTERS = new Set(['overdue', 'due_soon']);
 const DUE_SOON_DAYS = 7;
+// PNL-05: "Vendido por dia" covers today and the six days before.
+const SOLD_BY_DAY_DAYS = 7;
 // "12", "012" or "12-CRM" name order 12; anything else is a customer search.
 const ORDER_NUMBER_QUERY = /^0*(\d{1,15})(?:-crm)?$/iu;
 // ADR 028: "LJ-5B0C77ED", "lj5b0c77ed" or "#LJ-5B0C77ED" name a store order.
@@ -372,9 +374,11 @@ export function createOrderService(options) {
     /**
      * The Painel figures. The all-time totals stay as ADR 031 defined them;
      * `period` adds the confirmed sales of today, the last seven days or the
-     * month so far, and `deliveries` the promised days that passed without
-     * "Entregue em" and the ones due this week. Days are São Paulo days and
-     * are worked out here, so every screen agrees on what "hoje" is.
+     * month so far, `daily` (PNL-05) the confirmed sales of each of the last
+     * seven days whatever the period, and `deliveries` the promised days
+     * that passed without "Entregue em" and the ones due this week. Days are
+     * São Paulo days and are worked out here, so every screen agrees on what
+     * "hoje" is.
      *
      * @param {{period?: unknown}} [input]
      */
@@ -384,12 +388,29 @@ export function createOrderService(options) {
         /** @type {any} */ (input.period ?? 'hoje'),
         now,
       );
+      // PNL-05: the last seven São Paulo days ending today, whatever the
+      // period, oldest first.
+      const days = Array.from({ length: SOLD_BY_DAY_DAYS }, (_, index) =>
+        shiftDay(period.to, index - (SOLD_BY_DAY_DAYS - 1)),
+      );
       const [totals, deliveries] = await Promise.all([
-        repository.summary({ from: period.from, to: period.to }),
+        repository.summary({
+          dailyFrom: days[0],
+          dailyTo: period.to,
+          from: period.from,
+          to: period.to,
+        }),
         promisedDeliveries(now),
       ]);
+      const { daily: soldDays, ...figures } = totals;
+      const sold = new Map((soldDays ?? []).map((entry) => [entry.day, entry]));
       return {
-        ...totals,
+        ...figures,
+        daily: days.map((day) => ({
+          day,
+          confirmedCount: sold.get(day)?.confirmedCount ?? 0,
+          soldAmountCents: sold.get(day)?.soldAmountCents ?? 0,
+        })),
         deliveries: {
           dueSoonCount: deliveries.dueSoon.length,
           dueSoonUntil: deliveries.dueSoonUntil,
