@@ -1181,10 +1181,10 @@ test('holidays negative: a working day keeps the plain notice, and a Sunday holi
 
 // 9 — The version and what stays intact.
 
-test('version: mvp-simple-22 on every CRM call, still under the subject-v1 contract', () => {
+test('version: mvp-simple-23 on every CRM call, still under the subject-v1 contract', () => {
   const version = /const WORKFLOW_VERSION = '(mvp-simple-(\d+))';/u.exec(sdk);
   assert.ok(version);
-  assert.equal(version[1], 'mvp-simple-22');
+  assert.equal(version[1], 'mvp-simple-23');
   // requiresSubjectContract (modules/n8n-integration/src/service.js): >= 15.
   assert.ok(Number(version[2]) >= 15);
   const headers = snapshot.nodes
@@ -1197,7 +1197,7 @@ test('version: mvp-simple-22 on every CRM call, still under the subject-v1 contr
         header.name === 'X-Silmer-Workflow-Version',
     );
   assert.ok(headers.length > 10);
-  for (const header of headers) assert.equal(header.value, 'mvp-simple-22');
+  for (const header of headers) assert.equal(header.value, 'mvp-simple-23');
 });
 
 test('intact: the guardrail and the fence stay as published', () => {

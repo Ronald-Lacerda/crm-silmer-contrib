@@ -1,5 +1,15 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Triagem prioritária do Vendedor (06/11/2026)
+
+A [ADR 063](docs/adr/063-triagem-prioritaria-do-vendedor.md), autorizada pelo
+proprietário na RFC 051, encaminha dúvidas de mínimo/viabilidade e alternativas
+de quantidade ao humano, sem inferir catálogo ou condições de um atendimento.
+Prazo desejado inequívoco hoje/amanhã transfere antes da ficha completa;
+campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
+VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
+delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
+
 ## Olist — escopo inicial de centavos exatos (05/11/2026)
 
 A [ADR 062](docs/adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) /

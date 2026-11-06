@@ -1,5 +1,20 @@
 # TDD — CRM Silmer MVP
 
+## Triagem prioritária do Vendedor — VND-L05 (06/11/2026)
+
+[ADR 063](docs/adr/063-triagem-prioritaria-do-vendedor.md), AGT-01–05/08:
+o normalizador `mvp-simple-23` trata dúvida explícita de mínimo/viabilidade
+e alternativas de quantidade com `commercial_question`/`human_requested`.
+Notas e resumo existentes preservam contexto sem novo campo de API. Não há
+catálogo inferido ou mínimo fixo. Prazo desejado inequívoco hoje/amanhã gera
+`urgency` antes da ficha completa; enviar arte, pagar ou pedir orçamento para
+essas datas não define entrega. Data ambígua mantém confirmação. Pergunta
+gerada de campo preenchido segue para o próximo ponto faltante.
+Publicação exige delta revisado do prompt/normalizador, preservando overlays,
+guardrail, abertura humana, transporte, reservas, epoch e revisão; preparação
+offline recusa drift e dados fixados. Sem migração ou infraestrutura nova.
+[Operação e rollback](docs/runbooks/vendedor-prioridades.md).
+
 ## Olist — escopo inicial de centavos exatos (05/11/2026)
 
 A [ADR 062](docs/adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) /

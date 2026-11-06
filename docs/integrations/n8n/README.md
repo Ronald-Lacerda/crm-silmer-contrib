@@ -1062,6 +1062,16 @@ Destino de atendimento corrigido pelo proprietário: WhatsApp do CRM
 usado como fallback das entradas genéricas. Conservar contatos explicitamente
 nomeados e o fluxo de pós-pagamento da loja na fronteira correspondente.
 
+## VND-L05 — Triagem prioritária (06/11/2026)
+
+`mvp-simple-23`, [ADR 063](../../adr/063-triagem-prioritaria-do-vendedor.md):
+dúvidas explícitas de mínimo/viabilidade e opções de orçamento seguem ao
+vendedor sem inventar catálogo, disponibilidade ou mínimo. Alternativas ficam
+em notas sem substituir quantidade confirmada. Urgência inequívoca hoje/amanhã
+transfere com ficha incompleta; perguntas não repetem campos preenchidos.
+Mantém abertura humana, fences e contexto cifrado. Implementação preparada;
+publicação no Evolution é etapa separada no [runbook](../../runbooks/vendedor-prioridades.md).
+
 ## VND-L04 — Revisão de 03/11/2026
 
 [Revisão dos atendimentos e limites da amostra](revisao-2026-11-03.md):

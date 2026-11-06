@@ -1,5 +1,10 @@
 # Request for Comments
 
+## Decisão de 06/11/2026
+
+- [051 — Triagem prioritária sem inferir regras comerciais](051-triagem-prioritaria-sem-inferir-regras-comerciais.md),
+  aprovada na solicitação do proprietário, decidida na ADR 063 / VND-L05.
+
 ## Decisão de 05/11/2026
 
 - [048 — Métricas de expediente, perda declarada e presença](048-metricas-de-expediente-perda-e-presenca.md),

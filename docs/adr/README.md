@@ -1,5 +1,11 @@
 # Architecture Decision Records
 
+## Decisão de 06/11/2026
+
+- [063 — Triagem prioritária do Vendedor](063-triagem-prioritaria-do-vendedor.md),
+  RFC 051 / VND-L05: dúvidas comerciais e alternativas sem regra inferida,
+  urgência antes da ficha completa e perguntas só de campos faltantes.
+
 ## Decisão de 05/11/2026
 
 - [061 — Métricas de expediente, perda declarada e presença](061-metricas-de-expediente-perda-e-presenca.md),

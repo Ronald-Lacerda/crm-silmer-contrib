@@ -35,10 +35,15 @@ no validador da reserva. Não há delta funcional a publicar desse rascunho.
 
 [`k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json`](k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json)
 continua sendo o candidato de jornada com fronteira Meta, com 115 nós.
-Esse arquivo, SDK, adaptadores, preparadores e snapshots DEV/local foram
-preservados byte a byte do commit `72702f0`; o manifesto registra os 29
-fingerprints anteriores. Os testes existentes continuam verificando o
-candidato, sem declarar suas funcionalidades como publicadas.
+Na captura SIL-36, esse arquivo, SDK, adaptadores, preparadores e snapshots
+DEV/local foram preservados byte a byte do commit `72702f0`. Depois, a
+VND-L05 evoluiu intencionalmente somente SDK, candidato principal e snapshots
+DEV/local para `mvp-simple-23`. `candidateEvolutions` no manifesto conserva os
+quatro pares de hashes anterior/posterior e a ligação à ADR 063/RFC 051; os
+outros 25 fingerprints de preservação permanecem iguais. Os testes verificam
+os fingerprints atuais dos candidatos, sem declarar suas funcionalidades
+como publicadas. O export publicado de 141 nós, seus fingerprints,
+metadados da captura e headers operacionais continuam intactos.
 
 [`pending-features.json`](pending-features.json) associa cada delta à issue
 do Linear, aos requisitos e aos nós onde o código foi preservado:
@@ -61,6 +66,16 @@ do Linear, aos requisitos e aos nós onde o código foi preservado:
 As duas últimas são revisões técnicas: a diferença no JSON não autoriza
 trocar o valor operacional, reativar entradas legadas ou retirar o fence.
 
+A seção `candidateEvolutions` de `pending-features.json` registra a VND-L05
+separadamente dessas 12 issues existentes: triagem das dúvidas de mínimo e
+viabilidade, alternativas de quantidade, urgência antes da ficha completa e
+perguntas já respondidas. A [ADR 063](../../../docs/adr/063-triagem-prioritaria-do-vendedor.md)
+e a [RFC 051](../../../docs/rfc/051-triagem-prioritaria-sem-inferir-regras-comerciais.md)
+definem o escopo; o [runbook](../../../docs/runbooks/vendedor-prioridades.md)
+descreve o preparador offline e os limites de publicação. Não há nova issue
+externa atribuída nem evidência de publicação para essa evolução. VND-L04 e
+as demais pendências permanecem preservadas e abertas.
+
 ## Uso dos preparadores
 
 `create-evolution-workflow.mjs` adapta fontes Meta para candidatos inativos e
@@ -70,6 +85,13 @@ dois códigos de contexto/decisão e o prompt inteiros; ele não demonstra
 preservação dos wrappers atuais nesses nós. Não é o procedimento de
 reaplicação dos deltas acima. Nenhum desses programas foi executado contra
 o principal nesta reconciliação.
+
+`ops/n8n/patch-vendedor-prioridades.mjs` prepara somente hunks revisados de
+normalizador e prompt da VND-L05, mediante hashes explícitos do export vivo.
+Preserva wrappers e cabeçalhos operacionais e recusa trechos ausentes ou
+ambíguos: não migra implicitamente o publicado para a baseline do candidato.
+O candidato e os testes locais não demonstram aplicabilidade ao export vivo
+nem autorizam declarar as melhorias publicadas.
 
 Cada pendência deve produzir um delta restrito sobre a referência publicada,
 com fixtures sintéticas e comparação de conexões/settings. Uma futura

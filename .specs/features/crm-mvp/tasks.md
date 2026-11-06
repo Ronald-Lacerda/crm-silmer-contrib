@@ -328,6 +328,30 @@ em claro/escuro, desktop, celular e 320 px. Detalhes no runbook.
 
 Operação e rollback em [inbox-compacta](../../../docs/runbooks/inbox-compacta.md).
 
+## VND-L05 — Triagem prioritária sem inferir regra comercial (06/11/2026)
+
+AGT-01–05/08, ORC-03/05/07; RFC 051 / ADR 063, autorizadas pelo proprietário
+após revisão da Inbox. Supersede somente continuação após dúvida de capacidade
+e exigência de ficha completa para urgência hoje/amanhã. Sem catálogo novo.
+
+- [x] Encaminhar dúvida de mínimo/viabilidade sem inventar resposta ou mínimo.
+- [x] Preservar alternativas de quantidade sem escolher, somar ou sobrescrever.
+- [x] Antecipar urgência inequívoca com ficha incompleta e preservar pendências.
+- [x] Perguntar somente campos faltantes, preservando dados fora de ordem.
+- [x] Preparar SDK/snapshots principal/DEV/local `mvp-simple-23` e regressões sintéticas.
+- [x] Concluir revisão e gates de código: `npm run validate` (1.806 aprovados,
+      19 ignorados), E2E/axe (505 aprovados, sete ignorados, sem falha ou retry),
+      39 testes da triagem/patch e diff check. Referência publicada SIL-36 intacta;
+      quatro fingerprints candidatos atualizados com proveniência explícita.
+- [x] Preparar entrega atômica na branch `codex/vendedor-triagem-prioritaria`;
+      commit e push registrados no handoff.
+- [ ] Executar auditoria npm: revisão automática bloqueou envio de metadados
+      das dependências ao registro externo; aguarda autorização do proprietário.
+- [ ] Publicar delta sobre export vivo Evolution, com backup/comparação e
+      observação, sem importar snapshot inteiro nem reativar bot humano.
+
+Operação e limites no [runbook](../../../docs/runbooks/vendedor-prioridades.md).
+
 ## VND-L04 — Revisão dos atendimentos de 03/11/2026
 
 AGT-01–06/10, ORC-03/05/07 e INB-02; correções nas ADRs 024/049/051/052/056.

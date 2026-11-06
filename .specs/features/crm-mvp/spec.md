@@ -323,6 +323,16 @@ Para INB-01–04, Cliente é Contact + ContactIdentity; Pedido é rascunho até 
 9. **AGT-09:** WHEN o agente falha ou não responde em `ASSISTANT_STALL_MINUTES` a uma mensagem do cliente das últimas 24 h THEN o sistema SHALL criar handoff sem dono com motivo `automation_failure` e invalidar respostas atrasadas pelo epoch (ADR 052).
 10. **AGT-10:** WHEN o agente responde ou transfere THEN o CRM SHALL registrar a telemetria do turno só com códigos, contagens e tempos, sem texto do cliente, nome ou telefone, e expor apenas agregados (ADR 052).
 
+Emenda VND-L05 ([ADR 063](../../../docs/adr/063-triagem-prioritaria-do-vendedor.md)):
+AGT-05 inclui handoff por dúvida explícita de mínimo/viabilidade e opções de
+quantidade para orçamento, sem decidir capacidade ou política comercial.
+Opções ficam em notas, sem substituir quantidade confirmada. Prazo desejado
+inequívoco hoje/amanhã transfere antes de completar a ficha; enviar arte ou
+pagar não determina entrega. Data ambígua conserva confirmação. AGT-01/02
+exigem que a pergunta gerada também respeite campos já respondidos.
+Nenhuma dessas redes converte exceção comercial em regra geral ou concede
+criação automática de pedido. Aceite sintético em `test/n8n-vendedor-prioridades.test.js`.
+
 O contexto do agente vem de `recent_messages` e do snapshot de briefing da
 Conversa; não existe memória comercial paralela no n8n. `briefing_patch` ignora
 nulos, aceita somente campos de qualificação e altera apenas esse snapshot até sua projeção autorizada no Pedido pendente; o agente não sobrescreve escolhas humanas.

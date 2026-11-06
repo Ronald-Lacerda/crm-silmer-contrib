@@ -156,17 +156,17 @@ test('VND-L04: greeting asks only missing facts and preserves the current patch'
   );
 });
 
-test('VND-L04: greeting retains capability acknowledgement and returning welcome', () => {
+test('VND-L04: a returning welcome remains for ordinary collection', () => {
   const result = decide(
-    context('Vocês fazem camisetas?', {
+    context('Quero camisetas', {
       briefing: { product_type: 'camisetas' },
       contact_context: { previous_cycles: 1, previous_orders_count: 1 },
     }),
     { asked_field: 'customer_name' },
   );
   assert.match(result.reply_text, /Que bom falar com você de novo/u);
-  assert.match(result.reply_text, /Vou anotar para o vendedor confirmar isso/u);
   assert.match(result.reply_text, /Qual é o seu nome\?$/u);
+  assert.equal(result.handoff_required, false);
 });
 
 test('VND-L04: unresolved image gets a contextual question without inferring art', () => {
@@ -355,16 +355,18 @@ test('item 1: the first price question asks the next point instead of handing of
   assert.equal(result.briefing_patch.next_required_field, 'colors');
 });
 
-test('item 1: a large volume ("preço para 300 e 500 unidades") follows the same rule', () => {
+test('VND-L05: large alternative quotes transfer without choosing a quantity', () => {
   const first = decide(
     context('Qual o preço para 300 e 500 unidades?', {
       briefing: shirtWithout('quantity'),
     }),
     { asks_price: true },
   );
-  assert.equal(first.handoff_required, false);
-  assert.match(first.reply_text, /^Quem passa o valor é o vendedor/u);
-  assert.match(first.reply_text, /quantas peças você precisa\?$/u);
+  assert.equal(first.handoff_required, true);
+  assert.equal(first.trigger, 'commercial_question');
+  assert.equal(first.briefing_patch.quantity, undefined);
+  assert.match(first.briefing_patch.notes, /300 e 500 unidades/u);
+  assert.doesNotMatch(first.reply_text, /quantas peças você precisa\?$/u);
 });
 
 test('item 1: the second price question hands off as negotiation, by the marker or by the history', () => {
@@ -1002,7 +1004,7 @@ test('item 7: a deadline today or tomorrow hands the complete ficha off as urgen
   assert.equal(today.handoff_reason, 'urgency');
 });
 
-test('item 7 negative: a later deadline is a plain complete ficha; an incomplete one is not urgent yet', () => {
+test('VND-L05: a later complete ficha stays ordinary; an urgent incomplete ficha transfers', () => {
   const later = decide(
     context('20/11', {
       briefing: {
@@ -1023,7 +1025,11 @@ test('item 7 negative: a later deadline is a plain complete ficha; an incomplete
     }),
     { answer_status: 'answered', briefing_patch: { needed_by: 'amanhã' } },
   );
-  assert.equal(incomplete.handoff_required, false);
+  assert.equal(incomplete.handoff_required, true);
+  assert.equal(incomplete.handoff_reason, 'urgency');
+  assert.equal(incomplete.handoff_ready, false);
+  assert.ok(incomplete.missing_briefing_fields.includes('colors'));
+  assert.match(incomplete.reasoning, /Faltam: colors/u);
 });
 
 // Item 8 — partnership, resale, invoice: the seller answers each question.

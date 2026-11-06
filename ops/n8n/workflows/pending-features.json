@@ -195,5 +195,24 @@
       "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
       "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js"
     }
+  ],
+  "candidateEvolutions": [
+    {
+      "task": "VND-L05",
+      "status": "prepared_not_published",
+      "candidateVersion": "mvp-simple-23",
+      "source": "k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+      "sdk": "k7tI6T4RhQPyJkn9-mvp-simple.sdk.js",
+      "nodes": [
+        "Normalizar decisão da IA (MVP)",
+        "Atendente virtual Silmer (MVP)"
+      ],
+      "delta": "Triagem de dúvidas comerciais bloqueantes, alternativas de quantidade, urgência antes da ficha completa e perguntas de campos já respondidos. Não define catálogo, mínimo, preço ou disponibilidade a partir das conversas. Preserva VND-L04 e demais pendências; não aplica código completo ao publicado.",
+      "decision": "../../../docs/adr/063-triagem-prioritaria-do-vendedor.md",
+      "proposal": "../../../docs/rfc/051-triagem-prioritaria-sem-inferir-regras-comerciais.md",
+      "runbook": "../../../docs/runbooks/vendedor-prioridades.md",
+      "externalIssue": null,
+      "publicationEvidence": null
+    }
   ]
 }

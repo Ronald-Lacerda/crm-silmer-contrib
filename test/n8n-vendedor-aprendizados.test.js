@@ -326,22 +326,22 @@ test('item 3 negatives: the reference with another channel still hands off; a pl
   assert.equal(plain.briefing_patch.notes, undefined);
 });
 
-test('item 1: "vcs fazem bandeira?" is acknowledged before the next question, without a yes', () => {
+test('VND-L05: "vcs fazem bandeira?" transfers the production question without a yes', () => {
   const result = decide(context('Vcs fazem bandeira?'), {
     reply_text: 'Oi! Eu sou a assistente virtual da Silmer. Qual é o seu nome?',
     asked_field: 'customer_name',
     briefing_patch: { product_type: 'bandeira' },
   });
-  assert.equal(result.handoff_required, false);
-  assert.match(
-    result.reply_text,
-    /^Vou anotar para o vendedor confirmar isso\. .*Qual é o seu nome\?$/u,
-  );
+  assert.equal(result.handoff_required, true);
+  assert.equal(result.trigger, 'commercial_question');
+  assert.equal(result.handoff_reason, 'human_requested');
+  assert.match(result.reasoning, /Vcs fazem bandeira\?/u);
+  assert.doesNotMatch(result.reply_text, /Qual é o seu nome\?/u);
   assert.ok(sentences(result.reply_text).length <= 3);
   assert.doesNotMatch(result.reply_text, /\b(sim|fazemos)\b/iu);
 });
 
-test('item 1: feasibility and fidelity questions are acknowledged; an acknowledged reply is kept', () => {
+test('VND-L05: feasibility and fidelity transfer even when the model acknowledges the question', () => {
   for (const text of [
     'vcs conseguem fazer essas camisetas?',
     'o quão fiel à referência fica?',
@@ -351,9 +351,11 @@ test('item 1: feasibility and fidelity questions are acknowledged; an acknowledg
       reply_text: 'Que legal! Qual é o seu nome?',
       asked_field: 'customer_name',
     });
-    assert.match(
+    assert.equal(result.handoff_required, true, text);
+    assert.equal(result.trigger, 'commercial_question', text);
+    assert.doesNotMatch(
       result.reply_text,
-      /^Vou anotar para o vendedor confirmar isso\. Que legal! Qual é o seu nome\?$/u,
+      /Qual é o seu nome\?|\b(sim|fazemos)\b/iu,
       text,
     );
   }
@@ -361,10 +363,8 @@ test('item 1: feasibility and fidelity questions are acknowledged; an acknowledg
     reply_text: 'Vou anotar para o vendedor confirmar. Qual é o seu nome?',
     asked_field: 'customer_name',
   });
-  assert.equal(
-    already.reply_text,
-    'Vou anotar para o vendedor confirmar. Qual é o seu nome?',
-  );
+  assert.equal(already.trigger, 'commercial_question');
+  assert.doesNotMatch(already.reply_text, /Qual é o seu nome\?/u);
 });
 
 test('item 1 negative: "vocês fazem orçamento?" is not a price question nor a capability question', () => {

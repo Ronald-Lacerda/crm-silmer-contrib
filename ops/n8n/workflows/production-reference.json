@@ -157,8 +157,8 @@
     "ops/n8n/patch-waha-inbound-images.mjs": "d4ac511b573a62b73e1746d36ba6200498933598271d019490c1d1100b1cb547",
     "ops/n8n/patch-workflow-failure-diagnostics.mjs": "302cef440d6d3df35ad866ef4c621c8a64e975fd55c5d3a4679aac0de4fd2444",
     "ops/n8n/site-chat/silmer-chat.css": "cbb04246510ce649dec8a7ed2b447b2d202b6f27e698f8dfba2e4275dcc4ca9d",
-    "ops/n8n/workflows/0S5ZS1xeDCSoWovs-dev-test.sanitized.json": "df42100cbc635f89f097f56746ce792a81574f7b2a0dc1415b439261a9bc6dd1",
-    "ops/n8n/workflows/0S5ZS1xeDCSoWovs-local-test.sanitized.json": "c11ca738139400f55898b9d51ff2547d9802da79430f4ad25da3c394eca7c257",
+    "ops/n8n/workflows/0S5ZS1xeDCSoWovs-dev-test.sanitized.json": "e936a6613c7ca9500250e952d1e6b2d9a08b1ac7346d5fdc2f07f18d78a5c8e7",
+    "ops/n8n/workflows/0S5ZS1xeDCSoWovs-local-test.sanitized.json": "a562fca9d67a87b7e51eca3a0a5c753feecedc9ff094b4125d0f38067a1efd4d",
     "ops/n8n/workflows/create-daily-checkpoint-workflow.mjs": "2512fc2975d7f551af01aa0707598c3433d811ca56cac86f2f0a77535560cef6",
     "ops/n8n/workflows/create-dev-test-workflow.mjs": "14275d41e261acf7a873b0c31d9b4025777e3df5dadc96576619d3a93424a04f",
     "ops/n8n/workflows/create-evolution-workflow.mjs": "317d700d65dbd0a9da248ce17b9b74f0bee7f67fa88ab29f6b223f78107ea142",
@@ -167,10 +167,56 @@
     "ops/n8n/workflows/daily-checkpoint.sanitized.json": "fc339ff5ba3d5f8929e9479362325705eb92a7067ba17f30e3560106201f4fa9",
     "ops/n8n/workflows/k7tI6T4RhQPyJkn9-0c41ee97-954b-4319-b822-fbb91f239b6e.sanitized.json": "5bd8a12f1cada1c0f6a18c321532571075db920cb790684111c0d6ce282e40bf",
     "ops/n8n/workflows/k7tI6T4RhQPyJkn9-98f96069-ede2-4900-aa5c-7fec0d3b80cb.sanitized.json": "b7bfe0a1b8a086ce9b14fdd7e87a6745aa93bb406815aeada3b0155480eeea3e",
-    "ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json": "a24a57be8d7b99df152643e4da915371c6663717c6740863c6fe50c84d6fb10b",
-    "ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sdk.js": "96744fea53f8f7c856d18f5c4a1ffb47ff5c1e9c7007a5359ce7705c7b7d2a4d",
+    "ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json": "e1d081d72bd9c2e61c3ed51f7326d56c22452bcd9435d6f043d3283e6aaa9a22",
+    "ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sdk.js": "d72697ed58bd14ed214eeb9dfc55ecb5f46040bb303c3686bd81a6745e2e0739",
     "ops/n8n/workflows/organize-vendedor-workflow.mjs": "ef3a5934b4f542b96c81520c448861b436c76b11105be8fa2d73b8b62de3d890",
     "ops/n8n/workflows/prepare-vendedor-update.mjs": "9547c9cbaeb17c7d1b1cdabfccb4b944469198b117fbcfbb935081d3ed35afa9",
     "ops/n8n/workflows/render-mvp-workflow.mjs": "9df30ce6bbd14b3f5381f030045870e0cc9da5172104efb4cdf079c042dedbc9"
-  }
+  },
+  "candidateEvolutions": [
+    {
+      "task": "VND-L05",
+      "date": "2026-11-06",
+      "candidateVersion": "mvp-simple-23",
+      "status": "prepared_not_published",
+      "requirements": [
+        "AGT-01",
+        "AGT-02",
+        "AGT-03",
+        "AGT-04",
+        "AGT-05",
+        "AGT-08",
+        "ORC-03",
+        "ORC-05",
+        "ORC-07"
+      ],
+      "decision": "docs/adr/063-triagem-prioritaria-do-vendedor.md",
+      "proposal": "docs/rfc/051-triagem-prioritaria-sem-inferir-regras-comerciais.md",
+      "runbook": "docs/runbooks/vendedor-prioridades.md",
+      "baseCandidateCommit": "72702f0a97ee59f7ef0cfd6f211ccae517ce918f",
+      "operationalReferenceChanged": false,
+      "changedArtifacts": [
+        {
+          "path": "ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sdk.js",
+          "beforeSha256": "96744fea53f8f7c856d18f5c4a1ffb47ff5c1e9c7007a5359ce7705c7b7d2a4d",
+          "afterSha256": "d72697ed58bd14ed214eeb9dfc55ecb5f46040bb303c3686bd81a6745e2e0739"
+        },
+        {
+          "path": "ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json",
+          "beforeSha256": "a24a57be8d7b99df152643e4da915371c6663717c6740863c6fe50c84d6fb10b",
+          "afterSha256": "e1d081d72bd9c2e61c3ed51f7326d56c22452bcd9435d6f043d3283e6aaa9a22"
+        },
+        {
+          "path": "ops/n8n/workflows/0S5ZS1xeDCSoWovs-dev-test.sanitized.json",
+          "beforeSha256": "df42100cbc635f89f097f56746ce792a81574f7b2a0dc1415b439261a9bc6dd1",
+          "afterSha256": "e936a6613c7ca9500250e952d1e6b2d9a08b1ac7346d5fdc2f07f18d78a5c8e7"
+        },
+        {
+          "path": "ops/n8n/workflows/0S5ZS1xeDCSoWovs-local-test.sanitized.json",
+          "beforeSha256": "c11ca738139400f55898b9d51ff2547d9802da79430f4ad25da3c394eca7c257",
+          "afterSha256": "a562fca9d67a87b7e51eca3a0a5c753feecedc9ff094b4125d0f38067a1efd4d"
+        }
+      ]
+    }
+  ]
 }
