@@ -1,7 +1,7 @@
 # Geração assistida de pedidos de venda no Olist
 
 Emenda de escopo de 05/11/2026: [RFC 046](046-olist-escopo-inicial-de-centavos-exatos.md)
-/[ADR 059](../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) supersede
+/[ADR 062](../adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) supersede
 a amplitude monetária inicial: somente unitários exatos em centavos, com
 frações bloqueadas antes de qualquer inclusão. F1/T02 foram fechados após a
 [prova real C05–C07](../integrations/olist/evidence/exact-cent-proof-result.json)
@@ -715,7 +715,7 @@ e replanejados; T19–T26 cobrem as melhorias novas. OLIST-PLAN-02 é só docume
       fiel suportado pelo fornecedor; pergunta preparada, sem envio. Regressão
       111/111 e QA da continuação sem bloqueio; sem liberação de T03.
 
-Fechamento posterior à investigação: em 05/11/2026, a [ADR 059](../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md)
+Fechamento posterior à investigação: em 05/11/2026, a [ADR 062](../adr/062-olist-exportacao-com-unitario-exato-em-centavos.md)
 /[RFC 046](046-olist-escopo-inicial-de-centavos-exatos.md) aprovou o subconjunto
 de unitários exatos em centavos. [C05–C07 passaram na API e na tela](../integrations/olist/evidence/exact-cent-proof-result.json):
 14 GETs, três POSTs, R$ 5,20, identidade opaca por linha e valores/totais
@@ -1050,6 +1050,6 @@ Deploy/amostra/piloto/aceite:
 Riscos, bloqueios e próximo item desbloqueado:
 ```
 
-Próximos itens: T02/F1 concluídos para o escopo exato da ADR 059; iniciar T03 de dados/conexão e os controles posteriores. A limitação fracionária permanece registrada. Não liberar
+Próximos itens: T02/F1 concluídos para o escopo exato da ADR 062; iniciar T03 de dados/conexão e os controles posteriores. A limitação fracionária permanece registrada. Não liberar
 geração real antes de cadastro automático seguro, precisão por linha, filtros
 de cancelamento e identidade individual do piloto estarem validados.

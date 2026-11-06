@@ -2,7 +2,7 @@
 
 ## Olist — escopo inicial de centavos exatos (05/11/2026)
 
-A [ADR 059](docs/adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) /
+A [ADR 062](docs/adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) /
 [RFC 046](docs/rfc/046-olist-escopo-inicial-de-centavos-exatos.md), aprovada pelo PO,
 restringe a exportação automática inicial a subtotal em centavos divisível pela
 quantidade sem arredondamento. Frações permanecem válidas no CRM e bloqueiam

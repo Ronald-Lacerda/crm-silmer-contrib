@@ -6,7 +6,7 @@ coordenado pelo Tech Lead (Codex nesta execução). Consulta em 04/11/2026.
 · [ADR 057](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md).
 
 **Situação atual: Fase 1/T02 concluídas no escopo `exact-cent-v1`.**
-A [ADR 059](../../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md)
+A [ADR 062](../../adr/062-olist-exportacao-com-unitario-exato-em-centavos.md)
 /[RFC 046](../../rfc/046-olist-escopo-inicial-de-centavos-exatos.md) aprovou o
 bloqueio de unitários fracionários. [C05–C07 passaram por API e tela](evidence/exact-cent-proof-result.json):
 três pedidos abertos, 14 GETs, três POSTs, R$ 5,20, marcadores preservados pela

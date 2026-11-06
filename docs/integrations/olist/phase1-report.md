@@ -7,7 +7,7 @@ OLIST-T02 / OLIST-03–17, 20, 26, 35–41. Fechamento das experiências autoriz
 [Resultados sanitizados](evidence/phase1-controlled-results.json).
 
 **Fase 1 / T02 concluídas para o escopo inicial de centavos exatos.**
-A redução de escopo foi aprovada na [ADR 059](../../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md)
+A redução de escopo foi aprovada na [ADR 062](../../adr/062-olist-exportacao-com-unitario-exato-em-centavos.md)
 /[RFC 046](../../rfc/046-olist-escopo-inicial-de-centavos-exatos.md). A
 [prova C05–C07](evidence/exact-cent-proof-result.json) confirmou API e tela
 nativa: três pedidos abertos, 14 GETs, três POSTs e R$ 5,20 nominal, sem retry.

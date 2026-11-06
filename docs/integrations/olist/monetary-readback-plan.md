@@ -1,6 +1,6 @@
 # F1-G01 — diagnóstico dividido em entregas
 
-**Atualização de fechamento:** a [ADR 059](../../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md)
+**Atualização de fechamento:** a [ADR 062](../../adr/062-olist-exportacao-com-unitario-exato-em-centavos.md)
 /[RFC 046](../../rfc/046-olist-escopo-inicial-de-centavos-exatos.md) aprovou a
 redução de escopo. [C05–C07 passaram em API e tela](evidence/exact-cent-proof-result.json);
 F1/T02 fechados somente para unitários exatos em centavos. O diagnóstico
@@ -20,7 +20,7 @@ Não altera o runtime, o modelo monetário ou a sequência de liberação de T03
 | A — comparador decimal local                   | Implementada e verificada offline             | [Comparador](monetary-comparator.mjs), testes e [reprodução histórica](evidence/monetary-comparison-historical.json)               |
 | B — leituras dos pedidos existentes            | Concluída: seis resultados em sete tentativas | [Prova remota](evidence/monetary-readback-live-result.json); três GETs v3 e quatro POSTs de leitura v2, zero mutações de negócio   |
 | C — avaliar leitor / esclarecer com fornecedor | V2 insuficiente; pergunta atualizada          | V2 reproduz as divergências v3. [Pergunta técnica pronta](monetary-readback-question.md); envio ao fornecedor ainda não autorizado |
-| D — encerrar F1-G01 / T02                      | Concluída no escopo exato da ADR 059          | [Prova C05–C07](evidence/exact-cent-proof-result.json); frações excluídas da exportação automática, T03 pode iniciar               |
+| D — encerrar F1-G01 / T02                      | Concluída no escopo exato da ADR 062          | [Prova C05–C07](evidence/exact-cent-proof-result.json); frações excluídas da exportação automática, T03 pode iniciar               |
 
 As credenciais Olist expostas foram renovadas pelo PO antes da prova.
 As dependências acessíveis foram revisadas e a conta conferida contra o plano

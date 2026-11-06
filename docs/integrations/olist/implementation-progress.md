@@ -73,7 +73,7 @@ persistido depende deles. Publicação do código não equivale a deploy ou pilo
 
 ## Ampliação autorizada — bloqueio exato de exportação
 
-A [ADR 059](../../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) /
+A [ADR 062](../../adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) /
 [RFC 046](../../rfc/046-olist-escopo-inicial-de-centavos-exatos.md) registra a
 escolha posterior do PO pelo subconjunto exato. O módulo
 [olist-exact-cent.js](../../../modules/orders/src/domain/olist-exact-cent.js)

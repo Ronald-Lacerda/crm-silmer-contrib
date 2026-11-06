@@ -1,4 +1,4 @@
-# ADR 059 — Exportação Olist com unitário exato em centavos
+# ADR 062 — Exportação Olist com unitário exato em centavos
 
 Data: 05/11/2026. Status: decisão de escopo aceita pelo proprietário no chat;
 fechamento técnico F1 condicionado à prova controlada.
@@ -6,7 +6,7 @@ fechamento técnico F1 condicionado à prova controlada.
 Supersede parcialmente o item 5 da [ADR 057 Olist](057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md),
 quanto à amplitude inicial da representabilidade e do critério de leitura.
 Proposta: [RFC 046](../rfc/046-olist-escopo-inicial-de-centavos-exatos.md).
-Contrato principal: [RFC 044](../rfc/044-geracao-assistida-de-pedidos-no-olist.md).
+Contrato principal: [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
 Requisitos OLIST-09–10, 14–17, 40–43; tarefas T02/T06a/T08. Entrega anterior:
 [PR 295](https://github.com/romulosutil/crm-silmer/pull/295).
 

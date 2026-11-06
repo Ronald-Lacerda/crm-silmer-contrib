@@ -3,7 +3,7 @@
   "observedOn": "2026-11-05",
   "policy": "exact-cent-v1",
   "state": "phase1_closed_for_exact_cent_scope",
-  "scopeDecision": "ADR-059/RFC-046",
+  "scopeDecision": "ADR-062/RFC-046",
   "executedSourceCommit": "98a68543",
   "sourceSha256": {
     "modules/orders/src/domain/olist-exact-cent.js": "647892bbbfd6027bb53e34530f462d389edc894c28d7008d9f8671f825eff1ad",

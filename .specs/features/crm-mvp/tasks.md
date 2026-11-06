@@ -2,7 +2,7 @@
 
 ## OLIST-T02/T06a — Escopo de centavos exatos (05/11/2026)
 
-- [x] Registrar redução de escopo aprovada na [ADR 059](../../../docs/adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) / [RFC 046](../../../docs/rfc/046-olist-escopo-inicial-de-centavos-exatos.md).
+- [x] Registrar redução de escopo aprovada na [ADR 062](../../../docs/adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) / [RFC 046](../../../docs/rfc/046-olist-escopo-inicial-de-centavos-exatos.md).
 - [x] Implementar bloqueio fracionário e conferência exata por identidade de linha no núcleo Orders.
 - [x] Validar negativos offline e preparar prova C05–C07, até três pedidos/R$ 5,20, 14 GETs, sem retry.
 - [x] Executar prova API e tela na conta autorizada; T02/F1 fechados somente para o subconjunto exact-cent-v1.

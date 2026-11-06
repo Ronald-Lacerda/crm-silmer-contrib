@@ -2,7 +2,7 @@
 
 ## Emenda Olist — centavos exatos (05/11/2026)
 
-[ADR 059](../../../docs/adr/059-olist-exportacao-com-unitario-exato-em-centavos.md) e
+[ADR 062](../../../docs/adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) e
 [RFC 046](../../../docs/rfc/046-olist-escopo-inicial-de-centavos-exatos.md), aprovadas
 pelo PO: exportação automática inicial somente com unitário exato em centavos,
 sem arredondamento. Subtotais não divisíveis pela quantidade continuam válidos

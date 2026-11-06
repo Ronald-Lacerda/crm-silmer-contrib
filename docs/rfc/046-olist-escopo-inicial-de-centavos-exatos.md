@@ -1,7 +1,7 @@
 # RFC 046 — Escopo inicial Olist de centavos exatos
 
-Data: 05/11/2026. Proposta aceita pelo PO na [ADR 059](../adr/059-olist-exportacao-com-unitario-exato-em-centavos.md).
-Complementa a [RFC 044](044-geracao-assistida-de-pedidos-no-olist.md),
+Data: 05/11/2026. Proposta aceita pelo PO na [ADR 062](../adr/062-olist-exportacao-com-unitario-exato-em-centavos.md).
+Complementa a [RFC 050](050-geracao-assistida-de-pedidos-no-olist.md),
 OLIST-09–10/14–17/40–43, T02/T06a/T08. Não altera os demais contratos de ACL,
 cadastros, cancelamento, legado, loja ou impressão.
 
