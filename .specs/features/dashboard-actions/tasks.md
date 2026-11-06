@@ -34,20 +34,20 @@ interface do redesenho espera a fatia de interface de outra sessão (ACT-T03)
 chegar ao master. Componentes e práticas na §18–19 do
 [design.md](../../../design.md). Decisões em
 [RFC 048](../../../docs/rfc/048-metricas-de-expediente-perda-e-presenca.md) /
-[ADR 060](../../../docs/adr/060-metricas-de-expediente-perda-e-presenca.md);
+[ADR 061](../../../docs/adr/061-metricas-de-expediente-perda-e-presenca.md);
 contrato em ACT-06 (72h) e MET-01–12 da [spec](spec.md). Vendedor vê só os
 próprios números (PERF-07) e o crédito da venda é do responsável na
 confirmação (PERF-01).
 
 - [x] Componentes e práticas no design.md.
-- [x] RFC 048 / ADR 060 e emenda da spec (este commit).
+- [x] RFC 048 / ADR 061 e emenda da spec (este commit).
 - [ ] B — Métricas de expediente (MET-01–05) e retomada em 72h (ACT-06):
-      migração 0060 e `GET /api/v1/dashboard/metrics/service`.
-- [ ] C — Lead perdido com motivo (MET-06–08): migração 0061,
+      migração 0061 e `GET /api/v1/dashboard/metrics/service`.
+- [ ] C — Lead perdido com motivo (MET-06–08): migração 0062,
       `/api/v1/conversations/:id/lead-outcome` e
       `GET /api/v1/dashboard/metrics/losses`.
 - [ ] D — Presença e R$/hora (MET-09–11) com heartbeat no cliente:
-      migração 0062, `POST /api/v1/presence/heartbeat`,
+      migração 0063, `POST /api/v1/presence/heartbeat`,
       `GET /api/v1/dashboard/metrics/presence`, flag desligada, teste de
       balanceamento e aviso à equipe antes de ligar.
 - [ ] Interface do redesenho, depois de ACT-T03 no master.

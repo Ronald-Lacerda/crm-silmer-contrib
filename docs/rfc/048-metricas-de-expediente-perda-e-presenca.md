@@ -1,7 +1,7 @@
 # RFC 048 — Métricas de expediente, perda declarada e presença
 
 Data: 05/11/2026. Status: **aceito em 05/11/2026 pelo PO** e registrado na
-[ADR 060](../adr/060-metricas-de-expediente-perda-e-presenca.md).
+[ADR 061](../adr/061-metricas-de-expediente-perda-e-presenca.md).
 Complementa a [RFC 044](044-performance-comercial-e-central-de-acoes.md) e a
 [ADR 059](../adr/059-central-de-acoes-e-performance-comercial.md).
 Contrato: [ACT-06 emendado e MET-01–12](../../.specs/features/dashboard-actions/spec.md).
@@ -133,8 +133,8 @@ checkpoint (PERF-08 segue com a mesma apuração de vendas):
   `GET /api/v1/conversations/:id/lead-outcome`
 - `POST /api/v1/presence/heartbeat`
 
-Migrações expand: `0060` (função de expediente e índices), `0061`
-(desfechos de lead) e `0062` (presença).
+Migrações expand: `0061` (função de expediente e índices), `0062`
+(desfechos de lead) e `0063` (presença).
 
 ## Alternativas consideradas
 
@@ -156,8 +156,8 @@ Migrações expand: `0060` (função de expediente e índices), `0061`
   retenção de 90 dias e acesso do próprio vendedor.
 - **Perda escondendo cliente:** mensagem nova reabre automaticamente;
   falhas de envio continuam na central.
-- **Numeração:** a branch `codex/olist-phase3` também usa ADR 060 e a
-  migração 0060. Quem chegar depois ao master renumera antes do merge.
+- **Numeração:** a branch `codex/olist-phase3` já usa ADR 060 e a
+  migração 0060; esta decisão usa ADR 061 e 0061–0063. Quem chegar depois ao master confere a numeração antes do merge.
 
 ## Rastreabilidade
 

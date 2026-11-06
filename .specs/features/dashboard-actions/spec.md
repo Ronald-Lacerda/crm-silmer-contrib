@@ -5,7 +5,7 @@ refinado. [RFC 044](../../../docs/rfc/044-performance-comercial-e-central-de-aco
 e [ADR 059](../../../docs/adr/059-central-de-acoes-e-performance-comercial.md).
 ACT-06 emendada e MET-01–12 acrescentados em 05/11/2026 pela
 [RFC 048](../../../docs/rfc/048-metricas-de-expediente-perda-e-presenca.md) e
-[ADR 060](../../../docs/adr/060-metricas-de-expediente-perda-e-presenca.md) (ACT-T04).
+[ADR 061](../../../docs/adr/061-metricas-de-expediente-perda-e-presenca.md) (ACT-T04).
 Complementa FIN-01–03, PNL-01–04, PLA-04–12 e FINQ-04/18/19.
 
 ## Central do vendedor — ACT-01–12
@@ -35,7 +35,7 @@ Complementa FIN-01–03, PNL-01–04, PLA-04–12 e FINQ-04/18/19.
    objeto no PostgreSQL existente, com versão própria, versão do alvo e revisão
    da mensagem. Transferência, fechamento ou nova demanda invalidam decisão
    obsoleta; adiado vencido volta à fila. Adiar não resolve obrigação do pedido.
-6. **ACT-06 — Retomada:** após 72h (emenda ADR 060; eram 48h) sem resposta
+6. **ACT-06 — Retomada:** após 72h (emenda ADR 061; eram 48h) sem resposta
    à última saída humana enviada, pode aparecer sugestão em conversa própria humana, aberta e não arquivada.
    Não inventar compromisso, perda ou desinteresse. Saída falha/desconhecida
    não fundamenta sugestão nem pode esconder cliente que ainda espera. Retorno
@@ -109,7 +109,7 @@ Complementa FIN-01–03, PNL-01–04, PLA-04–12 e FINQ-04/18/19.
 
 ## Métricas de expediente, perda e presença — MET-01–12
 
-Decisões do PO em 05/11/2026 (RFC 048 / ADR 060). Todo contato é lead: o
+Decisões do PO em 05/11/2026 (RFC 048 / ADR 061). Todo contato é lead: o
 contato acontece sempre por iniciativa do cliente.
 
 1. **MET-01 — Expediente:** política `expediente-v1`, segunda a sexta,
@@ -177,7 +177,7 @@ contato acontece sempre por iniciativa do cliente.
     `GET /api/v1/conversations/:id/lead-outcome`; comando em
     `POST /api/v1/conversations/:id/lead-outcome`. Não altera
     `/dashboard/performance` nem o checkpoint (PERF-08). Migrações expand
-    `0060` (expediente e índices), `0061` (desfechos) e `0062` (presença).
+    `0061` (expediente e índices), `0062` (desfechos) e `0063` (presença).
 
 ## Verificação e fronteiras
 
@@ -187,5 +187,5 @@ prazo ausente, loja, teste, outra conta, Financeiro, CSRF, snapshot repetido,
 falha parcial e timeout. Testes live usam somente dados sintéticos.
 Não inclui cobrança InfinitePay da RFC 045, novo status comercial, coortes ou
 follow-up automático. A perda declarada de MET-06–08 não é status comercial:
-é desfecho de lead em registro próprio (emenda ADR 060). PNL-01–03 ganham a composição desta central; PNL-04 não
+é desfecho de lead em registro próprio (emenda ADR 061). PNL-01–03 ganham a composição desta central; PNL-04 não
 altera o destino atual do login.

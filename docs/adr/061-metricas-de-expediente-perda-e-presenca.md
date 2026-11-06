@@ -1,4 +1,4 @@
-# ADR 060 — Métricas de expediente, perda declarada e presença
+# ADR 061 — Métricas de expediente, perda declarada e presença
 
 Data: 05/11/2026. Status: aceita pelo PO em 05/11/2026.
 Proposta: [RFC 048](../rfc/048-metricas-de-expediente-perda-e-presenca.md),
@@ -56,7 +56,7 @@ Admin vê a equipe, vendedor só a própria linha (PERF-07) e Financeiro não
 tem acesso. Endpoints novos sob `/api/v1/dashboard/metrics/{service,losses,presence}`
 e `/api/v1/conversations/:id/lead-outcome`, sem alterar
 `/dashboard/performance` nem o checkpoint (PERF-08). Migrações expand
-`0060` (expediente e índices), `0061` (desfechos de lead) e `0062` (presença).
+`0061` (expediente e índices), `0062` (desfechos de lead) e `0063` (presença).
 
 ## Consequências e alternativas
 
@@ -71,5 +71,5 @@ status de conversa (fronteira da spec e mistura com encerramento), sessão ou
 login como tempo online (sessões duram dias e inflam o indicador) e cálculo
 de minutos úteis em JavaScript (duas fontes de verdade).
 
-A branch `codex/olist-phase3` também numera ADR 060 e migração 0060; a
-entrega que chegar depois ao master renumera antes do merge.
+A branch `codex/olist-phase3` já usa ADR 060 e migração 0060; por isso esta decisão
+usa ADR 061 e 0061–0063. Quem chegar depois ao master confere a numeração antes do merge.
