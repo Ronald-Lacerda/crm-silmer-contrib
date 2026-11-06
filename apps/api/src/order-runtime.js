@@ -217,9 +217,15 @@ export function createOrderRuntime(options) {
       deliveredOn: order.deliveredOn,
       fabCode: order.fabCode,
       ficha: order.ficha,
-      ...(order.ficha.sizePricing === undefined
+      ...(order.ficha.sizePricing === undefined && !order.legacySizePricing
         ? {}
-        : { pricing: sizePricingSummary(order.ficha) }),
+        : {
+            pricing: sizePricingSummary(
+              order.legacySizePricing
+                ? { ...order.ficha, sizePricing: order.legacySizePricing }
+                : order.ficha,
+            ),
+          }),
       // ADR 031: who printed a store order's ficha first, and when.
       fichaFirstPrintedAt: order.fichaFirstPrintedAt ?? null,
       fichaFirstPrintedBy: person(order.fichaFirstPrintedBy),
@@ -307,7 +313,7 @@ export function createOrderRuntime(options) {
    * @template T
    * @param {OrderCommand} input
    * @param {{action: string, target: {type: string, id: string}, expectedVersion: unknown, command: unknown}} request
-   * @param {() => Promise<T>} effect
+   * @param {(transaction?: unknown) => Promise<T>} effect
    * @returns {Promise<T>}
    */
   function run(input, request, effect) {
@@ -418,6 +424,22 @@ export function createOrderRuntime(options) {
           target: { id: input.contactId, type: 'contact' },
         },
         async () => presentOne(await service.createForContact(input)),
+      );
+    },
+
+    priceBreakdown: service.priceBreakdown,
+    /** @param {OrderCommand & {orderId: string, value: unknown, expectedVersion: number}} input */
+    async savePriceBreakdown(input) {
+      await service.assertPriceBreakdownAccess(input);
+      return run(
+        input,
+        {
+          action: 'order.price_breakdown.edit',
+          command: input.value,
+          expectedVersion: requireVersion(input.expectedVersion),
+          target: { type: 'order', id: input.orderId },
+        },
+        (transaction) => service.savePriceBreakdown(input, transaction),
       );
     },
 

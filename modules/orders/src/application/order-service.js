@@ -1,3 +1,4 @@
+import { projectOrderSource } from '../domain/order-source.js';
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -105,7 +106,7 @@ const STORE_NUMBER_QUERY = /^#?lj-?([0-9a-f]{8})$/iu;
 /**
  * Keeps the columns the list reads without decrypting in step with the ficha.
  *
- * @template {Pick<Order, 'ficha'|'status'|'finalAmountCents'|'paymentCondition'>} T
+ * @template {Pick<Order, 'ficha'|'status'|'finalAmountCents'|'paymentCondition'|'legacySizePricing'>} T
  * @param {T} order
  * @returns {T & {totalPieces: number, missingFields: string[]}}
  */
@@ -239,7 +240,22 @@ export function createOrderService(options) {
    * @param {Order[]} orders
    */
   async function readAll(orders) {
-    return (await withCurrentClient(orders)).map(current);
+    const sources =
+      typeof repository.readPriceBreakdowns === 'function'
+        ? await repository.readPriceBreakdowns(orders)
+        : new Map();
+    return (await withCurrentClient(orders)).map((order) => {
+      const source = sources.get(order.id);
+      const projection =
+        source?.sourceValid && source.data.mode === 'legacy'
+          ? projectOrderSource(order, source)
+          : null;
+      return current(
+        projection?.pricing?.complete
+          ? { ...order, legacySizePricing: projection.groups }
+          : order,
+      );
+    });
   }
 
   /** @param {Order} order */
@@ -636,6 +652,44 @@ export function createOrderService(options) {
       return { applied: true, order: current(order), reason: null };
     },
 
+    /** @param {{actor: OrderActor, orderId: string}} input */
+    async assertPriceBreakdownAccess(input) {
+      const order = await repository.findById(
+        requireId(input.orderId, 'orderId'),
+      );
+      if (!order) throw new OrderNotFoundError();
+      if (order.origin === 'loja') {
+        if (
+          input.actor?.kind !== 'human' ||
+          !(input.actor.capabilities ?? []).includes('COMMERCIAL_ADMIN')
+        )
+          throw new OrderForbiddenError();
+      } else await requireOwner(input.actor, order);
+      if (!repository.assertPriceBreakdownAccess)
+        throw new OrderInputError('Source repository unavailable');
+      await repository.assertPriceBreakdownAccess(input);
+    },
+
+    /** @param {string} orderId */
+    async priceBreakdown(orderId) {
+      const order = await repository.findById(requireId(orderId, 'orderId'));
+      if (!order) throw new OrderNotFoundError();
+      const records = repository.readPriceBreakdowns
+        ? await repository.readPriceBreakdowns([order])
+        : new Map();
+      return projectOrderSource(order, records.get(order.id) ?? null);
+    },
+
+    /** @param {any} input @param {unknown} transaction */
+    async savePriceBreakdown(input, transaction) {
+      if (!repository.savePriceBreakdown)
+        throw new OrderInputError('Source repository unavailable');
+      return repository.savePriceBreakdown(
+        { ...input, now: clock() },
+        transaction,
+      );
+    },
+
     /** @param {string} orderId */
     async get(orderId) {
       const order = await repository.findById(requireId(orderId, 'orderId'));
@@ -800,19 +854,16 @@ export function createOrderService(options) {
       } else if (section === 'observations') {
         ficha.observations = validateObservations(input.value);
       }
-      return current(
-        await repository.saveSection(
-          withDerivedFields({
-            ...order,
-            ficha,
-            updatedAt: clock().toISOString(),
-          }),
-          {
-            actor: input.actor,
-            correlationId: input.correlationId,
-            expectedVersion: order.version,
-          },
-        ),
+      const candidate = { ...order, ficha, updatedAt: clock().toISOString() };
+      // A commercial edit cannot carry the old sidecar proof into validation.
+      // The repository read will reattach it only if its keyed basis still matches.
+      delete candidate.legacySizePricing;
+      return readOne(
+        await repository.saveSection(withDerivedFields(candidate), {
+          actor: input.actor,
+          correlationId: input.correlationId,
+          expectedVersion: order.version,
+        }),
       );
     },
 
@@ -830,7 +881,7 @@ export function createOrderService(options) {
         input.amountText === undefined || input.amountText === null
           ? undefined
           : parseBrlAmount(/** @type {string} */ (input.amountText));
-      return current(
+      return readOne(
         await repository.saveStatus(
           confirmOrder(order, {
             actorId: input.actor.id,

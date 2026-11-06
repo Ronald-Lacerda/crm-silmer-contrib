@@ -17,7 +17,7 @@ F1/T02 concluídos no escopo `exact-cent-v1`; Fase 2 (T03/T04/T19/T05)
 implementada e validada localmente em 05/11/2026, no
 [commit 6a79cc8a](https://github.com/romulosutil/crm-silmer/commit/6a79cc8aecc3111dbfad5b8b14220f3b3df860aa).
 Fase 3 iniciada pela fatia T20b de composição persistida opt-in
-([contrato e limites](../runbooks/olist-phase3.md)); T20/T21 concluídas em
+([contrato e limites](../runbooks/olist-phase3.md)); T20/T21/T26 concluídas em
 domínio/API, com o gate F3 ainda aberto. As fases 4–6 permanecem pendentes.
 A geração real continua desligada, sem deploy, conexão real homologada ou
 piloto nesta entrega. A revisão substitui
@@ -787,7 +787,7 @@ geração e handlers de exportação continuam desligados nesta fase.
       valor livre e contrato antigo limitado à igualdade calculada. OLIST-10,
       34, 40–43. Dono Backend. Depende T20. Evidência: manipulação/overflow,
       desconto por quantidade, incompleto e revisões concorrentes.
-- [ ] **OLIST-T26** Leitura/enriquecimento de legado com autoria/versão,
+- [x] **OLIST-T26** Leitura/enriquecimento de legado com autoria/versão,
       total confirmado preservado e sem divisão inferida. OLIST-29, 42–44.
       Dono Backend. Depende T20/T21. Evidência: snapshot/total antigos intactos,
       composição igual aceita e divergente recusada; rollout/rollback testados.
@@ -1073,8 +1073,8 @@ Riscos, bloqueios e próximo item desbloqueado:
 ```
 
 Próximos itens: F1/T02 e F2/T03–T05/T19 concluídos para o escopo aprovado;
-continuar a Fase 3 após T20/T21, pelos adapters de legado/loja T26/T24 e
-pela prévia completa T06. O rollout depende também da interface na Fase 4.
+continuar a Fase 3 após T20/T21/T26, pelo adapter da loja T24 e pela
+prévia completa T06. O rollout depende também da interface na Fase 4.
 As preparações anteriores T20a/T21a não fechavam essas tarefas; o fechamento
 de T20/T21 está registrado no runbook. A limitação fracionária da ADR 062 permanece registrada. Não liberar
 geração real antes de cadastro automático seguro, precisão por linha, filtros

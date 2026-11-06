@@ -25,6 +25,9 @@ const DELIVERY_FILTERS = new Set(['overdue', 'due_soon']);
  * and identifiers never reach the client.
  */
 const PUBLIC_CODES = new Set([
+  'ORDER_SOURCE_INVALID',
+  'ORDER_SOURCE_STALE',
+  'ORDER_SOURCE_LOCKED',
   'SIZE_PRICING_AMOUNT_MISMATCH',
   'SIZE_PRICING_INVALID',
   'SIZE_PRICING_OVERFLOW',
@@ -346,6 +349,48 @@ export function registerOrderRoutes(
         });
         return reply.code(200).send({ order });
       }),
+  );
+
+  api.get('/api/v1/orders/:orderId/price-breakdown', async (request, reply) =>
+    respond(reply, async () => {
+      const orderId = requireIdentifier(
+        requireObject(request.params).orderId,
+        'ORDER_ID',
+      );
+      rejectUnknownKeys(requireObject(request.query ?? {}), []);
+      await authorizeRead(request, orders);
+      reply.header('cache-control', 'private, no-store');
+      return reply.code(200).send(await orders.priceBreakdown(orderId));
+    }),
+  );
+  api.post('/api/v1/orders/:orderId/price-breakdown', async (request, reply) =>
+    respond(reply, async () => {
+      const orderId = requireIdentifier(
+        requireObject(request.params).orderId,
+        'ORDER_ID',
+      );
+      const body = requireObject(request.body);
+      rejectUnknownKeys(body, ['expectedVersion', 'value']);
+      const expectedVersion = requireVersion(body.expectedVersion);
+      if (!Object.hasOwn(body, 'value'))
+        throw new OrderRequestError(400, 'INVALID_REQUEST');
+      const command = await authorizeCommand(
+        request,
+        orders,
+        contextFor,
+        'order.edit',
+      );
+      const result = await orders.savePriceBreakdown({
+        ...command,
+        orderId,
+        expectedVersion,
+        value: body.value,
+      });
+      return reply
+        .header('cache-control', 'private, no-store')
+        .code(200)
+        .send(result);
+    }),
   );
 
   api.post('/api/v1/orders/:orderId/store-correction', async (request, reply) =>

@@ -19,6 +19,17 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T26 — enriquecimento histórico separado da ficha
+
+[ADR 067](docs/adr/067-fontes-comerciais-suplementares-sem-reescrever-ficha.md)
+/ RFC 054: revisões suplementares cifradas e append-only preservam o envelope,
+o valor e os pagamentos históricos. Comando comercial humano com versão e
+ACL atual, lote por identidade e soma exata ao total, mesma transação de evento,
+auditoria e idempotência. HMAC da fonte invalida composição obsoleta; rebase é
+explícito. Reserva Olist em qualquer conta bloqueia mudanças. Reconfirmação
+legada usa prova fresca sem mesclá-la à ficha. T24/UI/seqüência externa seguem
+pendentes. [Runbook](docs/runbooks/olist-phase3.md).
+
 ## OLIST-T21 — total calculado e confirmação
 
 T20/T21 concluídas no domínio/API: subtotais revisados determinam total/grupos,

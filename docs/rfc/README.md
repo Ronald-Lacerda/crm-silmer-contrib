@@ -21,6 +21,12 @@
 - [044 — Performance comercial, checkpoint e central de ações](044-performance-comercial-e-central-de-acoes.md),
   protótipo refinado aprovado e recorte registrado na ADR 059 / ACT-T01.
 
+
+
+## Decisão técnica de 05/11/2026
+
+- [054 — Fontes suplementares para Olist](054-fontes-suplementares-para-olist.md), decidida na ADR 067 para T26/T24.
+
 ## Decisão de 04/11/2026
 
 - [050 — Geração assistida de pedidos de venda no Olist](050-geracao-assistida-de-pedidos-no-olist.md),

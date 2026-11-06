@@ -1,3 +1,8 @@
+import {
+  applyOrderSourceCommand,
+  projectOrderSource,
+} from '../domain/order-source.js';
+import { orderSourceFingerprint } from './order-source-fingerprint.js';
 import { sizePricingSummary } from '../domain/size-pricing-composition.js';
 import { randomUUID } from 'node:crypto';
 
@@ -948,6 +953,218 @@ export class PostgresOrderRepository {
     };
   }
 
+  /** Fresh commercial authority, also checked before replaying a receipt.
+   * Lock order: active user/grant, conversation, order, source revision.
+   * @param {Queryable} tx @param {any} input @param {boolean} lockOrder */
+  async #sourceAccess(tx, input, lockOrder) {
+    const actor = input.actor;
+    if (actor?.kind !== 'human' || !actor.id) throw new OrderForbiddenError();
+    const active = (
+      await tx.query(
+        `SELECT users.id, profile.function_name
+      FROM crm.users AS users JOIN crm.user_functions AS profile ON profile.user_id=users.id
+      WHERE users.id=$1 AND users.disabled_at IS NULL FOR SHARE OF users,profile`,
+        [actor.id],
+      )
+    ).rows[0];
+    if (!active || active.function_name !== 'Vendedor')
+      throw new OrderForbiddenError();
+    let admin = false;
+    if ((actor.capabilities ?? []).includes('COMMERCIAL_ADMIN')) {
+      admin = Boolean(
+        (
+          await tx.query(
+            `SELECT 1 FROM crm.user_capabilities
+        WHERE user_id=$1 AND capability='COMMERCIAL_ADMIN' FOR SHARE`,
+            [actor.id],
+          )
+        ).rows[0],
+      );
+    }
+    const reference = (
+      await tx.query(
+        'SELECT conversation_id,manual_owner_id,origin FROM crm.orders WHERE id=$1',
+        [input.orderId],
+      )
+    ).rows[0];
+    if (!reference) throw new OrderNotFoundError();
+    if (reference.origin === 'loja') {
+      if (!admin) throw new OrderForbiddenError();
+    } else if (reference.conversation_id) {
+      const conversation = await lockConversation(
+        tx,
+        reference.conversation_id,
+      );
+      if (
+        !conversation ||
+        (!admin &&
+          (active.function_name !== 'Vendedor' ||
+            conversation.assigned_user_id !== actor.id))
+      )
+        throw new OrderForbiddenError();
+    } else if (
+      !admin &&
+      (active.function_name !== 'Vendedor' ||
+        reference.manual_owner_id !== actor.id)
+    )
+      throw new OrderForbiddenError();
+    if (!lockOrder) return null;
+    const row = (
+      await tx.query(
+        `SELECT ${ORDER_COLUMNS} FROM crm.orders WHERE id=$1 FOR UPDATE`,
+        [input.orderId],
+      )
+    ).rows[0];
+    if (
+      !row ||
+      row.conversation_id !== reference.conversation_id ||
+      row.manual_owner_id !== reference.manual_owner_id ||
+      row.origin !== reference.origin
+    )
+      throw new OrderConflictError('Order ownership changed');
+    return this.#map(row);
+  }
+
+  /** @param {any} input */
+  async assertPriceBreakdownAccess(input) {
+    await this.#database.transaction((tx) =>
+      this.#sourceAccess(tx, input, false),
+    );
+  }
+
+  /** @param {Order[]} orders @returns {Promise<Map<string, any>>} */
+  async readPriceBreakdowns(orders) {
+    if (orders.length === 0) return new Map();
+    const rows = (
+      await this.#database.query(
+        `SELECT DISTINCT ON (order_id) *
+      FROM crm.order_olist_source_revisions WHERE order_id=ANY($1::text[])
+      ORDER BY order_id,revision DESC`,
+        [orders.map((order) => order.id)],
+      )
+    ).rows;
+    const byId = new Map(orders.map((order) => [order.id, order]));
+    return new Map(
+      rows.map((row) => {
+        const order = /** @type {Order} */ (byId.get(row.order_id));
+        return [
+          order.id,
+          {
+            data: decryptJson(
+              row.data_envelope,
+              `order-olist-source:${order.id}:${row.revision}`,
+              this.#envelopeKey,
+            ),
+            revision: Number(row.revision),
+            orderVersion: Number(row.order_version),
+            sourceValid:
+              Number(row.order_version) < order.version &&
+              row.source_hmac ===
+                orderSourceFingerprint(order, this.#envelopeKey),
+            updatedBy: row.updated_by,
+            updatedAt: isoOrNull(row.updated_at),
+          },
+        ];
+      }),
+    );
+  }
+
+  /** The caller's idempotency/audit client owns the entire write.
+   * @param {any} input @param {Queryable|undefined} transaction */
+  async savePriceBreakdown(input, transaction) {
+    const work = async (/** @type {Queryable} */ tx) => {
+      const order = /** @type {Order} */ (
+        await this.#sourceAccess(tx, input, true)
+      );
+      if (order.version !== input.expectedVersion)
+        throw new OrderConflictError('The order version changed');
+      // prepareExport locks this same order before inserting its snapshot.
+      const effect = await tx.query(
+        `SELECT 1 FROM crm.olist_exports AS export
+        WHERE export.order_id=$1 AND (
+          export.state NOT IN ('invalidated','rejected') OR export.remote_id IS NOT NULL OR
+          EXISTS (SELECT 1 FROM crm.olist_attempts AS attempt WHERE attempt.export_id=export.id AND attempt.outcome<>'rejected') OR
+          EXISTS (SELECT 1 FROM crm.olist_export_resources AS dependency JOIN crm.olist_attempts AS attempt ON attempt.resource_id=dependency.resource_id
+                  WHERE dependency.export_id=export.id AND attempt.outcome<>'rejected')) LIMIT 1`,
+        [order.id],
+      );
+      if (effect.rows[0])
+        throw new OrderConflictError(
+          'The Olist snapshot is reserved',
+          'ORDER_SOURCE_LOCKED',
+        );
+      const row = (
+        await tx.query(
+          `SELECT * FROM crm.order_olist_source_revisions
+        WHERE order_id=$1 ORDER BY revision DESC LIMIT 1 FOR UPDATE`,
+          [order.id],
+        )
+      ).rows[0];
+      const fingerprint = orderSourceFingerprint(order, this.#envelopeKey);
+      const current =
+        row && row.source_hmac === fingerprint
+          ? decryptJson(
+              row.data_envelope,
+              `order-olist-source:${order.id}:${row.revision}`,
+              this.#envelopeKey,
+            )
+          : null;
+      if (row && !current && input.value?.action !== 'initialize')
+        throw new OrderConflictError(
+          'Review the changed commercial source',
+          'ORDER_SOURCE_STALE',
+        );
+      const data = applyOrderSourceCommand(order, current, input.value);
+      const revision = row ? Number(row.revision) + 1 : 1;
+      if (!Number.isSafeInteger(revision) || revision > 2147483647)
+        throw new OrderConflictError(
+          'Source revision limit',
+          'ORDER_SOURCE_LOCKED',
+        );
+      const now = input.now.toISOString();
+      await tx.query(
+        `INSERT INTO crm.order_olist_source_revisions
+        (order_id,revision,order_version,source_hmac,data_envelope,updated_by,updated_at)
+        VALUES($1,$2,$3,$4,$5::jsonb,$6,$7)`,
+        [
+          order.id,
+          revision,
+          order.version,
+          fingerprint,
+          JSON.stringify(
+            encryptJson(
+              data,
+              `order-olist-source:${order.id}:${revision}`,
+              this.#envelopeKey,
+            ),
+          ),
+          input.actor.id,
+          now,
+        ],
+      );
+      await tx.query(
+        'UPDATE crm.orders SET version=version+1,updated_at=$2 WHERE id=$1',
+        [order.id, now],
+      );
+      const updated = { ...order, version: order.version + 1, updatedAt: now };
+      await appendOrderEvent(
+        tx,
+        updated,
+        'order.price_breakdown_updated',
+        input.correlationId,
+      );
+      return projectOrderSource(updated, {
+        data,
+        revision,
+        orderVersion: order.version,
+        sourceValid: true,
+        updatedBy: input.actor.id,
+        updatedAt: now,
+      });
+    };
+    return transaction ? work(transaction) : this.#database.transaction(work);
+  }
+
   /** @param {Order} order @param {OrderWriteOptions} options */
   async saveSection(order, options) {
     return this.#writeFicha(order, options, 'order.section_saved');
@@ -1016,7 +1233,8 @@ export class PostgresOrderRepository {
                order_date = $5::date, confirmed_at = $6, confirmed_by = $7,
                reopened_at = $8, reopened_by = $9,
                missing_fields = $10::text[], updated_at = $11,
-               ficha_envelope = $12::jsonb, version = version + 1
+               ficha_envelope = CASE WHEN $13::boolean THEN ficha_envelope ELSE $12::jsonb END,
+               version = version + 1
            WHERE id = $1
            RETURNING ${ORDER_COLUMNS}`,
           [
@@ -1034,6 +1252,7 @@ export class PostgresOrderRepository {
             JSON.stringify(
               encryptJson(order.ficha, fichaAad(order.id), this.#envelopeKey),
             ),
+            order.legacySizePricing !== undefined,
           ],
         );
       },

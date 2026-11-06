@@ -27,6 +27,10 @@
   RFC 049 / COB-DEL-01: 0%, X% e 100%, sinal/saldo, Pix/cartão e quitação
   verificada de pedidos existentes, após aprovação do protótipo.
 
+## Decisão técnica de 05/11/2026
+
+- [067 — Fontes comerciais suplementares](067-fontes-comerciais-suplementares-sem-reescrever-ficha.md), RFC 054 / T26/T24, preservando ficha, total e pagamentos.
+
 ## Decisão de 04/11/2026
 
 - [057 — Olist por habilitação e subtotal por tamanho](057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md),

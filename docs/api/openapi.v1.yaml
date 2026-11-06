@@ -2586,6 +2586,65 @@ paths:
         '404': { $ref: '#/components/responses/OrderNotFound' }
         '409': { $ref: '#/components/responses/OrderConflict' }
         '422': { $ref: '#/components/responses/OrderUnprocessable' }
+  /orders/{orderId}/price-breakdown:
+    get:
+      operationId: getOrderPriceBreakdown
+      summary: Consulta composição suplementar do pedido histórico
+      description: >-
+        OLIST-T26. Ação order.read no escopo comercial existente. Retorna
+        revisão/autor e IDs estáveis, com pendências explícitas se ausente,
+        incompleta ou obsoleta. Não altera ficha nem total. Cache privado no-store.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Fonte suplementar, sem HMAC/envelope interno
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderPriceBreakdown' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/OrderNotFound' }
+    post:
+      operationId: saveOrderPriceBreakdown
+      summary: Enriquece preços históricos sem regravar a ficha
+      description: >-
+        OLIST-T26. Humano responsável/Admin com order.edit, sessão, CSRF,
+        Origin, Idempotency-Key e expectedVersion. Autoridade atual é revalidada
+        antes de replay e sob lock. initialize em legado emite IDs sem inferir
+        preços; set_subtotals exige cobertura completa por identidade e soma
+        igual ao total preservado quando completo. Preços null salvam rascunho.
+        Alteração comercial da fonte exige initialize explícito e nova revisão.
+        Composição T21 e loja não usam esta mutação genérica. Reserva/efeito
+        Olist em qualquer conta bloqueia. Revisão cifrada append-only, incremento
+        da versão do Pedido, evento, auditoria e recibo compartilham transação.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion, value]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+                value:
+                  { $ref: '#/components/schemas/OrderPriceBreakdownCommand' }
+      responses:
+        '200':
+          description: Revisão gravada ou replay autorizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderPriceBreakdown' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/OrderNotFound' }
+        '409': { $ref: '#/components/responses/OrderConflict' }
+        '422': { $ref: '#/components/responses/OrderUnprocessable' }
   /orders/{orderId}/store-correction:
     post:
       operationId: correctStoreOrderQuantity
@@ -5776,7 +5835,7 @@ components:
         pricing:
           $ref: '#/components/schemas/SizePricingSummary'
           readOnly: true
-          description: Presente somente em pedidos com composição por tamanho.
+          description: Presente em composição T21 ou legado com suplemento fresco e completo.
         totalPieces: { type: integer, minimum: 0 }
         missingFields:
           type: array
@@ -6352,6 +6411,75 @@ components:
             - { $ref: '#/components/schemas/FichaObservations' }
             - { $ref: '#/components/schemas/FichaArtworkInput' }
             - { $ref: '#/components/schemas/SizePricingCommand' }
+    OrderPriceBreakdownCommand:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [action]
+          properties:
+            action: { const: initialize }
+        - type: object
+          additionalProperties: false
+          required: [action, lines]
+          properties:
+            action: { const: set_subtotals }
+            lines:
+              type: array
+              description: Cobertura exata das linhas emitidas pelo servidor, sem duplicatas.
+              items:
+                type: object
+                additionalProperties: false
+                required: [groupId, lineId, subtotalCents]
+                properties:
+                  groupId: { type: string, format: uuid }
+                  lineId: { type: string, format: uuid }
+                  subtotalCents:
+                    {
+                      type: [integer, 'null'],
+                      minimum: 1,
+                      maximum: 9007199254740991,
+                    }
+    OrderPriceBreakdown:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          mode,
+          orderId,
+          orderVersion,
+          revision,
+          sourceValid,
+          groups,
+          pricing,
+          issues,
+          updatedBy,
+          updatedAt,
+        ]
+      properties:
+        mode: { type: string, enum: [legacy, managed] }
+        orderId: { type: string }
+        orderVersion: { type: integer, minimum: 1 }
+        revision: { type: integer, minimum: 0 }
+        sourceValid: { type: boolean }
+        groups:
+          type: array
+          maxItems: 50
+          items: { $ref: '#/components/schemas/SizePricingGroup' }
+        pricing:
+          oneOf:
+            - { $ref: '#/components/schemas/SizePricingSummary' }
+            - { type: 'null' }
+        issues:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [code, field]
+            properties:
+              code: { type: string }
+              field: { type: string }
+        updatedBy: { type: [string, 'null'] }
+        updatedAt: { type: [string, 'null'], format: date-time }
     OrderConfirmRequest:
       type: object
       additionalProperties: false
@@ -6606,6 +6734,9 @@ components:
                   ORDER_NOT_CONFIRMABLE,
                   INVALID_AMOUNT,
                   INVALID_GRADE,
+                  ORDER_SOURCE_INVALID,
+                  ORDER_SOURCE_STALE,
+                  ORDER_SOURCE_LOCKED,
                   SIZE_PRICING_INVALID,
                   SIZE_PRICING_OVERFLOW,
                   SIZE_PRICING_ALREADY_INITIALIZED,

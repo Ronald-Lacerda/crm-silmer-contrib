@@ -141,6 +141,18 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 ## OLIST-T20b — Início da Fase 3 (05/11/2026)
 
+## OLIST-T26 — Legado sem reescrever ficha (05/11/2026)
+
+- [x] Fonte suplementar cifrada append-only, IDs estáveis, autoria/versão e HMAC.
+- [x] Lote humano versionado/idempotente com igualdade do total histórico,
+      preservando ficha, pagamento/check e rótulos/templates antigos.
+- [x] ACL atual antes de replay, mesma transação de revisão/evento/auditoria/recibo,
+      reserva Olist e fontes obsoletas bloqueadas, rebase e rollback sem down.
+- [x] Leitura/reconfirmação do legado usa prova interna fresca, sem migrar a ficha.
+
+OLIST-29, 42–44. [ADR 067](../../../docs/adr/067-fontes-comerciais-suplementares-sem-reescrever-ficha.md),
+[runbook](../../../docs/runbooks/olist-phase3.md). T24 e T06 ainda pendentes; F3 aberto.
+
 ## OLIST-T20/T21 — Composição e confirmação calculada (05/11/2026)
 
 - [x] Persistir composição opt-in no envelope cifrado, com IDs emitidos pelo servidor.

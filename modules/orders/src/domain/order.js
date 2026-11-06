@@ -51,6 +51,7 @@ const orderDateFormat = new Intl.DateTimeFormat('en-CA', {
  *   storeNumber: string|null, leadTimeBusinessDays: number|null,
  *   gatewayPayment: import('./store-order.js').GatewayPayment|null,
  *   fichaFirstPrintedAt?: string|null, fichaFirstPrintedBy?: string|null,
+ *   legacySizePricing?: import('./size-pricing.js').SizePriceGroup[],
  *   ficha: Ficha, totalPieces: number, missingFields: string[],
  *   finalAmountCents: number|null, paymentCondition: PaymentCondition|null,
  *   orderDate: string|null, confirmedAt: string|null, confirmedBy: string|null,
@@ -245,7 +246,7 @@ function confirmationBlockers(order, amountCents, paymentCondition) {
  * PFI-09: what still keeps a pending order from being generated. A
  * confirmed order lacks nothing.
  *
- * @param {Pick<Order, 'status'|'ficha'|'finalAmountCents'|'paymentCondition'>} order
+ * @param {Pick<Order, 'status'|'ficha'|'finalAmountCents'|'paymentCondition'|'legacySizePricing'>} order
  * @returns {string[]}
  */
 export function missingForConfirmation(order) {
@@ -253,12 +254,31 @@ export function missingForConfirmation(order) {
   return pricingConfirmationBlockers(order, order.paymentCondition);
 }
 
-/** @param {Pick<Order, 'ficha'|'finalAmountCents'>} order @param {unknown} condition */
+/** Server-only legacy composition, never merged into the persisted ficha.
+ * @param {Pick<Order, 'ficha'|'legacySizePricing'>} order */
+function pricingFicha(order) {
+  return order.ficha.sizePricing === undefined && order.legacySizePricing
+    ? { ...order.ficha, sizePricing: order.legacySizePricing }
+    : order.ficha;
+}
+
+/** @param {Pick<Order, 'ficha'|'finalAmountCents'|'legacySizePricing'>} order @param {unknown} condition */
 function pricingConfirmationBlockers(order, condition) {
+  const ficha = pricingFicha(order);
   const pricing =
-    order.ficha.sizePricing === undefined
-      ? null
-      : sizePricingSummary(order.ficha);
+    ficha.sizePricing === undefined ? null : sizePricingSummary(ficha);
+  if (
+    order.ficha.sizePricing === undefined &&
+    order.legacySizePricing &&
+    pricing?.complete &&
+    pricing.totalCents !== order.finalAmountCents
+  ) {
+    throw new OrderValidationError(
+      'A composição deve preservar o total histórico.',
+      'SIZE_PRICING_AMOUNT_MISMATCH',
+      ['priceBreakdown'],
+    );
+  }
   const fields = confirmationBlockers(
     order,
     pricing?.totalCents ?? null,
@@ -291,7 +311,7 @@ export function confirmOrder(order, input) {
     );
   }
   const amountCents = /** @type {number} */ (
-    sizePricingSummary(order.ficha).totalCents
+    sizePricingSummary(pricingFicha(order)).totalCents
   );
   if (input.amountCents !== undefined && input.amountCents !== amountCents) {
     throw new OrderValidationError(

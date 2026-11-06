@@ -1,3 +1,9 @@
+import { randomBytes } from 'node:crypto';
+import {
+  applyOrderSourceCommand,
+  projectOrderSource,
+} from '../domain/order-source.js';
+import { orderSourceFingerprint } from './order-source-fingerprint.js';
 import { sizePricingSummary } from '../domain/size-pricing-composition.js';
 import {
   OrderConflictError,
@@ -50,6 +56,9 @@ export class InMemoryOrderRepository {
   #receipts = [];
   /** @type {RecordedAudit[]} */
   #audits = [];
+  /** @type {Map<string, any[]>} */
+  #sources = new Map();
+  #sourceKey = randomBytes(32);
   #sequence = 0;
   #tail = Promise.resolve();
 
@@ -561,6 +570,80 @@ export class InMemoryOrderRepository {
     });
   }
 
+  /** @param {any} input */
+  async assertPriceBreakdownAccess(input) {
+    const order = this.#orders.get(input.orderId);
+    if (!order) throw new OrderNotFoundError();
+    if (
+      input.actor?.kind !== 'human' ||
+      !input.actor.id ||
+      (order.origin === 'loja' &&
+        !(input.actor.capabilities ?? []).includes('COMMERCIAL_ADMIN')) ||
+      (!order.conversationId &&
+        order.origin !== 'loja' &&
+        order.manualOwnerId !== input.actor.id &&
+        !(input.actor.capabilities ?? []).includes('COMMERCIAL_ADMIN'))
+    )
+      throw new OrderForbiddenError();
+  }
+
+  /** @param {Order[]} orders @returns {Promise<Map<string, any>>} */
+  async readPriceBreakdowns(orders) {
+    const result = new Map();
+    for (const order of orders) {
+      const record = this.#sources.get(order.id)?.at(-1);
+      if (record)
+        result.set(order.id, {
+          ...clone(record),
+          sourceValid:
+            record.orderVersion < order.version &&
+            record.sourceHmac ===
+              orderSourceFingerprint(order, this.#sourceKey),
+        });
+    }
+    return result;
+  }
+
+  /** @param {any} input @param {unknown} [_transaction] */
+  async savePriceBreakdown(input, _transaction) {
+    await this.assertPriceBreakdownAccess(input);
+    return this.#exclusive(() => {
+      const order = this.#orders.get(input.orderId);
+      if (!order) throw new OrderNotFoundError();
+      if (order.version !== input.expectedVersion)
+        throw new OrderConflictError('The order version changed');
+      const history = this.#sources.get(order.id) ?? [];
+      const previous = history.at(-1);
+      const sourceHmac = orderSourceFingerprint(order, this.#sourceKey);
+      const current =
+        previous?.sourceHmac === sourceHmac ? clone(previous.data) : null;
+      if (previous && !current && input.value?.action !== 'initialize')
+        throw new OrderConflictError(
+          'Review the changed source',
+          'ORDER_SOURCE_STALE',
+        );
+      const data = applyOrderSourceCommand(order, current, input.value);
+      const now = input.now.toISOString();
+      const record = {
+        data,
+        revision: history.length + 1,
+        orderVersion: order.version,
+        sourceHmac,
+        updatedBy: input.actor.id,
+        updatedAt: now,
+      };
+      const updated = { ...order, version: order.version + 1, updatedAt: now };
+      this.#sources.set(order.id, [...history, clone(record)]);
+      this.#orders.set(order.id, updated);
+      this.#record(
+        updated,
+        'order.price_breakdown_updated',
+        input.correlationId,
+      );
+      return projectOrderSource(updated, { ...record, sourceValid: true });
+    });
+  }
+
   /** @param {Order} order @param {OrderWriteOptions} options */
   async saveSection(order, options) {
     return this.#writeFicha(order, options, 'order.section_saved');
@@ -619,7 +702,7 @@ export class InMemoryOrderRepository {
           ...current,
           confirmedAt: order.confirmedAt,
           confirmedBy: order.confirmedBy,
-          ficha: clone(order.ficha),
+          ficha: clone(order.legacySizePricing ? current.ficha : order.ficha),
           finalAmountCents: order.finalAmountCents,
           paidOn: order.paidOn,
           paymentReviewRequired:

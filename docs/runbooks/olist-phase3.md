@@ -5,6 +5,53 @@ OLIST-09–10, 29, 34, 40–44;
 [ADR 057](../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
 
+## T26 — fonte histórica suplementar
+
+T26 implementada conforme [ADR 067](../adr/067-fontes-comerciais-suplementares-sem-reescrever-ficha.md)
+/ [RFC 054](../rfc/054-fontes-suplementares-para-olist.md), OLIST-29, 42–44.
+A migration expand 0065 acrescenta order_olist_source_revisions append-only,
+com envelope AES-GCM separado por Pedido/revisão. Aplicar a migration antes
+da API. Não há backfill, rateio ou reescrita de pedidos antigos.
+
+GET/POST /api/v1/orders/:id/price-breakdown usam leitura comercial e mutação
+order.edit, com sessão/CSRF/Origin/Idempotency-Key. Revalidar humano ativo,
+função Vendedor e posse/Admin antes do replay e dentro da transação. A revisão,
+o incremento de order.version, evento, auditoria e recibo usam o mesmo client;
+falha de auditoria não deixa preço, versão ou recibo parcialmente gravados.
+
+initialize em legado confirmado ou reaberto emite IDs de grupo/linha e preços
+null. set_subtotals recebe todas as linhas emitidas (groupId/lineId/centavos
+positivos ou null), sem importar grade/review/total. Completo deve somar o valor
+histórico; diferença é recusada sem gravar. Incompleto permanece pendência.
+IDs sobrevivem às revisões e à releitura. O autor e a versão são persistidos.
+
+A fonte é autenticada por HMAC dos campos comerciais canonicalizados.
+Impressão, recibo e datas de pagamento não pedem rebase. Alterar atributos,
+quantidade ou valor torna o suplemento obsoleto; initialize explícito inicia
+nova composição para a fonte alterada e mantém todas as revisões anteriores.
+Não regenerar IDs silenciosamente nem reaproveitar preços da fonte anterior.
+
+O legado completo/fresco pode ser reconfirmado após reabrir, apenas por seu
+comando humano e com o mesmo total. A prova interna não é aceita do navegador,
+não é publicada por spread e não entra na ficha. Reabertura/reconfirmação com
+essa prova preserva inclusive o envelope original. Correção comercial por
+seção items remove a prova transitória e invalida o suplemento, em vez de
+impedir a edição ou confirmar com preço antigo.
+
+Reserva/snapshot Olist em qualquer conta e tentativas de venda ou recursos
+ligados em estado reservado/confirmado/incerto bloqueiam o complemento. A
+reserva e o complemento serializam no mesmo lock de Pedido. Não limpar vínculo
+ou tentativas para liberar edição. Geração real continua desligada.
+
+Rollback: código anterior continua lendo a ficha/colunas antigas; manter 0065,
+revisões e chaves. Não executar down, modificar revisão antiga nem remover o
+guard T21 de preço calculado. API antiga exige mutações comerciais bloqueadas.
+
+Evidência T26: domínio/API 14/14 e PostgreSQL dedicado 8/8 sem skips. Incluem
+preservação de ficha/total/quitação/check, duas revisões concorrentes, replay
+revogado, falha de auditoria, envelope copiado, rebase após correção e disputa
+com reserva de snapshot. Testes locais não homologam ambiente remoto.
+
 ## Contrato entregue
 
 Adoção explícita via `PATCH /api/v1/orders/:id/sections/size-pricing`, com
@@ -164,3 +211,9 @@ já reproduzida no baseline, sem regressão nova identificada.
 E2E final T21: 485 aprovados/7 skips previstos, sem falhas; servidor estático na
 porta 4187. Nenhum teste foi flexibilizado. `git diff --check` aprovado; o
 PostgreSQL sintético iniciado para esta verificação foi encerrado.
+
+
+Gate T26: `npm run validate` aprovado, 1813 testes/16 skips explícitos,
+incluindo tipos, lint, fronteiras, formatação, validadores e build. O skip novo
+é a suíte PostgreSQL que exige TEST_DATABASE_URL; ela foi executada separada
+com 8/8 aprovados em banco dedicado.

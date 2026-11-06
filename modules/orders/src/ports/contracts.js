@@ -127,6 +127,9 @@ import { ORDER_ORIGINS } from '../domain/store-order.js';
  *   orders aside, so the promised day inside the ficha can be compared.
  *
  * @typedef {{
+ *   readPriceBreakdowns?(orders: Order[]): Promise<Map<string, any>>,
+ *   assertPriceBreakdownAccess?(input: any): Promise<void>,
+ *   savePriceBreakdown?(input: any, transaction?: any): Promise<any>,
  *   createPending(input: CreatePendingOrderInput): Promise<Order>,
  *   findById(orderId: string): Promise<Order|null>,
  *   findPendingByConversation(conversationId: string): Promise<Order|null>,
