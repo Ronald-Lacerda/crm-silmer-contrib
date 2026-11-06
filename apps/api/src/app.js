@@ -21,6 +21,7 @@ import { registerIdentityRoutes } from './identity-routes.js';
 import { registerFinanceRoutes } from './finance-routes.js';
 import { registerDashboardRoutes } from './dashboard-routes.js';
 import { registerDashboardCheckpointRoutes } from './dashboard-checkpoint-routes.js';
+import { registerDashboardMetricsRoutes } from './dashboard-metrics-routes.js';
 import { registerShippingRoutes } from './shipping-routes.js';
 import { registerN8nRoutes } from './n8n-routes.js';
 import { registerN8nCommandMediaRoutes } from './n8n-command-media-routes.js';
@@ -62,6 +63,7 @@ export const WEBHOOK_REQUESTS_PER_SECOND = 20;
  *   finance?: any,
  *   dashboard?: any,
  *   dashboardCheckpoint?: any,
+ *   dashboardMetrics?: any,
  *   shipping?: any,
  *   orderPdfRenderer?: (html: string) => Promise<Buffer>,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime
@@ -345,6 +347,12 @@ export function createApi(options = {}, runtime = {}) {
         correlationId:
           requests.get(request)?.correlationId ?? 'dashboard-request',
       }));
+    });
+  }
+  if (runtime.dashboardMetrics) {
+    api.register(async (metricsScope) => {
+      await metricsScope.register(rateLimit, { global: false });
+      registerDashboardMetricsRoutes(metricsScope, runtime.dashboardMetrics);
     });
   }
   if (runtime.finance) {

@@ -235,7 +235,7 @@ test(
       reason: 'Synthetic reply',
     });
     await pool.query(
-      `UPDATE crm.messages SET status='sent',occurred_at='2026-11-03T14:00:00Z',sent_at='2026-11-03T14:00:00Z' WHERE id=$1`,
+      `UPDATE crm.messages SET status='sent',occurred_at='2026-11-02T14:00:00Z',sent_at='2026-11-02T14:00:00Z' WHERE id=$1`,
       [sent.id],
     );
     const confirmedId = await order({

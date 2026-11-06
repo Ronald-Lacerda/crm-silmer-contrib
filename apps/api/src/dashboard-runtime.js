@@ -11,7 +11,7 @@ import {
 } from '@crm-silmer/orders';
 
 export const DASHBOARD_ACTION_LIMIT = 100;
-export const DASHBOARD_FOLLOWUP_HOURS = 48;
+export const DASHBOARD_FOLLOWUP_HOURS = 72;
 
 export class DashboardError extends Error {
   /** @param {number} statusCode @param {string} code */
@@ -349,7 +349,7 @@ export function projectDashboardConversation(row, now) {
         : kind === 'reply'
           ? 'Cliente espera sua resposta'
           : kind === 'followup'
-            ? 'Última mensagem humana sem resposta há 48h ou mais'
+            ? 'Última mensagem humana sem resposta há 3 dias ou mais'
             : 'Retorno agendado por você',
     attentionSince: handoff ? iso(row.handoff_created_at) : since,
     dueAt: handoff ? iso(row.handoff_due_at) : null,

@@ -71,17 +71,21 @@ test('ACT: unresolved sends remain actionable without pretending the customer ow
   assert.equal(receiptFailure?.reason, 'send_failure');
 });
 
-test('ACT: follow-up is a 48h suggestion only after an effective human send', () => {
+test('ACT: follow-up is a 72h suggestion only after an effective human send', () => {
   const sent = conversation({
     last_direction: 'outbound',
     last_author_kind: 'human',
     last_status: 'sent',
-    last_occurred_at: '2026-11-03T15:00:00.000Z',
+    last_occurred_at: '2026-11-02T15:00:00.000Z',
   });
   assert.equal(projectDashboardConversation(sent, NOW)?.kind, 'followup');
+  assert.match(
+    projectDashboardConversation(sent, NOW)?.subtitle ?? '',
+    /há 3 dias ou mais/u,
+  );
   assert.equal(
     projectDashboardConversation(
-      { ...sent, last_occurred_at: '2026-11-03T15:00:01.000Z' },
+      { ...sent, last_occurred_at: '2026-11-02T15:00:01.000Z' },
       NOW,
     ),
     null,

@@ -2453,6 +2453,52 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '429': { description: Limite de comandos excedido }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /dashboard/metrics/service:
+    get:
+      operationId: getDashboardServiceMetrics
+      summary: Tempos de atendimento no expediente e conversas sem resposta (RFC 048)
+      description: >-
+        Ação conversation.read com papel relido no PostgreSQL (PERF-07).
+        Vendedor ativo recebe só a própria linha; administrador ativo
+        (COMMERCIAL_ADMIN) recebe a equipe e o bloco `team`. Financeiro e
+        conta desativada recebem 403. Qualquer chave além de `days`
+        (actorId, userId, scope) é 400 INVALID_REQUEST; outro valor de
+        `days` é 400 INVALID_FILTER. Janela de 7 ou 30 dias civis até hoje
+        em São Paulo; coorte = pedidos de atendimento (handoffs) criados na
+        janela. Minutos são de expediente pela política `expediente-v1`
+        (`crm.business_minutes_v1`, ADR 061): segunda a sexta, 09:00–12:00 e
+        13:00–18:00 America/Sao_Paulo, sem feriados. Tempo para assumir e 1ª
+        resposta contam do pedido e são creditados a quem assumiu; tomada
+        direta sem pedido não gera amostra. Resposta efetiva é envio humano
+        `sent` sem entrega `failed`/`outcome_unknown`; bot e sistema não
+        contam. Mediana e p90 por percentil contínuo, em minutos com uma
+        casa; sem amostra é nulo e p90 é nulo com menos de 5 amostras.
+        `unansweredNow` é o retrato das conversas abertas do vendedor em
+        modo humano cuja espera do cliente passa de 15 minutos de
+        expediente. `unansweredEpisodes` conta cada espera que passou de 15
+        minutos e cujo instante de cruzamento caiu na janela, creditada a
+        quem era dono da conversa nesse instante. Contas inativas preservam
+        autoria. Leitura privada no-store, limite de 60 leituras/minuto.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/HumanReadOrigin'
+        - in: query
+          name: days
+          schema: { type: string, enum: ['7', '30'], default: '7' }
+      responses:
+        '200':
+          description: Métricas de atendimento do período
+          headers:
+            Cache-Control:
+              { schema: { type: string, const: 'private, no-store' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardServiceMetrics' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { description: Limite de leituras excedido }
+        '503': { $ref: '#/components/responses/Unavailable' }
 components:
   securitySchemes:
     automationBasic:
@@ -2621,6 +2667,93 @@ components:
       properties:
         expectedVersion: { type: integer, minimum: 1 }
         expectedFinanceVersion: { type: integer, minimum: 0 }
+    DashboardTimeMetric:
+      type: object
+      additionalProperties: false
+      required: [samples, medianMinutes, p90Minutes]
+      properties:
+        samples: { type: integer, minimum: 0 }
+        medianMinutes: { type: [number, 'null'], minimum: 0 }
+        p90Minutes:
+          type: [number, 'null']
+          minimum: 0
+          description: Nulo com menos de 5 amostras.
+    DashboardServiceMetricsRow:
+      type: object
+      additionalProperties: false
+      required:
+        [userId, name, active, firstResponse, claim, unansweredNow, unansweredEpisodes]
+      properties:
+        userId: { type: string }
+        name: { type: [string, 'null'] }
+        active: { type: boolean }
+        firstResponse:
+          allOf:
+            - $ref: '#/components/schemas/DashboardTimeMetric'
+            - type: object
+              required: [openCount, oldestOpenMinutes, closedWithoutReply]
+              properties:
+                openCount: { type: integer, minimum: 0 }
+                oldestOpenMinutes: { type: [number, 'null'], minimum: 0 }
+                closedWithoutReply: { type: integer, minimum: 0 }
+        claim: { $ref: '#/components/schemas/DashboardTimeMetric' }
+        unansweredNow:
+          type: object
+          additionalProperties: false
+          required: [count, oldestWaitingMinutes]
+          properties:
+            count: { type: integer, minimum: 0 }
+            oldestWaitingMinutes: { type: [number, 'null'], minimum: 0 }
+        unansweredEpisodes:
+          type: object
+          additionalProperties: false
+          required: [count]
+          properties:
+            count: { type: integer, minimum: 0 }
+    DashboardServiceMetrics:
+      type: object
+      additionalProperties: false
+      required:
+        [from, to, days, scope, generatedAt, businessHours, rows]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        days: { type: integer, enum: [7, 30] }
+        scope: { type: string, enum: [team, self] }
+        generatedAt: { type: string, format: date-time }
+        businessHours:
+          type: object
+          additionalProperties: false
+          required: [policy, weekdays, blocks, unansweredThresholdMinutes]
+          properties:
+            policy: { type: string, const: expediente-v1 }
+            weekdays:
+              type: array
+              items: { type: integer, minimum: 1, maximum: 7 }
+            blocks:
+              type: array
+              items:
+                type: array
+                minItems: 2
+                maxItems: 2
+                items: { type: string, pattern: '^\d{2}:\d{2}$' }
+            unansweredThresholdMinutes: { type: integer, const: 15 }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/DashboardServiceMetricsRow' }
+        team:
+          type: object
+          description: Somente para administrador (scope team).
+          additionalProperties: false
+          required: [unclaimedHandoffs]
+          properties:
+            unclaimedHandoffs:
+              type: object
+              additionalProperties: false
+              required: [count, oldestWaitingMinutes]
+              properties:
+                count: { type: integer, minimum: 0 }
+                oldestWaitingMinutes: { type: [number, 'null'], minimum: 0 }
     FinancePage:
       type: object
       additionalProperties: false
