@@ -67,6 +67,12 @@ O gate agrega formatação, JSDoc/checkJs, ESLint, fronteiras do monólito, test
 gates separados e obrigatórios. Durante a implementação, os mesmos passos
 podem ser executados separadamente pelos scripts documentados no `README.md`.
 
+Para falha de inicialização do Firefox no Windows, use o
+[roteiro de áudio em Linux local](docs/runbooks/playwright-audio-local.md).
+Ele mantém a versão do Playwright e as assertions existentes, com cópia
+isolada do commit e áudio sintético. Não substituir o gate de gravação real
+por skip ou mock para contornar a falha do executável do host.
+
 Mudanças de topologia ou recovery também executam `npm run validate:topology`
 e `npm run test:recovery:mocks`. O plano revisável por uma segunda pessoa é
 gerado por `npm run recovery:plan`; ele é offline e nunca substitui o

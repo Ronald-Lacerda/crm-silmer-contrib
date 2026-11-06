@@ -87,10 +87,16 @@ testes focados da referência/reserva passaram novamente; revisão
 independente sem achados pendentes. O sensor da revisão detectou quatro
 regressões em cópias temporárias, sem alterar o checkout.
 
-E2E teve 500 aprovados e sete ignorados; quatro casos com crash/timeout do
-navegador passaram na repetição com dois workers. O único caso restante é
-gravação sintética Firefox: o executável não inicia no host (`spawn UNKNOWN`),
-mesmo com o navegador do Playwright instalado. A integração deve conferir
-esse gate no CI/ambiente compatível. A auditoria de dependências passou no
-limiar high, com seis avisos low/moderate existentes. Nenhuma dependência
-foi alterada por esta fatia.
+A pendência de gravação Firefox foi encerrada em 06/11/2026: captura e
+reprodução reais com dispositivo sintético passaram em Firefox e Chromium
+na cópia isolada Linux do commit do PR, com Node 24.20.0, npm 11.19.0 e
+Playwright 1.62.1. E2E integral final: 505 aprovados, sete skips legados,
+zero falhas e nenhum retry consumido. Não houve alteração, remoção ou skip do teste de áudio.
+O executável nativo Windows permanece com erro SideBySide/`mozglue`; o
+[procedimento reproduzível](../../../docs/runbooks/playwright-audio-local.md)
+usa Docker local e PulseAudio null sink, sem portas publicadas ou mounts do
+checkout. A [validação independente do PR](../../../.specs/features/workflow-reference/validation.md)
+registra os gates completos e a revisão.
+
+A auditoria de dependências passou no limiar high, com seis avisos
+low/moderate existentes. Nenhuma dependência foi alterada por esta fatia.

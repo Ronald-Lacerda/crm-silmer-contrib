@@ -146,15 +146,22 @@ alinhamento Git e registro das funcionalidades extras no Linear.
       requisitos, nós afetados e critérios de aceite separados.
 - [x] Validar fingerprints, privacidade, topologia e preservação; revisão
       independente sem achados pendentes e entrega em branch própria.
-- [ ] Confirmar o teste de áudio Firefox em ambiente compatível/CI antes
-      da integração: execução local bloqueada por `spawn UNKNOWN`.
+- [x] Confirmar captura/reprodução nativas em Firefox e Chromium na imagem
+      Linux fixada do Playwright: dois testes aprovados, sem skips ou
+      alteração de assertions; preparo de áudio sintético igual ao CI.
 
 Validação após rebase sobre a master: `npm run validate` com 1.757 aprovados, 16 ignorados,
 nenhuma falha e build; 12 testes focados aprovados após a correção do header
-técnico SHA256. E2E: 500 aprovados na suíte e quatro falhas transitórias
-aprovadas isoladamente com dois workers; sete ignorados e o caso Firefox
-sem iniciar. Auditoria sem vulnerabilidades high/critical. Nenhum teste foi
-removido ou enfraquecido. Commit/push da entrega incluem este registro;
+técnico SHA256. A pendência Firefox foi encerrada em 06/11 na cópia Linux
+isolada do commit do PR, com Node 24.20.0/npm 11.19.0 e dispositivo sintético.
+E2E integral final: 505 aprovados, sete skips legados, zero falhas e nenhum
+retry consumido; a política de dois retries é a já configurada para CI.
+Procedimento em [áudio local](../../../docs/runbooks/playwright-audio-local.md)
+e resultado integral na [validação do PR](../workflow-reference/validation.md).
+O WinError 14001/SideBySide de `mozglue` continua sendo uma limitação do
+executável nativo Windows, não uma homologação de microfone físico.
+Auditoria sem vulnerabilidades high/critical. Nenhum teste foi removido ou
+enfraquecido. Commit/push da entrega incluem este registro;
 integração na master e deploy não pertencem à autorização desta tarefa.
 
 [Referência e pendências](../../../ops/n8n/workflows/README.md).
