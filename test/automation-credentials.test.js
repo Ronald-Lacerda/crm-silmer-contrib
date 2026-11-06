@@ -33,6 +33,10 @@ test('builds the fixed technical actor with only the approved CRM actions', () =
     'deal.fields.patch',
     'deal.transition',
     'handoff.create',
+    'billing.checkout.reserve',
+    'billing.checkout.record',
+    'billing.checkout.read',
+    'billing.payment.record',
     'order.intent',
     'store.order.record',
   ]);

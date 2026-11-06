@@ -1,5 +1,17 @@
 // Orders module (ADR 006): the Pedido aggregate, its ficha and persistence.
 export {
+  BillingError,
+  billingPercent,
+  billingSplit,
+  billingUrl,
+  billingIdentifier,
+  billingCents,
+} from './domain/billing.js';
+export {
+  encryptJson as encryptOrderPrivateJson,
+  decryptJson as decryptOrderPrivateJson,
+} from './adapters/envelope.js';
+export {
   FinanceError,
   financeQuery,
   financeVersions,

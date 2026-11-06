@@ -8,6 +8,9 @@
 - [059 — Central de ações e performance comercial](059-central-de-acoes-e-performance-comercial.md),
   RFC 044 / ACT-T01: fila pessoal, conferências independentes, crédito congelado
   e checkpoint diário com snapshot e reserva por destinatário; ativação ACT-T02.
+- [058 — Cobranças do pedido com InfinitePay](058-cobrancas-do-pedido-com-infinitepay.md),
+  RFC 049 / COB-DEL-01: 0%, X% e 100%, sinal/saldo, Pix/cartão e quitação
+  verificada de pedidos existentes, após aprovação do protótipo.
 
 ## Decisão de 03/11/2026
 

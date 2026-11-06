@@ -1,5 +1,18 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Cobranças do pedido — InfinitePay (05/11/2026)
+
+A [ADR 058](docs/adr/058-cobrancas-do-pedido-com-infinitepay.md), após aprovação
+do protótipo da RFC 049, acrescenta plano, cobranças e recebimentos ao
+PostgreSQL existente. Responsável/admin emite pelo pedido confirmado;
+worker/n8n dedicados usam reserva de efeito antes da InfinitePay e callback
+autenticado após verificação no provedor. Sinal, saldo, taxas e quitação são
+distintos; transação não pode ser consumida também pela loja. Reabertura,
+resultado incerto e devolução têm conciliação explícita. Não altera os dois
+status comerciais, checkout da loja ou bot. Contrato
+[COB-01–16](.specs/features/order-billing/spec.md), entrega COB-DEL-01 e
+[operação/rollback](docs/runbooks/order-billing.md).
+
 ## Abertura assistida de pedidos (03/11/2026)
 
 A [ADR 056](docs/adr/056-abertura-de-pedido-com-confirmacao-humana.md)

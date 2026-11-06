@@ -254,6 +254,21 @@ provide('liveEvent', liveEvent);
 provide('liveConnection', connection);
 provide('sessionUser', user);
 
+// COB-REV-01 / PCX-13: temporary replies survive Inbox → Pedido → Inbox,
+// only inside this authenticated shell. No message content enters storage.
+/** @type {import('vue').Ref<Map<string, string>>} */
+const inboxReplyDrafts = ref(new Map());
+provide('inboxReplyDrafts', inboxReplyDrafts);
+watch(
+  () => (phase.value === 'authenticated' ? (user.value.id ?? null) : null),
+  () => {
+    inboxReplyDrafts.value.clear();
+    // Old pending sends retain their old scope, never the next account's map.
+    inboxReplyDrafts.value = new Map();
+  },
+  { flush: 'sync' },
+);
+
 // Pesquisa UX 2026-10-15, achado 6: a visible confirmation of what a person
 // just did, with an optional "Desfazer"; screen readers hear it once.
 const toast = ref(null);
@@ -336,6 +351,7 @@ watch(
 
 void restoreSession();
 onBeforeUnmount(() => {
+  inboxReplyDrafts.value.clear();
   stream.close();
   if (storeCountTimer) globalThis.clearTimeout(storeCountTimer);
   if (financeSessionTimer) globalThis.clearInterval(financeSessionTimer);

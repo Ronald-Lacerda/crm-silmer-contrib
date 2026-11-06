@@ -38,6 +38,11 @@ export {
   reconcileN8nCommandOutcome,
 } from './n8n-command-worker.js';
 export {
+  BILLING_COMMAND_JOB_TYPE,
+  BILLING_COMMAND_QUEUE,
+  createBillingCommandJobHandler,
+} from './billing-command-worker.js';
+export {
   createMediaDeleteJobHandler,
   MEDIA_DELETE_JOB_TYPE,
   MEDIA_RETENTION_QUEUE,

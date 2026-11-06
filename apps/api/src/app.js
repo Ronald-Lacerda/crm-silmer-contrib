@@ -23,6 +23,7 @@ import { registerDashboardRoutes } from './dashboard-routes.js';
 import { registerDashboardCheckpointRoutes } from './dashboard-checkpoint-routes.js';
 import { registerDashboardMetricsRoutes } from './dashboard-metrics-routes.js';
 import { registerLeadOutcomeRoutes } from './lead-outcome-routes.js';
+import { registerOrderBillingRoutes } from './order-billing-routes.js';
 import { registerShippingRoutes } from './shipping-routes.js';
 import { registerN8nRoutes } from './n8n-routes.js';
 import { registerN8nCommandMediaRoutes } from './n8n-command-media-routes.js';
@@ -66,6 +67,7 @@ export const WEBHOOK_REQUESTS_PER_SECOND = 20;
  *   dashboardCheckpoint?: any,
  *   dashboardMetrics?: any,
  *   leadOutcomes?: any,
+ *   billing?: any,
  *   shipping?: any,
  *   orderPdfRenderer?: (html: string) => Promise<Buffer>,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime
@@ -371,6 +373,12 @@ export function createApi(options = {}, runtime = {}) {
       correlationId:
         requests.get(/** @type {any} */ (request))?.correlationId ??
         'finance-request',
+    }));
+  }
+  if (runtime.billing) {
+    registerOrderBillingRoutes(api, runtime.billing, (request) => ({
+      correlationId: requests.get(request)?.correlationId ?? 'billing-request',
+      requestId: requests.get(request)?.requestId ?? 'billing-request',
     }));
   }
   if (runtime.orderAssistance) {

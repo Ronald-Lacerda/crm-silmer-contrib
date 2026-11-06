@@ -1,5 +1,26 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## COB-DEL-01 — Cobranças InfinitePay (05/11/2026)
+
+Protótipo aprovado pelo proprietário; execução autorizada após avaliação.
+Contrato [COB-01–16](../order-billing/spec.md), RFC 049 / ADR 058. Entrega
+vertical e gate operacional separados em [tasks](../order-billing/tasks.md).
+Status e evidências de implementação/ativação são mantidos nessa fronteira.
+
+## COB-T00 — Proposta de cobrança InfinitePay (05/11/2026)
+
+PAY-01–05 diferidos, FIN-01–03, FINQ-01–19 e PRV-01–03.
+Demanda: cobranças para pedidos existentes com 0%, X% ou 100%, Pix e cartão,
+incluindo parcelamento pela InfinitePay no pagamento integral.
+
+- [x] Investigar checkout da loja e confirmar fontes atuais após o grafo.
+- [x] Consolidar definições do proprietário e revisão de confiabilidade/QA
+      na [RFC 049](../../../docs/rfc/049-cobrancas-do-pedido-com-infinitepay.md).
+- [x] Decidir a RFC e publicar contratos/ADR antes da implementação COB-T01–05.
+
+Análise concluída e sucedida por COB-DEL-01 acima. Ativação real permanece
+no gate COB-OPS-01.
+
 ## OPS-INBOX-SEND-09 — Mídia reservada após timeout HTTP (05/11/2026)
 
 MSG-02/03, ORC-08, PRV-01 e OPS-ERR-03/06/08/10. Os dois alertas de

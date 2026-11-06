@@ -42,11 +42,84 @@ for (const phone of [false, true]) {
       await page.reload();
       await expect(reply).toHaveValue('');
     });
+
+    test('preserves a reply through its order and back without persisting it on reload', async ({
+      page,
+    }) => {
+      await mockConversationShipping(page);
+      await page.goto(`/inbox/${FIRST}`);
+      const reply = page.getByLabel('Responder', { exact: true });
+      await reply.fill(FIRST_DRAFT);
+      await page
+        .getByRole('link', {
+          name: 'Abrir pedido 01-CRM, pendente',
+          exact: true,
+        })
+        .click();
+      await expect(page).toHaveURL(
+        `/pedidos/shipping-order-1?conversa=${FIRST}`,
+      );
+      await expect(
+        page.getByRole('heading', { name: 'Pedido 01-CRM', exact: true }),
+      ).toBeVisible();
+      await page
+        .getByRole('link', { name: 'Abrir conversa', exact: true })
+        .click();
+      await expect(page).toHaveURL(`/inbox/${FIRST}`);
+      await expect(reply).toHaveValue(FIRST_DRAFT);
+      await openConversation(page, SECOND);
+      await expect(reply).toHaveValue('');
+      await openConversation(page, FIRST);
+      await expect(reply).toHaveValue(FIRST_DRAFT);
+      await page.reload();
+      await expect(reply).toHaveValue('');
+    });
   });
 }
 
 test.describe('reply command outcomes', () => {
   test.use({ viewport: { height: 768, width: 1366 } });
+
+  test('clears session drafts before another account opens the same conversation', async ({
+    page,
+  }) => {
+    const mock = await mockConversationShipping(page);
+    let user = {
+      id: 'shipping-seller',
+      name: 'Vendedora sintética',
+      functionName: 'Vendedor',
+      capabilities: [],
+    };
+    await page.route('**/api/v1/sessions/current', async (route) => {
+      await route.fulfill({
+        json: route.request().method() === 'DELETE' ? {} : { user },
+      });
+    });
+    await page.route('**/api/v1/sessions', async (route) => {
+      user = { ...user, id: 'shipping-next-seller', name: 'Outra vendedora' };
+      for (const conversation of mock.conversations)
+        conversation.assignedUser = { id: user.id, functionName: 'Vendedor' };
+      await route.fulfill({ json: { user } });
+    });
+    await page.goto(`/inbox/${FIRST}`);
+    const reply = page.getByLabel('Responder', { exact: true });
+    await reply.fill(FIRST_DRAFT);
+    await page.getByRole('button', { name: 'Sair', exact: true }).click();
+    await page
+      .getByLabel('E-mail', { exact: true })
+      .fill('synthetic@example.test');
+    await page
+      .getByLabel('Senha', { exact: true })
+      .fill('synthetic-test-password');
+    await page
+      .getByRole('button', { name: 'Entrar com segurança', exact: true })
+      .click();
+    await page
+      .getByRole('link', { name: 'Caixa de Entrada', exact: true })
+      .click();
+    await openConversation(page, FIRST);
+    await expect(reply).toHaveValue('');
+  });
 
   test('keeps a failed reply and clears it only when accepted for sending', async ({
     page,

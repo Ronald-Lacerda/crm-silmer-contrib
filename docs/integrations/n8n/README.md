@@ -1,5 +1,14 @@
 # Integração CRM Silmer ↔ n8n — MVP simples
 
+## Cobranças do pedido — ADR 058 (05/11/2026)
+
+O fluxo aprovado da [RFC 049](../../rfc/049-cobrancas-do-pedido-com-infinitepay.md)
+usa workflow dedicado, reserva financeira de uso único e callbacks
+autenticados, separados da Inbox e de `store-orders`. Estado oficial no CRM,
+sem acesso direto ao banco. Contrato COB-01–16 e
+[operação/configuração/rollback](../../runbooks/order-billing.md).
+O gerador offline está em `ops/n8n/workflows/create-order-billing-workflow.mjs`.
+
 ## Abertura assistida — ADR 056 (03/11/2026)
 
 A [ADR 056](../../adr/056-abertura-de-pedido-com-confirmacao-humana.md)

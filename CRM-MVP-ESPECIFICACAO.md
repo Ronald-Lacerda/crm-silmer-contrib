@@ -1,5 +1,17 @@
 # CRM Silmer — Especificação de Produto do MVP
 
+## Evolução aprovada — cobranças InfinitePay (05/11/2026)
+
+[ADR 058](docs/adr/058-cobrancas-do-pedido-com-infinitepay.md), após aprovação
+do protótipo: responsável/admin cobra pedido confirmado com entrada 0%, X%
+ou 100%. 0% não emite link; X% separa sinal e saldo; 100% cobra integral,
+permitindo Pix ou cartão parcelado na InfinitePay. Sinal não é quitação.
+Preço e condição são humanos, envio do link é humano e a confirmação de
+pagamento é verificada no servidor. Recebimentos/saldo deixam de ser
+diferidos somente nessa fronteira; loja, dois status comerciais, ficha e
+check financeiro permanecem. Contrato
+[COB-01–16](.specs/features/order-billing/spec.md).
+
 ## Evolução aprovada — Financeiro, Fila e detalhe (21/10/2026)
 
 Definição do PO registrada na [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md)

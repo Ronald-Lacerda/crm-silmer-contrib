@@ -21,6 +21,10 @@ export const AUTOMATION_EXECUTOR_ACTIONS = Object.freeze([
   'deal.fields.patch',
   'deal.transition',
   'handoff.create',
+  'billing.checkout.reserve',
+  'billing.checkout.record',
+  'billing.checkout.read',
+  'billing.payment.record',
   ...AUTOMATION_ORDER_ACTIONS,
   ...AUTOMATION_STORE_ACTIONS,
 ]);

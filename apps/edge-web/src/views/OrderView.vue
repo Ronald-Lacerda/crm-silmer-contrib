@@ -11,6 +11,7 @@ import {
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import OrderClosingSection from '../components/order/OrderClosingSection.vue';
+import OrderBillingSection from '../components/order/OrderBillingSection.vue';
 import OrderArtworkSection from '../components/order/OrderArtworkSection.vue';
 import OrderIcon from '../components/order/OrderIcon.vue';
 import OrderInfoStrips from '../components/order/OrderInfoStrips.vue';
@@ -55,6 +56,7 @@ const SECTION_HASHES = Object.freeze({
   artwork: 'arte',
   observations: 'observacoes',
   service: 'atendimento',
+  billing: 'cobrancas',
 });
 
 const LIVE_REFRESH_DELAY_MS = 250;
@@ -68,6 +70,8 @@ const liveEvent = inject('liveEvent', ref(null));
 const sessionUser = inject('sessionUser', ref({}));
 const heading = ref(null);
 const order = ref(null);
+const billingState = ref({ ready: false, managed: false, available: false });
+provide('orderBillingState', billingState);
 const loading = ref(true);
 const notFound = ref(false);
 const error = ref('');
@@ -149,6 +153,12 @@ const showProgress = computed(
  */
 const mobileAction = computed(() => {
   if (!order.value || editingSection.value !== '') return '';
+  if (
+    isPhone.value &&
+    openSection.value === 'billing' &&
+    billingState.value.available
+  )
+    return '';
   if (!isPending.value) return 'pdf';
   if (!canEdit.value || isStore.value) return '';
   return nextStep.value ? 'step' : 'generate';
@@ -765,6 +775,11 @@ onBeforeUnmount(() => {
           <OrderProgress v-if="showProgress" :order="order" />
           <OrderSummarySection :order="order" />
           <OrderMilestonesSection :order="order" />
+          <OrderBillingSection
+            :order="order"
+            @state="billingState = $event"
+            @changed="load(true)"
+          />
           <OrderItemsSection :order="order" />
           <OrderArtworkSection :order="order" />
           <OrderObservationsSection :order="order" />

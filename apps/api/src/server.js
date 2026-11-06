@@ -28,6 +28,7 @@ import { createDashboardApiRuntime } from './dashboard-runtime.js';
 import { createDashboardCheckpointRuntime } from './dashboard-checkpoint-runtime.js';
 import { createDashboardMetricsRuntime } from './dashboard-metrics-runtime.js';
 import { createLeadOutcomeApiRuntime } from './lead-outcome-runtime.js';
+import { createOrderBillingRuntime } from './order-billing-runtime.js';
 import { createHealthErrorsRuntime } from './health-errors-runtime.js';
 import { registerHealthErrorsRoutes } from './health-errors-routes.js';
 import { createShippingApiRuntime } from './shipping-runtime.js';
@@ -74,6 +75,7 @@ import { createSafeLogger, SERVICES } from '@crm-silmer/shared';
  *   dashboardCheckpoint?: ReturnType<typeof createDashboardCheckpointRuntime>,
  *   dashboardMetrics?: ReturnType<typeof createDashboardMetricsRuntime>,
  *   leadOutcomes?: ReturnType<typeof createLeadOutcomeApiRuntime>,
+ *   billing?: ReturnType<typeof createOrderBillingRuntime>,
  *   healthErrors?: ReturnType<typeof createHealthErrorsRuntime>,
  *   operationalHealth?: ReturnType<typeof createOperationalHealth>,
  *   shipping?: ReturnType<typeof createShippingApiRuntime>,
@@ -316,6 +318,22 @@ export function createServerApi(runtime = {}) {
           environment,
         })
       : undefined);
+  const billingEnabled = readBooleanFlag(
+    environment.ORDER_BILLING_ENABLED,
+    'ORDER_BILLING_ENABLED',
+  );
+  const billingReceiveEnabled = readBooleanFlag(
+    environment.ORDER_BILLING_RECEIVE_ENABLED,
+    'ORDER_BILLING_RECEIVE_ENABLED',
+  );
+  const billing =
+    runtime.billing ??
+    (runtime.database && operations && (billingEnabled || billingReceiveEnabled)
+      ? createOrderBillingRuntime(runtime.database, {
+          access: operations,
+          environment,
+        })
+      : undefined);
   const api = createApi(
     { trustProxy: runtime.trustProxy ?? false },
     {
@@ -325,6 +343,7 @@ export function createServerApi(runtime = {}) {
       dashboardCheckpoint,
       dashboardMetrics,
       leadOutcomes,
+      billing,
       shipping,
       automationAuth,
       commercial,

@@ -12,6 +12,12 @@ const props = defineProps({
 });
 
 const editing = inject('orderEditing');
+const billingState = inject('orderBillingState', null);
+const billingReadonly = computed(() =>
+  Boolean(
+    billingState && (!billingState.value.ready || billingState.value.managed),
+  ),
+);
 const firstField = ref(null);
 const draft = ref({ deliveredOn: '', paidOn: '' });
 const paymentReviewed = ref(false);
@@ -28,7 +34,9 @@ const isManual = computed(
 // ADR 008: unlike the ficha sections, the trail stays open after the order
 // is generated — payment and delivery usually come later — and never needs a
 // reopen.
-const canEdit = computed(() => editing.canEdit.value);
+const canEdit = computed(
+  () => editing.canEdit.value && !(isManual.value && billingReadonly.value),
+);
 const otherSectionOpen = computed(
   () => editing.editingSection.value !== '' && !isEditing.value,
 );
@@ -40,6 +48,7 @@ const recordedCount = computed(
 );
 
 async function startEditing() {
+  if (!canEdit.value) return;
   paymentReviewed.value = false;
   draft.value = {
     deliveredOn: props.order.deliveredOn ?? '',
@@ -85,8 +94,12 @@ async function save() {
   saving.value = true;
   const result = await editing.saveMilestones({
     ...(isManual.value ? {} : { deliveredOn: draft.value.deliveredOn || null }),
-    paidOn: draft.value.paidOn || null,
-    ...(props.order.paymentReviewRequired && paymentReviewed.value
+    paidOn: billingReadonly.value
+      ? (props.order.paidOn ?? null)
+      : draft.value.paidOn || null,
+    ...(props.order.paymentReviewRequired &&
+    paymentReviewed.value &&
+    !billingReadonly.value
       ? { paymentReviewed: true }
       : {}),
   });
@@ -150,6 +163,7 @@ async function save() {
             ref="firstField"
             v-model="draft.paidOn"
             type="date"
+            :disabled="billingReadonly"
             :max="today"
             :aria-invalid="Boolean(fieldErrors.paidOn) || undefined"
             :aria-describedby="
@@ -167,13 +181,20 @@ async function save() {
             {{ fieldErrors.paidOn }}
           </p>
           <p v-else id="milestone-paid-hint" class="op-hint">
-            O dia em que o valor integral do pagamento entrou.
+            {{
+              billingReadonly
+                ? 'A quitação é calculada pelas cobranças confirmadas na InfinitePay.'
+                : 'O dia em que o valor integral do pagamento entrou.'
+            }}
           </p>
           <p v-if="order.paymentReviewRequired" class="op-hint">
             Confirme o recebimento integral e salve a data de pagamento para
             liberar no Financeiro.
           </p>
-          <label v-if="order.paymentReviewRequired" class="op-check">
+          <label
+            v-if="order.paymentReviewRequired && !billingReadonly"
+            class="op-check"
+          >
             <input
               v-model="paymentReviewed"
               type="checkbox"
@@ -250,15 +271,17 @@ async function save() {
           <span class="op-origin-note">{{ step.note }}</span>
         </li>
       </ol>
-      <p v-if="order.paymentReviewRequired" class="op-hint">
+      <p v-if="order.paymentReviewRequired && !billingReadonly" class="op-hint">
         Confirme o recebimento integral e salve a data de pagamento para liberar
         no Financeiro.
       </p>
       <p class="op-hint">
         {{
-          isManual
-            ? 'Pago em é informado aqui. Entregue em é preenchido ao confirmar a entrega nos seus afazeres do Dashboard.'
-            : 'Pago em e Entregue em são informados no pedido.'
+          billingReadonly
+            ? 'Pago em é calculado pelas cobranças confirmadas na InfinitePay; receber um sinal não registra quitação integral.'
+            : isManual
+              ? 'Pago em é informado aqui. Entregue em é preenchido ao confirmar a entrega nos seus afazeres do Dashboard.'
+              : 'Pago em e Entregue em são informados no pedido.'
         }}
         Essas datas não mudam o status nem a ficha já gerada.
       </p>

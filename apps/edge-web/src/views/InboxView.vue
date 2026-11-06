@@ -254,11 +254,11 @@ const subjectManyOpen = ref({});
 const subjectAnswers = ref({});
 /** @type {import('vue').Ref<Record<string, string>>} */
 const subjectAnswerErrors = ref({});
-// UX-FUNC-01 / PCX-13: drafts belong to a conversation, never to whichever
-// customer happens to be on screen next. They live only in this Inbox instance
-// and leave with it (no browser storage of customer message content).
+// UX-FUNC-01 / PCX-13 / COB-REV-01: drafts belong to a conversation and the
+// current shell session, including a round trip to its order. The shell clears
+// them on session changes; no browser storage holds customer message content.
 /** @type {import('vue').Ref<Map<string, string>>} */
-const replyDrafts = ref(new Map());
+const replyDrafts = inject('inboxReplyDrafts', () => ref(new Map()), true);
 const reply = computed({
   get: () => replyDrafts.value.get(activeId.value) ?? '',
   set(value) {
@@ -1955,6 +1955,7 @@ async function sendReply() {
   if (!canReply.value || !active.value || busy.value || mediaSending.value)
     return;
   const conversationId = active.value.id;
+  const draftScope = replyDrafts.value;
   const draft = reply.value;
   const text = draft.trim();
   if (!text) return;
@@ -1969,6 +1970,7 @@ async function sendReply() {
     'Mensagem aceita para envio.',
   );
   if (sent) {
+    if (replyDrafts.value !== draftScope) return;
     // A reply to A may finish while B is open. Clear only A's submitted draft,
     // and never erase a newer edit or move the keyboard out of B's context.
     if (replyDrafts.value.get(conversationId) === draft)

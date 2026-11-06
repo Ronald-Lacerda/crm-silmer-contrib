@@ -56,6 +56,8 @@ export const OPERATIONAL_ACTIONS = Object.freeze(
     'order.print',
     'order.read',
     'order.reopen',
+    'billing.read',
+    'billing.manage',
     // T139: a seller may quote only its owned, human conversation.
     'shipping.quote',
     'task.cancel',

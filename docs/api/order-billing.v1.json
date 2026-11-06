@@ -1,0 +1,842 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CRM Silmer — Cobranças InfinitePay",
+    "version": "1.0.0",
+    "description": "COB-01–16 / ADR058. Valores em centavos; nenhuma rota pública de quitação. Corpos limitados a 8KiB; respostas privadas no-store."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "paths": {
+    "/orders/{orderId}/billing": {
+      "parameters": [
+        {
+          "name": "orderId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      ],
+      "get": {
+        "operationId": "readOrderBilling",
+        "summary": "Consultar cobrança e saldo; links privados somente para quem gerencia",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Sessão humana. Responsável atual ou administrador para mutações; versões e propriedade são revalidadas sob lock, inclusive no replay."
+      }
+    },
+    "/orders/{orderId}/billing/plan": {
+      "parameters": [
+        {
+          "name": "orderId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      ],
+      "post": {
+        "operationId": "configureOrderBilling",
+        "summary": "Salvar condição de entrada, incluindo 0% sem emissão",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Sessão humana. Responsável atual ou administrador para mutações; versões e propriedade são revalidadas sob lock, inclusive no replay.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedVersion",
+                  "expectedBillingVersion",
+                  "percent"
+                ],
+                "properties": {
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "expectedBillingVersion": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "percent": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{orderId}/billing/charges": {
+      "parameters": [
+        {
+          "name": "orderId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      ],
+      "post": {
+        "operationId": "issueOrderBillingCharge",
+        "summary": "Reservar cobrança de sinal, integral ou saldo",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Sessão humana. Responsável atual ou administrador para mutações; versões e propriedade são revalidadas sob lock, inclusive no replay.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedVersion",
+                  "expectedBillingVersion",
+                  "percent"
+                ],
+                "properties": {
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "expectedBillingVersion": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "percent": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{orderId}/billing/charges/{chargeId}/refund": {
+      "parameters": [
+        {
+          "name": "orderId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        {
+          "name": "chargeId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "recordOrderBillingRefund",
+        "summary": "Registrar devolução já conferida na InfinitePay, sem executar estorno",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Sessão humana. Responsável atual ou administrador para mutações; versões e propriedade são revalidadas sob lock, inclusive no replay.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedVersion",
+                  "expectedBillingVersion",
+                  "amountCents"
+                ],
+                "properties": {
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "expectedBillingVersion": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "amountCents": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{orderId}/billing/reconcile": {
+      "parameters": [
+        {
+          "name": "orderId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      ],
+      "post": {
+        "operationId": "reconcileOrderBilling",
+        "summary": "Conciliar acordo atual ou fechar não pago após validade e conferência",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Sessão humana. Responsável atual ou administrador para mutações; versões e propriedade são revalidadas sob lock, inclusive no replay.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedVersion",
+                  "expectedBillingVersion",
+                  "decision",
+                  "confirmedProviderReview"
+                ],
+                "properties": {
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "expectedBillingVersion": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "decision": {
+                    "enum": ["apply_current", "close_unpaid"]
+                  },
+                  "confirmedProviderReview": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/integrations/n8n/billing/charges/{chargeId}/reserve": {
+      "parameters": [
+        {
+          "name": "chargeId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "reserveOrderBillingEffect",
+        "summary": "Consumir reserva uma única vez antes de criar link",
+        "security": [
+          {
+            "automationBasic": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Silmer-Workflow-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "const": "silmer-order-billing"
+            }
+          },
+          {
+            "name": "X-Silmer-Workflow-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Silmer-Execution-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "description": "Basic do AUTOMATION_EXECUTOR. Mesma identidade de workflow/correlação das demais rotas n8n. API confere cobrança conhecida; payment só após payment_check no n8n.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [],
+                "properties": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/integrations/n8n/billing/charges/{chargeId}/created": {
+      "parameters": [
+        {
+          "name": "chargeId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "recordOrderBillingCheckout",
+        "summary": "Persistir link da execução reservada",
+        "security": [
+          {
+            "automationBasic": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Silmer-Workflow-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "const": "silmer-order-billing"
+            }
+          },
+          {
+            "name": "X-Silmer-Workflow-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Silmer-Execution-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "description": "Basic do AUTOMATION_EXECUTOR. Mesma identidade de workflow/correlação das demais rotas n8n. API confere cobrança conhecida; payment só após payment_check no n8n.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["checkoutUrl"],
+                "properties": {
+                  "checkoutUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "maxLength": 2048
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/integrations/n8n/billing/charges/{chargeId}/lookup": {
+      "parameters": [
+        {
+          "name": "chargeId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "lookupOrderBillingCharge",
+        "summary": "Consultar alvo mínimo de verificação pelo gateway",
+        "security": [
+          {
+            "automationBasic": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Silmer-Workflow-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "const": "silmer-order-billing"
+            }
+          },
+          {
+            "name": "X-Silmer-Workflow-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Silmer-Execution-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "description": "Basic do AUTOMATION_EXECUTOR. Mesma identidade de workflow/correlação das demais rotas n8n. API confere cobrança conhecida; payment só após payment_check no n8n."
+      }
+    },
+    "/integrations/n8n/billing/charges/{chargeId}/payment": {
+      "parameters": [
+        {
+          "name": "chargeId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "recordVerifiedOrderBillingPayment",
+        "summary": "Registrar transação verificada e deduplicar NSU global",
+        "security": [
+          {
+            "automationBasic": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Silmer-Workflow-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "const": "silmer-order-billing"
+            }
+          },
+          {
+            "name": "X-Silmer-Workflow-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Silmer-Execution-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "description": "Basic do AUTOMATION_EXECUTOR. Mesma identidade de workflow/correlação das demais rotas n8n. API confere cobrança conhecida; payment só após payment_check no n8n.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "transactionNsu",
+                  "invoiceSlug",
+                  "amountCents",
+                  "paidAmountCents",
+                  "method",
+                  "installments",
+                  "receiptUrl"
+                ],
+                "properties": {
+                  "transactionNsu": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "invoiceSlug": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "amountCents": {
+                    "type": "integer",
+                    "minimum": 100
+                  },
+                  "paidAmountCents": {
+                    "type": "integer",
+                    "minimum": 100
+                  },
+                  "method": {
+                    "enum": ["pix", "credit_card"]
+                  },
+                  "installments": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 12
+                  },
+                  "receiptUrl": {
+                    "type": ["string", "null"],
+                    "format": "uri",
+                    "maxLength": 2048
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "automationBasic": {
+        "$ref": "./openapi.v1.yaml#/components/securitySchemes/automationBasic"
+      },
+      "sessionCookie": {
+        "$ref": "./openapi.v1.yaml#/components/securitySchemes/sessionCookie"
+      },
+      "csrfHeader": {
+        "$ref": "./openapi.v1.yaml#/components/securitySchemes/csrfHeader"
+      },
+      "idempotencyKey": {
+        "$ref": "./openapi.v1.yaml#/components/securitySchemes/idempotencyKey"
+      }
+    }
+  }
+}

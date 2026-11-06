@@ -21,9 +21,18 @@
 
 ## Em revisão
 
+- [047 — Enviar cobrança pela conversa](047-enviar-cobranca-pela-conversa.md),
+  aberta em 05/11/2026 após revisão da jornada: gerar e enviar o link de Pix/cartão
+  na conversa certa, por comando humano, sem copiar/colar; novo protótipo em avaliação.
 - [038 — Frete e etiqueta pelo Melhor Envio](038-frete-e-etiqueta-pelo-melhor-envio.md),
   aberta em 29/10/2026. Tem retirada na loja ou Melhor Envio, etiqueta
   pronta ao embalar e menu próprio. As decisões D1–D9 estão em aberto.
+
+## Decisão de 05/11/2026
+
+- [049 — Cobranças do pedido com InfinitePay](049-cobrancas-do-pedido-com-infinitepay.md),
+  aprovada após avaliação do protótipo. ADR 058 / COB-DEL-01: condições
+  0%, X% e 100%, Pix/cartão, sinal/saldo e confirmação no servidor.
 
 ## Decisão de 30/10/2026
 

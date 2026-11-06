@@ -1363,13 +1363,13 @@
     align-items: center;
   }
 
-  /* While the seller types, the keyboard takes the bottom of the screen:
-     the navigation bar steps aside so the reply sits right above the keys. */
-  html:has(.inbox-composer textarea:focus) .mobile-nav {
+  /* Keep the reply steady when focus moves from the text to Send. Showing
+     navigation during that tap would move the button before its click. */
+  html:has(.inbox-composer:focus-within) .mobile-nav {
     display: none;
   }
 
-  html:has(.inbox-composer textarea:focus) #main-content {
+  html:has(.inbox-composer:focus-within) #main-content {
     padding-block-end: 0;
   }
 

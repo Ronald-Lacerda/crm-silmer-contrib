@@ -1,5 +1,18 @@
 # Regras do CRM Silmer
 
+## Cobranças InfinitePay — extensão aprovada (05/11/2026)
+
+A [ADR 058](docs/adr/058-cobrancas-do-pedido-com-infinitepay.md) autoriza
+cobranças de pedidos confirmados fora da loja, com entrada 0%, X% ou 100%,
+Pix e cartão inclusive parcelado. Emenda a exclusão de recebimentos/saldo da
+regra 16 somente para pedidos geridos pela integração. Sinal não preenche
+“Pago em”; pagamento não confirma pedido. Condições e envio do link são
+humanos. n8n verifica o provedor e mutações oficiais passam pela API.
+APIs de datas não contornam quitação. Financeiro mantém seu check próprio;
+loja e PAY-01–05 legados são preservados. Contrato
+[COB-01–16](.specs/features/order-billing/spec.md), entrega COB-DEL-01 e
+[runbook](docs/runbooks/order-billing.md).
+
 ## Exceção vigente — ponte Evolution/Baileys (29/10/2026)
 
 A [ADR 050](docs/adr/050-evolution-baileys-como-ponte-do-whatsapp.md), autorizada

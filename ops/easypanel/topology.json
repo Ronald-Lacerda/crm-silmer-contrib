@@ -88,7 +88,10 @@
           "MELHOR_ENVIO_USER_AGENT",
           "MELHOR_ENVIO_ENVELOPE_KEY",
           "DAILY_CHECKPOINT_ENABLED",
-          "DAILY_CHECKPOINT_RECIPIENTS_JSON"
+          "DAILY_CHECKPOINT_RECIPIENTS_JSON",
+          "ORDER_BILLING_ENABLED",
+          "ORDER_BILLING_RECEIVE_ENABLED",
+          "ORDER_BILLING_N8N_URL"
         ]
       },
       "services": [

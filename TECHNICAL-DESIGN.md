@@ -1,5 +1,19 @@
 # TDD — CRM Silmer MVP
 
+## Cobranças InfinitePay — COB-DEL-01 (05/11/2026)
+
+[ADR 058](docs/adr/058-cobrancas-do-pedido-com-infinitepay.md) /
+[COB-01–16](.specs/features/order-billing/spec.md): a migração expand 0055
+mantém plano, cobranças, recebimentos e consumo global de transação no
+PostgreSQL existente. API humana usa sessão/CSRF, propriedade viva, versão
+do pedido/plano e idempotência. Outbox `billing.checkout.create`, fila
+`billing`, entrega ao workflow n8n dedicado. Reserva de uso único antecede
+`/links`; confirmação usa `payment_check` e callback autenticado. Links
+cifrados, principal separado de taxas, sinal sem `paid_on`, revisão comercial
+e conciliação/devolução auditadas. Triggers protegem a verdade da quitação
+inclusive contra comandos legados. Flags separam emissão e recebimento no
+rollback; [runbook](docs/runbooks/order-billing.md).
+
 ## Melhor Envio — T139 (02/11/2026)
 
 [ADR 054](docs/adr/054-cotacao-na-conversa-vinculada-ao-pedido.md), MEVQ-01–08:

@@ -1,5 +1,15 @@
 # CRM Silmer MVP — Requisitos Rastreáveis
 
+## Cobranças do pedido — extensão aprovada (05/11/2026)
+
+Após aprovação do protótipo, [ADR 058](../../../docs/adr/058-cobrancas-do-pedido-com-infinitepay.md)
+e [COB-01–16](../order-billing/spec.md) autorizam geração de cobranças e
+recebimentos de pedidos confirmados fora da loja, com 0%, X% e 100%, Pix e
+cartão parcelado. Essa fronteira emenda FIN-01–03 quanto a recebimento/saldo
+somente de pedidos geridos pela integração; não reativa PAY-01–05 antigos.
+Sinal não quita, pagamento não confirma pedido e Financeiro mantém seu check.
+Entrega [COB-DEL-01](../order-billing/tasks.md).
+
 ## Filtros horizontais da Inbox — PCX-18 (05/11/2026)
 
 Tarefa INBOX-UX-06, autorizada pelo proprietário no chat com a captura local

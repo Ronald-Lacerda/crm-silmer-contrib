@@ -55,6 +55,24 @@ paths:
                       worker: { enum: [ok, degraded] }
                       queue: { enum: [ok, degraded] }
                       commands: { enum: [ok, degraded] }
+  /orders/{orderId}/billing:
+    $ref: './order-billing.v1.json#/paths/~1orders~1{orderId}~1billing'
+  /orders/{orderId}/billing/plan:
+    $ref: './order-billing.v1.json#/paths/~1orders~1{orderId}~1billing~1plan'
+  /orders/{orderId}/billing/charges:
+    $ref: './order-billing.v1.json#/paths/~1orders~1{orderId}~1billing~1charges'
+  /orders/{orderId}/billing/charges/{chargeId}/refund:
+    $ref: './order-billing.v1.json#/paths/~1orders~1{orderId}~1billing~1charges~1{chargeId}~1refund'
+  /orders/{orderId}/billing/reconcile:
+    $ref: './order-billing.v1.json#/paths/~1orders~1{orderId}~1billing~1reconcile'
+  /integrations/n8n/billing/charges/{chargeId}/reserve:
+    $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1reserve'
+  /integrations/n8n/billing/charges/{chargeId}/created:
+    $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1created'
+  /integrations/n8n/billing/charges/{chargeId}/lookup:
+    $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1lookup'
+  /integrations/n8n/billing/charges/{chargeId}/payment:
+    $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1payment'
   /inbox/conversations/{conversationId}/order-assistance:
     get:
       operationId: readConversationOrderAssistance
