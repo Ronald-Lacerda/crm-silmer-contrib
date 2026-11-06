@@ -119,6 +119,7 @@ const CURRENT_ORDER_JOIN = `LEFT JOIN LATERAL (
                       AND candidate_order.payment_condition IS NOT NULL) ready_for_confirmation
              FROM crm.orders candidate_order
              WHERE candidate_order.conversation_id=conversation.id
+               AND candidate_order.cancelled_at IS NULL
              ORDER BY (candidate_order.status = 'pendente') DESC,
                       candidate_order.confirmed_at DESC NULLS LAST,
                       candidate_order.number_sequence DESC
@@ -131,12 +132,12 @@ const CURRENT_ORDER_JOIN = `LEFT JOIN LATERAL (
 const HAS_PENDING_ORDER = `EXISTS (
              SELECT 1 FROM crm.orders pending_order
              WHERE pending_order.conversation_id=conversation.id
-               AND pending_order.status='pendente'
+               AND pending_order.status='pendente' AND pending_order.cancelled_at IS NULL
              UNION ALL
              SELECT 1 FROM crm.conversation_subjects pending_subject
              JOIN crm.orders linked_order ON linked_order.id=pending_subject.order_id
              WHERE pending_subject.conversation_id=conversation.id
-               AND linked_order.status='pendente'
+               AND linked_order.status='pendente' AND linked_order.cancelled_at IS NULL
            ) has_pending_order`;
 
 // The canonical header order remains unchanged. Review chooses one explicit,
@@ -147,6 +148,7 @@ const REVIEW_ORDER_JOIN = `LEFT JOIN LATERAL (
              FROM crm.orders candidate
              LEFT JOIN crm.conversations order_conversation ON order_conversation.id=candidate.conversation_id
              WHERE candidate.status='pendente' AND NOT candidate.is_test
+               AND candidate.cancelled_at IS NULL
                AND cardinality(candidate.missing_fields)=0 AND candidate.total_pieces>0
                AND candidate.final_amount_cents>0 AND candidate.payment_condition IS NOT NULL
                AND (candidate.conversation_id=conversation.id OR EXISTS (
@@ -898,6 +900,7 @@ export class PostgresInboxReadRepository {
            LEFT JOIN crm.conversations conversation
              ON conversation.id = orders.conversation_id
            WHERE orders.status = 'pendente' AND NOT orders.is_test
+             AND orders.cancelled_at IS NULL
              AND (orders.manual_owner_id = $1
                OR conversation.assigned_user_id = $1)`,
           [actorId],

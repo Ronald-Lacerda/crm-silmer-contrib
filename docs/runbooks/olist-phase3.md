@@ -1,9 +1,75 @@
 # Olist — Fase 3: composição, prévia, comando, despacho e reconciliação Olist
 
-OLIST-T20/T21/T26/T24/T06/T22/T07/T08/T09, composição, fontes, cadastros, venda e vínculo. Requisitos
+OLIST-T20/T21/T26/T24/T06/T22/T07/T08/T09/T23, composição, fontes, cadastros, venda, vínculo e cancelamento. Requisitos
 OLIST-09–10, 29, 34, 40–44;
 [ADR 057](../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
+
+## T23 — cancelamento local terminal
+
+OLIST-19, 21, 30, 45–47; [ADR 068](../adr/068-cancelamento-local-terminal-pre-exportacao.md).
+`POST /api/v1/orders/:orderId/cancel` recebe exclusivamente `expectedVersion`
+e `reason`, com Idempotency-Key, sessão, Origin e CSRF. Motivo aparado de 1 a
+1000 caracteres, sem controles. Vendedor responsável pela conversa/Pedido manual
+ou Admin ativo; loja só Admin. Checkbox Olist/Financeiro/automação não concede
+esse comando. Autorização e posse atuais são travadas antes do recibo, inclusive
+replay. Mesma chave/corpo reproduz resposta; corpo diferente conflita; outra
+chave num cancelado não produz outro evento.
+
+A migration expand 0070 acrescenta marcador terminal separado do status. Motivo
+AES-256-GCM com AAD `order-cancellation:{id}`; auditoria e eventos guardam só
+códigos/identificadores. A projeção comercial expõe `cancelledAt`, `cancelledBy`,
+`cancellationReason` e `effectiveStatus: cancelado`, com `locked: true`, mantendo
+`status: pendente|confirmado`. Ficha, número, preço, datas, confirmação, checkout,
+pagamento, gateway, Nota criada e eventos anteriores permanecem intactos.
+Não existe restauração, exclusão, estorno, cancelamento no ERP ou substituição
+automática. O índice de pendente libera apenas uma futura criação humana explícita.
+
+Ordem de locks: usuário/perfil/grant → conversa → Pedido → exportações de todas
+as contas em ordem de ID. Pedido serializa cancelamento com reserva de venda
+(T08 e porta legada), vínculo administrativo e edição. Venda reservada, incerta,
+confirmada, vinculada, ID observado ou tentativa de venda não rejeitada resulta
+em 409 `ORDER_CANCELLATION_BLOCKED`. Não usar ausência de ID como autorização.
+Operações ainda canceláveis tornam-se `invalidated/ORDER_CANCELLED` na mesma
+transação do Pedido/eventos/auditoria/recibo. Jobs antigos terminam sem rede
+como `failed/ORDER_CANCELLED`, sem retry. Resultado tardio de cadastro iniciado
+continua persistível/reconciliável, preservando tentativas e IDs, sem liberar
+próxima etapa, novo cadastro ou venda.
+
+`GET /orders?cancellation=active|cancelled|all` (também busca) usa `active` como
+padrão, antes de contar e paginar, independente do filtro comercial de status.
+Vendas, valor vendido, peças, afazeres, entregas, Inbox e listas financeiras
+excluem cancelados na origem. Não subtrair os valores novamente no consumidor.
+GET comercial por ID mantém seu escopo anterior; Financeiro consulta por ID o
+histórico do cancelado que era elegível, com `canManage:false`, sem acesso ao
+motivo livre, Inbox ou edição. Comandos financeiros, arte e correção de loja
+recusam terminalidade; leitura/download permanecem. Impressão histórica não
+grava primeira impressão de loja cancelada.
+
+Para pedido pago/loja, o futuro fluxo humano F4 deve avisar explicitamente que
+cancelar no CRM não devolve dinheiro nem resolve obrigação fiscal. API e estado
+não declaram estorno. T23 não habilita interface, geração, conta ou piloto.
+
+### Migração e rollback T23
+
+Expand 0070 não modifica registros antigos nem habilita efeito externo. Aplicar
+antes dos processos novos. Não remover marcadores, envelopes, histórico, IDs ou
+índice para rollback. Desligar novas mutações/despacho antes de investigar;
+rollback de código só para versão que preserve terminalidade, filtros e
+serialização com reserva/vínculo. A versão anterior a T23 trata cancelados como
+ativos e não é compatível depois do primeiro cancelamento. Reconciliar cadastros
+iniciados por suas reservas existentes; nenhum delete/cancel ERP como compensação.
+
+### Verificação T23
+
+Node 24.20.0/npm 11.19.0. Banco exclusivo `crm_silmer_test` sintético, runner
+SQL com concorrência 1, preservando concorrência interna dos cenários. Nesta
+máquina usou-se PostgreSQL portátil preexistente, cluster novo e loopback em
+porta exclusiva; não constitui evidência do EasyPanel. Fixtures cobrem ambas
+as ordens forçadas e disputa simultânea para cancelamento/reserva/vínculo,
+replay revogado, rollback de auditoria, pagamento/histórico e paginação limit1.
+O teste `order-cancellation-postgres-live.test.js` integra `test:olist:live`.
+Resultados completos no fechamento T23 abaixo.
 
 ## T09 — vínculo existente e reconciliação administrativa
 
@@ -767,7 +833,6 @@ var/olist-t08-*.log, fora do versionamento. Despacho e conta continuam desligado
 por padrão, sem acesso real ao ERP, deploy ou piloto. Entrega atômica OLIST-T08
 na branch codex/olist-phase3. Próximos T09/T23/T10; gate F3 permanece aberto.
 
-
 ## Fechamento T09 — 06/11/2026
 
 Vínculo existente e reconciliação administrativa concluídos no domínio/API e
@@ -802,3 +867,35 @@ sintético encerrado após a regressão final. Logs em var/olist-t09-*.log, fora
 versionamento. Nenhuma nova dependência externa ou infraestrutura. Entrega
 atômica OLIST-T09 na branch codex/olist-phase3; despacho real/deploy/piloto
 continuam desligados. Próximos T23/T10; gate F3 permanece aberto.
+
+## Fechamento T23 — 06/11/2026
+
+Cancelamento local pré-exportação entregue no domínio/API, PostgreSQL, leitores
+ativos e guardas do worker. OLIST-19, 21, 30 e 45–47; ADR 068 e migration expand 0070. Motivo cifrado, ACL atual inclusive replay, transação única, histórico e
+pagamento preservados. Revisões independentes Backend/Integrações/QA sem
+findings bloqueantes após corrigir locks, replay e classificação do worker.
+
+- `npm run validate`: aprovado com Node 24.20.0/npm 11.19.0; 1977 testes
+  aprovados e 24 skips explícitos, tipos/lint/fronteiras/validadores/build verdes.
+- PostgreSQL integrado: 242/242 aprovados, zero skips; runner serial cobre
+  migrations, Pedidos/Loja/correção, Financeiro, Inbox/Painel/assistência, n8n e
+  Olist. Os 18 testes da vertical T23 incluem rollback, ACL durante replay,
+  motivos cifrados, pagamento/checkout/Nota criada imutáveis, filtros antes de
+  limit1 e corrida com reserva legada/T08 e vínculo nas duas ordens forçadas e
+  simultânea. Job antigo para sem rede/retry e cadastro tardio conserva IDs.
+- API de Pedidos: 50/50; testes novos de terminalidade/arte/paginação também
+  aprovados. Nenhuma dependência adicionada ou dado real usado.
+- E2E completo final: 485 aprovados/7 skips previstos, dois workers, sem build
+  concorrente. A primeira rodada teve três falhas na tela de desempenho enquanto
+  outro build executava; repetição isolada passou 10/10 e a repetição completa
+  passou 485/485, sem alterar assertions, timeouts ou código dessa tela.
+- `npm audit --audit-level=high`: aprovado, zero altas/críticas; um baixo e
+  cinco moderados preexistentes, sem atualizar dependências nesta tarefa.
+- `git diff --check`: aprovado. Logs `var/t23-*.log` e
+  `var/olist-t23-cancellation-sql.log` são locais e não versionados.
+
+Banco PostgreSQL portátil sintético exclusivo encerrado após os testes. Um
+rascunho cancelado não gera substituto: somente outro comando humano explícito
+pode abrir um novo, preservando o anterior. Sem chamada cancelar ERP/gateway,
+sem despacho real, deploy, conta ou piloto habilitados. Próximo item T10; UI e
+aviso de pedido pago/loja permanecem na F4. A fase 3 não está encerrada.

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { OlistError } from '@crm-silmer/olist';
 const CODES = new Set([
+  'ORDER_CANCELLED',
   'FORBIDDEN',
   'CSRF_INVALID',
   'INVALID_CREDENTIALS',

@@ -47,6 +47,8 @@ const orderDateFormat = new Intl.DateTimeFormat('en-CA', {
  *   conversationId: string|null, contactId?: string|null,
  *   manualOwnerId?: string|null, manualCreateKey?: string|null,
  *   status: OrderStatus, fabCode: string,
+ *   cancelledAt?: string|null, cancelledBy?: string|null,
+ *   cancellationReason?: string|null,
  *   origin: 'atendimento'|'loja', isTest: boolean,
  *   storeNumber: string|null, leadTimeBusinessDays: number|null,
  *   gatewayPayment: import('./store-order.js').GatewayPayment|null,
@@ -156,10 +158,22 @@ function requireActorAndClock({ actorId, now }) {
 
 /** @param {Order} order @param {OrderStatus} expected @param {string} command */
 function requireStatus(order, expected, command) {
+  requireActiveOrder(order);
   if (order.status !== expected) {
     throw new OrderConflictError(
       `Only ${expected} orders can be ${command}`,
       'ORDER_STATUS_CONFLICT',
+    );
+  }
+}
+
+/** A local cancellation is terminal without changing the commercial status.
+ * @param {{cancelledAt?: string|null}} order */
+export function requireActiveOrder(order) {
+  if (order.cancelledAt) {
+    throw new OrderConflictError(
+      'Cancelled orders are terminal',
+      'ORDER_CANCELLED',
     );
   }
 }
@@ -383,6 +397,7 @@ function isMilestoneDay(value, today) {
  * @returns {Order}
  */
 export function recordMilestones(order, input) {
+  requireActiveOrder(order);
   requireClock(input.now);
   const today = orderDateFormat.format(input.now);
   const invalid = MILESTONE_FIELDS.filter(

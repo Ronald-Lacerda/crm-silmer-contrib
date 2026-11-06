@@ -118,7 +118,7 @@ export function createOlistAdminRepository(database, options) {
   }
   /** @param {any} tx @param {any} input @param {boolean} [exclusive] */
   async function operation(tx, input, exclusive = false) {
-    const order = (
+    let order = (
       await tx.query(
         'SELECT id,number,version,conversation_id FROM crm.orders WHERE id=$1',
         [input.orderId],
@@ -129,11 +129,13 @@ export function createOlistAdminRepository(database, options) {
       await tx.query('SELECT id FROM crm.conversations WHERE id=$1 FOR SHARE', [
         order.conversation_id,
       ]);
-    await tx.query(
-      'SELECT id FROM crm.orders WHERE id=$1 FOR ' +
-        (exclusive ? 'UPDATE' : 'SHARE'),
-      [order.id],
-    );
+    order = (
+      await tx.query(
+        'SELECT id,number,version,conversation_id,cancelled_at FROM crm.orders WHERE id=$1 FOR ' +
+          (exclusive ? 'UPDATE' : 'SHARE'),
+        [order.id],
+      )
+    ).rows[0];
     const row =
       (
         await tx.query(
@@ -524,6 +526,7 @@ export function createOlistAdminRepository(database, options) {
         const { actor, connection } = await guard(tx, input, 'olist.link');
         const locked = await operation(tx, input, true);
         const order = locked.order;
+        if (order.cancelled_at) throw new OlistError('ORDER_CANCELLED');
         let row = locked.row;
         if (row && ['linked', 'confirmed'].includes(row.state)) {
           if (

@@ -84,6 +84,7 @@ export const ORDER_SECTIONS = Object.freeze(
 export const DEFAULT_ORDER_PAGE_SIZE = 25;
 const MAX_QUERY_LENGTH = 120;
 const LIST_KEYS = new Set([
+  'cancellation',
   'status',
   'origin',
   'q',
@@ -177,7 +178,7 @@ export function createOrderService(options) {
     const pendingConversations = [
       ...new Set(
         orders
-          .filter((order) => order.status === 'pendente')
+          .filter((order) => order.status === 'pendente' && !order.cancelledAt)
           .map((order) => /** @type {string} */ (order.conversationId)),
       ),
     ];
@@ -185,7 +186,10 @@ export function createOrderService(options) {
       ...new Set(
         orders
           .filter(
-            (order) => order.status === 'pendente' && !order.conversationId,
+            (order) =>
+              order.status === 'pendente' &&
+              !order.conversationId &&
+              !order.cancelledAt,
           )
           .map((order) => order.contactId)
           .filter((id) => typeof id === 'string'),
@@ -206,7 +210,7 @@ export function createOrderService(options) {
         : new Map(),
     ]);
     return orders.map((order) => {
-      if (order.status !== 'pendente') return order;
+      if (order.status !== 'pendente' || order.cancelledAt) return order;
       if (!order.conversationId && order.contactId) {
         return {
           ...order,
@@ -404,6 +408,27 @@ export function createOrderService(options) {
   }
 
   return Object.freeze({
+    /** @param {any} input */
+    async assertCancellationAccess(input) {
+      const order = await repository.findById(
+        requireId(input.orderId, 'orderId'),
+      );
+      if (!order) throw new OrderNotFoundError();
+      if (order.origin === 'loja') {
+        if (
+          input.actor?.kind !== 'human' ||
+          !(input.actor.capabilities ?? []).includes('COMMERCIAL_ADMIN')
+        )
+          throw new OrderForbiddenError();
+      } else await requireOwner(input.actor, order);
+      if (!repository.assertCancellationAccess) throw new OrderForbiddenError();
+      await repository.assertCancellationAccess(input);
+    },
+    /** @param {any} input @param {any} [transaction] */
+    async cancel(input, transaction) {
+      if (!repository.cancelOrder) throw new OrderForbiddenError();
+      return repository.cancelOrder({ ...input, now: clock() }, transaction);
+    },
     /**
      * The Painel figures. The all-time totals stay as ADR 031 defined them;
      * `period` adds the confirmed sales of today, the last seven days or the
@@ -720,7 +745,7 @@ export function createOrderService(options) {
      *
      * `ownerId` (Painel, "Meus pedidos") keeps one seller's orders.
      *
-     * @param {{status?: string, origin?: string, q?: string, cursor?: string|null, limit?: number, delivery?: string, ownerId?: string}} [input]
+     * @param {{cancellation?: 'active'|'cancelled'|'all', status?: string, origin?: string, q?: string, cursor?: string|null, limit?: number, delivery?: string, ownerId?: string}} [input]
      */
     async list(input = {}) {
       for (const key of Object.keys(input)) {
@@ -740,7 +765,7 @@ export function createOrderService(options) {
         // combine with the other filters or page with a cursor.
         if (
           !DELIVERY_FILTERS.has(/** @type {string} */ (input.delivery)) ||
-          ['status', 'origin', 'q', 'cursor', 'ownerId'].some(
+          ['cancellation', 'status', 'origin', 'q', 'cursor', 'ownerId'].some(
             (key) => /** @type {any} */ (input)[key] !== undefined,
           )
         ) {
@@ -761,6 +786,7 @@ export function createOrderService(options) {
       }
       /** @type {import('../ports/contracts.js').OrderListQuery} */
       const query = {
+        cancellation: input.cancellation ?? 'active',
         cursor: input.cursor ?? null,
         limit: input.limit ?? DEFAULT_ORDER_PAGE_SIZE,
         status: /** @type {any} */ (input.status),
@@ -808,10 +834,12 @@ export function createOrderService(options) {
       const orders = await repository.listByConversation(
         requireId(conversationId, 'conversationId'),
       );
-      const pending = orders.find((order) => order.status === 'pendente');
+      const pending = orders.find(
+        (order) => order.status === 'pendente' && !order.cancelledAt,
+      );
       if (pending) return readOne(pending);
       const confirmed = orders
-        .filter((order) => order.status === 'confirmado')
+        .filter((order) => order.status === 'confirmado' && !order.cancelledAt)
         .sort((left, right) =>
           String(right.confirmedAt).localeCompare(String(left.confirmedAt)),
         )[0];

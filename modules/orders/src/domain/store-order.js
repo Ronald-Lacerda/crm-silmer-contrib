@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { OrderConflictError, OrderError } from './errors.js';
 import { blankArtwork, blankItem } from './ficha.js';
-import { operationalDay } from './order.js';
+import { operationalDay, requireActiveOrder } from './order.js';
 import {
   STORE_ACTOR_ID,
   STORE_PAYMENT_GATEWAY,
@@ -515,9 +515,10 @@ export function buildStoreOrder({ fabCode, id, match, now, record }) {
  * LOJ-07: a store order takes no human write after it is born — no section,
  * no confirmation or reopening, no trail day, no art file.
  *
- * @param {{origin?: string}} order
+ * @param {{origin?: string, cancelledAt?: string|null}} order
  */
 export function requireUnlocked(order) {
+  requireActiveOrder(order);
   if (order.origin === 'loja') {
     throw new OrderConflictError('Store orders are locked', 'ORDER_LOCKED');
   }

@@ -8,9 +8,10 @@ import { sizePricingSummary } from '../domain/size-pricing-composition.js';
 import {
   OrderConflictError,
   OrderForbiddenError,
+  OrderInputError,
   OrderNotFoundError,
 } from '../domain/errors.js';
-import { formatOrderNumber } from '../domain/order.js';
+import { formatOrderNumber, requireActiveOrder } from '../domain/order.js';
 import {
   StoreOrderDuplicateError,
   StoreOrderError,
@@ -296,6 +297,7 @@ export class InMemoryOrderRepository {
         (entry) => entry.orderId === input.orderId,
       );
       if (!current || !receipt) throw new OrderNotFoundError();
+      requireActiveOrder(current);
       if (
         this.#audits.some(
           (entry) =>
@@ -372,7 +374,9 @@ export class InMemoryOrderRepository {
   #pendingFor(conversationId) {
     return [...this.#orders.values()].find(
       (order) =>
-        order.conversationId === conversationId && order.status === 'pendente',
+        order.conversationId === conversationId &&
+        order.status === 'pendente' &&
+        !order.cancelledAt,
     );
   }
 
@@ -387,6 +391,7 @@ export class InMemoryOrderRepository {
   /** @param {import('../ports/contracts.js').OrderListQuery} query */
   async list(query) {
     const {
+      cancellation,
       after,
       conversationIds,
       contactIds,
@@ -405,6 +410,10 @@ export class InMemoryOrderRepository {
     );
     const scoped = [...this.#orders.values()].filter(
       (order) =>
+        (cancellation === 'all' ||
+          (cancellation === 'cancelled'
+            ? Boolean(order.cancelledAt)
+            : !order.cancelledAt)) &&
         (origin === undefined || order.origin === origin) &&
         (owner === undefined ||
           order.manualOwnerId === owner.userId ||
@@ -454,7 +463,9 @@ export class InMemoryOrderRepository {
    */
   async summary(query) {
     // ADR 027: a test order from the site shop is never a sale.
-    const orders = [...this.#orders.values()].filter((order) => !order.isTest);
+    const orders = [...this.#orders.values()].filter(
+      (order) => !order.isTest && !order.cancelledAt,
+    );
     const confirmed = orders.filter((order) => order.status === 'confirmado');
     const soldAmountCents = confirmed.reduce(
       (total, order) => total + (order.finalAmountCents ?? 0),
@@ -522,6 +533,7 @@ export class InMemoryOrderRepository {
       .filter(
         (order) =>
           order.status === 'confirmado' &&
+          !order.cancelledAt &&
           order.origin === 'atendimento' &&
           !order.deliveredOn &&
           !order.isTest,
@@ -539,7 +551,11 @@ export class InMemoryOrderRepository {
     return this.#exclusive(() => {
       const current = this.#orders.get(input.orderId);
       if (!current) throw new OrderNotFoundError();
-      if (current.origin !== 'loja' || current.fichaFirstPrintedAt) {
+      if (
+        current.origin !== 'loja' ||
+        current.fichaFirstPrintedAt ||
+        current.cancelledAt
+      ) {
         return { order: clone(current), recorded: false };
       }
       const at = input.now.toISOString();
@@ -587,6 +603,54 @@ export class InMemoryOrderRepository {
       throw new OrderForbiddenError();
   }
 
+  /** In-memory conversations have no assignment store; the service checks
+   * conversation ownership before entering this adapter.
+   * @param {import('../ports/contracts.js').CancelOrderInput} input
+   * @param {unknown} [_transaction] */
+  async assertCancellationAccess(input, _transaction) {
+    await this.assertPriceBreakdownAccess(input);
+    const order = this.#orders.get(input.orderId);
+    if (!order) throw new OrderNotFoundError();
+    return clone(order);
+  }
+
+  /** @param {import('../ports/contracts.js').CancelOrderInput} input
+   * @param {unknown} [_transaction] */
+  async cancelOrder(input, _transaction) {
+    await this.assertCancellationAccess(input);
+    return this.#exclusive(() => {
+      const current = this.#orders.get(input.orderId);
+      if (!current) throw new OrderNotFoundError();
+      requireActiveOrder(current);
+      if (current.version !== input.expectedVersion) {
+        throw new OrderConflictError('The order version changed');
+      }
+      if (
+        typeof input.reason !== 'string' ||
+        !input.reason.trim() ||
+        input.reason.length > 1000 ||
+        /[\u0000-\u001f\u007f]/u.test(input.reason)
+      ) {
+        throw new OrderInputError('reason is invalid', ['reason']);
+      }
+      const next = {
+        ...clone(current),
+        cancelledAt: input.now.toISOString(),
+        cancelledBy: input.actor.id,
+        cancellationReason: input.reason.trim(),
+        updatedAt: input.now.toISOString(),
+        version: current.version + 1,
+      };
+      this.#orders.set(next.id, next);
+      this.#record(next, 'order.cancelled', input.correlationId);
+      this.#audit(next, 'order.cancel', 'LOCAL_PRE_EXPORT_CANCELLATION', {
+        actor: input.actor.id,
+        correlationId: input.correlationId,
+      });
+      return clone(next);
+    });
+  }
+
   /** @param {Order[]} orders @returns {Promise<Map<string, any>>} */
   async readPriceBreakdowns(orders) {
     const result = new Map();
@@ -610,6 +674,7 @@ export class InMemoryOrderRepository {
     return this.#exclusive(() => {
       const order = this.#orders.get(input.orderId);
       if (!order) throw new OrderNotFoundError();
+      requireActiveOrder(order);
       if (order.version !== input.expectedVersion)
         throw new OrderConflictError('The order version changed');
       const history = this.#sources.get(order.id) ?? [];
@@ -748,6 +813,7 @@ export class InMemoryOrderRepository {
     return this.#exclusive(() => {
       const current = this.#orders.get(orderId);
       if (!current) throw new OrderNotFoundError();
+      requireActiveOrder(current);
       if (current.origin === 'loja') {
         throw new OrderConflictError('Store orders are locked', 'ORDER_LOCKED');
       }

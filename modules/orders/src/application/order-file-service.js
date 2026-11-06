@@ -62,7 +62,7 @@ function sha256Hex(content) {
  * @param {{
  *   files: OrderFileRepository,
  *   storage: ObjectStorage,
- *   orders: {findById(orderId: string): Promise<{id: string, status: string, conversationId: string|null, manualOwnerId?: string|null, origin?: string}|null>},
+ *   orders: {findById(orderId: string): Promise<{id: string, status: string, conversationId: string|null, manualOwnerId?: string|null, origin?: string, cancelledAt?: string|null}|null>},
  *   authorizeOwnership: (input: {actor: OrderActor, conversationId: string|null, order: {conversationId: string|null, manualOwnerId?: string|null}}) => Promise<void>,
  *   clock?: () => Date,
  *   idFactory?: () => string,

@@ -2615,10 +2615,17 @@ paths:
         é achado pelo número ou pelo número da loja (LJ-XXXXXXXX, ADR 028).
         `counts` traz o total de cada grupo
         (Confirmados e Pendentes) para a busca atual, independentemente da
-        página.
+        página. OLIST-T23: `cancellation` seleciona active (padrão), cancelled
+        ou all; o mesmo universo é filtrado antes das contagens e paginação.
+        O status comercial continua pendente/confirmado mesmo no histórico cancelado.
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/HumanReadOrigin'
+        - name: cancellation
+          in: query
+          description: Situação local, independente do status comercial; active é o padrão.
+          schema:
+            { type: string, enum: [active, cancelled, all], default: active }
         - {
             name: status,
             in: query,
@@ -2715,6 +2722,12 @@ paths:
               properties:
                 q: { type: string, minLength: 1, maxLength: 128 }
                 status: { $ref: '#/components/schemas/OrderStatus' }
+                cancellation:
+                  {
+                    type: string,
+                    enum: [active, cancelled, all],
+                    default: active,
+                  }
                 origin: { $ref: '#/components/schemas/OrderOrigin' }
                 cursor: { type: string, maxLength: 1024 }
                 limit: { type: integer, minimum: 1, maximum: 100, default: 25 }
@@ -2748,6 +2761,8 @@ paths:
         as dos próximos sete dias. `daily` (PNL-05) traz as vendas confirmadas
         de cada um dos últimos sete dias, terminando hoje, independente de
         `period`. Os dias são de São Paulo e calculados no servidor.
+        Cancelados locais ficam fora de todos os indicadores ativos, inclusive
+        vendas, valor, peças, pendências, entregas e dias de `daily` (OLIST-19/46).
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/HumanReadOrigin'
@@ -2772,7 +2787,7 @@ paths:
     get:
       operationId: getOrder
       summary: Retorna um pedido com a ficha completa
-      description: Ação order.read.
+      description: Ação order.read. Preserva a consulta de pedidos cancelados e seus snapshots, motivo, autoria, histórico e pagamento no escopo comercial anterior.
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/OrderId'
@@ -3045,6 +3060,55 @@ paths:
         '404': { $ref: '#/components/responses/OrderNotFound' }
         '409': { $ref: '#/components/responses/OrderConflict' }
         '422': { $ref: '#/components/responses/OrderUnprocessable' }
+  /orders/{orderId}/cancel:
+    post:
+      operationId: cancelOrderLocally
+      summary: Cancela o pedido localmente antes da reserva de venda no ERP
+      description: >-
+        OLIST-T23 / ADR 061. Ação order.cancel com ACL comercial atual:
+        responsável humano ativo ou COMMERCIAL_ADMIN; loja exige Admin ativo.
+        Habilitação Olist não concede cancelamento alheio. Motivo obrigatório,
+        aparado, de 1 a 1000 caracteres e sem caracteres de controle; fica cifrado.
+        Versão, cancelamento terminal, invalidação da exportação ainda não reservada,
+        evento, auditoria e recibo idempotente compartilham a transação.
+        Revalida autoridade antes do replay. Mesma chave/corpo repete a resposta;
+        corpo divergente ou versão obsoleta conflitam. Reserva de venda, tentativa
+        não rejeitada, ID remoto observado, vínculo, confirmação ou resultado incerto
+        em qualquer conta bloqueiam a ação. Não exclui, reabre, estorna, desfaz
+        pagamento/Nota criada ou cancela no ERP. Snapshots, checkout e recursos
+        remotos já criados permanecem. Pedidos pagos/loja mantêm o pagamento e
+        qualquer obrigação financeira/fiscal anterior.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion, reason]
+              properties:
+                expectedVersion: { type: integer, minimum: 1 }
+                reason:
+                  type: string
+                  minLength: 1
+                  maxLength: 1000
+                  pattern: '^[^\u0000-\u001f\u007f]+$'
+      responses:
+        '200':
+          description: Pedido cancelado ou replay idempotente; effectiveStatus cancelado e status comercial preservado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OrderResponse' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/OrderNotFound' }
+        '409': { $ref: '#/components/responses/OrderConflict' }
+        '422': { $ref: '#/components/responses/OrderUnprocessable' }
   /orders/{orderId}/reopen:
     post:
       operationId: reopenOrder
@@ -3053,7 +3117,7 @@ paths:
         Ação order.reopen, restrita ao dono da conversa ou a COMMERCIAL_ADMIN.
         Só a partir de confirmado. Volta a pendente mantendo número, valor e
         condição, registra autor e horário da reabertura e bloqueia a
-        impressão.
+        impressão. Pedido cancelado é terminal e recebe 409 ORDER_CANCELLED.
       security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
       parameters:
         - $ref: '#/components/parameters/OrderId'
@@ -3360,6 +3424,8 @@ paths:
         Financeiro ou Admin ativo. Legados manuais não revisados ficam fora.
         Aguardando ordena paidOn ascendente; concluídos completedAt descendente,
         com número e id como desempate. Contagens usam o mesmo universo.
+        OLIST-46: cancelados ficam fora antes de contar e paginar, preservando
+        consulta histórica por ID sob a elegibilidade financeira anterior.
         Respostas privadas no-store; nenhuma conversa, arte ou dado fiscal.
       security: [{ sessionCookie: [] }]
       parameters:
@@ -3387,13 +3453,17 @@ paths:
     get:
       operationId: getFinanceOrder
       summary: Consulta mínima e histórico financeiro de pedido elegível
+      description: >-
+        OLIST-46: pedido cancelado que satisfaz a elegibilidade financeira anterior
+        permanece consultável por ID, com cancelledAt e canManage false. Pagamento,
+        Nota criada e eventos anteriores permanecem; cancelamento não é estorno.
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/OrderId'
         - $ref: '#/components/parameters/HumanReadOrigin'
       responses:
         '200':
-          description: Consulta; canManage false para Admin
+          description: Consulta; canManage false para Admin e pedido cancelado
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FinanceResponse' }
@@ -4450,6 +4520,10 @@ components:
         financeVersion: { type: integer, minimum: 0 }
         completedAt: { type: [string, 'null'], format: date-time }
         completedByName: { type: [string, 'null'] }
+        cancelledAt:
+          type: string
+          format: date-time
+          description: Presente somente na consulta histórica de pedido cancelado; impede comandos financeiros.
     FinanceResponse:
       type: object
       additionalProperties: false
@@ -6413,6 +6487,10 @@ components:
           number,
           conversationId,
           status,
+          effectiveStatus,
+          cancelledAt,
+          cancelledBy,
+          cancellationReason,
           fabCode,
           ficha,
           totalPieces,
@@ -6455,7 +6533,9 @@ components:
         locked:
           type: boolean
           description: >-
-            Pedido da loja: nenhuma escrita é aceita (409 ORDER_LOCKED).
+            Pedido da loja: escritas comerciais usuais são recusadas
+            (409 ORDER_LOCKED); cancelamento local usa comando dedicado por Admin.
+            Pedido cancelado também fica locked e é terminal (409 ORDER_CANCELLED).
         storeNumber:
           type: [string, 'null']
           pattern: '^LJ-[0-9A-F]{8}$'
@@ -6484,6 +6564,19 @@ components:
             - { $ref: '#/components/schemas/OrderActorRef' }
             - { type: 'null' }
         status: { $ref: '#/components/schemas/OrderStatus' }
+        effectiveStatus:
+          type: string
+          enum: [pendente, confirmado, cancelado]
+          description: Situação efetiva; cancelado sobrepõe o status comercial preservado.
+        cancelledAt: { type: [string, 'null'], format: date-time }
+        cancelledBy:
+          oneOf:
+            - { $ref: '#/components/schemas/OrderActorRef' }
+            - { type: 'null' }
+        cancellationReason:
+          type: [string, 'null']
+          maxLength: 1000
+          description: Motivo autorizado na consulta comercial; armazenado cifrado e ausente de logs/eventos.
         fabCode: { type: string }
         ficha: { $ref: '#/components/schemas/Ficha' }
         pricing:
@@ -7459,6 +7552,8 @@ components:
                   SIZE_PRICING_AMOUNT_MISMATCH,
                   INVALID_DATE,
                   ORDER_STATUS_CONFLICT,
+                  ORDER_CANCELLED,
+                  ORDER_CANCELLATION_BLOCKED,
                   EMPTY_FILE,
                   FILE_CONTENT_MISMATCH,
                   FILE_LIMIT_REACHED,

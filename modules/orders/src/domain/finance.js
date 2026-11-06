@@ -85,10 +85,11 @@ export function financeCursor(row, status) {
   ).toString('base64url');
 }
 
-/** @param {any} row */
-export function isFinanceEligible(row) {
+/** @param {any} row @param {boolean} [includeCancelled] */
+export function isFinanceEligible(row, includeCancelled = false) {
   return (
     row?.status === 'confirmado' &&
+    (includeCancelled || !row.cancelled_at) &&
     Boolean(row.paid_on) &&
     row.is_test === false &&
     row.finance_payment_review_required === false &&

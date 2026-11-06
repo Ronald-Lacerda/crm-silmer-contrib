@@ -196,7 +196,7 @@ export class PostgresOrderFileRepository {
       throw new OrderNotFoundError();
     }
     const locked = await transaction.query(
-      `SELECT conversation_id, manual_owner_id, status FROM crm.orders
+      `SELECT conversation_id, manual_owner_id, status, cancelled_at FROM crm.orders
        WHERE id = $1 FOR UPDATE`,
       [orderId],
     );
@@ -207,6 +207,12 @@ export class PostgresOrderFileRepository {
       current.manual_owner_id !== row.manual_owner_id
     ) {
       throw new OrderNotFoundError();
+    }
+    if (current.cancelled_at) {
+      throw new OrderConflictError(
+        'Cancelled orders are terminal',
+        'ORDER_CANCELLED',
+      );
     }
     if (current.status !== 'pendente') {
       throw new OrderConflictError(

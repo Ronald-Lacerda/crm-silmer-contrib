@@ -2,6 +2,7 @@ import { OlistError } from './errors.js';
 import { buildOlistSalePayload, reconcileOlistSale } from './sale-payload.js';
 
 const STOP = new Set([
+  'ORDER_CANCELLED',
   'FORBIDDEN',
   'VERSION_CONFLICT',
   'OLIST_NOT_CONFIGURED',
@@ -113,6 +114,11 @@ export function createOlistDispatcher({
           contextKey: config.contextKey,
         });
         base = baseFor(operation);
+        if (
+          operation.state === 'invalidated' &&
+          operation.last_error_code === 'ORDER_CANCELLED'
+        )
+          throw new OlistError('ORDER_CANCELLED');
         if (['confirmed', 'linked'].includes(operation.state))
           return result('sent', undefined, String(operation.remote_id));
         if (operation.saleAttempt) {

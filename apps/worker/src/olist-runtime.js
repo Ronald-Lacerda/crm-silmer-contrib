@@ -13,6 +13,7 @@ import {
 /** @param {any} value */
 function safeCode(value) {
   const codes = new Set([
+    'ORDER_CANCELLED',
     'OLIST_DISPATCH_DISABLED',
     'OLIST_JOB_INVALID',
     'OLIST_JOB_LEASE_LOST',

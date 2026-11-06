@@ -27,11 +27,14 @@ import { ORDER_ORIGINS } from '../domain/store-order.js';
  * the clear. `origin` narrows the search. `owner` (Painel, "Meus pedidos")
  * narrows to one seller's orders, by the rule that names the seller: the
  * manual order they own, or an order of a conversation assigned to them.
+ * `cancellation` selects active orders by default, cancelled history, or all;
+ * adapters apply it before status counts, cursor comparison and pagination.
  * @typedef {{
  *   status?: OrderStatus, numberSequence?: number, conversationIds?: string[],
  *   contactIds?: string[],
  *   phoneDigests?: string[], storeNumber?: string,
  *   origin?: 'atendimento'|'loja', cursor?: string|null, limit: number,
+ *   cancellation?: 'active'|'cancelled'|'all',
  *   owner?: {userId: string, conversationIds: string[]},
  * }} OrderListQuery
  *
@@ -78,7 +81,7 @@ import { ORDER_ORIGINS } from '../domain/store-order.js';
  * }} OrderPage
  *
  * ADR 031: the Dashboard figures. Sales and pieces count confirmed orders,
- * pending orders are counted apart, test orders never count. `storeNewCount`
+ * pending orders are counted apart, test and cancelled orders never count. `storeNewCount`
  * counts the store orders whose ficha was never printed and
  * `storeNewOldestPaidAt` is when InfinitePay confirmed the oldest of them
  * (null when there is none).
@@ -106,7 +109,7 @@ import { ORDER_ORIGINS } from '../domain/store-order.js';
  *
  * Every write bumps `version` by one, refuses a stale `expectedVersion` with
  * VERSION_CONFLICT and appends an identifier-only `order.*` domain event in
- * the same unit of work. Only one pending order may exist per conversation.
+ * the same unit of work. Only one active pending order may exist per conversation.
  *
  * - `saveSection`/`projectBriefing` write the ficha and its derived columns
  *   (`totalPieces`, `missingFields`, `updatedAt`) of a pending order only.
@@ -127,7 +130,15 @@ import { ORDER_ORIGINS } from '../domain/store-order.js';
  *   orders aside, so the promised day inside the ficha can be compared.
  *
  * @typedef {{
+ *   orderId: string, expectedVersion: number, reason: string,
+ *   actor: {id: string, kind: string, capabilities?: readonly string[]},
+ *   correlationId: string, now: Date,
+ * }} CancelOrderInput
+ *
+ * @typedef {{
  *   readPriceBreakdowns?(orders: Order[]): Promise<Map<string, any>>,
+ *   assertCancellationAccess?(input: CancelOrderInput, transaction?: any): Promise<Order>,
+ *   cancelOrder?(input: CancelOrderInput, transaction?: any): Promise<Order>,
  *   assertPriceBreakdownAccess?(input: any): Promise<void>,
  *   savePriceBreakdown?(input: any, transaction?: any): Promise<any>,
  *   createPending(input: CreatePendingOrderInput): Promise<Order>,
@@ -180,10 +191,11 @@ export function assertOrderRepositoryContract(repository) {
  * Validates the parts of a list query both adapters interpret identically.
  *
  * @param {OrderListQuery} query
- * @returns {{status: OrderStatus|undefined, numberSequence: number|undefined, conversationIds: string[]|undefined, contactIds: string[]|undefined, phoneDigests: string[]|undefined, storeNumber: string|undefined, origin: 'atendimento'|'loja'|undefined, owner: {userId: string, conversationIds: string[]}|undefined, after: {updatedAt: string, id: string}|null, limit: number}}
+ * @returns {{status: OrderStatus|undefined, numberSequence: number|undefined, conversationIds: string[]|undefined, contactIds: string[]|undefined, phoneDigests: string[]|undefined, storeNumber: string|undefined, origin: 'atendimento'|'loja'|undefined, owner: {userId: string, conversationIds: string[]}|undefined, cancellation: 'active'|'cancelled'|'all', after: {updatedAt: string, id: string}|null, limit: number}}
  */
 export function readOrderListQuery(query) {
   const {
+    cancellation = 'active',
     conversationIds,
     contactIds,
     cursor,
@@ -195,6 +207,9 @@ export function readOrderListQuery(query) {
     status,
     storeNumber,
   } = query;
+  if (!['active', 'cancelled', 'all'].includes(cancellation)) {
+    throw new OrderInputError('cancellation is invalid', ['cancellation']);
+  }
   if (
     !Number.isSafeInteger(limit) ||
     limit < 1 ||
@@ -248,6 +263,7 @@ export function readOrderListQuery(query) {
     throw new TypeError('owner must name a user and their conversations');
   }
   return {
+    cancellation,
     after:
       cursor === undefined || cursor === null ? null : decodeCursor(cursor),
     conversationIds,

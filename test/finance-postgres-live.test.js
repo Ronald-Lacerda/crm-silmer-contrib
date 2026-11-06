@@ -753,7 +753,9 @@ if (!connectionString) {
     );
     await assert.rejects(
       pool.query('DELETE FROM crm.users WHERE id=$1', [actor.id]),
-      { code: '23503' },
+      (/** @type {any} */ error) =>
+        ['23503', '23001'].includes(error.code) &&
+        error.constraint === 'order_finance_events_actor_id_fkey',
     );
     await assert.rejects(
       pool.query(
@@ -775,5 +777,81 @@ if (!connectionString) {
       ).rows[0].count,
       2,
     );
+  });
+
+  test('OLIST-46: cancelled paid orders leave financial queues before pagination and retain history without commands', async () => {
+    const waiting = await seedOrder(pool);
+    const completed = await seedOrder(pool, { origin: 'loja' });
+    const completion = await commandFor(pool, completed);
+    await runtime.change(completion);
+    const before = await runtime.list({ actor: FINANCE });
+    const prior = await runtime.get({ actor: FINANCE, orderId: completed });
+    const financialState = await pool.query(
+      'SELECT * FROM crm.order_finance WHERE order_id=$1',
+      [completed],
+    );
+    const financialEffects = await effects(pool, completed);
+    for (const id of [waiting, completed]) {
+      await pool.query(
+        `UPDATE crm.orders SET cancelled_at=$2,cancelled_by=$3,
+         cancellation_reason_envelope=$4::jsonb,version=version+1,updated_at=$2
+         WHERE id=$1`,
+        [
+          id,
+          NOW,
+          SELLER.id,
+          JSON.stringify(
+            encryptJson(
+              'Motivo sintético',
+              `order-cancellation:${id}`,
+              ENVELOPE_KEY,
+            ),
+          ),
+        ],
+      );
+    }
+    const after = await runtime.list({ actor: FINANCE, query: { limit: 1 } });
+    assert.equal(after.counts.waiting, before.counts.waiting - 1);
+    assert.equal(after.counts.completed, before.counts.completed - 1);
+    for (const status of ['waiting', 'completed']) {
+      let cursor;
+      do {
+        const page = await runtime.list({
+          actor: FINANCE,
+          query: { status, limit: 1, ...(cursor ? { cursor } : {}) },
+        });
+        assert.ok(
+          page.items.every(
+            (/** @type {any} */ row) => ![waiting, completed].includes(row.id),
+          ),
+        );
+        cursor = page.nextCursor;
+      } while (cursor);
+    }
+    const history = (await runtime.get({ actor: FINANCE, orderId: completed }))
+      .order;
+    assert.equal(history.canManage, false);
+    assert.equal(history.cancelledAt, NOW.toISOString());
+    assert.equal(history.paidOn, prior.order.paidOn);
+    assert.equal(history.completedAt, prior.order.completedAt);
+    assert.deepEqual(history.history, prior.order.history);
+    assert.deepEqual(
+      (
+        await pool.query('SELECT * FROM crm.order_finance WHERE order_id=$1', [
+          completed,
+        ])
+      ).rows,
+      financialState.rows,
+    );
+    for (const command of [
+      completion,
+      await commandFor(pool, completed, { action: 'reopen' }),
+      await commandFor(pool, waiting),
+    ]) {
+      await assert.rejects(runtime.change(command), {
+        code: 'FINANCE_ORDER_NOT_FOUND',
+      });
+    }
+    assert.deepEqual(await effects(pool, completed), financialEffects);
   });
 }

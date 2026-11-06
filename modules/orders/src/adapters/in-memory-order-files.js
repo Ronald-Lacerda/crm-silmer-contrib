@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 
 import { OrderConflictError, OrderNotFoundError } from '../domain/errors.js';
 import { MAX_ORDER_REFERENCE_FILES } from '../domain/order-files.js';
+import { requireActiveOrder } from '../domain/order.js';
 
 /**
  * @typedef {import('../application/order-file-service.js').OrderFileRecord} OrderFileRecord
@@ -46,7 +47,7 @@ export class InMemoryOrderFileRepository {
   #orders;
   #tail = Promise.resolve();
 
-  /** @param {{findById(orderId: string): Promise<{status: string}|null>}} orders */
+  /** @param {{findById(orderId: string): Promise<{status: string, cancelledAt?: string|null}|null>}} orders */
   constructor(orders) {
     this.#orders = orders;
   }
@@ -71,6 +72,7 @@ export class InMemoryOrderFileRepository {
   async #requirePending(orderId) {
     const order = await this.#orders.findById(orderId);
     if (!order) throw new OrderNotFoundError();
+    requireActiveOrder(order);
     if (order.status !== 'pendente') {
       throw new OrderConflictError(
         'Only pending orders accept file changes',

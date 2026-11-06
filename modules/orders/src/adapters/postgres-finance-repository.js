@@ -6,11 +6,11 @@ import {
   isFinanceEligible,
 } from '../domain/finance.js';
 
-const ELIGIBLE = `o.status = 'confirmado' AND o.paid_on IS NOT NULL
+const ELIGIBLE = `o.cancelled_at IS NULL AND o.status = 'confirmado' AND o.paid_on IS NOT NULL
   AND NOT o.is_test AND NOT o.finance_payment_review_required
   AND o.final_amount_cents > 0
   AND (o.origin <> 'loja' OR o.paid_amount_cents >= o.final_amount_cents)`;
-const SELECT = `SELECT o.id, o.number, o.number_sequence, o.origin, o.status, o.manual_owner_id,
+const SELECT = `SELECT o.id, o.number, o.number_sequence, o.origin, o.status, o.manual_owner_id, o.cancelled_at,
   o.paid_on::text AS paid_on, o.final_amount_cents, o.paid_amount_cents,
   o.finance_payment_review_required, o.is_test, o.total_pieces, o.version,
   o.ficha_envelope, coalesce(f.version, 0) AS finance_version,
@@ -76,7 +76,9 @@ export class PostgresFinanceRepository {
       ]);
     const { rows } = await client.query(`${SELECT} WHERE o.id = $1`, [id]);
     const row = rows[0];
-    if (!isFinanceEligible(row))
+    // A cancelled order keeps its financial history readable under the same
+    // eligibility scope, but never qualifies for another financial command.
+    if (!isFinanceEligible(row, !lock))
       throw new FinanceError(404, 'FINANCE_ORDER_NOT_FOUND');
     return row;
   }
@@ -93,7 +95,7 @@ export class PostgresFinanceRepository {
     );
     return {
       ...this.present(row),
-      canManage,
+      canManage: canManage && !row.cancelled_at,
       items: (ficha.items ?? []).map((/** @type {any} */ item) => ({
         tipo: item.tipo,
         cor: item.cor,
@@ -127,6 +129,9 @@ export class PostgresFinanceRepository {
     const ficha = this.ficha(row);
     return {
       id: row.id,
+      ...(row.cancelled_at
+        ? { cancelledAt: new Date(row.cancelled_at).toISOString() }
+        : {}),
       number: row.number,
       clientName: ficha.summary?.cliente ?? '',
       origin: row.origin,
@@ -151,6 +156,8 @@ export class PostgresFinanceRepository {
   /** @param {any} client @param {{row:any, action:'completed'|'reopened', actorId:string, correlationId:string, now:Date}} input */
   async change(client, input) {
     const { row, action, actorId, correlationId, now } = input;
+    if (row.cancelled_at)
+      throw new FinanceError(404, 'FINANCE_ORDER_NOT_FOUND');
     const completed = action === 'completed';
     if (Boolean(row.completed_at) === completed)
       throw new FinanceError(409, 'FINANCE_STATUS_CONFLICT');

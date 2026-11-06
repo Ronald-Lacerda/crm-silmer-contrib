@@ -347,11 +347,11 @@ export class PostgresInboxRepository {
         const pending = await transaction.query(
           `SELECT EXISTS (
              SELECT 1 FROM crm.orders
-             WHERE conversation_id = $1 AND status = 'pendente'
+             WHERE conversation_id = $1 AND status = 'pendente' AND cancelled_at IS NULL
              UNION ALL
              SELECT 1 FROM crm.conversation_subjects subject
              JOIN crm.orders orders ON orders.id = subject.order_id
-             WHERE subject.conversation_id = $1 AND orders.status = 'pendente'
+             WHERE subject.conversation_id = $1 AND orders.status = 'pendente' AND orders.cancelled_at IS NULL
            ) AS present`,
           [input.conversationId],
         );

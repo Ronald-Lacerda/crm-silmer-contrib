@@ -9,6 +9,7 @@ import { InMemoryOrderRepository } from '../modules/orders/src/adapters/in-memor
 import { syntheticItems } from './fixtures/order-items.js';
 import { orderContextsFrom } from './fixtures/order-contexts.js';
 import { priceDraft } from './fixtures/size-pricing.js';
+import { authorize } from '../modules/identity-access/src/authorization.js';
 
 const synthetic = JSON.parse(
   await readFile(
@@ -32,11 +33,15 @@ const readHeaders = Object.freeze({
 });
 
 const ORDER_KEYS = [
+  'cancelledAt',
+  'cancelledBy',
+  'cancellationReason',
   'confirmedAt',
   'confirmedBy',
   'conversationId',
   'createdAt',
   'deliveredOn',
+  'effectiveStatus',
   'fabCode',
   'ficha',
   'fichaFirstPrintedAt',
@@ -2186,4 +2191,227 @@ test('OLIST-T21 legacy browser amount does not bypass missing price composition'
   assert.equal(unchanged.version, ready.version);
   assert.equal(unchanged.status, 'pendente');
   assert.equal(unchanged.finalAmountCents, null);
+});
+
+test('OLIST-T23 cancellation forwards commercial authorization, preserves status and replays once', async (t) => {
+  const { api, runtime, repository, guards, assignments } = orderHarness();
+  t.after(() => api.close());
+  const order = await createConfirmed(runtime, 'conversation-1');
+  const request = {
+    method: /** @type {const} */ ('POST'),
+    url: `/api/v1/orders/${order.id}/cancel`,
+    headers: { ...writeHeaders, 'idempotency-key': 'cancel-synthetic-order' },
+    payload: { expectedVersion: order.version, reason: '  Cliente desistiu  ' },
+  };
+  const accepted = await api.inject(request);
+  assert.equal(accepted.statusCode, 200);
+  assert.equal(accepted.headers['cache-control'], 'no-store');
+  const cancelled = accepted.json().order;
+  assert.deepEqual(Object.keys(cancelled).sort(), orderKeys(cancelled));
+  assert.equal(cancelled.effectiveStatus, 'cancelado');
+  assert.equal(cancelled.status, 'confirmado');
+  assert.equal(cancelled.locked, true);
+  assert.equal(cancelled.version, order.version + 1);
+  assert.equal(cancelled.cancellationReason, 'Cliente desistiu');
+  assert.deepEqual(cancelled.cancelledBy, {
+    id: SELLER.id,
+    name: 'Vendedora Um',
+  });
+  assert.ok(cancelled.cancelledAt);
+  assert.equal(cancelled.finalAmountCents, order.finalAmountCents);
+  assert.deepEqual(cancelled.ficha, order.ficha);
+  assert.equal(guards.at(-1)?.input.action, 'order.cancel');
+  assert.equal(guards.at(-1)?.input.cookie, writeHeaders.cookie);
+  assert.equal(guards.at(-1)?.input.csrfToken, writeHeaders['x-csrf-token']);
+  assert.equal(guards.at(-1)?.input.origin, writeHeaders.origin);
+  assert.deepEqual((await api.inject(request)).json(), accepted.json());
+  assert.equal(
+    repository
+      .eventsFor(order.id)
+      .filter((event) => event.eventType === 'order.cancelled').length,
+    1,
+  );
+  const conflict = await api.inject({
+    ...request,
+    payload: { ...request.payload, reason: 'Outro motivo' },
+  });
+  assert.equal(conflict.statusCode, 409);
+  assert.equal(conflict.json().error.code, 'IDEMPOTENCY_KEY_REUSED');
+  assignments['conversation-1'] = OTHER.id;
+  const revokedReplay = await api.inject(request);
+  assert.equal(revokedReplay.statusCode, 403);
+  assert.equal(revokedReplay.json().error.code, 'FORBIDDEN');
+});
+
+test('OLIST-T23 cancellation rejects malformed commands without changing the order', async (t) => {
+  const { api, runtime } = orderHarness();
+  t.after(() => api.close());
+  const order = await createPending(runtime, 'conversation-1');
+  const headersWithoutKey = { ...writeHeaders };
+  Reflect.deleteProperty(headersWithoutKey, 'idempotency-key');
+  const payload = { expectedVersion: order.version, reason: 'Desistência' };
+  const cases = [
+    { headers: headersWithoutKey, payload, code: 'INVALID_IDEMPOTENCY_KEY' },
+    {
+      headers: writeHeaders,
+      payload: { reason: 'Desistência' },
+      code: 'INVALID_EXPECTED_VERSION',
+    },
+    {
+      headers: writeHeaders,
+      payload: { ...payload, expectedVersion: 0 },
+      code: 'INVALID_EXPECTED_VERSION',
+    },
+    {
+      headers: writeHeaders,
+      payload: { ...payload, cancelInErp: true },
+      code: 'INVALID_REQUEST',
+    },
+    {
+      headers: writeHeaders,
+      payload: { ...payload, reason: '' },
+      code: 'ORDER_INVALID',
+    },
+    {
+      headers: writeHeaders,
+      payload: { ...payload, reason: 'x'.repeat(1001) },
+      code: 'ORDER_INVALID',
+    },
+    {
+      headers: writeHeaders,
+      payload: { ...payload, reason: 'linha\nnova' },
+      code: 'ORDER_INVALID',
+    },
+    {
+      headers: writeHeaders,
+      payload: { ...payload, reason: 42 },
+      code: 'ORDER_INVALID',
+    },
+  ];
+  for (const example of cases) {
+    const response = await api.inject({
+      method: 'POST',
+      url: `/api/v1/orders/${order.id}/cancel`,
+      headers: example.headers,
+      payload: example.payload,
+    });
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().error.code, example.code);
+  }
+  const unchanged = (await runtime.get(order.id)).order;
+  assert.equal(unchanged.version, order.version);
+  assert.equal(unchanged.cancelledAt, null);
+  assert.equal(unchanged.effectiveStatus, 'pendente');
+});
+
+test('OLIST-T23 cancellation preserves safe 409 code and rejects non-owner even with Olist checkbox', async (t) => {
+  const { api, runtime, repository } = orderHarness();
+  t.after(() => api.close());
+  const order = await createPending(runtime, 'conversation-1');
+  repository.cancelOrder = async () => {
+    throw Object.assign(new Error('Private reservation detail'), {
+      statusCode: 409,
+      code: 'ORDER_CANCELLATION_BLOCKED',
+    });
+  };
+  const blocked = await api.inject({
+    method: 'POST',
+    url: `/api/v1/orders/${order.id}/cancel`,
+    headers: writeHeaders,
+    payload: { expectedVersion: order.version, reason: 'Desistência' },
+  });
+  assert.equal(blocked.statusCode, 409);
+  assert.deepEqual(blocked.json(), {
+    error: { code: 'ORDER_CANCELLATION_BLOCKED' },
+  });
+
+  const other = orderHarness({ writeActor: { ...OTHER, olistEnabled: true } });
+  t.after(() => other.api.close());
+  const owned = await createPending(other.runtime, 'conversation-1');
+  const forbidden = await other.api.inject({
+    method: 'POST',
+    url: `/api/v1/orders/${owned.id}/cancel`,
+    headers: writeHeaders,
+    payload: { expectedVersion: owned.version, reason: 'Desistência' },
+  });
+  assert.equal(forbidden.statusCode, 403);
+  assert.equal((await other.runtime.get(owned.id)).order.cancelledAt, null);
+});
+
+test('OLIST-T23 GET orders applies active/cancelled/all before pagination and preserves two statuses', async (t) => {
+  const { api, runtime } = orderHarness();
+  t.after(() => api.close());
+  const active = await createPending(runtime, 'conversation-1');
+  const cancelled = await createPending(runtime, 'conversation-2');
+  await runtime.cancel({
+    ...seed({}),
+    actor: SELLER,
+    orderId: cancelled.id,
+    expectedVersion: cancelled.version,
+    reason: 'Desistência',
+  });
+  for (const [query, ids] of [
+    ['', [active.id]],
+    ['?cancellation=active', [active.id]],
+    ['?cancellation=cancelled', [cancelled.id]],
+    ['?cancellation=all', [cancelled.id, active.id]],
+  ]) {
+    const response = await api.inject({
+      method: 'GET',
+      url: '/api/v1/orders' + query,
+      headers: readHeaders,
+    });
+    assert.equal(response.statusCode, 200);
+    const body = response.json();
+    assert.deepEqual(
+      body.items.map((/** @type {any} */ item) => item.id),
+      ids,
+    );
+    assert.deepEqual(body.counts, { confirmado: 0, pendente: ids.length });
+  }
+  for (const query of ['?cancellation=unknown', '?status=cancelado']) {
+    const response = await api.inject({
+      method: 'GET',
+      url: '/api/v1/orders' + query,
+      headers: readHeaders,
+    });
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().error.code, 'INVALID_FILTER');
+  }
+});
+
+test('OLIST-T23 Financeiro habilitado Olist cannot cancel and inactive humans stay denied', () => {
+  for (const capabilities of [[], ['COMMERCIAL_ADMIN']]) {
+    assert.throws(
+      () =>
+        authorize(
+          {
+            id: 'finance-synthetic',
+            kind: 'human',
+            functionName: 'Financeiro',
+            capabilities: /** @type {Array<'COMMERCIAL_ADMIN'>} */ (
+              capabilities
+            ),
+            olistEnabled: true,
+          },
+          'order.cancel',
+        ),
+      { code: 'FORBIDDEN' },
+    );
+  }
+  assert.doesNotThrow(() =>
+    authorize({ ...SELLER, functionName: 'Vendedor' }, 'order.cancel'),
+  );
+  assert.throws(
+    () =>
+      authorize(
+        {
+          ...SELLER,
+          functionName: 'Vendedor',
+          disabledAt: '2026-11-06T12:00:00Z',
+        },
+        'order.cancel',
+      ),
+    { code: 'FORBIDDEN' },
+  );
 });

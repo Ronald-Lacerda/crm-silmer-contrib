@@ -22,6 +22,7 @@ test('FINQ-04/05: full settlement, confirmation, non-test and reviewed legacy da
   assert.equal(isFinanceEligible(eligible), true);
   for (const overrides of [
     { status: 'pendente' },
+    { cancelled_at: '2026-11-06T15:00:00.000Z' },
     { paid_on: null },
     { is_test: true },
     { finance_payment_review_required: true },
@@ -39,6 +40,28 @@ test('FINQ-04/05: full settlement, confirmation, non-test and reviewed legacy da
     true,
   );
   assert.equal(isFinanceEligible(null), false);
+});
+
+test('OLIST-46: cancellation removes financial eligibility while preserving scoped history', () => {
+  const cancelled = {
+    ...eligible,
+    cancelled_at: '2026-11-06T15:00:00.000Z',
+    completed_at: '2026-11-05T15:00:00.000Z',
+  };
+  assert.equal(isFinanceEligible(cancelled), false);
+  assert.equal(isFinanceEligible(cancelled, true), true);
+  for (const overrides of [
+    { status: 'pendente' },
+    { paid_on: null },
+    { is_test: true },
+    { finance_payment_review_required: true },
+    { origin: 'loja', paid_amount_cents: 9999 },
+  ]) {
+    assert.equal(
+      isFinanceEligible({ ...cancelled, ...overrides }, true),
+      false,
+    );
+  }
 });
 
 test('FINQ-06: bounded filters and cursors cannot cross lists', () => {

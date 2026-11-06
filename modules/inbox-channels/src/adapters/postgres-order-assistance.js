@@ -525,7 +525,7 @@ export class PostgresOrderAssistanceRepository {
     return Boolean(
       (
         await tx.query(
-          `SELECT orders.id FROM crm.orders orders WHERE orders.status='pendente' AND (orders.conversation_id=$1 OR EXISTS (SELECT 1 FROM crm.conversation_subjects subject WHERE subject.conversation_id=$1 AND subject.order_id=orders.id)) LIMIT 1`,
+          `SELECT orders.id FROM crm.orders orders WHERE orders.status='pendente' AND orders.cancelled_at IS NULL AND (orders.conversation_id=$1 OR EXISTS (SELECT 1 FROM crm.conversation_subjects subject WHERE subject.conversation_id=$1 AND subject.order_id=orders.id)) LIMIT 1`,
           [id],
         )
       ).rows[0],

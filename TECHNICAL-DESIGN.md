@@ -181,6 +181,27 @@ Prova C05–C07 concluída em 05/11: [API e tela nativa consistentes](docs/integ
 T03 pode iniciar. Runtime integrado, ACL, banco, UI e piloto seguem nas tarefas
 posteriores; frações continuam bloqueadas antes do envio.
 
+## OLIST-T23 — marcador terminal de cancelamento local
+
+[ADR 068](docs/adr/068-cancelamento-local-terminal-pre-exportacao.md), OLIST-19,
+21, 30, 45–47. A migration expand 0070 adiciona `cancelled_at`, `cancelled_by` e
+`cancellation_reason_envelope` à tabela de Pedidos, sem terceiro status. O motivo
+usa AES-256-GCM com AAD por Pedido. `POST /api/v1/orders/:id/cancel` exige ACL
+comercial humana ativa, sessão/CSRF/Origin, Idempotency-Key, versão e motivo;
+loja exige Admin. A autorização transacional antecede até a consulta ao recibo.
+Pedido/evento/invalidação Olist/auditoria/recibo usam o mesmo client.
+
+Locks seguem autoridade → conversa → Pedido → exportações. Recursos já
+reservados podem concluir reconciliação; nenhuma nova etapa do cancelado é
+autorizada. Reserva de venda, incerteza, ID observado ou vínculo impedem cancelar.
+Trigger protege terminalidade e os campos comerciais/financeiros originais.
+O índice de pendente considera apenas ativos, sem criar substituto automático.
+Filtros `cancellation=active|cancelled|all` precedem contagem e paginação;
+Financeiro mantém detalhe histórico no escopo anterior e nega comandos.
+API de arte revalida terminalidade sob lock e impressão histórica não grava
+primeira impressão. [Operação e rollback](docs/runbooks/olist-phase3.md#t23--cancelamento-local-terminal).
+T10 e interface F4 seguem separados; nenhum cancelamento ERP ou estorno.
+
 ## Olist subtotal e cancelamento contrato para implementação
 
 [ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), OLIST-01–50,
@@ -199,15 +220,15 @@ OLIST-PLAN-02 e T01–T26. Não representa código ou schema já publicados.
 - Dinheiro ERP: representação derivada e precisão provada por linha. Comparar
   subtotais remotos/total, bloquear só exportação inexata; não atualizar catálogo
   encontrado, inventar desconto ou compensar diferenças entre tamanhos.
-- Cancelamento: proposta de marcador terminal separado dos dois status,
+- Cancelamento: marcador terminal separado dos dois status, adotado na ADR 068,
   motivo/versão/auditoria e exclusão das métricas/filas ativas antes de paginar;
   preservar histórico/pagamento/check. Só pré-exportação, serializado com worker.
 - UI/ficha: Aplicação por grupo e Previsão de entrega preservam chaves. Nova
   ficha v7/selector/snapshot/amostra; templates v2–v6 intactos. Sem preço novo
   na impressão. Configuração ERP central versionada, piloto por ID privado.
 
-Contrato/precisão fiscal e detalhes DDL são gates T02/T03/T23; flags e variáveis
-ainda serão definidas. Sem novo serviço/store/infra; publicação GitHub → EasyPanel.
+Contrato/precisão fiscal e detalhes DDL têm evidências em T02/T03/T23 no runbook;
+flags permanecem desligadas. Sem novo serviço/store/infra; publicação GitHub → EasyPanel.
 
 Preparação local T20a/T21a em 05/11: `modules/orders/src/domain/size-pricing.js`
 implementa IDs de grupo/linha, subtotal positivo em centavos, soma exata e
@@ -384,7 +405,8 @@ não fazem parte da baseline.
 O produto inclui Inbox, Clientes, Pedidos, Dashboard, Financeiro, Usuários e Conta, conforme ACL.
 Pedido/Ficha já existem. Negócio/Kanban estão aposentados pela ADR 004;
 Instagram é fase posterior. Cobrança PIX, envio automático da Ficha, arquivos
-duráveis e cancelamento comercial seguem como fronteiras pendentes.
+duráveis e interface do cancelamento comercial seguem como fronteiras pendentes;
+o comando local pré-exportação foi entregue em OLIST-T23.
 
 ## 2. Caminho de runtime
 

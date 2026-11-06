@@ -25,6 +25,8 @@ const DELIVERY_FILTERS = new Set(['overdue', 'due_soon']);
  * and identifiers never reach the client.
  */
 const PUBLIC_CODES = new Set([
+  'ORDER_CANCELLED',
+  'ORDER_CANCELLATION_BLOCKED',
   'ORDER_SOURCE_INVALID',
   'ORDER_SOURCE_STALE',
   'ORDER_SOURCE_LOCKED',
@@ -463,6 +465,34 @@ export function registerOrderRoutes(
     }),
   );
 
+  api.post('/api/v1/orders/:orderId/cancel', async (request, reply) =>
+    respond(reply, async () => {
+      const orderId = requireIdentifier(
+        requireObject(request.params).orderId,
+        'ORDER_ID',
+      );
+      const body = requireObject(request.body);
+      rejectUnknownKeys(body, ['expectedVersion', 'reason']);
+      const expectedVersion = requireVersion(body.expectedVersion);
+      const command = await authorizeCommand(
+        request,
+        orders,
+        contextFor,
+        'order.cancel',
+      );
+      const order = await orders.cancel({
+        ...command,
+        orderId,
+        expectedVersion,
+        reason: body.reason,
+      });
+      return reply
+        .header('cache-control', 'no-store')
+        .code(200)
+        .send({ order });
+    }),
+  );
+
   api.post('/api/v1/orders/:orderId/reopen', async (request, reply) =>
     respond(reply, async () => {
       const params = requireObject(request.params);
@@ -851,6 +881,7 @@ async function authorizeRead(request, orders, action = 'order.read') {
 function parseListQuery(value) {
   const query = requireObject(value ?? {});
   rejectUnknownKeys(query, [
+    'cancellation',
     'cursor',
     'delivery',
     'limit',
@@ -859,8 +890,13 @@ function parseListQuery(value) {
     'q',
     'status',
   ]);
-  /** @type {{status?: string, origin?: string, q?: string, cursor?: string, limit?: number, delivery?: string, owner?: 'me'}} */
+  /** @type {{cancellation?: 'active'|'cancelled'|'all',status?: string, origin?: string, q?: string, cursor?: string, limit?: number, delivery?: string, owner?: 'me'}} */
   const input = {};
+  if (query.cancellation !== undefined) {
+    if (!['active', 'cancelled', 'all'].includes(query.cancellation))
+      throw new OrderRequestError(400, 'INVALID_FILTER');
+    input.cancellation = query.cancellation;
+  }
   // Painel ("Meus pedidos"): only "me"; the seller is always the session's.
   if (query.owner !== undefined) {
     if (query.owner !== 'me') {

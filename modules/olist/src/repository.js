@@ -188,6 +188,31 @@ export function createOlistRepository(database, options) {
         new Date(connection.expires_at) <= clock())
     )
       throw new OlistError('OLIST_CONNECTION_CHANGED');
+    const target = (
+      await client.query(
+        'SELECT order_id FROM crm.olist_exports WHERE id=$1 AND account_key=$2 AND context_key=$3',
+        [input.exportId, input.accountKey, input.contextKey],
+      )
+    ).rows[0];
+    if (!target) throw new OlistError('OLIST_EXPORT_UNAVAILABLE');
+    const reference = (
+      await client.query('SELECT conversation_id FROM crm.orders WHERE id=$1', [
+        target.order_id,
+      ])
+    ).rows[0];
+    if (reference?.conversation_id)
+      await client.query(
+        'SELECT id FROM crm.conversations WHERE id=$1 FOR SHARE',
+        [reference.conversation_id],
+      );
+    const lockedOrder = (
+      await client.query(
+        'SELECT cancelled_at FROM crm.orders WHERE id=$1 FOR SHARE',
+        [target.order_id],
+      )
+    ).rows[0];
+    if (!lockedOrder || lockedOrder.cancelled_at)
+      throw new OlistError('ORDER_CANCELLED');
     const { rows } = await client.query(
       'SELECT * FROM crm.olist_exports WHERE id=$1 AND account_key=$2 AND context_key=$3 FOR SHARE',
       [input.exportId, input.accountKey, input.contextKey],
@@ -665,6 +690,7 @@ export function createOlistRepository(database, options) {
      * @param {any} input */
     async recordDispatchStop(input) {
       const allowed = new Set([
+        'ORDER_CANCELLED',
         'FORBIDDEN',
         'VERSION_CONFLICT',
         'OLIST_CREATION_DISABLED',
@@ -705,6 +731,8 @@ export function createOlistRepository(database, options) {
         if (!row) throw new OlistError('OLIST_EXPORT_UNAVAILABLE');
         if (
           ['confirmed', 'linked'].includes(row.state) ||
+          (row.state === 'invalidated' &&
+            row.last_error_code === 'ORDER_CANCELLED') ||
           row.last_error_code === code
         )
           return row;
@@ -1519,10 +1547,11 @@ export function createOlistRepository(database, options) {
       const work = async (/** @type {any} */ client) => {
         await exportCommandGuard(client, input);
         const order = await client.query(
-          'SELECT id FROM crm.orders WHERE id=$1 FOR UPDATE',
+          'SELECT id,cancelled_at FROM crm.orders WHERE id=$1 FOR UPDATE',
           [input.orderId],
         );
         if (!order.rows[0]) throw new OlistError('ORDER_NOT_FOUND', 404);
+        if (order.rows[0].cancelled_at) throw new OlistError('ORDER_CANCELLED');
         const row = (
           await client.query(
             'SELECT * FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2',
@@ -1576,10 +1605,11 @@ export function createOlistRepository(database, options) {
       const work = async (/** @type {any} */ client) => {
         await exportCommandGuard(client, input);
         const order = await client.query(
-          'SELECT version FROM crm.orders WHERE id=$1 FOR UPDATE',
+          'SELECT version,cancelled_at FROM crm.orders WHERE id=$1 FOR UPDATE',
           [input.orderId],
         );
         if (!order.rows[0]) throw new OlistError('ORDER_NOT_FOUND', 404);
+        if (order.rows[0].cancelled_at) throw new OlistError('ORDER_CANCELLED');
         const existing = (
           await client.query(
             'SELECT * FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2',
@@ -1660,6 +1690,34 @@ export function createOlistRepository(database, options) {
         const resource = Boolean(input.resourceId);
         const target = resource ? 'olist_resources' : 'olist_exports';
         const id = resource ? input.resourceId : input.exportId;
+        if (!resource) {
+          const targetOrder = (
+            await client.query(
+              'SELECT order_id FROM crm.olist_exports WHERE id=$1 AND account_key=$2',
+              [id, input.accountKey],
+            )
+          ).rows[0];
+          if (!targetOrder) throw new OlistError('OLIST_EXPORT_UNAVAILABLE');
+          const referenceOrder = (
+            await client.query(
+              'SELECT conversation_id FROM crm.orders WHERE id=$1',
+              [targetOrder.order_id],
+            )
+          ).rows[0];
+          if (referenceOrder?.conversation_id)
+            await client.query(
+              'SELECT id FROM crm.conversations WHERE id=$1 FOR SHARE',
+              [referenceOrder.conversation_id],
+            );
+          const activeOrder = (
+            await client.query(
+              'SELECT cancelled_at FROM crm.orders WHERE id=$1 FOR SHARE',
+              [targetOrder.order_id],
+            )
+          ).rows[0];
+          if (!activeOrder || activeOrder.cancelled_at)
+            throw new OlistError('ORDER_CANCELLED');
+        }
         const { rows } = await client.query(
           'SELECT * FROM crm.' +
             target +

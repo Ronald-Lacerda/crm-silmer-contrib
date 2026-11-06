@@ -141,6 +141,21 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 ## OLIST-T20b — Início da Fase 3 (05/11/2026)
 
+## OLIST-T23 — cancelamento local pré-exportação (06/11/2026)
+
+- [x] Marcador terminal separado dos dois status, motivo cifrado, versão e ACL
+      comercial atual, inclusive antes do replay; loja exige Admin ativo.
+- [x] Cancelamento, invalidação Olist, evento, auditoria e recibo atômicos;
+      venda reservada, incerta, exportada, vinculada ou com ID observado bloqueia.
+- [x] Universos ativos filtrados antes das somas, contagens e paginação;
+      histórico comercial/financeiro, pagamento, checkout, arte e Nota criada preservados.
+- [x] Corridas com reserva antiga/T08 e vínculo administrativo verificadas,
+      sem cancelamento ERP, retry, compensação ou substituição automática.
+
+OLIST-19, 21, 30, 45–47. [ADR 068](../../../docs/adr/068-cancelamento-local-terminal-pre-exportacao.md)
+e [contrato/evidências](../../../docs/runbooks/olist-phase3.md#t23--cancelamento-local-terminal).
+Próximo T10; F3 permanece aberto, despacho real/deploy/piloto desligados.
+
 ## OLIST-T09 — vínculo e reconciliação administrativos (06/11/2026)
 
 - [x] Admin atual sem checkbox, rotas estritas, sessão/CSRF/Origin, recibo cifrado

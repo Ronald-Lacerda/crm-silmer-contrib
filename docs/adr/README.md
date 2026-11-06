@@ -27,6 +27,12 @@
   RFC 049 / COB-DEL-01: 0%, X% e 100%, sinal/saldo, Pix/cartão e quitação
   verificada de pedidos existentes, após aprovação do protótipo.
 
+## Decisão técnica de 06/11/2026
+
+- [068 — Cancelamento local terminal pré-exportação](068-cancelamento-local-terminal-pre-exportacao.md),
+  RFC 050 / OLIST-T23: marcador separado dos dois status comerciais, motivo
+  cifrado, ACL comercial, disputa com reserva de venda e histórico financeiro preservado.
+
 ## Decisão técnica de 05/11/2026
 
 - [067 — Fontes comerciais suplementares](067-fontes-comerciais-suplementares-sem-reescrever-ficha.md), RFC 054 / T26/T24, preservando ficha, total e pagamentos.

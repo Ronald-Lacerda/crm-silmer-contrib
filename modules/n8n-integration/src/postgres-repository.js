@@ -877,9 +877,9 @@ export class PostgresN8nIntegrationRepository {
           await client.query(
             `SELECT
                (SELECT count(*)::integer FROM crm.orders
-                WHERE conversation_id=$1 AND status='pendente') AS pending_count,
+                WHERE conversation_id=$1 AND status='pendente' AND cancelled_at IS NULL) AS pending_count,
                (SELECT id FROM crm.orders
-                WHERE conversation_id=$1 AND status='pendente' LIMIT 1)
+                WHERE conversation_id=$1 AND status='pendente' AND cancelled_at IS NULL LIMIT 1)
                  AS pending_id,
                (SELECT id FROM crm.conversation_subjects
                 WHERE conversation_id=$1 AND is_current) AS subject_id,

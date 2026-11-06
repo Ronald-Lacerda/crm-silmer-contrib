@@ -49,6 +49,7 @@ export const OPERATIONAL_ACTIONS = Object.freeze(
     // limited to the conversation owner or COMMERCIAL_ADMIN by the orders
     // runtime, while reading and printing stay open to every seller.
     'order.confirm',
+    'order.cancel',
     'order.create',
     'order.edit',
     // ADR 008: the paid and delivered days, recorded in either status.

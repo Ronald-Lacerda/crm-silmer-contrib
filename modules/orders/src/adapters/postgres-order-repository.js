@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto';
 import {
   OrderConflictError,
   OrderForbiddenError,
+  OrderInputError,
   OrderNotFoundError,
 } from '../domain/errors.js';
 import {
@@ -39,6 +40,7 @@ const ORDER_COLUMNS = `id, number_sequence, number, conversation_id,
   lead_time_business_days, payment_source, payment_confirmed_at,
   paid_amount_cents, payment_transaction_nsu, payment_invoice_slug,
   ficha_first_printed_at, ficha_first_printed_by,
+  cancelled_at, cancelled_by, cancellation_reason_envelope,
   version, created_at, updated_at`;
 
 /** @param {string} orderId */
@@ -201,6 +203,15 @@ export class PostgresOrderRepository {
   /** @param {any} row @returns {Order} */
   #map(row) {
     return {
+      cancelledAt: isoOrNull(row.cancelled_at ?? null),
+      cancelledBy: row.cancelled_by ?? null,
+      cancellationReason: row.cancellation_reason_envelope
+        ? decryptJson(
+            row.cancellation_reason_envelope,
+            `order-cancellation:${row.id}`,
+            this.#envelopeKey,
+          )
+        : null,
       confirmedAt: isoOrNull(row.confirmed_at),
       confirmedBy: row.confirmed_by,
       conversationId: row.conversation_id,
@@ -577,6 +588,8 @@ export class PostgresOrderRepository {
       );
       if (!locked.rows[0]) throw new OrderNotFoundError();
       const current = this.#map(locked.rows[0]);
+      if (current.cancelledAt)
+        throw new OrderConflictError('Order is cancelled', 'ORDER_CANCELLED');
       const loja = current.ficha.loja;
       if (!loja) throw new OrderNotFoundError();
       const stored = loja.comprovanteUrl ?? null;
@@ -721,11 +734,11 @@ export class PostgresOrderRepository {
           FROM (SELECT order_date, count(*)::integer AS confirmed_count,
                        coalesce(sum(final_amount_cents), 0)::bigint AS sold_amount_cents
                 FROM crm.orders
-                WHERE NOT is_test AND status = 'confirmado'
+                WHERE NOT is_test AND cancelled_at IS NULL AND status = 'confirmado'
                   AND order_date BETWEEN $3::date AND $4::date
                 GROUP BY order_date) sold) AS daily
        FROM crm.orders
-       WHERE NOT is_test`,
+       WHERE NOT is_test AND cancelled_at IS NULL`,
       [query.from, query.to, query.dailyFrom, query.dailyTo],
     );
     const row = result.rows[0];
@@ -765,7 +778,7 @@ export class PostgresOrderRepository {
   async openDeliveries() {
     const result = await this.#database.query(
       `SELECT ${ORDER_COLUMNS} FROM crm.orders
-       WHERE status = 'confirmado' AND origin = 'atendimento'
+       WHERE status = 'confirmado' AND origin = 'atendimento' AND cancelled_at IS NULL
          AND delivered_on IS NULL AND NOT is_test
        ORDER BY number_sequence`,
     );
@@ -790,7 +803,7 @@ export class PostgresOrderRepository {
          SET ficha_first_printed_at = $2, ficha_first_printed_by = $3,
              version = version + 1
          WHERE id = $1 AND origin = 'loja'
-           AND ficha_first_printed_at IS NULL
+           AND ficha_first_printed_at IS NULL AND cancelled_at IS NULL
          RETURNING ${ORDER_COLUMNS}`,
         [input.orderId, at, input.actorId],
       );
@@ -841,7 +854,7 @@ export class PostgresOrderRepository {
   async findPendingByConversation(conversationId) {
     const result = await this.#database.query(
       `SELECT ${ORDER_COLUMNS} FROM crm.orders
-       WHERE conversation_id = $1 AND status = 'pendente'`,
+       WHERE conversation_id = $1 AND status = 'pendente' AND cancelled_at IS NULL`,
       [conversationId],
     );
     return result.rows[0] ? this.#map(result.rows[0]) : null;
@@ -862,6 +875,7 @@ export class PostgresOrderRepository {
   async list(query) {
     const {
       after,
+      cancellation,
       conversationIds,
       contactIds,
       limit,
@@ -917,6 +931,8 @@ export class PostgresOrderRepository {
       scope = `${scope} AND (manual_owner_id = ${bind(owner.userId)}
         OR conversation_id = ANY(${bind(owner.conversationIds)}::text[]))`;
     }
+    if (cancellation !== 'all')
+      scope = `${scope} AND cancelled_at IS ${cancellation === 'cancelled' ? 'NOT ' : ''}NULL`;
 
     const counted = await this.#database.query(
       `SELECT status, count(*)::integer AS total FROM crm.orders
@@ -1032,6 +1048,102 @@ export class PostgresOrderRepository {
     );
   }
 
+  /** Current commercial authority is required even for an idempotent replay.
+   * @param {any} input @param {Queryable} [transaction] */
+  async assertCancellationAccess(input, transaction) {
+    const work = async (/** @type {Queryable} */ tx) =>
+      /** @type {Order} */ (await this.#sourceAccess(tx, input, true));
+    return transaction ? work(transaction) : this.#database.transaction(work);
+  }
+
+  /** OLIST-T23: no network port; cancellation, invalidation and event commit together.
+   * @param {any} input @param {Queryable} [transaction] */
+  async cancelOrder(input, transaction) {
+    if (
+      typeof input.reason !== 'string' ||
+      !input.reason.trim() ||
+      input.reason.length > 1000 ||
+      /[\u0000-\u001f\u007f]/u.test(input.reason)
+    )
+      throw new OrderInputError('A cancellation reason is required', [
+        'reason',
+      ]);
+    const work = async (/** @type {Queryable} */ tx) => {
+      const order = /** @type {Order} */ (
+        await this.#sourceAccess(tx, input, true)
+      );
+      if (order.cancelledAt)
+        throw new OrderConflictError('Order is cancelled', 'ORDER_CANCELLED');
+      if (order.version !== input.expectedVersion)
+        throw new OrderConflictError('Order changed');
+      // Lock every account's operation after the order: no account switch bypass.
+      const exports = (
+        await tx.query(
+          'SELECT * FROM crm.olist_exports WHERE order_id=$1 ORDER BY id FOR UPDATE',
+          [order.id],
+        )
+      ).rows;
+      for (const operation of exports) {
+        const attempts = await tx.query(
+          "SELECT 1 FROM crm.olist_attempts WHERE export_id=$1 AND stage='sale' AND outcome<>'rejected' LIMIT 1",
+          [operation.id],
+        );
+        if (
+          operation.remote_id ||
+          operation.observed_sale_id ||
+          ['reserved', 'confirmed', 'linked', 'uncertain'].includes(
+            operation.state,
+          ) ||
+          attempts.rows[0]
+        )
+          throw new OrderConflictError(
+            'Sale effect prevents cancellation',
+            'ORDER_CANCELLATION_BLOCKED',
+          );
+      }
+      const updated = await tx.query(
+        `UPDATE crm.orders SET cancelled_at=$2,cancelled_by=$3,cancellation_reason_envelope=$4::jsonb,version=version+1,updated_at=$2 WHERE id=$1 RETURNING ${ORDER_COLUMNS}`,
+        [
+          order.id,
+          input.now,
+          input.actor.id,
+          JSON.stringify(
+            encryptJson(
+              input.reason,
+              `order-cancellation:${order.id}`,
+              this.#envelopeKey,
+            ),
+          ),
+        ],
+      );
+      // Resource attempts/IDs and outbox history are retained. An invalidated
+      // operation cannot reserve another resource or sale, even on an old job.
+      for (const operation of exports) {
+        await tx.query(
+          "UPDATE crm.olist_exports SET state='invalidated',version=version+1,updated_at=$2,last_error_code='ORDER_CANCELLED' WHERE id=$1",
+          [operation.id, input.now],
+        );
+        await tx.query(
+          `INSERT INTO crm.olist_events(id,account_key,export_id,actor_id,event_code,version,correlation_id,occurred_at)
+          VALUES($1,$2,$3,$4,'OLIST_ORDER_CANCELLED',$5,$6,$7)`,
+          [
+            randomUUID(),
+            operation.account_key,
+            operation.id,
+            input.actor.id,
+            Number(operation.version) + 1,
+            input.correlationId,
+            input.now,
+          ],
+        );
+      }
+      const saved = this.#map(updated.rows[0]);
+      await appendOrderEvent(tx, saved, 'order.cancelled', input.correlationId);
+      return saved;
+    };
+    return transaction ? work(transaction) : this.#database.transaction(work);
+  }
+
   /** @param {Order[]} orders @returns {Promise<Map<string, any>>} */
   async readPriceBreakdowns(orders) {
     if (orders.length === 0) return new Map();
@@ -1076,6 +1188,8 @@ export class PostgresOrderRepository {
       const order = /** @type {Order} */ (
         await this.#sourceAccess(tx, input, true)
       );
+      if (order.cancelledAt)
+        throw new OrderConflictError('Order is cancelled', 'ORDER_CANCELLED');
       if (order.version !== input.expectedVersion)
         throw new OrderConflictError('The order version changed');
       // prepareExport locks this same order before inserting its snapshot.
@@ -1513,6 +1627,8 @@ export class PostgresOrderRepository {
         [order.id],
       );
       const current = locked.rows[0];
+      if (current?.cancelled_at)
+        throw new OrderConflictError('Order is cancelled', 'ORDER_CANCELLED');
       if (
         !current ||
         current.conversation_id !== order.conversationId ||

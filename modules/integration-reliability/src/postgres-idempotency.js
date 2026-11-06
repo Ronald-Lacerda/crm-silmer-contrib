@@ -81,15 +81,18 @@ export class PostgresIdempotencyRecordStore {
    * @template T
    * @param {IdempotencyIdentity} identity
    * @param {(client: TransactionClient) => Promise<T>} operation
+   * @param {(client: TransactionClient) => Promise<unknown>} [beforeExecute]
    * @returns {Promise<T>}
    */
-  async execute(identity, operation) {
+  async execute(identity, operation, beforeExecute) {
     validateIdentity(identity);
     if (typeof operation !== 'function') {
       throw new TypeError('operation must be a function');
     }
 
     return this.#database.transaction(async (client) => {
+      // Hold current domain authority through both effect and receipt replay.
+      await beforeExecute?.(client);
       if (!client || typeof client.query !== 'function') {
         throw new TypeError('transaction must provide a queryable client');
       }

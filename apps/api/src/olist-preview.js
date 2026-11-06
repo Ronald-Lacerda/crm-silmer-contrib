@@ -70,10 +70,12 @@ export function createOlistPreview(database, options) {
       );
       const settingsRow = settingsRows.rows[0];
       const orderRows = await tx.query(
-        'SELECT id FROM crm.orders WHERE id=$1 FOR SHARE',
+        'SELECT id,cancelled_at FROM crm.orders WHERE id=$1 FOR SHARE',
         [input.orderId],
       );
       if (!orderRows.rows[0]) throw new OlistError('ORDER_NOT_FOUND', 404);
+      if (orderRows.rows[0].cancelled_at)
+        throw new OlistError('ORDER_CANCELLED');
       const scoped = {
         query: tx.query.bind(tx),
         transaction: async (/** @type {any} */ work) => work(tx),

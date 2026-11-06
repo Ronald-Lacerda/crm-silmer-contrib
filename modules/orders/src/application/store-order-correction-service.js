@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { OrderForbiddenError, OrderNotFoundError } from '../domain/errors.js';
 import { storeProduct } from '../domain/store-catalog.js';
 import { StoreOrderError } from '../domain/store-order.js';
+import { requireActiveOrder } from '../domain/order.js';
 
 /** @param {{repository: any, clock?: () => Date}} options */
 export function createStoreOrderCorrectionService({
@@ -29,6 +30,7 @@ export function createStoreOrderCorrectionService({
       }
       const current = await repository.findById(input.orderId);
       if (!current) throw new OrderNotFoundError();
+      requireActiveOrder(current);
       const product = storeProduct(current.ficha.loja?.produto.slug);
       const grade = current.ficha.items[0]?.grade;
       if (

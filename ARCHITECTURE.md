@@ -19,6 +19,20 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T23 — cancelamento local terminal (06/11/2026)
+
+A [ADR 068](docs/adr/068-cancelamento-local-terminal-pre-exportacao.md) concretiza
+OLIST-19, 21, 30, 45–47: marcador separado dos dois status, motivo cifrado e ACL
+comercial atual, com loja restrita a Admin. Versão, evento, auditoria, invalidação
+das exportações canceláveis e recibo compartilham a mesma transação.
+O lock de Pedido serializa cancelamento com reservas de venda e vínculo; efeito
+reservado/incerto/exportado/vinculado ou ID observado impede o cancelamento.
+Histórico, pagamento, checkout e Nota criada permanecem, enquanto os universos
+ativos excluem cancelados antes de contar/paginar. Sem chamada de cancelamento
+ERP, estorno ou substituição automática. Migration expand 0070, guardas de
+terminalidade e [runbook](docs/runbooks/olist-phase3.md#t23--cancelamento-local-terminal).
+Próximo T10; F3 aberto, sem despacho real, deploy ou piloto.
+
 ## OLIST-T09 — vínculo e reconciliação por leitura (06/11/2026)
 
 OLIST-13–18, 25, 30, 32, 36–39: Admin atual, sem herdar checkbox, confere venda

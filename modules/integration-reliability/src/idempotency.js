@@ -128,12 +128,14 @@ export class InMemoryIdempotencyRecordStore {
    *   correlationId: string,
    * }} identity
    * @param {() => Promise<T>} operation
+   * @param {(transaction?: unknown) => Promise<unknown>} [beforeExecute]
    * @returns {Promise<T>}
    */
-  async execute(identity, operation) {
+  async execute(identity, operation, beforeExecute) {
     requireNonEmpty(identity.scope, 'scope');
     requireNonEmpty(identity.key, 'key');
     requireNonEmpty(identity.fingerprint, 'fingerprint');
+    await beforeExecute?.();
     const storageKey = this.#storageKey(identity.scope, identity.key);
     const existing = this.#records.get(storageKey);
     if (existing) {
@@ -235,6 +237,7 @@ export class InMemoryIdempotencyRecordStore {
  *       correlationId: string,
  *     },
  *     operation: (transaction?: unknown) => Promise<unknown>,
+ *     beforeExecute?: (transaction?: unknown) => Promise<unknown>,
  *   ) => Promise<unknown> },
  * }} dependencies
  */
@@ -245,9 +248,10 @@ export function createIdempotentCommandExecutor(dependencies) {
    * @template T
    * @param {IdempotentCommandRequest} request
    * @param {(transaction?: unknown) => Promise<T>} effect
+   * @param {(transaction?: unknown) => Promise<unknown>} [beforeExecute]
    * @returns {Promise<T>}
    */
-  return async function execute(request, effect) {
+  return async function execute(request, effect, beforeExecute) {
     validateCommandRequest(request);
     const scope = `${request.actor}:${request.action}`;
     const fingerprint = fingerprintCommand({
@@ -286,6 +290,7 @@ export function createIdempotentCommandExecutor(dependencies) {
           );
           return response;
         },
+        beforeExecute,
       )
     );
   };
