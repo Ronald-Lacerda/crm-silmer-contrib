@@ -919,3 +919,169 @@ test('OLIST-T20b quantities and duplicate totals fit the PostgreSQL integer cont
     { code: 'SIZE_PRICING_INVALID' },
   );
 });
+
+/** @param {import('../modules/orders/src/domain/order.js').Order} order */
+function managedGroups(order) {
+  assert.ok(order.ficha.sizePricing);
+  return order.ficha.sizePricing;
+}
+
+test('OLIST-T20 completes an empty draft by identity, reorders lines and edits attributes without replacing IDs', async () => {
+  const { service, order } = await setup();
+  let saved = await pricingCommand(service, order, { action: 'initialize' });
+  saved = await pricingCommand(service, saved, {
+    action: 'remove_group',
+    groupId: managedGroups(saved)[0].id,
+  });
+  assert.deepEqual(saved.ficha.items, []);
+  saved = await pricingCommand(service, saved, {
+    action: 'add_group',
+    item: { ...syntheticItems()[0], grade: [] },
+  });
+  const groupId = managedGroups(saved)[0].id;
+  for (const size of ['M', 'G'])
+    saved = await pricingCommand(service, saved, {
+      action: 'add_line',
+      groupId,
+      size,
+      quantity: 10,
+    });
+  const [m, g] = managedGroups(saved)[0].lines;
+  for (const { line, subtotalCents } of [
+    { line: m, subtotalCents: 18000 },
+    { line: g, subtotalCents: 16000 },
+  ]) {
+    saved = await pricingCommand(service, saved, {
+      action: 'review_subtotal',
+      groupId,
+      lineId: line.id,
+      subtotalCents,
+    });
+  }
+  saved = await pricingCommand(service, saved, {
+    action: 'update_group',
+    groupId,
+    attributes: {},
+  });
+  saved = await pricingCommand(service, saved, {
+    action: 'update_group',
+    groupId,
+    attributes: { cor: saved.ficha.items[0].cor },
+  });
+  assert.ok(
+    managedGroups(saved)[0].lines.every((line) => line.subtotalReviewed),
+  );
+  saved = await pricingCommand(service, saved, {
+    action: 'reorder_lines',
+    groupId,
+    lineIds: [g.id, m.id],
+  });
+  assert.deepEqual(
+    saved.ficha.items[0].grade.map((line) => line.tamanho),
+    ['G', 'M'],
+  );
+  assert.deepEqual(
+    managedGroups(saved)[0].lines.map((line) => [
+      line.id,
+      line.subtotalCents,
+      line.subtotalReviewed,
+    ]),
+    [
+      [g.id, 16000, true],
+      [m.id, 18000, true],
+    ],
+  );
+  saved = await pricingCommand(service, saved, {
+    action: 'rename_line',
+    groupId,
+    lineId: m.id,
+    size: 'GG',
+  });
+  assert.equal(managedGroups(saved)[0].lines[1].id, m.id);
+  assert.equal(managedGroups(saved)[0].lines[1].subtotalReviewed, false);
+  assert.equal(saved.ficha.items[0].grade[1].tamanho, 'GG');
+  saved = await pricingCommand(service, saved, {
+    action: 'update_group',
+    groupId,
+    attributes: { cor: 'VERDE', quantidade_informada: 500 },
+  });
+  assert.equal(saved.ficha.items[0].cor, 'VERDE');
+  assert.equal(saved.totalPieces, 20);
+  assert.ok(
+    managedGroups(saved)[0].lines.every((line) => !line.subtotalReviewed),
+  );
+  assert.equal(managedGroups(saved)[0].id, groupId);
+  saved = await pricingCommand(service, saved, {
+    action: 'remove_line',
+    groupId,
+    lineId: g.id,
+  });
+  assert.equal(saved.totalPieces, 10);
+  assert.equal(managedGroups(saved)[0].lines[0].id, m.id);
+  saved = await pricingCommand(service, saved, {
+    action: 'remove_line',
+    groupId,
+    lineId: m.id,
+  });
+  assert.equal(saved.totalPieces, 0);
+  assert.deepEqual(saved.ficha.items[0].grade, []);
+});
+
+test('OLIST-T20 rejects identity replacement, duplicate sizes and malformed permutations atomically', async () => {
+  const { service, repository, order } = await pricedDraft();
+  const saved = await pricingCommand(service, order, { action: 'initialize' });
+  const group = managedGroups(saved)[0];
+  const target = { groupId: group.id, lineId: group.lines[0].id };
+  const invalidCommands = [
+    { action: 'update_group', groupId: group.id, attributes: { grade: [] } },
+    { action: 'update_group', groupId: group.id, attributes: { id: group.id } },
+    {
+      action: 'update_group',
+      groupId: group.id,
+      attributes: { subtotalReviewed: true },
+    },
+    { action: 'add_group', item: { ...syntheticItems()[0], id: group.id } },
+    { action: 'add_line', groupId: group.id, size: 'M', quantity: 1 },
+    { action: 'add_line', groupId: group.id, size: 'G', quantity: 2147483647 },
+    {
+      action: 'add_line',
+      groupId: group.id,
+      size: 'G',
+      quantity: 1,
+      subtotalCents: 5,
+    },
+    { action: 'reorder_lines', groupId: group.id, lineIds: [] },
+    {
+      action: 'reorder_lines',
+      groupId: group.id,
+      lineIds: [managedGroups(saved)[1].lines[0].id],
+    },
+    {
+      action: 'remove_line',
+      groupId: group.id,
+      lineId: managedGroups(saved)[1].lines[0].id,
+    },
+    { action: 'rename_line', ...target, size: '' },
+    { action: 'remove_group', groupId: 'unknown' },
+  ];
+  for (const value of invalidCommands) {
+    await assert.rejects(pricingCommand(service, saved, value));
+    assert.deepEqual((await repository.findById(saved.id))?.ficha, saved.ficha);
+    assert.equal((await repository.findById(saved.id))?.version, saved.version);
+  }
+  const added = await pricingCommand(service, saved, {
+    action: 'add_line',
+    groupId: group.id,
+    size: 'G',
+    quantity: 1,
+  });
+  await assert.rejects(
+    pricingCommand(service, added, {
+      action: 'rename_line',
+      ...target,
+      size: 'G',
+    }),
+    { code: 'SIZE_PRICING_INVALID' },
+  );
+  assert.equal((await repository.findById(saved.id))?.version, added.version);
+});

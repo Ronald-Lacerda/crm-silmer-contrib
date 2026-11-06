@@ -1708,18 +1708,50 @@ if (connectionString) {
     ).rows;
     assert.equal(events.length, 4);
     assert.ok(!JSON.stringify(events).includes('subtotal'));
+    let edited = await apply(restarted, changed, {
+      action: 'add_line',
+      groupId: group.id,
+      size: 'G',
+      quantity: 2,
+    });
+    const gId = edited.ficha.sizePricing[0].lines[1].id;
+    edited = await apply(restarted, edited, {
+      action: 'reorder_lines',
+      groupId: group.id,
+      lineIds: [gId, target.lineId],
+    });
+    assert.deepEqual(
+      edited.ficha.items[0].grade.map(
+        (/** @type {any} */ line) => line.tamanho,
+      ),
+      ['G', 'M'],
+    );
+    edited = await apply(restarted, edited, {
+      action: 'update_group',
+      groupId: group.id,
+      attributes: { cor: 'VERDE' },
+    });
+    edited = await apply(restarted, edited, {
+      action: 'remove_line',
+      groupId: group.id,
+      lineId: gId,
+    });
+    const roundtrip = await service.get(order.id);
+    assert.equal(roundtrip.ficha.items[0].cor, 'VERDE');
+    assert.equal(roundtrip.ficha.sizePricing?.[0].lines[0].id, target.lineId);
+    assert.deepEqual(roundtrip.ficha.sizePricing, edited.ficha.sizePricing);
     await pool.query(
       'UPDATE crm.conversations SET assigned_user_id = NULL WHERE id=$1',
       [conversationId],
     );
     await assert.rejects(
-      apply(service, changed, {
+      apply(service, edited, {
         action: 'review_subtotal',
         ...target,
         subtotalCents: 200,
       }),
       { code: 'FORBIDDEN' },
     );
-    assert.equal((await restarted.get(order.id)).version, changed.version);
+    assert.equal((await restarted.get(order.id)).version, edited.version);
   });
 }

@@ -6194,6 +6194,92 @@ components:
           properties:
             action: { const: duplicate_group }
             groupId: { type: string, format: uuid }
+        - type: object
+          additionalProperties: false
+          required: [action, item]
+          properties:
+            action: { const: add_group }
+            item: { $ref: '#/components/schemas/FichaItem' }
+        - type: object
+          additionalProperties: false
+          required: [action, groupId]
+          properties:
+            action: { const: remove_group }
+            groupId: { type: string, format: uuid }
+        - type: object
+          additionalProperties: false
+          required: [action, groupId, attributes]
+          properties:
+            action: { const: update_group }
+            groupId: { type: string, format: uuid }
+            attributes: { $ref: '#/components/schemas/SizePricingAttributes' }
+        - type: object
+          additionalProperties: false
+          required: [action, groupId, size, quantity]
+          properties:
+            action: { const: add_line }
+            groupId: { type: string, format: uuid }
+            size: { type: string, minLength: 1, maxLength: 200 }
+            quantity: { type: integer, minimum: 1, maximum: 2147483647 }
+        - type: object
+          additionalProperties: false
+          required: [action, groupId, lineId]
+          properties:
+            action: { const: remove_line }
+            groupId: { type: string, format: uuid }
+            lineId: { type: string, format: uuid }
+        - type: object
+          additionalProperties: false
+          required: [action, groupId, lineId, size]
+          properties:
+            action: { const: rename_line }
+            groupId: { type: string, format: uuid }
+            lineId: { type: string, format: uuid }
+            size: { type: string, minLength: 1, maxLength: 200 }
+        - type: object
+          additionalProperties: false
+          required: [action, groupId, lineIds]
+          properties:
+            action: { const: reorder_lines }
+            groupId: { type: string, format: uuid }
+            lineIds:
+              type: array
+              uniqueItems: true
+              items: { type: string, format: uuid }
+    SizePricingAttributes:
+      type: object
+      additionalProperties: false
+      description: Atributos parciais da peça, sem grade/IDs/preços. Mudança invalida revisão das linhas.
+      properties:
+        tipo: { $ref: '#/components/schemas/FichaItem/properties/tipo' }
+        tipo_servico:
+          { $ref: '#/components/schemas/FichaItem/properties/tipo_servico' }
+        cor: { $ref: '#/components/schemas/FichaItem/properties/cor' }
+        estampa: { $ref: '#/components/schemas/FichaItem/properties/estampa' }
+        gola: { $ref: '#/components/schemas/FichaItem/properties/gola' }
+        modelo: { $ref: '#/components/schemas/FichaItem/properties/modelo' }
+        cor_frente:
+          { $ref: '#/components/schemas/FichaItem/properties/cor_frente' }
+        cor_costas:
+          { $ref: '#/components/schemas/FichaItem/properties/cor_costas' }
+        cor_manga_direita:
+          {
+            $ref: '#/components/schemas/FichaItem/properties/cor_manga_direita',
+          }
+        cor_manga_esquerda:
+          {
+            $ref: '#/components/schemas/FichaItem/properties/cor_manga_esquerda',
+          }
+        vies_gola:
+          { $ref: '#/components/schemas/FichaItem/properties/vies_gola' }
+        vies_mangas:
+          { $ref: '#/components/schemas/FichaItem/properties/vies_mangas' }
+        malhas: { $ref: '#/components/schemas/FichaItem/properties/malhas' }
+        publico: { $ref: '#/components/schemas/FichaItem/properties/publico' }
+        quantidade_informada:
+          {
+            $ref: '#/components/schemas/FichaItem/properties/quantidade_informada',
+          }
     OrderSectionPatchRequest:
       type: object
       additionalProperties: false

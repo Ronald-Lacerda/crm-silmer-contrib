@@ -1,3 +1,4 @@
+import { blankItem, validateItems } from './ficha.js';
 import { OrderConflictError, OrderValidationError } from './errors.js';
 import {
   calculateSizePricing,
@@ -32,16 +33,8 @@ function requirePersistableQuantity(groups) {
   if (total > 2147483647n) invalid();
 }
 
-/**
- * T20b: adopt only a never-confirmed draft. IDs and review are server state;
- * commands reference existing IDs rather than importing a replacement graph.
- * Positional alignment is changed only here, together with the encrypted ficha.
- * T21/T24/T26 will add confirmation, shop and historical enrichment adapters.
- * @param {import('./order.js').Order} order
- * @param {unknown} value
- * @returns {import('./ficha.js').Ficha}
- */
-export function applySizePricingCommand(order, value) {
+/** @param {unknown} value @returns {Record<string, unknown>} */
+function record(value) {
   if (
     !value ||
     typeof value !== 'object' ||
@@ -49,46 +42,30 @@ export function applySizePricingCommand(order, value) {
     Object.getPrototypeOf(value) !== Object.prototype
   )
     invalid();
-  const command = /** @type {Record<string, unknown>} */ (value);
-  const fields = {
-    initialize: ['action'],
-    review_subtotal: ['action', 'groupId', 'lineId', 'subtotalCents'],
-    change_quantity: ['action', 'groupId', 'lineId', 'quantity'],
-    reorder_groups: ['action', 'groupIds'],
-    duplicate_group: ['action', 'groupId'],
-  };
-  const action = command.action;
-  if (typeof action !== 'string' || !Object.hasOwn(fields, action)) invalid();
-  const keys = fields[/** @type {keyof typeof fields} */ (action)];
+  return /** @type {Record<string, unknown>} */ (value);
+}
+
+/** @param {unknown} value @param {string[]} expected @returns {number[]} */
+function permutation(value, expected) {
   if (
-    Object.keys(command).length !== keys.length ||
-    keys.some((key) => !Object.hasOwn(command, key))
+    !Array.isArray(value) ||
+    Object.keys(value).length !== value.length ||
+    value.length !== expected.length ||
+    new Set(value).size !== expected.length ||
+    Object.keys(value).some((key, i) => key !== String(i)) ||
+    value.some((id) => typeof id !== 'string' || !expected.includes(id))
   )
     invalid();
-  if (order.origin === 'loja') conflict('ORDER_LOCKED');
-  if (order.status !== 'pendente') conflict('ORDER_STATUS_CONFLICT');
-  if (order.confirmedAt !== null)
-    conflict('SIZE_PRICING_LEGACY_REQUIRES_ADAPTER');
-  const ficha = structuredClone(order.ficha);
-  if (action === 'initialize') {
-    if (ficha.sizePricing !== undefined)
-      conflict('SIZE_PRICING_ALREADY_INITIALIZED');
-    ficha.sizePricing = createSizePricing(
-      ficha.items.map((item) =>
-        item.grade.map((line) => ({
-          size: line.tamanho,
-          quantity: line.quantidade,
-        })),
-      ),
-    );
-    requirePersistableQuantity(ficha.sizePricing);
-    return ficha;
-  }
+  return value.map((id) => expected.indexOf(id));
+}
+
+/** Validate prices against the same ficha that is persisted/confirmed.
+ * @param {import('./ficha.js').Ficha} ficha */
+export function sizePricingSummary(ficha) {
   if (ficha.sizePricing === undefined) conflict('SIZE_PRICING_NOT_INITIALIZED');
   const groups = ficha.sizePricing;
-  // Refuse malformed persisted state before any transition. No matching by
-  // size across garments, by content, or by a browser-supplied ordinal.
-  calculateSizePricing(groups);
+  const summary = calculateSizePricing(groups);
+  requirePersistableQuantity(groups);
   if (
     groups.length !== ficha.items.length ||
     groups.some((group, index) => {
@@ -104,35 +81,150 @@ export function applySizePricingCommand(order, value) {
     })
   )
     invalid();
-  const groupIndex = groups.findIndex((group) => group.id === command.groupId);
-  const group = groups[groupIndex];
-  if (action === 'reorder_groups') {
-    const ids = command.groupIds;
-    if (
-      !Array.isArray(ids) ||
-      Object.keys(ids).length !== ids.length ||
-      ids.length !== groups.length ||
-      new Set(ids).size !== groups.length ||
-      ids.some(
-        (id) => typeof id !== 'string' || !groups.some((g) => g.id === id),
-      )
-    )
-      invalid();
-    const indices = ids.map((id) => groups.findIndex((g) => g.id === id));
-    ficha.sizePricing = indices.map((index) => groups[index]);
-    ficha.items = indices.map((index) => ficha.items[index]);
+  return summary;
+}
+
+/**
+ * OLIST-T20: server-issued IDs; explicit commands never import a replacement
+ * pricing graph. Grade and prices move in the same encrypted write.
+ * @param {import('./order.js').Order} order
+ * @param {unknown} value
+ * @returns {import('./ficha.js').Ficha}
+ */
+export function applySizePricingCommand(order, value) {
+  const command = record(value);
+  const fields = {
+    initialize: ['action'],
+    review_subtotal: ['action', 'groupId', 'lineId', 'subtotalCents'],
+    change_quantity: ['action', 'groupId', 'lineId', 'quantity'],
+    reorder_groups: ['action', 'groupIds'],
+    duplicate_group: ['action', 'groupId'],
+    add_group: ['action', 'item'],
+    remove_group: ['action', 'groupId'],
+    update_group: ['action', 'groupId', 'attributes'],
+    add_line: ['action', 'groupId', 'size', 'quantity'],
+    remove_line: ['action', 'groupId', 'lineId'],
+    rename_line: ['action', 'groupId', 'lineId', 'size'],
+    reorder_lines: ['action', 'groupId', 'lineIds'],
+  };
+  const action = command.action;
+  if (typeof action !== 'string' || !Object.hasOwn(fields, action)) invalid();
+  const keys = fields[/** @type {keyof typeof fields} */ (action)];
+  if (
+    Object.keys(command).length !== keys.length ||
+    keys.some((key) => !Object.hasOwn(command, key))
+  )
+    invalid();
+  if (order.origin === 'loja') conflict('ORDER_LOCKED');
+  if (order.status !== 'pendente') conflict('ORDER_STATUS_CONFLICT');
+  const ficha = structuredClone(order.ficha);
+  if (action === 'initialize') {
+    if (ficha.sizePricing !== undefined)
+      conflict('SIZE_PRICING_ALREADY_INITIALIZED');
+    if (order.confirmedAt !== null)
+      conflict('SIZE_PRICING_LEGACY_REQUIRES_ADAPTER');
+    ficha.sizePricing = createSizePricing(
+      ficha.items.map((item) =>
+        item.grade.map((line) => ({
+          size: line.tamanho,
+          quantity: line.quantidade,
+        })),
+      ),
+    );
+    sizePricingSummary(ficha);
+    return ficha;
+  }
+  sizePricingSummary(ficha);
+  const groups = /** @type {import('./size-pricing.js').SizePriceGroup[]} */ (
+    ficha.sizePricing
+  );
+  if (action === 'add_group') {
+    const [item] = validateItems([command.item]);
+    const [group] = createSizePricing([
+      item.grade.map((line) => ({
+        size: line.tamanho,
+        quantity: line.quantidade,
+      })),
+    ]);
+    groups.push(group);
+    ficha.items.push(item);
+  } else if (action === 'reorder_groups') {
+    const indices = permutation(
+      command.groupIds,
+      groups.map((g) => g.id),
+    );
+    ficha.sizePricing = indices.map((i) => groups[i]);
+    ficha.items = indices.map((i) => ficha.items[i]);
   } else {
+    const groupIndex = groups.findIndex((g) => g.id === command.groupId);
+    const group = groups[groupIndex];
     if (!group || typeof command.groupId !== 'string') invalid();
+    const item = ficha.items[groupIndex];
     if (action === 'duplicate_group') {
       ficha.sizePricing = duplicateSizePricingGroup(groups, command.groupId);
-      ficha.items.push(structuredClone(ficha.items[groupIndex]));
+      ficha.items.push(structuredClone(item));
+    } else if (action === 'remove_group') {
+      groups.splice(groupIndex, 1);
+      ficha.items.splice(groupIndex, 1);
+    } else if (action === 'update_group') {
+      const attributes = record(command.attributes);
+      if (
+        Object.keys(attributes).some(
+          (key) => key === 'grade' || !Object.hasOwn(blankItem(), key),
+        )
+      )
+        invalid();
+      const [updated] = validateItems([{ ...item, ...attributes }]);
+      if (
+        JSON.stringify(updated) !== JSON.stringify(validateItems([item])[0])
+      ) {
+        ficha.items[groupIndex] = updated;
+        for (const line of group.lines) line.subtotalReviewed = false;
+      }
+    } else if (action === 'add_line') {
+      const [seed] = createSizePricing([
+        [
+          {
+            size: /** @type {string} */ (command.size),
+            quantity: /** @type {number} */ (command.quantity),
+          },
+        ],
+      ]);
+      const [line] = seed.lines;
+      group.lines.push(line);
+      item.grade.push({ tamanho: line.size, quantidade: line.quantity });
+    } else if (action === 'reorder_lines') {
+      const indices = permutation(
+        command.lineIds,
+        group.lines.map((line) => line.id),
+      );
+      group.lines = indices.map((i) => group.lines[i]);
+      item.grade = indices.map((i) => item.grade[i]);
     } else {
       if (typeof command.lineId !== 'string') invalid();
       const lineIndex = group.lines.findIndex(
         (line) => line.id === command.lineId,
       );
       if (lineIndex < 0) invalid();
-      if (action === 'review_subtotal') {
+      const line = group.lines[lineIndex];
+      if (action === 'remove_line') {
+        group.lines.splice(lineIndex, 1);
+        item.grade.splice(lineIndex, 1);
+      } else if (action === 'rename_line') {
+        const [seed] = createSizePricing([
+          [
+            {
+              size: /** @type {string} */ (command.size),
+              quantity: line.quantity,
+            },
+          ],
+        ]);
+        if (line.size !== seed.lines[0].size) {
+          line.size = seed.lines[0].size;
+          line.subtotalReviewed = false;
+          item.grade[lineIndex].tamanho = line.size;
+        }
+      } else if (action === 'review_subtotal') {
         if (
           command.subtotalCents !== null &&
           typeof command.subtotalCents !== 'number'
@@ -152,11 +244,10 @@ export function applySizePricingCommand(order, value) {
           command.lineId,
           command.quantity,
         );
-        ficha.items[groupIndex].grade[lineIndex].quantidade = command.quantity;
+        item.grade[lineIndex].quantidade = command.quantity;
       }
     }
   }
-  calculateSizePricing(ficha.sizePricing);
-  requirePersistableQuantity(ficha.sizePricing);
+  sizePricingSummary(ficha);
   return ficha;
 }

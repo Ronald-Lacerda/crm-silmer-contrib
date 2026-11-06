@@ -19,6 +19,15 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T20 — composição e edição por identidade
+
+Comandos por identidade completam edição de atributos, grupos e linhas,
+inclusão/remoção, alteração de tamanho e reordenação. Grade e preços viajam na
+mesma escrita cifrada com ACL comercial, versão e idempotência. Mudança real
+exige revisão; reordenação e atualização sem mudança preservam aprovação.
+Legado/loja continuam sem reescrita e a UI pertence à Fase 4. T20 concluída no
+domínio/API, com T21 ainda pendente. [Contrato](docs/runbooks/olist-phase3.md).
+
 ## Olist — início da Fase 3 (05/11/2026)
 
 OLIST-T20b persiste composição opcional no envelope da ficha, sem migration

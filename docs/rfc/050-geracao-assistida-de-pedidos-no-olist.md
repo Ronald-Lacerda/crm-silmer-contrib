@@ -17,8 +17,8 @@ F1/T02 concluídos no escopo `exact-cent-v1`; Fase 2 (T03/T04/T19/T05)
 implementada e validada localmente em 05/11/2026, no
 [commit 6a79cc8a](https://github.com/romulosutil/crm-silmer/commit/6a79cc8aecc3111dbfad5b8b14220f3b3df860aa).
 Fase 3 iniciada pela fatia T20b de composição persistida opt-in
-([contrato e limites](../runbooks/olist-phase3.md)); T20/T21 e o gate F3
-continuam abertos. As fases 4–6 permanecem pendentes. A geração real continua
+([contrato e limites](../runbooks/olist-phase3.md)); T20 concluída em domínio/API,
+T21 e o gate F3 continuam abertos. As fases 4–6 permanecem pendentes. A geração real continua
 desligada, sem deploy, conexão real homologada ou piloto nesta entrega. A revisão substitui
 as recomendações iniciais de preço unitário digitado, cadastro apenas existente, posse do pedido e edição após
 envio. Não há issue/PR específica vinculada nesta etapa.
@@ -772,15 +772,15 @@ geração e handlers de exportação continuam desligados nesta fase.
 
 ### Fase 3 Melhorias CRM e sequência confiável
 
-- [ ] **OLIST-T20** IDs estáveis de grupo/linha, subtotais e revisão humana
+- [x] **OLIST-T20** IDs estáveis de grupo/linha, subtotais e revisão humana
       após quantidade; migração/compatibilidade estrutural. OLIST-09–10, 29, 42–44.
       Dono Backend. Depende T03. Evidência: reordenação/duplicação/M em dois grupos.
       Preparação local autorizada pelo PO em 05/11: **T20a/T21a** implementam
       [núcleo de domínio](../integrations/olist/implementation-progress.md),
       com IDs, soma exata e revisão após quantidade. Não integra API/banco/UI,
       não fecha T20/T21 nem libera geração ERP ou o gate F1.
-      T20b inicia persistência cifrada/comandos humanos por ID; faltam edição
-      de atributos, inclusão/remoção e reordenação de linhas.
+      T20 completa persistência cifrada e comandos humanos por ID: atributos,
+      inclusão/remoção de grupos/linhas, tamanhos e reordenação de linhas.
       [Contrato, bloqueios e rollback](../runbooks/olist-phase3.md).
 - [ ] **OLIST-T21** Domínio/API de subtotal e total calculado; confirmação sem
       valor livre e contrato antigo limitado à igualdade calculada. OLIST-10,

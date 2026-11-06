@@ -1,6 +1,6 @@
 # Olist — início da Fase 3: composição persistida
 
-OLIST-T20b, fatia parcial de OLIST-T20. Requisitos OLIST-09, 29, 42–44;
+OLIST-T20, composição persistida e edição completa por identidade. Requisitos OLIST-09, 29, 42–44;
 [ADR 057](../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
 
@@ -27,6 +27,15 @@ Ações posteriores, sempre com IDs já emitidos:
 - `reorder_groups`: groupIds, permutação completa dos IDs; move grupo/peça
   juntos. Tamanho M em duas peças conserva suas identidades e preços próprios.
 - `duplicate_group`: groupId; copia a peça com IDs novos e revisão falsa.
+- `add_group`/`remove_group`: cria peça a partir de item validado, com IDs novos
+  e subtotais ausentes, ou remove pelo groupId.
+- `update_group`: groupId e attributes parciais, sem grade/IDs/preços; mudança
+  real de atributos invalida revisão de todas as linhas, sem perder IDs.
+- `add_line`/`remove_line`: groupId mais size/quantity ou lineId; inclusão
+  recebe novo ID e preço ausente, remoção não reaproveita identidades.
+- `rename_line`: groupId, lineId e size; preserva ID e exige revisão se mudar.
+- `reorder_lines`: groupId e lineIds, permutação completa; grade e preços
+  permanecem alinhados, sem invalidar revisão por mera reordenação.
 
 Campos extras, identidade alheia, coerção, centavos fracionários, somas com
 overflow e total de peças acima de 2147483647 são recusados antes da escrita.
@@ -34,17 +43,15 @@ Subtotal 100/quantidade 3 é comercialmente válido; esta fatia não chama ERP.
 
 ## Limites deliberados e próximo trabalho
 
-T20/T21 e o gate F3 permanecem abertos. Não há UI de adoção, total monetário
+T20 concluída no domínio/API; T21 e o gate F3 permanecem abertos. Não há UI de adoção, total monetário
 autoritativo publicado, confirmação calculada ou exportação. A confirmação de
 um pedido adotado responde `SIZE_PRICING_CONFIRMATION_PENDING` até T21.
 `finalAmountCents`, snapshots confirmados, status, pagamentos e gateway não
 são alterados por estes comandos.
 
 Após adoção, a substituição antiga de items é recusada com
-`SIZE_PRICING_ITEMS_MANAGED`. Ainda faltam comandos por identidade para
-acrescentar/remover grupos/linhas, reordenar linhas e editar atributos.
-Não adotar pedidos operacionais: composição vazia/incompleta não pode ser
-completada pela UI antiga. A projeção automática retorna applied=false e
+`SIZE_PRICING_ITEMS_MANAGED`. A edição completa usa os comandos por identidade acima.
+Não adotar pedidos operacionais: a UI de grade ainda pertence a T12/Fase 4. A projeção automática retorna applied=false e
 reason=size_pricing_managed antes de escrever, preservando a ficha humana.
 Outras seções humanas permanecem editáveis e preservam a composição.
 
@@ -97,3 +104,14 @@ corrigir limite agregado de quantidade. Não é evidência de produção.
   existentes (um baixo/cinco moderados), sem atualizar dependências.
 
 Os logs sintéticos ficam em var/olist-phase3-*.log, fora do versionamento.
+
+
+## Fechamento T20 — 05/11/2026
+
+A composição vazia pode ser completada por comandos autorizados; IDs são
+persistidos, emitidos somente pelo servidor e não são reconstruídos por
+posição/conteúdo. Mudança sem alteração real não invalida revisão. A evolução
+é aditiva no envelope, sem reescrever legado; enriquecer confirmado continua
+em T26. As verificações incluem aplicação/API, roundtrip cifrado, concorrência
+e grade/linhas reordenadas. Interface de edição e confirmação calculada não
+são declaradas entregues por T20.

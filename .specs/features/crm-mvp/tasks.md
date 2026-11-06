@@ -146,11 +146,11 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
       reordenação de grupos e duplicação; grade/composição na mesma escrita.
 - [x] Bloquear perda de identidade por cliente antigo/projeção automática,
       adoção de loja/confirmado/reaberto histórico e confirmação livre após adoção.
-- [ ] Completar T20: edição de atributos, inclusão/remoção e reordenação de linhas.
+- [x] Completar T20: edição de atributos, inclusão/remoção e reordenação de linhas.
 - [ ] T21: total calculado autoritativo e confirmação; T24/T26: loja/legado.
 
 Requisitos OLIST-09, 29, 42–44. [Contrato e limites](../../../docs/runbooks/olist-phase3.md).
-Fatia preparatória; T20/T21/F3 permanecem abertos. Nenhuma adoção operacional,
+T20 completa no domínio/API; T21/F3 permanecem abertos. Nenhuma adoção operacional,
 UI, geração ERP, deploy ou piloto liberado.
 
 ## OLIST-F2 — Fase 2 concluída (05/11/2026)

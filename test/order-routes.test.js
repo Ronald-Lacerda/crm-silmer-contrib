@@ -2055,3 +2055,48 @@ test('OLIST-T20b sections route applies write guards and exposes safe pricing er
   });
   assert.equal(forbidden.statusCode, 403);
 });
+
+test('OLIST-T20 API creates and edits composition from an empty adopted draft with version fencing', async (t) => {
+  const { api, runtime } = orderHarness({ writeActor: SELLER });
+  t.after(() => api.close());
+  let order = await createPending(runtime, 'conversation-1');
+  let sequence = 0;
+  const apply = async (/** @type {unknown} */ value) => {
+    const response = await api.inject({
+      method: 'PATCH',
+      url: `/api/v1/orders/${order.id}/sections/size-pricing`,
+      headers: {
+        ...readHeaders,
+        'x-csrf-token': 'csrf-synthetic',
+        'idempotency-key': `t20-api-${sequence++}`,
+      },
+      payload: { expectedVersion: order.version, value },
+    });
+    assert.equal(response.statusCode, 200);
+    order = response.json().order;
+  };
+  await apply({ action: 'initialize' });
+  for (const group of [...order.ficha.sizePricing])
+    await apply({ action: 'remove_group', groupId: group.id });
+  await apply({
+    action: 'add_group',
+    item: { ...syntheticItems()[0], grade: [] },
+  });
+  const groupId = order.ficha.sizePricing[0].id;
+  await apply({ action: 'add_line', groupId, size: 'M', quantity: 2 });
+  const lineId = order.ficha.sizePricing[0].lines[0].id;
+  await apply({
+    action: 'update_group',
+    groupId,
+    attributes: { cor: 'VERDE' },
+  });
+  await apply({
+    action: 'review_subtotal',
+    groupId,
+    lineId,
+    subtotalCents: 999,
+  });
+  assert.equal(order.totalPieces, 2);
+  assert.equal(order.ficha.sizePricing[0].lines[0].subtotalReviewed, true);
+  assert.equal(order.ficha.items[0].cor, 'VERDE');
+});
