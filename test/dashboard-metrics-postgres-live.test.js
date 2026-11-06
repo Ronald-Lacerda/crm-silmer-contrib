@@ -131,6 +131,8 @@ test(
     const sellerB = await user('b', 'Vendedor');
     const sellerC = await user('c', 'Vendedor');
     const sellerD = await user('d', 'Vendedor');
+    const sellerE = await user('e', 'Vendedor');
+    const sellerF = await user('f', 'Vendedor');
     const admin = await user('admin', 'Vendedor', true);
     const financial = await user('finance', 'Financeiro');
 
@@ -417,6 +419,31 @@ test(
       `Motivo sintético (repasse para ${sellerB.id})`,
     );
 
+    // Claim and first response never overlap (RFC 048). Pending customer
+    // message at the claim: request 10:00, claim 10:20, reply 10:25.
+    const pendingAtClaim = await conversation(
+      sp('2026-11-04T09:55'),
+      sellerE.id,
+    );
+    await handoff(pendingAtClaim, sp('2026-11-04T10:00'), {
+      by: sellerE.id,
+      at: sp('2026-11-04T10:20'),
+    });
+    await reply(pendingAtClaim, sellerE.id, sp('2026-11-04T10:25'));
+    // Nothing pending at the claim (already answered): the first response
+    // starts at the next customer message, 10:30, answered at 10:34.
+    const answeredBefore = await conversation(
+      sp('2026-11-04T09:40'),
+      sellerF.id,
+    );
+    await reply(answeredBefore, sellerF.id, sp('2026-11-04T09:45'));
+    await handoff(answeredBefore, sp('2026-11-04T09:55'), {
+      by: sellerF.id,
+      at: sp('2026-11-04T10:00'),
+    });
+    await message(answeredBefore, sp('2026-11-04T10:30'));
+    await reply(answeredBefore, sellerF.id, sp('2026-11-04T10:34'));
+
     // Seller C answered and was later disabled: authorship is preserved.
     const inactive = await conversation(sp('2026-11-03T10:00'), sellerC.id);
     await handoff(inactive, sp('2026-11-03T10:00'), {
@@ -459,10 +486,11 @@ test(
       medianMinutes: 3,
       p90Minutes: 7.6,
     });
+    // From the claim: 4, 8, 12, 14 and 15 minutes.
     assert.deepEqual(row(sellerA).firstResponse, {
       samples: 5,
-      medianMinutes: 15,
-      p90Minutes: 22.2,
+      medianMinutes: 12,
+      p90Minutes: 14.6,
       openCount: 0,
       oldestOpenMinutes: null,
       closedWithoutReply: 0,
@@ -480,12 +508,13 @@ test(
       medianMinutes: 5,
       p90Minutes: null,
     });
+    // 12:30 -> 13:05 is 5 business minutes; the open one waits since 14:05.
     assert.deepEqual(row(sellerB).firstResponse, {
       samples: 1,
-      medianMinutes: 10,
+      medianMinutes: 5,
       p90Minutes: null,
       openCount: 1,
-      oldestOpenMinutes: 60,
+      oldestOpenMinutes: 55,
       closedWithoutReply: 1,
     });
     assert.deepEqual(row(sellerB).unansweredNow, {
@@ -497,7 +526,18 @@ test(
 
     assert.equal(row(sellerC).active, false);
     assert.equal(row(sellerC).claim.samples, 1);
-    assert.equal(row(sellerC).firstResponse.medianMinutes, 6);
+    assert.equal(row(sellerC).firstResponse.medianMinutes, 4);
+    assert.deepEqual(row(sellerE).claim, {
+      samples: 1,
+      medianMinutes: 20,
+      p90Minutes: null,
+    });
+    assert.equal(row(sellerE).firstResponse.samples, 1);
+    assert.equal(row(sellerE).firstResponse.medianMinutes, 5);
+    assert.equal(row(sellerF).claim.medianMinutes, 5);
+    assert.equal(row(sellerF).firstResponse.samples, 1);
+    assert.equal(row(sellerF).firstResponse.medianMinutes, 4);
+    assert.equal(row(sellerF).unansweredEpisodes.count, 0);
     assert.equal(row(sellerD).claim.samples, 1);
     assert.equal(row(sellerD).claim.medianMinutes, 0);
     assert.equal(row(sellerD).firstResponse.medianMinutes, 1);

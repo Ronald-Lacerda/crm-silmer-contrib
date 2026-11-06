@@ -39,7 +39,8 @@ function calendarDay(value) {
 
 /** Service metrics of a São Paulo calendar window, in business minutes.
  * Cohort = seller handoffs created in the window; credit goes to who claimed
- * it. Unanswered episodes are dated and credited at the instant the wait
+ * it. Time to claim runs from the request to the claim; the first response
+ * starts at the claim (or the next customer message) so they never overlap. Unanswered episodes are dated and credited at the instant the wait
  * crossed the threshold, using the conversation's ownership history.
  * @param {{query:(sql:string,values?:unknown[])=>Promise<{rows:any[]}>}} database
  * @param {{from:string,to:string,actorId:string,manager:boolean,now:Date}} input
@@ -67,24 +68,50 @@ export async function readServiceMetrics(database, input) {
          FROM crm.handoff_history history
          WHERE history.handoff_id = h.id AND history.from_status = 'pending'
            AND history.to_status = 'accepted' AND history.assigned_user_id IS NOT NULL
+           AND history.occurred_at <= bounds.now_at
          ORDER BY history.occurred_at, history.resulting_version LIMIT 1
        ) claim ON true
      ), claimed AS (
+       -- RFC 048: the first response does not overlap the time to claim. It
+       -- starts at the claim when a customer message is pending (no effective
+       -- human reply after it) at that instant; otherwise at the first
+       -- customer message after the claim. Without either there is nothing to
+       -- answer yet: no sample and nothing open.
        SELECT cohort.claimer AS user_id,
               crm.business_minutes_v1(cohort.created_at, cohort.claimed_at)::float8 AS claim_minutes,
               CASE WHEN reply.at IS NOT NULL
-                THEN crm.business_minutes_v1(cohort.created_at, reply.at)::float8 END AS reply_minutes,
-              reply.at IS NULL AND cohort.terminal_at IS NULL AS open,
-              reply.at IS NULL AND cohort.terminal_at IS NOT NULL AS closed_without_reply,
-              CASE WHEN reply.at IS NULL AND cohort.terminal_at IS NULL
-                THEN crm.business_minutes_v1(cohort.created_at, bounds.now_at) END AS open_minutes
+                THEN crm.business_minutes_v1(started.at, reply.at)::float8 END AS reply_minutes,
+              started.at IS NOT NULL AND reply.at IS NULL AND cohort.terminal_at IS NULL AS open,
+              started.at IS NOT NULL AND reply.at IS NULL AND cohort.terminal_at IS NOT NULL
+                AS closed_without_reply,
+              CASE WHEN started.at IS NOT NULL AND reply.at IS NULL AND cohort.terminal_at IS NULL
+                THEN crm.business_minutes_v1(started.at, bounds.now_at) END AS open_minutes
        FROM cohort CROSS JOIN bounds
+       CROSS JOIN LATERAL (
+         SELECT
+           (SELECT max(i.occurred_at) FROM crm.messages i
+            WHERE i.conversation_id = cohort.conversation_id AND i.direction = 'inbound'
+              AND i.author_kind = 'contact' AND i.occurred_at <= cohort.claimed_at) AS last_inbound,
+           (SELECT max(coalesce(r.sent_at, r.occurred_at)) FROM crm.messages r
+            WHERE r.conversation_id = cohort.conversation_id AND ${EFFECTIVE_HUMAN_SEND('r')}
+              AND coalesce(r.sent_at, r.occurred_at) <= cohort.claimed_at) AS last_reply,
+           (SELECT min(i.occurred_at) FROM crm.messages i
+            WHERE i.conversation_id = cohort.conversation_id AND i.direction = 'inbound'
+              AND i.author_kind = 'contact' AND i.occurred_at > cohort.claimed_at
+              AND i.occurred_at <= bounds.now_at) AS next_inbound
+       ) at_claim
+       CROSS JOIN LATERAL (
+         SELECT CASE
+           WHEN at_claim.last_inbound IS NOT NULL
+             AND (at_claim.last_reply IS NULL OR at_claim.last_reply < at_claim.last_inbound)
+           THEN cohort.claimed_at ELSE at_claim.next_inbound END AS at
+       ) started
        LEFT JOIN LATERAL (
          SELECT coalesce(m.sent_at, m.occurred_at) AS at FROM crm.messages m
-         WHERE m.conversation_id = cohort.conversation_id
-           AND m.occurred_at >= cohort.created_at AND ${EFFECTIVE_HUMAN_SEND('m')}
+         WHERE m.conversation_id = cohort.conversation_id AND ${EFFECTIVE_HUMAN_SEND('m')}
+           AND coalesce(m.sent_at, m.occurred_at) >= started.at
            AND coalesce(m.sent_at, m.occurred_at) <= bounds.now_at
-         ORDER BY m.occurred_at, m.id LIMIT 1
+         ORDER BY coalesce(m.sent_at, m.occurred_at), m.id LIMIT 1
        ) reply ON true
        WHERE cohort.claimer IS NOT NULL
      ), service AS (
@@ -106,8 +133,11 @@ export async function readServiceMetrics(database, input) {
          AND (c.terminal_at IS NULL OR c.terminal_at >= bounds.from_at)
      ), ownership AS (
        -- Who owned the conversation from when: claim/transfer of a handoff,
-       -- takeover, panel transfer (the target lives only in the audit reason)
-       -- and any human send, which also assigns the conversation to its author.
+       -- takeover, panel transfer and any human send, which also assigns the
+       -- conversation to its author. Limitation: a panel transfer stores its
+       -- target only in the free-text audit reason ("... (repasse para <id>)"),
+       -- parsed below; if that format changes or the id is unknown, the
+       -- episode falls back to the current owner.
        SELECT h.conversation_id, history.assigned_user_id AS user_id, history.occurred_at
        FROM candidates JOIN crm.handoffs h ON h.conversation_id = candidates.id
        JOIN crm.handoff_history history ON history.handoff_id = h.id

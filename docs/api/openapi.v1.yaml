@@ -2467,9 +2467,13 @@ paths:
         em São Paulo; coorte = pedidos de atendimento (handoffs) criados na
         janela. Minutos são de expediente pela política `expediente-v1`
         (`crm.business_minutes_v1`, ADR 061): segunda a sexta, 09:00–12:00 e
-        13:00–18:00 America/Sao_Paulo, sem feriados. Tempo para assumir e 1ª
-        resposta contam do pedido e são creditados a quem assumiu; tomada
-        direta sem pedido não gera amostra. Resposta efetiva é envio humano
+        13:00–18:00 America/Sao_Paulo, sem feriados. Tempo para assumir vai
+        do pedido até a tomada. A 1ª resposta não se sobrepõe a ele: começa
+        na tomada se havia mensagem do cliente sem resposta humana efetiva
+        naquele instante, senão na primeira mensagem do cliente posterior, e
+        termina no primeiro envio humano efetivo depois desse início; aberta
+        e encerrada sem resposta usam a mesma base. Ambos são creditados a
+        quem assumiu; tomada direta sem pedido não gera amostra. Resposta efetiva é envio humano
         `sent` sem entrega `failed`/`outcome_unknown`; bot e sistema não
         contam. Mediana e p90 por percentil contínuo, em minutos com uma
         casa; sem amostra é nulo e p90 é nulo com menos de 5 amostras.
