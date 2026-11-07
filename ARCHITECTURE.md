@@ -19,6 +19,21 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## OLIST-T11 — interface administrativa Olist (07/11/2026)
+
+OLIST-03–05, 11, 22–25 e 48: `/olist` oferece conexão/reconexão/desconexão,
+parâmetros comerciais/fiscais completos e consultas limitadas de referências
+e mapeamentos por recurso. Administração depende de `COMMERCIAL_ADMIN`, sem
+herdar ou conceder habilitação de geração. Código/estado OAuth são removidos
+da URL antes do shell, consumidos uma vez e não persistidos no navegador.
+
+A edição captura a versão original, preserva vencimento/recebimento/fiscal
+e trata conflito sem sobrescrever rascunho; refresh não abre edição obsoleta.
+Respostas tardias não restauram consultas após mudança de conexão ou revogação.
+Sem transporte criador, migration, dependência ou infraestrutura nova; geração
+real permanece desligada. [Contrato, evidências e rollback](docs/runbooks/olist-phase4.md).
+T11 inicia F4; T12/T13/T25 e gates operacionais F5/F6 continuam pendentes.
+
 ## OLIST-T10 — guardas comerciais e recuperação (06/11/2026)
 
 OLIST-02, 06, 16, 19, 21, 27–30, 39, 45–47: toda escrita de ficha,

@@ -10,6 +10,8 @@ import {
 } from 'vue';
 import { commandKey, request } from '../lib/api-client.js';
 import { consumeOlistCallback } from '../lib/olist-callback.js';
+import OlistMappingsPanel from '../components/OlistMappingsPanel.vue';
+import { olistAdminFailure } from '../lib/olist-admin-feedback.js';
 
 const props = defineProps({
   session: { type: Object, required: true },
@@ -38,17 +40,22 @@ const accountBusy = ref(false);
 const settingsEditing = ref(false);
 const settingsForm = ref(null);
 const settingsEditButton = ref(null);
+const editingVersion = ref(0);
+const settingsConflict = ref(false);
+const fiscal = reactive({ ncm: '', origin: '', unit: '' });
 const idFields = [
   { key: 'sellerId', label: 'Vendedor no Olist (ID)' },
   { key: 'operationNatureId', label: 'Natureza de operação (ID)' },
   { key: 'warehouseId', label: 'Depósito (ID)' },
   { key: 'paymentMethodId', label: 'Forma de pagamento (ID)' },
+  { key: 'receivingMethodId', label: 'Forma de recebimento (ID)' },
   { key: 'priceListId', label: 'Lista de preços (ID)' },
   { key: 'originId', label: 'Origem CRM no Olist (ID)' },
 ];
 const settings = reactive(
   Object.fromEntries([
     ...idFields.map((field) => [field.key, '']),
+    ['paymentDueOn', ''],
     ['paymentTerms', ''],
     ['purchaseOrder', ''],
   ]),
@@ -56,6 +63,16 @@ const settings = reactive(
 let lookupController;
 let accountController;
 let disposed = false;
+const expiresLabel = computed(() => {
+  const value = Date.parse(status.value?.expiresAt ?? '');
+  return Number.isFinite(value)
+    ? new Intl.DateTimeFormat('pt-BR', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+        timeZone: 'America/Sao_Paulo',
+      }).format(value)
+    : '';
+});
 const connectionLabel = computed(() => {
   if (!status.value) return 'Estado indisponível';
   if (!status.value.configured) return 'Conexão ainda não configurada';
@@ -101,6 +118,7 @@ watch(canManage, (allowed) => {
   accountController?.abort();
   status.value = null;
   settingsEditing.value = false;
+  copySettings();
 });
 
 async function lookup() {
@@ -149,7 +167,7 @@ async function lookup() {
 }
 
 async function loadStatus() {
-  if (!canManage.value || accountBusy.value) return;
+  if (!canManage.value || accountBusy.value || settingsEditing.value) return;
   accountController?.abort();
   const own = new AbortController();
   accountController = own;
@@ -162,19 +180,45 @@ async function loadStatus() {
     copySettings();
   } catch (cause) {
     if (disposed || own.signal.aborted) return;
-    accountError.value = failureText(cause);
+    status.value = null;
+    copySettings();
+    accountError.value = olistAdminFailure(cause);
   } finally {
-    if (!disposed && accountController === own) loading.value = false;
+    if (!disposed && accountController === own) {
+      loading.value = false;
+      if (accountError.value) await focus(accountNotice);
+    }
   }
 }
 
 function copySettings() {
   for (const key of Object.keys(settings))
     settings[key] = String(status.value?.settings?.[key] ?? '');
+  for (const key of Object.keys(fiscal))
+    fiscal[key] = String(status.value?.settings?.productFiscal?.[key] ?? '');
+}
+
+async function denyAdministration() {
+  status.value = null;
+  settingsEditing.value = false;
+  copySettings();
+  accountError.value = olistAdminFailure({ status: 403 });
+  await focus(accountNotice);
 }
 
 async function beginSettingsEdit() {
+  if (
+    !canManage.value ||
+    !status.value?.configured ||
+    loading.value ||
+    accountBusy.value
+  )
+    return;
   copySettings();
+  editingVersion.value = status.value.settingsVersion;
+  settingsConflict.value = false;
+  accountError.value = '';
+  accountMessage.value = '';
   settingsEditing.value = true;
   await nextTick();
   if (!disposed) settingsForm.value?.querySelector('input')?.focus();
@@ -182,13 +226,17 @@ async function beginSettingsEdit() {
 
 async function cancelSettingsEdit() {
   settingsEditing.value = false;
+  accountError.value = '';
   copySettings();
+  if (settingsConflict.value) await loadStatus();
+  settingsConflict.value = false;
   await focus(settingsEditButton);
 }
 
 /** @param {'authorize'|'complete'|'disconnect'|'settings'} action @param {Record<string, unknown>} body */
 async function accountAction(action, body) {
   if (!canManage.value || accountBusy.value || loading.value) return;
+  if (settingsEditing.value && action !== 'settings') return;
   const own = new AbortController();
   accountController?.abort();
   accountController = own;
@@ -232,7 +280,17 @@ async function accountAction(action, body) {
     accountError.value =
       action === 'complete'
         ? 'Não foi possível concluir a autorização. Inicie uma nova conexão com o Olist.'
-        : failureText(cause);
+        : olistAdminFailure(cause);
+    if (action === 'settings' && /** @type {any} */ (cause)?.status === 409) {
+      settingsConflict.value = true;
+      accountError.value =
+        'Os parâmetros mudaram em outra sessão. Cancele a edição para carregar a versão atual e revisar antes de salvar.';
+    }
+    if ([401, 403].includes(/** @type {any} */ (cause)?.status)) {
+      status.value = null;
+      settingsEditing.value = false;
+      copySettings();
+    }
     await focus(accountNotice);
   } finally {
     if (!disposed && accountController === own) accountBusy.value = false;
@@ -240,7 +298,9 @@ async function accountAction(action, body) {
 }
 
 function saveSettings() {
-  /** @type {Record<string, string|number|null>} */
+  if (!canManage.value || !settingsEditing.value || settingsConflict.value)
+    return;
+  /** @type {Record<string, any>} */
   const values = {};
   for (const field of idFields) {
     const value = String(settings[field.key]).trim();
@@ -257,10 +317,26 @@ function saveSettings() {
     }
     values[field.key] = value ? Number(value) : null;
   }
+  values.paymentDueOn = settings.paymentDueOn || null;
   values.paymentTerms = settings.paymentTerms.trim() || null;
+  const fiscalValues = Object.values(fiscal).map((value) => value.trim());
+  if (
+    fiscalValues.some(Boolean) &&
+    (!/^[0-9]{8}$/u.test(fiscal.ncm) ||
+      !/^[0-8]$/u.test(fiscal.origin) ||
+      !/^[A-Z0-9]{1,6}$/u.test(fiscal.unit))
+  ) {
+    accountError.value =
+      'Informe NCM com 8 dígitos, origem fiscal entre 0 e 8 e unidade com até 6 letras maiúsculas ou números. Para remover a configuração fiscal, limpe os três campos.';
+    void focus(accountNotice);
+    return;
+  }
+  values.productFiscal = fiscalValues.some(Boolean)
+    ? { ncm: fiscal.ncm, origin: Number(fiscal.origin), unit: fiscal.unit }
+    : null;
   values.purchaseOrder = settings.purchaseOrder.trim() || null;
   void accountAction('settings', {
-    expectedVersion: status.value.settingsVersion,
+    expectedVersion: editingVersion.value,
     reason: 'Parâmetros comerciais Olist atualizados pelo administrador',
     settings: values,
   });
@@ -296,7 +372,13 @@ onBeforeUnmount(() => {
     <header class="page-heading">
       <div>
         <h1 ref="heading" tabindex="-1">Olist</h1>
-        <p>Consulte a preparação dos pedidos para o Olist.</p>
+        <p>
+          {{
+            canManage
+              ? 'Gerencie a conexão e os parâmetros centrais do Olist.'
+              : 'Consulte a preparação dos pedidos para o Olist.'
+          }}
+        </p>
       </div>
     </header>
     <p class="olist-release-note">
@@ -392,15 +474,23 @@ onBeforeUnmount(() => {
         <button
           class="quiet"
           type="button"
-          :disabled="loading || accountBusy"
+          :disabled="loading || accountBusy || settingsEditing"
           @click="loadStatus"
         >
           Atualizar conexão
         </button>
       </div>
       <p v-if="loading" role="status">Consultando a conexão…</p>
-      <template v-else>
+      <template v-if="!loading || status">
         <p>{{ connectionLabel }}</p>
+        <p v-if="status" class="field-help">
+          Ambiente: produção. Use a empresa autorizada para esta integração. A
+          empresa é conferida ao conectar e reconectar.
+        </p>
+        <p v-if="status?.connected && expiresLabel" class="field-help">
+          Acesso válido até {{ expiresLabel }} (horário de São Paulo). A
+          renovação é automática enquanto a autorização permitir.
+        </p>
         <p v-if="status && !status.accountConfigured" class="field-help">
           A conta da empresa precisa ser configurada antes da conexão.
         </p>
@@ -420,16 +510,20 @@ onBeforeUnmount(() => {
         <div v-if="status?.configured" class="button-row">
           <button
             type="button"
-            :disabled="accountBusy"
+            :disabled="loading || accountBusy || settingsEditing"
             @click="accountAction('authorize', {})"
           >
-            {{ status.connected ? 'Reconectar Olist' : 'Conectar Olist' }}
+            {{
+              status.connected || status.reconnectRequired
+                ? 'Reconectar Olist'
+                : 'Conectar Olist'
+            }}
           </button>
           <button
             v-if="status.connected || status.reconnectRequired"
             class="quiet"
             type="button"
-            :disabled="accountBusy"
+            :disabled="loading || accountBusy || settingsEditing"
             @click="
               accountAction('disconnect', {
                 expectedVersion: status.version,
@@ -445,6 +539,14 @@ onBeforeUnmount(() => {
           <p class="field-help">
             Parâmetros centrais da empresa. Confira os identificadores na conta
             Olist; o responsável do CRM não define o vendedor do ERP.
+          </p>
+          <p class="field-help">
+            Versão dos parâmetros: {{ status.settingsVersion }}.
+            {{
+              settingsEditing
+                ? 'Salve ou cancele a edição antes de atualizar a conexão.'
+                : 'Salvar substitui os parâmetros centrais e invalida prévias anteriores.'
+            }}
           </p>
           <form
             v-if="settingsEditing"
@@ -468,6 +570,19 @@ onBeforeUnmount(() => {
                 />
               </div>
               <div class="olist-field">
+                <label for="olist-payment-due">Vencimento do pagamento</label>
+                <input
+                  id="olist-payment-due"
+                  v-model="settings.paymentDueOn"
+                  type="date"
+                  :disabled="accountBusy"
+                  aria-describedby="olist-payment-due-help"
+                />
+                <p id="olist-payment-due-help" class="field-help">
+                  Data explícita; não é calculada pelo prazo de pagamento.
+                </p>
+              </div>
+              <div class="olist-field">
                 <label for="olist-payment-terms">Prazo de pagamento</label
                 ><input
                   id="olist-payment-terms"
@@ -488,6 +603,45 @@ onBeforeUnmount(() => {
                 />
               </div>
             </div>
+            <fieldset class="olist-fiscal" :disabled="accountBusy">
+              <legend>Cadastro fiscal de novos produtos</legend>
+              <p class="field-help">
+                Preencha com orientação fiscal. Deixe os três campos vazios para
+                manter o cadastro de novos produtos bloqueado.
+              </p>
+              <div class="olist-settings-grid">
+                <div class="olist-field">
+                  <label for="olist-ncm">NCM</label
+                  ><input
+                    id="olist-ncm"
+                    v-model="fiscal.ncm"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="8"
+                  />
+                </div>
+                <div class="olist-field">
+                  <label for="olist-fiscal-origin"
+                    >Origem fiscal (código de 0 a 8)</label
+                  ><input
+                    id="olist-fiscal-origin"
+                    v-model="fiscal.origin"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="1"
+                  />
+                </div>
+                <div class="olist-field">
+                  <label for="olist-unit">Unidade fiscal</label
+                  ><input
+                    id="olist-unit"
+                    v-model="fiscal.unit"
+                    type="text"
+                    maxlength="6"
+                  />
+                </div>
+              </div>
+            </fieldset>
             <div class="button-row">
               <button
                 class="quiet"
@@ -496,7 +650,11 @@ onBeforeUnmount(() => {
                 @click="cancelSettingsEdit"
               >
                 Cancelar</button
-              ><button class="primary" type="submit" :disabled="accountBusy">
+              ><button
+                class="primary"
+                type="submit"
+                :disabled="accountBusy || settingsConflict"
+              >
                 {{ accountBusy ? 'Salvando…' : 'Salvar parâmetros' }}
               </button>
             </div>
@@ -509,6 +667,26 @@ onBeforeUnmount(() => {
                   {{ status.settings?.[field.key] ?? 'Não informado' }}
                 </dd></template
               >
+              <dt>Vencimento do pagamento</dt>
+              <dd>
+                {{
+                  status.settings?.paymentDueOn
+                    ? new Intl.DateTimeFormat('pt-BR', {
+                        timeZone: 'UTC',
+                      }).format(
+                        new Date(status.settings.paymentDueOn + 'T00:00:00Z'),
+                      )
+                    : 'Não informado'
+                }}
+              </dd>
+              <dt>Cadastro fiscal de novos produtos</dt>
+              <dd>
+                {{
+                  status.settings?.productFiscal
+                    ? `NCM ${status.settings.productFiscal.ncm} · Origem ${status.settings.productFiscal.origin} · ${status.settings.productFiscal.unit}`
+                    : 'Não informado; cadastro de novos produtos bloqueado'
+                }}
+              </dd>
               <dt>Prazo de pagamento</dt>
               <dd>{{ status.settings?.paymentTerms || 'Não informado' }}</dd>
               <dt>Ordem de compra padrão</dt>
@@ -517,7 +695,7 @@ onBeforeUnmount(() => {
             <button
               ref="settingsEditButton"
               type="button"
-              :disabled="accountBusy"
+              :disabled="!status.configured || loading || accountBusy"
               @click="beginSettingsEdit"
             >
               Editar parâmetros
@@ -526,6 +704,16 @@ onBeforeUnmount(() => {
         </details>
       </template>
     </section>
+    <OlistMappingsPanel
+      v-if="canManage && status?.configured && !loading && !accountBusy"
+      :key="`${status.generation}:${status.version}:${status.settingsVersion}`"
+      @access-denied="denyAdministration"
+      :connected="
+        Boolean(
+          status.configured && status.connected && !status.reconnectRequired,
+        )
+      "
+    />
   </div>
 </template>
 
@@ -552,6 +740,16 @@ onBeforeUnmount(() => {
 }
 .olist-field label {
   margin: 0;
+}
+.olist-fiscal {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  margin: 0 0 var(--space-4);
+  min-inline-size: 0;
+}
+.olist-fiscal legend {
+  padding-inline: var(--space-2);
 }
 .olist-field input {
   inline-size: 100%;
@@ -584,6 +782,7 @@ onBeforeUnmount(() => {
 }
 .olist-settings-grid {
   display: grid;
+  align-items: start;
   gap: var(--space-4);
   margin-block-end: var(--space-4);
 }

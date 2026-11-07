@@ -12,6 +12,7 @@ const settings = {
   paymentTerms: null,
   purchaseOrder: null,
 };
+const resourceId = '7fbb479b-65c0-4b74-ae0b-daf8bdce1a96';
 const connected = {
   configured: true,
   accountConfigured: true,
@@ -26,7 +27,7 @@ const connected = {
   expiresAt: null,
 };
 
-/** @param {import('@playwright/test').Page} page @param {{profile?:string,enabled?:boolean,conflict?:boolean}} [options] */
+/** @param {import('@playwright/test').Page} page @param {{profile?:string,enabled?:boolean,conflict?:boolean,initialStatus?:any,failures?:Record<string,{code:string,status:number}>,catalogItems?:any[],mappingState?:string,authorizationUrl?:string}} [options] */
 async function setup(page, options = {}) {
   const viewer = {
     id: 'viewer',
@@ -49,7 +50,11 @@ async function setup(page, options = {}) {
   };
   /** @type {Array<{path:string,body:any,url:string}>} */
   const calls = [];
-  let current = { ...connected, settings: { ...settings } };
+  let current = {
+    ...connected,
+    settings: { ...settings },
+    ...options.initialStatus,
+  };
   /** @type {() => void} */
   let releaseEvent = () => {};
   const eventGate = new Promise((resolve) => {
@@ -85,6 +90,12 @@ async function setup(page, options = {}) {
       });
     }
     if (path === '/api/v1/orders/summary') return json({ storeNewCount: 0 });
+    const failure = options.failures?.[path.slice(base.length + 1)];
+    if (failure)
+      return json(
+        { code: failure.code, detail: 'private-provider-detail-canary' },
+        failure.status,
+      );
     if (path === `${base}/status`) return json(current);
     if (path.startsWith(`${base}/`) && req.method() === 'POST') {
       expect(req.headers()['x-csrf-token']).toBe('olist-test-csrf');
@@ -102,6 +113,19 @@ async function setup(page, options = {}) {
           creationEnabled: false,
         });
       if (path === `${base}/complete`) return json(current);
+      if (path === `${base}/lookups`)
+        return json({
+          items: options.catalogItems ?? [
+            { id: 23, name: 'Referência sintética' },
+          ],
+        });
+      if (path === `${base}/mappings`)
+        return json({
+          id: resourceId,
+          kind: 'variation',
+          state: options.mappingState ?? 'confirmed',
+          remoteId: '501',
+        });
       if (path === `${base}/settings`) {
         current = {
           ...current,
@@ -116,7 +140,8 @@ async function setup(page, options = {}) {
       }
       if (path === `${base}/authorize`)
         return json({
-          authorizationUrl: 'https://unexpected.example.test/oauth',
+          authorizationUrl:
+            options.authorizationUrl ?? 'https://unexpected.example.test/oauth',
         });
     }
     if (path === '/api/v1/users' && req.method() === 'GET')
@@ -146,6 +171,14 @@ async function setup(page, options = {}) {
   });
   return {
     calls,
+    /** @param {any} next */
+    setStatus(next) {
+      current = { ...current, ...next };
+    },
+    revokeManagement() {
+      viewer.capabilities = [];
+      releaseEvent();
+    },
     revoke() {
       viewer.olistEnabled = false;
       viewer.olistAuthorizationVersion++;
@@ -380,4 +413,562 @@ test('central parameters use the settings version and preserve omitted values as
     expectedVersion: 4,
     settings: { ...settings, sellerId: 23, paymentTerms: '30 dias' },
   });
+});
+
+test('T11 edits every central setting without dropping fiscal, receipt or due date policy', async ({
+  page,
+}) => {
+  const configuredSettings = {
+    ...settings,
+    sellerId: 23,
+    receivingMethodId: 77,
+    paymentDueOn: '2026-11-30',
+    productFiscal: { ncm: '61091000', origin: 0, unit: 'UN' },
+  };
+  const { calls } = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    initialStatus: { settings: configuredSettings },
+  });
+  await page.goto('/olist');
+  await page.getByText('Parâmetros comerciais', { exact: true }).click();
+  await expect(
+    page.getByText('Versão dos parâmetros: 4.', { exact: false }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Editar parâmetros' }).click();
+  await expect(
+    page.getByLabel('Vendedor no Olist (ID)', { exact: true }),
+  ).toBeFocused();
+  await expect(page.getByLabel('Forma de recebimento (ID)')).toHaveValue('77');
+  await expect(page.getByLabel('Vencimento do pagamento')).toHaveValue(
+    '2026-11-30',
+  );
+  await expect(page.getByLabel('NCM', { exact: true })).toHaveValue('61091000');
+  await page
+    .getByLabel('Prazo de pagamento', { exact: true })
+    .fill('Prazo explícito');
+  await page.getByRole('button', { name: 'Salvar parâmetros' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Olist', exact: true }),
+  ).toBeFocused();
+  expect(calls.find((call) => call.path === `${base}/settings`)?.body).toEqual({
+    expectedVersion: 4,
+    reason: 'Parâmetros comerciais Olist atualizados pelo administrador',
+    settings: { ...configuredSettings, paymentTerms: 'Prazo explícito' },
+  });
+  expect(
+    calls.filter((call) => /export|previews|reconcile|links/u.test(call.path)),
+  ).toHaveLength(0);
+});
+
+test('T11 rejects partial fiscal policy before any command and cancels with predictable focus', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, { profile: 'admin', enabled: false });
+  await page.goto('/olist');
+  await page.getByText('Parâmetros comerciais', { exact: true }).click();
+  await page.getByRole('button', { name: 'Editar parâmetros' }).click();
+  await page.getByLabel('NCM', { exact: true }).fill('61091000');
+  await page.getByRole('button', { name: 'Salvar parâmetros' }).click();
+  await expect(page.getByRole('alert')).toBeFocused();
+  await expect(page.getByRole('alert')).toContainText(
+    'origem fiscal entre 0 e 8',
+  );
+  expect(calls.filter((call) => call.path === `${base}/settings`)).toHaveLength(
+    0,
+  );
+  await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Editar parâmetros' }),
+  ).toBeFocused();
+});
+
+test('T11 stale settings preserve the draft and require a fresh explicit edit', async ({
+  page,
+}) => {
+  const failures = { settings: { code: 'VERSION_CONFLICT', status: 409 } };
+  const mock = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    failures,
+  });
+  await page.goto('/olist');
+  await page.getByText('Parâmetros comerciais', { exact: true }).click();
+  await page.getByRole('button', { name: 'Editar parâmetros' }).click();
+  await page.getByLabel('Vendedor no Olist (ID)', { exact: true }).fill('24');
+  await expect(
+    page.getByRole('button', { name: 'Atualizar conexão' }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: 'Reconectar Olist' }),
+  ).toBeDisabled();
+  mock.setStatus({
+    settingsVersion: 5,
+    settings: { ...settings, sellerId: 99 },
+  });
+  await page.getByRole('button', { name: 'Salvar parâmetros' }).click();
+  await expect(page.getByRole('alert')).toBeFocused();
+  await expect(
+    page.getByLabel('Vendedor no Olist (ID)', { exact: true }),
+  ).toHaveValue('24');
+  await expect(
+    page.getByRole('button', { name: 'Salvar parâmetros' }),
+  ).toBeDisabled();
+  expect(
+    mock.calls.find((call) => call.path === `${base}/settings`)?.body
+      .expectedVersion,
+  ).toBe(4);
+  await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Editar parâmetros' }),
+  ).toBeFocused();
+  await page.getByRole('button', { name: 'Editar parâmetros' }).click();
+  await expect(
+    page.getByLabel('Vendedor no Olist (ID)', { exact: true }),
+  ).toHaveValue('99');
+});
+
+test('T11 catalogs and exact mappings are safe keyboard reads with empty and uncertain states', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    catalogItems: [],
+    mappingState: 'uncertain',
+  });
+  await page.goto('/olist');
+  await page
+    .getByText('Consultar referências no Olist', { exact: true })
+    .focus();
+  await page.keyboard.press('Enter');
+  for (const kind of [
+    'sellers',
+    'warehouses',
+    'paymentMethods',
+    'receivingMethods',
+    'priceLists',
+  ]) {
+    await page.getByLabel('Referência comercial').selectOption(kind);
+    await page
+      .getByRole('button', { name: 'Consultar referências', exact: true })
+      .focus();
+    await page.keyboard.press('Enter');
+    await expect(
+      page.getByRole('heading', { name: 'Referências encontradas: 0' }),
+    ).toBeFocused();
+    await expect(
+      page.getByText('Nenhuma referência encontrada nesta categoria.'),
+    ).toBeVisible();
+  }
+  await page
+    .getByText('Consultar mapeamento registrado', { exact: true })
+    .focus();
+  await page.keyboard.press('Enter');
+  await page.getByLabel('Identificador do recurso no CRM').fill('501');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('alert')).toBeFocused();
+  expect(calls.filter((call) => call.path === `${base}/mappings`)).toHaveLength(
+    0,
+  );
+  await page.getByLabel('Identificador do recurso no CRM').fill(resourceId);
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByRole('heading', { name: 'Mapeamento registrado' }),
+  ).toBeFocused();
+  await expect(
+    page.getByText('Resultado incerto', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Variação de tamanho', { exact: true }),
+  ).toBeVisible();
+  expect(calls.find((call) => call.path === `${base}/mappings`)?.body).toEqual({
+    resourceId,
+  });
+  expect(
+    calls
+      .filter((call) => call.path === `${base}/lookups`)
+      .map((call) => call.body.kind),
+  ).toEqual([
+    'sellers',
+    'warehouses',
+    'paymentMethods',
+    'receivingMethods',
+    'priceLists',
+  ]);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+for (const failure of [
+  {
+    code: 'OLIST_RESOURCE_NOT_FOUND',
+    status: 404,
+    text: 'Mapeamento não encontrado',
+  },
+  {
+    code: 'OLIST_RATE_LIMITED',
+    status: 429,
+    text: 'Limite de consultas atingido',
+  },
+  {
+    code: 'OLIST_RECONNECT_REQUIRED',
+    status: 409,
+    text: 'Reconecte a conta Olist',
+  },
+  { code: 'FORBIDDEN', status: 403, text: 'Seu acesso mudou' },
+]) {
+  test(`T11 mapping ${failure.code} gives safe feedback and focus`, async ({
+    page,
+  }) => {
+    await setup(page, {
+      profile: 'admin',
+      enabled: false,
+      failures: { mappings: failure },
+    });
+    await page.goto('/olist');
+    await page
+      .getByText('Consultar mapeamento registrado', { exact: true })
+      .click();
+    await page.getByLabel('Identificador do recurso no CRM').fill(resourceId);
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('alert')).toBeFocused();
+    await expect(page.getByRole('alert')).toContainText(failure.text);
+    await expect(page.locator('body')).not.toContainText(
+      'private-provider-detail-canary',
+    );
+  });
+}
+
+test('T11 disconnected account blocks remote reads while preserving local mapping inspection', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    initialStatus: { connected: false, reconnectRequired: true },
+  });
+  await page.goto('/olist');
+  await expect(
+    page.getByText('Reconexão necessária', { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByText('Consultar referências no Olist', { exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: 'Consultar referências', exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: 'Reconectar Olist' }),
+  ).toBeEnabled();
+  await page
+    .getByText('Consultar mapeamento registrado', { exact: true })
+    .click();
+  await page.getByLabel('Identificador do recurso no CRM').fill(resourceId);
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByRole('heading', { name: 'Mapeamento registrado' }),
+  ).toBeVisible();
+  expect(calls.filter((call) => call.path === `${base}/lookups`)).toHaveLength(
+    0,
+  );
+});
+
+test('T11 disconnect clears administrative results and posts the connection version', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, { profile: 'admin', enabled: false });
+  await page.goto('/olist');
+  await page
+    .getByText('Consultar referências no Olist', { exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Consultar referências', exact: true })
+    .click();
+  await expect(
+    page.getByText('Referência sintética', { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Desconectar Olist', exact: true })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Olist', exact: true }),
+  ).toBeFocused();
+  await expect(
+    page.getByText('Referência sintética', { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText('Conta desconectada', { exact: true }),
+  ).toBeVisible();
+  expect(
+    calls.find((call) => call.path === `${base}/disconnect`)?.body
+      .expectedVersion,
+  ).toBe(3);
+});
+
+for (const query of [
+  'code=synthetic-code&state=synthetic-state&state=duplicate',
+  'error=access_denied&state=synthetic-state',
+  'code=synthetic-code',
+]) {
+  test(`T11 invalid callback is cleaned without completion: ${query}`, async ({
+    page,
+  }) => {
+    const { calls } = await setup(page, { profile: 'admin', enabled: false });
+    await page.goto(`/olist?${query}`);
+    await expect(page).toHaveURL('/olist');
+    await expect(page.getByRole('alert')).toBeFocused();
+    expect(
+      calls.filter((call) => call.path === `${base}/complete`),
+    ).toHaveLength(0);
+    expect(calls.every((call) => !call.url.includes('synthetic-'))).toBe(true);
+  });
+}
+
+test('T11 admin mobile and dark reflow keep parameters and mappings accessible and names inert', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const name = '<img src=x onerror=alert(1)> synthetic catalog';
+  await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    catalogItems: [{ id: 23, name }],
+  });
+  await page.goto('/olist');
+  await page.getByText('Parâmetros comerciais', { exact: true }).click();
+  await page.getByRole('button', { name: 'Editar parâmetros' }).click();
+  await page
+    .getByText('Consultar referências no Olist', { exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Consultar referências', exact: true })
+    .click();
+  await expect(page.getByText(name, { exact: true })).toBeVisible();
+  await expect(page.locator('.olist-reference-list img')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Gerar/u })).toHaveCount(0);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.getByRole('heading', { name: 'Olist', exact: true }).focus();
+  await page.evaluate(() => globalThis.scrollTo(0, 0));
+  await page.screenshot({ path: 'var/olist-admin-mobile.png', fullPage: true });
+  await page.evaluate(() => {
+    globalThis.document.documentElement.dataset.theme = 'dark';
+  });
+  await page.setViewportSize({ width: 320, height: 844 });
+  expect(
+    await page.evaluate(
+      () =>
+        globalThis.document.documentElement.scrollWidth <=
+        globalThis.innerWidth,
+    ),
+  ).toBe(true);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({
+    path: 'var/olist-admin-dark-320.png',
+    fullPage: true,
+  });
+});
+
+test('T11 late catalog response cannot restore data after administrative capability revocation', async ({
+  page,
+}) => {
+  const mock = await setup(page, { profile: 'admin', enabled: true });
+  let release = () => {};
+  const gate = new Promise((resolve) => {
+    release = () => resolve(null);
+  });
+  await page.route(`**${base}/lookups`, async (route) => {
+    await gate;
+    await route.fulfill({
+      json: { items: [{ id: 23, name: 'Late private catalog' }] },
+    });
+  });
+  await page.goto('/olist');
+  await page
+    .getByText('Consultar referências no Olist', { exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Consultar referências', exact: true })
+    .click();
+  await expect(
+    page.getByText('Consultando as referências da conta…'),
+  ).toBeVisible();
+  mock.revokeManagement();
+  await expect(
+    page.getByRole('heading', { name: 'Conexão da empresa' }),
+  ).toHaveCount(0);
+  release();
+  await expect(
+    page.getByRole('heading', { name: 'Mapeamentos e referências' }),
+  ).toHaveCount(0);
+  await expect(page.locator('body')).not.toContainText('Late private catalog');
+});
+
+test('T11 refresh cannot open an edit against stale settings and desktop layout remains accessible', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await setup(page, { profile: 'admin', enabled: false });
+  await page.goto('/olist');
+  await page.getByText('Parâmetros comerciais', { exact: true }).click();
+  let release = () => {};
+  const gate = new Promise((resolve) => {
+    release = () => resolve(null);
+  });
+  await page.route(`**${base}/status`, async (route) => {
+    await gate;
+    await route.fulfill({
+      json: {
+        ...connected,
+        settingsVersion: 5,
+        settings: { ...settings, sellerId: 88 },
+      },
+    });
+  });
+  await page.getByRole('button', { name: 'Atualizar conexão' }).click();
+  await expect(page.getByText('Consultando a conexão…')).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Editar parâmetros' }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: 'Reconectar Olist' }),
+  ).toBeDisabled();
+  release();
+  await page.getByRole('button', { name: 'Editar parâmetros' }).click();
+  await expect(
+    page.getByLabel('Vendedor no Olist (ID)', { exact: true }),
+  ).toHaveValue('88');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.getByRole('heading', { name: 'Olist', exact: true }).focus();
+  await page.evaluate(() => globalThis.scrollTo(0, 0));
+  await page.screenshot({
+    path: 'var/olist-admin-desktop.png',
+    fullPage: true,
+  });
+  // A 1366px viewport at 200% zoom has 683 CSS pixels of usable width.
+  await page.setViewportSize({ width: 683, height: 384 });
+  expect(
+    await page.evaluate(
+      () =>
+        globalThis.document.documentElement.scrollWidth <=
+        globalThis.innerWidth,
+    ),
+  ).toBe(true);
+  await expect(
+    page.getByLabel('Vendedor no Olist (ID)', { exact: true }),
+  ).toHaveValue('88');
+});
+
+test('T11 connection error remains safe and focused with a retry action', async ({
+  page,
+}) => {
+  await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    failures: { status: { status: 503, code: 'SERVICE_UNAVAILABLE' } },
+  });
+  await page.goto('/olist');
+  await expect(page.getByRole('alert')).toBeFocused();
+  await expect(
+    page.getByRole('button', { name: 'Atualizar conexão' }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole('button', { name: 'Editar parâmetros' }),
+  ).toHaveCount(0);
+  await expect(page.locator('body')).not.toContainText(
+    'private-provider-detail-canary',
+  );
+});
+
+test('T11 reconnect uses the official OAuth destination by keyboard without completing or creating entities', async ({
+  page,
+}) => {
+  const authorizationUrl =
+    'https://accounts.tiny.com.br/realms/tiny/protocol/openid-connect/auth?state=synthetic-once';
+  const { calls } = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    authorizationUrl,
+    initialStatus: { connected: false, reconnectRequired: true },
+  });
+  await page.route('https://accounts.tiny.com.br/**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<title>Autorização sintética</title>',
+    }),
+  );
+  await page.goto('/olist');
+  await page.getByRole('button', { name: 'Reconectar Olist' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(authorizationUrl);
+  expect(
+    calls.filter((call) => call.path === `${base}/authorize`),
+  ).toHaveLength(1);
+  expect(
+    calls.filter((call) => /complete|export|links|reconcile/u.test(call.path)),
+  ).toHaveLength(0);
+});
+
+test('T11 incomplete deployment configuration offers no unusable editor or remote commands', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    initialStatus: {
+      configured: false,
+      accountConfigured: false,
+      connected: false,
+    },
+  });
+  await page.goto('/olist');
+  await expect(
+    page.getByText('Conexão ainda não configurada', { exact: true }),
+  ).toBeVisible();
+  await page.getByText('Parâmetros comerciais', { exact: true }).click();
+  await expect(
+    page.getByRole('button', { name: 'Editar parâmetros' }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('button', { name: 'Conectar Olist', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Mapeamentos e referências' }),
+  ).toHaveCount(0);
+  expect(
+    calls.filter((call) =>
+      [
+        base + '/settings',
+        base + '/lookups',
+        base + '/mappings',
+        base + '/authorize',
+      ].includes(call.path),
+    ),
+  ).toHaveLength(0);
+});
+
+test('T11 unsafe identifiers are rejected locally and expiration uses São Paulo time', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    initialStatus: { expiresAt: '2026-11-30T15:00:00.000Z' },
+  });
+  await page.goto('/olist');
+  await expect(
+    page.getByText(/Acesso válido até 30.11.2026, 12:00/u),
+  ).toBeVisible();
+  await page.getByText('Parâmetros comerciais', { exact: true }).click();
+  await page.getByRole('button', { name: 'Editar parâmetros' }).click();
+  await page
+    .getByLabel('Vendedor no Olist (ID)', { exact: true })
+    .fill('9007199254740992');
+  await page.getByRole('button', { name: 'Salvar parâmetros' }).click();
+  await expect(page.getByRole('alert')).toBeFocused();
+  await expect(page.getByRole('alert')).toContainText(
+    'números inteiros positivos',
+  );
+  expect(calls.filter((call) => call.path === `${base}/settings`)).toHaveLength(
+    0,
+  );
 });

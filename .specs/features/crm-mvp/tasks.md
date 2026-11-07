@@ -141,6 +141,20 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 ## OLIST-T20b — Início da Fase 3 (05/11/2026)
 
+## OLIST-T11 — interface administrativa Olist (07/11/2026)
+
+- [x] Conexão/reconexão/desconexão administrativa e callback limpo/consumo único,
+      sem credencial, documento da empresa ou operadora privada na interface.
+- [x] Parâmetros completos, incluindo vencimento/recebimento/fiscal; versão
+      capturada ao editar, conflito mantém rascunho e exige revisão explícita.
+- [x] Consultas limitadas de referências comerciais e mapeamentos exatos por
+      recurso, com ACL, respostas tardias descartadas e nenhuma criação ERP.
+- [x] Teclado/foco/axe, estados negativos e reflow claro/escuro verificados.
+
+OLIST-03–05, 11, 22–25 e 48. [Contrato, evidências e rollback](../../../docs/runbooks/olist-phase4.md).
+T11 inicia a Fase 4; T12/T13/T25 continuam pendentes. Geração real desligada,
+sem deploy, habilitação, conexão real homologada ou piloto.
+
 ## OLIST-T10 — guardas comerciais e recuperação (06/11/2026)
 
 - [x] T23 integrada à branch da Fase 3; escritores comerciais consultam o ledger
