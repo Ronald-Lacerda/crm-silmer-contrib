@@ -64,7 +64,7 @@ test('pins the approved runtime and toolchain versions exactly', async () => {
   );
   assert.equal(packageJson.packageManager, 'npm@11.19.0');
   assert.deepEqual(packageJson.engines, { node: '24.20.0', npm: '11.19.0' });
-  assert.equal(apiPackage.dependencies.fastify, '5.12.5');
+  assert.equal(apiPackage.dependencies.fastify, '5.12.8');
   assert.deepEqual(packageJson.devDependencies, {
     '@axe-core/playwright': '4.13.0',
     '@fontsource/poppins': '5.3.0',

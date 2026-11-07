@@ -1,5 +1,18 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## OPS-DEPS-01 — correção da auditoria npm (07/11/2026)
+
+Manutenção interna do gate INT-3 / T00.2. Atualização autorizada pelo mantenedor,
+preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
+[runbook](../../../docs/runbooks/dependency-audit-2026-11-07.md).
+
+- [x] Seis alertas eliminados, instalação reproduzível e ESLint preservado.
+- [x] CI manual autorizado sobre master: validate (1.872 aprovados), E2E/axe
+      (538 aprovados), PostgreSQL (264 aprovados) e auditoria zerada.
+      Actions bloqueado por cobrança; checks de containers/Trivy indisponíveis
+      localmente, com limitação registrada no runbook. Integração e implantação
+      acompanhadas na [PR 309](https://github.com/romulosutil/crm-silmer/pull/309).
+
 ## OLIST-T02/T06a — Escopo de centavos exatos (05/11/2026)
 
 - [x] Registrar redução de escopo aprovada na [ADR 062](../../../docs/adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) / [RFC 046](../../../docs/rfc/046-olist-escopo-inicial-de-centavos-exatos.md).

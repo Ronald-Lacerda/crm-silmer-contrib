@@ -22,7 +22,7 @@
     "@crm-silmer/work-management": "0.0.0",
     "@fastify/multipart": "^10.1.1",
     "@fastify/rate-limit": "11.2.0",
-    "fastify": "5.12.5",
+    "fastify": "5.12.8",
     "playwright": "1.62.1"
   }
 }
