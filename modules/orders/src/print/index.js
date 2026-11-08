@@ -3,6 +3,7 @@ import { renderFichaHtmlV3 } from './ficha-canonical-v3.js';
 import { renderFichaHtmlV4 } from './ficha-canonical-v4.js';
 import { renderFichaHtmlV5 } from './ficha-canonical-v5.js';
 import { renderFichaHtmlV6 } from './ficha-canonical-v6.js';
+import { renderFichaHtmlV7 } from './ficha-canonical-v7.js';
 import { renderStoreFichaHtml, TEMPLATE_STORE_V1 } from './ficha-loja-v1.js';
 import {
   TEMPLATE_V2,
@@ -10,6 +11,7 @@ import {
   TEMPLATE_V4,
   TEMPLATE_V5,
   TEMPLATE_V6,
+  TEMPLATE_V7,
   printSnapshot,
 } from './print-snapshot.js';
 
@@ -20,6 +22,7 @@ export {
   TEMPLATE_V4,
   TEMPLATE_V5,
   TEMPLATE_V6,
+  TEMPLATE_V7,
 };
 
 /**
@@ -32,6 +35,11 @@ export {
  * `docs/phase0/ficha-pdf-approval-v6.json` remains a production go-live
  * gate. The validator refuses an unapproved switch; v2–v5 stay addressable
  * and their approved artifacts remain unchanged.
+ *
+ * OLIST-50 (RFC 050): `ficha-canonical-v7` (Aplicação, Previsão de entrega) is
+ * addressable and testable but NOT selected. Selecting it needs the PO to
+ * approve its synthetic sample and the physical gates; the validator refuses
+ * `PRINT_TEMPLATE = v7` until that approval is recorded.
  *
  * @type {string}
  */
@@ -50,6 +58,9 @@ export const PRINT_TEMPLATE = TEMPLATE_V6;
 export function renderOrderFicha(order, template = PRINT_TEMPLATE) {
   if (order?.origin === 'loja') return renderStoreFichaHtml(order);
   const snapshot = printSnapshot(order, template);
+  if (template === TEMPLATE_V7) {
+    return renderFichaHtmlV7(snapshot, { synthetic: false });
+  }
   if (template === TEMPLATE_V6) {
     return renderFichaHtmlV6(snapshot, { synthetic: false });
   }

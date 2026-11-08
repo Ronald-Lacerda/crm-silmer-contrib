@@ -156,7 +156,7 @@ test('lists exactly what is missing to generate, point by point (PFI-09, PFI-15,
   // PFI-19: the amount and the payment method are asked when generating,
   // never listed as missing nor typed in the panel.
   await expect(readiness).toHaveText(
-    'Falta para gerar: cor do item 1, gola do item 1, quem faz a arte e entrega prometida. Valor e forma de pagamento você informa ao gerar.',
+    'Falta para gerar: cor do item 1, gola do item 1, quem faz a arte e previsão de entrega. Valor e forma de pagamento você informa ao gerar.',
   );
   await expect(page.getByLabel('Valor final')).toHaveCount(0);
   await expect(page.getByRole('radio')).toHaveCount(0);
@@ -168,12 +168,12 @@ test('lists exactly what is missing to generate, point by point (PFI-09, PFI-15,
   const count = progress.getByRole('status');
   await expect(count).toHaveText('0 de 3 prontos');
   await expect(progress.getByRole('listitem')).toHaveText([
-    /Entrega prometida\s*falta: a data combinada/u,
+    /Previsão de entrega\s*falta: a data combinada/u,
     /Itens\s*falta: cor do item 1 e gola do item 1/u,
     /Arte do pedido\s*falta: quem faz a arte/u,
   ]);
   await expect(progress.getByRole('button')).toHaveText([
-    'Informar entrega prometida',
+    'Informar previsão de entrega',
   ]);
   await expect(progress).toContainText(
     'Valor e forma de pagamento: você informa ao gerar o pedido.',
@@ -186,7 +186,7 @@ test('lists exactly what is missing to generate, point by point (PFI-09, PFI-15,
   await page.keyboard.press('Enter');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const summary = page.getByRole('region', { name: 'Resumo do pedido' });
-  const delivery = summary.getByLabel('Entrega prometida');
+  const delivery = summary.getByLabel('Previsão de entrega');
   await expect(delivery).toBeFocused();
   expect(writes.filter((call) => call.action === 'confirm')).toHaveLength(0);
 
@@ -501,7 +501,7 @@ test('reads the order summary and marks the customer as locked (PFI-02)', async 
   // ADR 020: the technique lives on each item, not in the summary.
   await expect(summary.locator('dt')).toHaveText([
     'Cliente',
-    'Entrega prometida',
+    'Previsão de entrega',
     'Total de peças',
     'Nome do pedido',
     'Vendedor',
@@ -552,9 +552,9 @@ test('edits the summary and saves the whole section at once (PFI-06)', async ({
   // D13: the customer comes from the contact and is never typed here.
   await expect(summary.getByLabel('Cliente')).toBeDisabled();
   await expect(
-    summary.getByLabel('Entrega prometida'),
+    summary.getByLabel('Previsão de entrega'),
   ).toHaveAccessibleDescription('A data combinada com o cliente.');
-  await expect(summary.getByLabel(/Técnica/u)).toHaveCount(0);
+  await expect(summary.getByLabel(/Aplicação/u)).toHaveCount(0);
   const name = summary.getByLabel('Nome do pedido');
   await expect(name).toHaveAccessibleDescription(
     'Evento, empresa, time ou turma.',
@@ -953,16 +953,16 @@ test('requires a technique for each item before the seller can generate the orde
   await page.goto('/pedidos/order-pendente');
 
   const closing = page.getByRole('region', { name: 'Fechamento e pagamento' });
-  await expect(closing).toContainText('técnica do item 1');
+  await expect(closing).toContainText('aplicação do item 1');
   const items = page.getByRole('region', { name: 'Itens e especificações' });
   await items.getByRole('button', { name: 'Editar' }).click();
-  const technique = items.getByLabel('Técnica', { exact: true });
+  const technique = items.getByLabel('Aplicação', { exact: true });
   await expect(technique).toHaveAccessibleDescription(
     'Silk, DTF, sublimação, bordado… ou Sem estampa. Obrigatória para gerar.',
   );
   await technique.fill('BORDADO');
   await items.getByRole('button', { name: 'Salvar itens' }).click();
-  await expect(closing).not.toContainText('técnica do item 1');
+  await expect(closing).not.toContainText('aplicação do item 1');
   await expect(items).toContainText('BORDADO');
 });
 
@@ -1048,9 +1048,9 @@ test('shows the three trail dates without repeating the summary (PLA-01..03, PLA
   ]);
   const summary = page.getByRole('region', { name: 'Resumo do pedido' });
   await expect(summary).toContainText('Data do pedido');
-  await expect(summary).toContainText('Entrega prometida');
+  await expect(summary).toContainText('Previsão de entrega');
   await expect(trail).not.toContainText('Pedido fechado');
-  await expect(trail).not.toContainText('Entrega prometida');
+  await expect(trail).not.toContainText('Previsão de entrega');
 
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
@@ -1225,7 +1225,7 @@ test('reads each item with the seven points in order and the extras closed (PFI-
     'Tipo de roupa',
     'Cor',
     'Quantidade',
-    'Técnica',
+    'Aplicação',
     'Modelo de malha',
     'Tamanhos',
     'Gola',
@@ -1329,7 +1329,7 @@ test('edits the seven points and the extras of an item (PIT-01, PIT-02, PIT-03)'
   await expect(items.getByText('Quantidade', { exact: true })).toBeVisible();
   await items.getByLabel('Tipo de roupa').fill('REGATA');
   await items.getByLabel('Cor', { exact: true }).fill('PRETA');
-  await items.getByLabel('Técnica', { exact: true }).fill('SILK 4 CORES');
+  await items.getByLabel('Aplicação', { exact: true }).fill('SILK 4 CORES');
   await items.getByLabel('Modelo de malha 1').fill('ALGODÃO');
   await items.getByLabel('Gola', { exact: true }).fill('REGATA');
   await items
@@ -1341,7 +1341,7 @@ test('edits the seven points and the extras of an item (PIT-01, PIT-02, PIT-03)'
   // A second item stays half filled: it saves and is listed as missing.
   await items.getByRole('button', { name: 'Adicionar item' }).click();
   await page.locator('#item-1-tipo').fill('BONÉ');
-  await page.locator('#item-1-tecnica').fill('BORDADO');
+  await page.locator('#item-1-aplicacao').fill('BORDADO');
   await items.getByRole('button', { name: 'Salvar itens' }).click();
 
   await expect(
@@ -1701,7 +1701,7 @@ test('heads each section with its state in words and "Editar" naming the section
   ).toHaveCount(1);
   const states = page.locator('main .op-sheet-state');
   await expect(states).toHaveText([
-    'Falta entrega prometida',
+    'Falta previsão de entrega',
     '1 de 3 datas',
     'Falta: cor do item 1 e gola do item 1',
     'Falta marcar quem faz a arte',
@@ -1745,7 +1745,7 @@ test('heads each section with its state in words and "Editar" naming the section
 
   // The promised delivery and who makes the art read as done once saved.
   await summary.getByRole('button', { name: 'Editar resumo' }).click();
-  await summary.getByLabel('Entrega prometida').fill('2026-11-20');
+  await summary.getByLabel('Previsão de entrega').fill('2026-11-20');
   await summary.getByRole('button', { name: 'Salvar resumo' }).click();
   await expect(summary.locator('.op-sheet-state')).toHaveText(
     'Entrega 20/11/2026',
@@ -1975,7 +1975,7 @@ test('folds the sections into an accordion on a phone, by keyboard, with the sta
     name: /^Itens e especificações/u,
   });
   await expect(summaryHead).toHaveAccessibleName(
-    /^Resumo do pedido\s*,\s*Falta entrega prometida$/u,
+    /^Resumo do pedido\s*,\s*Falta previsão de entrega$/u,
   );
   await expect(itemsHead).toHaveAccessibleName(
     /^Itens e especificações\s*,\s*Falta: cor do item 1 e gola do item 1$/u,
@@ -2094,10 +2094,10 @@ test('opens the section of the hash and of the next step, and never folds an edi
   // The next step in the footer opens its section and its editor.
   const footer = page.locator('.op-mobile-action');
   await footer
-    .getByRole('button', { name: 'Informar entrega prometida' })
+    .getByRole('button', { name: 'Informar previsão de entrega' })
     .focus();
   await page.keyboard.press('Enter');
-  const delivery = summary.getByLabel('Entrega prometida');
+  const delivery = summary.getByLabel('Previsão de entrega');
   await expect(delivery).toBeFocused();
   await expect(summaryHead).toHaveAttribute('aria-expanded', 'true');
   await expect(observationsHead).toHaveAttribute('aria-expanded', 'false');
@@ -2917,7 +2917,7 @@ test('makes the next step the only primary while one is missing (PFI-13, PFI-16)
   // Wide screen: the next step on top is the primary; "Gerar pedido" stays
   // in the rail, unavailable, with what is missing beside it.
   const primary = page.locator('main button.primary:visible');
-  await expect(primary).toHaveText(['Informar entrega prometida']);
+  await expect(primary).toHaveText(['Informar previsão de entrega']);
   const generate = page
     .getByRole('region', { name: 'Fechamento e pagamento' })
     .getByRole('button', { name: 'Gerar pedido' });
@@ -2931,11 +2931,11 @@ test('makes the next step the only primary while one is missing (PFI-13, PFI-16)
   await page.setViewportSize({ height: 844, width: 390 });
   const footer = page.locator('.op-mobile-action');
   const step = footer.getByRole('button', {
-    name: 'Informar entrega prometida',
+    name: 'Informar previsão de entrega',
   });
-  await expect(primary).toHaveText(['Informar entrega prometida']);
+  await expect(primary).toHaveText(['Informar previsão de entrega']);
   await expect(footer.locator('button.primary')).toHaveText(
-    'Informar entrega prometida',
+    'Informar previsão de entrega',
   );
   await expect(
     footer.getByRole('button', { name: 'Gerar pedido' }),
@@ -2961,7 +2961,7 @@ test('makes the next step the only primary while one is missing (PFI-13, PFI-16)
   await expect(
     page
       .getByRole('region', { name: 'Resumo do pedido' })
-      .getByLabel('Entrega prometida'),
+      .getByLabel('Previsão de entrega'),
   ).toBeFocused();
   await expect(footer).toHaveCount(0);
   expect(writes).toHaveLength(0);
@@ -2978,10 +2978,10 @@ test('reaches and opens the next step by keyboard, and announces the count (PFI-
 
   const progress = page.getByRole('region', { name: 'Para gerar o pedido' });
   const next = progress.getByRole('button', {
-    name: 'Informar entrega prometida',
+    name: 'Informar previsão de entrega',
   });
   await expect(progress.locator('li[aria-current="step"]')).toContainText(
-    'Entrega prometida',
+    'Previsão de entrega',
   );
   // From the heading, the next step comes before any section control.
   let presses = 0;
@@ -2997,7 +2997,7 @@ test('reaches and opens the next step by keyboard, and announces the count (PFI-
 
   await page.keyboard.press('Enter');
   const summary = page.getByRole('region', { name: 'Resumo do pedido' });
-  const delivery = summary.getByLabel('Entrega prometida');
+  const delivery = summary.getByLabel('Previsão de entrega');
   await expect(delivery).toBeFocused();
 
   // PFI-06: with a section open the step waits, focusable, and says why.

@@ -408,9 +408,9 @@ aparece na tela; ele só existe na ficha impressa, que mantém "Lastro do
 pedido" e os mesmos templates e hashes.
 
 - **Progresso real no topo (PFI-15):** "Para gerar o pedido: N de 3", com os
-  passos Entrega prometida, Itens e Arte do pedido, lidos só de
+  passos Previsão de entrega, Itens e Arte do pedido, lidos só de
   `missingFields`; só o próximo passo tem botão, com verbo e objeto
-  ("Informar a entrega prometida", "Completar os itens", "Marcar quem faz a
+  ("Informar a previsão de entrega", "Completar os itens", "Marcar quem faz a
   arte"). Uma pendência que a tela não conhece vira o passo "Revisar
   pendências" e o total passa a 4, nunca um falso "3 de 3". Com os três
   passos feitos, o progresso vira uma linha só ("Tudo pronto para gerar · 3
@@ -562,7 +562,7 @@ alterada e completam a §3 (baixa carga cognitiva) e a §11 (acessibilidade).
 
 - Ação indisponível mas relevante usa `aria-disabled="true"`, continua
   focável e mostra o motivo ao lado ou na descrição acessível ("Salve ou
-  cancele a edição aberta", "Falta: entrega prometida").
+  cancele a edição aberta", "Falta: previsão de entrega").
 - Ativá-la não executa nada nem perde dado; nunca some sem explicação.
 
 ### Filtros em folha
@@ -605,7 +605,7 @@ alterada e completam a §3 (baixa carga cognitiva) e a §11 (acessibilidade).
   Esc ou "Voltar" ao botão que o abriu (no pedido, o do trilho ou o do
   rodapé do celular).
 - Como entregue no diálogo "Gerar o pedido" (T125): revisão com cliente,
-  itens e peças, entrega prometida e arte do pedido; erro no campo sem enviar
+  itens e peças, previsão de entrega e arte do pedido; erro no campo sem enviar
   nada; envio único mesmo com Enter duplo (`aria-busy`/`aria-disabled`); 422
   com pendência fora do diálogo fecha, relê o pedido e leva o foco ao próximo
   passo; 409 e queda de conexão mantêm o diálogo aberto com a mensagem

@@ -5,6 +5,7 @@ export const TEMPLATE_V3 = 'ficha-canonical-v3';
 export const TEMPLATE_V4 = 'ficha-canonical-v4';
 export const TEMPLATE_V5 = 'ficha-canonical-v5';
 export const TEMPLATE_V6 = 'ficha-canonical-v6';
+export const TEMPLATE_V7 = 'ficha-canonical-v7';
 
 /** A field nobody filled prints blank, never "null". @param {unknown} value */
 function printedText(value) {
@@ -64,9 +65,9 @@ function printedTrail(order) {
  * blank.
  *
  * The v2 snapshot is exactly the one the print route built before ADR 017;
- * v3 adds the date trail, and v4 to v6 who makes the art. Items travel as
- * stored (v6 prints their audience): each template decides how to print
- * them.
+ * v3 adds the date trail, and v4 to v7 who makes the art. Items travel as
+ * stored (v6 prints their audience, v7 renames two labels): each template
+ * decides how to print them.
  *
  * @param {any} order
  * @param {string} [templateVersion]
@@ -77,7 +78,8 @@ export function printSnapshot(order, templateVersion = TEMPLATE_V2) {
     templateVersion !== TEMPLATE_V3 &&
     templateVersion !== TEMPLATE_V4 &&
     templateVersion !== TEMPLATE_V5 &&
-    templateVersion !== TEMPLATE_V6
+    templateVersion !== TEMPLATE_V6 &&
+    templateVersion !== TEMPLATE_V7
   ) {
     throw new Error(`Unknown ficha template: ${templateVersion}`);
   }
@@ -102,7 +104,8 @@ export function printSnapshot(order, templateVersion = TEMPLATE_V2) {
   if (
     templateVersion === TEMPLATE_V4 ||
     templateVersion === TEMPLATE_V5 ||
-    templateVersion === TEMPLATE_V6
+    templateVersion === TEMPLATE_V6 ||
+    templateVersion === TEMPLATE_V7
   ) {
     pedido.artwork = order.ficha.artwork ?? {
       feito_pelo_cliente: false,

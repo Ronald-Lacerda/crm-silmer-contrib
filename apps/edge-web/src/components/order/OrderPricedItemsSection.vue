@@ -35,7 +35,7 @@ let opener = null;
 const ATTRIBUTE_FIELDS = Object.freeze([
   { key: 'tipo', label: 'Tipo de roupa' },
   { key: 'cor', label: 'Cor' },
-  { key: 'tipo_servico', label: 'Técnica' },
+  { key: 'tipo_servico', label: 'Aplicação' },
   { key: 'gola', label: 'Gola' },
   { key: 'modelo', label: 'Modelo' },
   { key: 'estampa', label: 'Estampa (referência)' },

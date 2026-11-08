@@ -4,6 +4,8 @@
 > **Status:** inventário original do P0.1, reconciliado em 05/10/2026 com ADRs 006, 016 e 020\
 > **Fontes:** `ficha_exemplo.xlsx`, `PRODUCT-READINESS-TECH-LEAD.md` e `CRM-MVP-ESPECIFICACAO.md`\
 > **Baseline atual:** coleta não linear, Pedido pendente/confirmado, técnica por item, arte do pedido e impressão v6 com público por item (ADR 025). Os grupos de perguntas não são estados nem colunas.
+>
+> **Rótulos v7 (OLIST-49):** a tela e a ficha v7 usam “Previsão de entrega” (antes “Entrega prometida”) e “Aplicação” no item (antes “Técnica”). As chaves `data_entrega_confirmada` e `tipo_servico` não mudam, e as fichas v2–v6 mantêm os rótulos históricos citados neste documento.
 
 Este documento transforma a planilha de exemplo em um contrato de dados e em
 uma jornada conversacional testável. Ele separa o que o cliente informa, o que

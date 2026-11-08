@@ -314,8 +314,8 @@ function issueLabel(issue) {
     STORE_ORDER_COMPLEMENT_REQUIRED: 'Prepare o complemento do pedido da loja.',
     ORDER_SOURCE_STALE:
       'O pedido mudou. Prepare novamente o complemento a partir dos dados atuais.',
-    STORE_DELIVERY_REQUIRED: 'Informe a entrega prometida no complemento.',
-    STORE_APPLICATION_REQUIRED: 'Informe a técnica do item no complemento.',
+    STORE_DELIVERY_REQUIRED: 'Informe a previsão de entrega no complemento.',
+    STORE_APPLICATION_REQUIRED: 'Informe a aplicação do item no complemento.',
     STORE_ARTWORK_REQUIRED:
       'A origem da arte precisa de conferência no pedido de origem.',
     STORE_ITEM_FIELD_REQUIRED:
@@ -487,7 +487,7 @@ onBeforeUnmount(() => {
             <div class="order-source-grid">
               <div class="op-field">
                 <label :for="fieldId('delivery')"
-                  >Entrega prometida complementar</label
+                  >Previsão de entrega complementar</label
                 >
                 <input
                   :id="fieldId('delivery')"
@@ -516,7 +516,7 @@ onBeforeUnmount(() => {
                 class="op-field"
               >
                 <label :for="fieldId(application.groupId)"
-                  >Técnica complementar do item {{ index + 1 }}</label
+                  >Aplicação complementar do item {{ index + 1 }}</label
                 >
                 <input
                   :id="fieldId(application.groupId)"
@@ -705,7 +705,7 @@ onBeforeUnmount(() => {
           class="order-source-details"
         >
           <div>
-            <dt>Entrega prometida complementar</dt>
+            <dt>Previsão de entrega complementar</dt>
             <dd>
               {{
                 source.details?.deliveryOn ||
@@ -718,7 +718,7 @@ onBeforeUnmount(() => {
             v-for="(application, index) in source.details?.applications ?? []"
             :key="application.groupId"
           >
-            <dt>Técnica do item {{ index + 1 }}</dt>
+            <dt>Aplicação do item {{ index + 1 }}</dt>
             <dd>
               {{
                 order.ficha?.items?.[index]?.tipo_servico ||

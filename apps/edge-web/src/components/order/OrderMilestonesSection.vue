@@ -241,7 +241,7 @@ async function save() {
             ? 'Primeiro contato é preenchido na criação. Confirme a entrega nos seus afazeres do Dashboard.'
             : 'Primeiro contato vem da conversa.'
         }}
-        Data do pedido e entrega prometida ficam no Resumo do pedido.
+        Data do pedido e previsão de entrega ficam no Resumo do pedido.
       </p>
 
       <div class="op-form-actions">

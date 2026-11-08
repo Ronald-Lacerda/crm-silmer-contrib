@@ -477,7 +477,7 @@ onBeforeUnmount(() => {
               <dd>{{ detail.ownerName || origin(detail) }}</dd>
             </div>
             <div>
-              <dt>Entrega prometida</dt>
+              <dt>Previsão de entrega</dt>
               <dd>{{ day(detail.deliveryOn) }}</dd>
             </div>
           </dl>

@@ -158,7 +158,16 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 OLIST-01–12, 21–24, 33–35 e 40–44; [contrato e evidências](../../../docs/runbooks/olist-phase4.md#t12--composição-e-conferência-por-pedido-08112026).
 Mesma branch `codex/olist-phase4-t11`; nenhum deploy, conta habilitada ou flag
-real alterada. T13/T25 e as Fases 5–6 permanecem separadas.
+real alterada. T13 e as Fases 5–6 permanecem separadas; T25 está registrada abaixo.
+
+## OLIST-T25 — rótulos e ficha-canonical-v7 (08/11/2026)
+
+- [x] Previsão de entrega e Aplicação na UI, ARIA, erros, resumos e filas; chaves e API inalteradas.
+- [x] `ficha-canonical-v7` preparada com amostra sintética, PDF e hashes próprios; v2–v6 intactas.
+- [x] `PRINT_TEMPLATE` segue na v6; o validador recusa a v7 sem aprovação do PO e gates físicos.
+
+OLIST-23–24 e 49–50. [Contrato, evidências e rollback](../../../docs/runbooks/olist-phase4.md#t25--rótulos-e-ficha-canonical-v7-08112026).
+Aprovação da amostra e troca do template pendentes (humanas). Geração real desligada, sem deploy ou piloto.
 
 ## OLIST-T11 — interface administrativa Olist (07/11/2026)
 
@@ -171,7 +180,7 @@ real alterada. T13/T25 e as Fases 5–6 permanecem separadas.
 - [x] Teclado/foco/axe, estados negativos e reflow claro/escuro verificados.
 
 OLIST-03–05, 11, 22–25 e 48. [Contrato, evidências e rollback](../../../docs/runbooks/olist-phase4.md).
-T11 iniciou a Fase 4; T12 concluída na continuação acima. T13/T25 pendentes.
+T11 iniciou a Fase 4; T12 concluída na continuação acima; T25 concluída (ver OLIST-T25). T13 pendente.
 Geração real desligada,
 sem deploy, habilitação, conexão real homologada ou piloto.
 
@@ -187,7 +196,7 @@ sem deploy, habilitação, conexão real homologada ou piloto.
       regressão de Pedidos/Loja/Financeiro/filas/n8n executadas.
 
 OLIST-02, 06, 16, 19, 21, 27–30, 39, 45–47. [Contrato e evidências](../../../docs/runbooks/olist-phase3.md#t10--guardas-comerciais-e-recuperação).
-F3 concluída localmente; próximas T11/T12/T13/T25, sem despacho real/deploy/piloto.
+F3 concluída localmente; próximas T11/T12/T13/T25 (T11/T12/T25 já entregues), sem despacho real/deploy/piloto.
 
 ## OLIST-T23 — cancelamento local pré-exportação (06/11/2026)
 

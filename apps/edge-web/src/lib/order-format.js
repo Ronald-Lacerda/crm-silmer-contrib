@@ -67,7 +67,7 @@ const ITEM_POINT_LABELS = Object.freeze({
   // ADR 025 (D5): the fabric is "Modelo de malha" at Silmer.
   malhas: 'modelo de malha',
   tipo: 'tipo de roupa',
-  tipo_servico: 'técnica',
+  tipo_servico: 'aplicação',
 });
 
 // ADR 025 (D1): who an item is for, a closed list the API also enforces.
@@ -181,7 +181,7 @@ function missingFieldLabel(field) {
   if (field === 'priceBreakdown' || field.startsWith('priceBreakdown.'))
     return 'composição de preços a revisar';
   if (field === 'artwork') return 'quem faz a arte';
-  if (field === 'summary.data_entrega_confirmada') return 'entrega prometida';
+  if (field === 'summary.data_entrega_confirmada') return 'previsão de entrega';
   if (field === 'finalAmount') return 'valor final';
   if (field === 'paymentCondition') return 'forma de pagamento';
   const item = /^items\[(\d+)\]\.(\w+)$/u.exec(field);
@@ -220,9 +220,9 @@ export function isPageGap(field) {
 // The amount and the payment method are typed when generating, not here.
 const ORDER_STEPS = Object.freeze([
   {
-    action: 'Informar entrega prometida',
+    action: 'Informar previsão de entrega',
     key: 'delivery',
-    label: 'Entrega prometida',
+    label: 'Previsão de entrega',
     /** @param {string} field */
     owns: (field) => field === 'summary.data_entrega_confirmada',
     section: 'summary',

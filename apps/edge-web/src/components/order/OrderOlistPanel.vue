@@ -496,7 +496,7 @@ onBeforeUnmount(() => {
               </dd>
             </div>
             <div>
-              <dt>Entrega prometida</dt>
+              <dt>Previsão de entrega</dt>
               <dd>
                 {{
                   dayLabel(preview.commercial?.deliveryOn) || 'Não informada'

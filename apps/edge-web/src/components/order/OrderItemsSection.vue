@@ -647,15 +647,15 @@ async function save() {
             </div>
 
             <div class="op-field op-field--wide">
-              <label :for="`item-${itemIndex}-tecnica`">Técnica</label>
+              <label :for="`item-${itemIndex}-aplicacao`">Aplicação</label>
               <input
-                :id="`item-${itemIndex}-tecnica`"
+                :id="`item-${itemIndex}-aplicacao`"
                 v-model="item.tipo_servico"
                 type="text"
                 autocomplete="off"
-                :aria-describedby="`item-${itemIndex}-tecnica-hint`"
+                :aria-describedby="`item-${itemIndex}-aplicacao-hint`"
               />
-              <p :id="`item-${itemIndex}-tecnica-hint`" class="op-hint">
+              <p :id="`item-${itemIndex}-aplicacao-hint`" class="op-hint">
                 Silk, DTF, sublimação, bordado… ou Sem estampa. Obrigatória para
                 gerar.
               </p>
@@ -980,7 +980,7 @@ async function save() {
             </dd>
           </div>
           <div class="op-point--wide">
-            <dt>Técnica</dt>
+            <dt>Aplicação</dt>
             <dd>{{ shownValue(item.tipo_servico) }}</dd>
           </div>
           <div>

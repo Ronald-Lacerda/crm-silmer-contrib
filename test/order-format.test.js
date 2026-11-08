@@ -160,7 +160,7 @@ test('names each point missing to generate in plain words (PIT-06)', () => {
     [
       'tipo de roupa do item 1',
       'cor do item 1',
-      'técnica do item 1',
+      'aplicação do item 1',
       'modelo de malha do item 1',
       'tamanhos do item 2',
       'gola do item 2',
@@ -381,7 +381,12 @@ test('names the promised delivery and tells it apart from the amount and payment
       'finalAmount',
       'paymentCondition',
     ]),
-    ['cor do item 1', 'entrega prometida', 'valor final', 'forma de pagamento'],
+    [
+      'cor do item 1',
+      'previsão de entrega',
+      'valor final',
+      'forma de pagamento',
+    ],
   );
   assert.equal(isPageGap('summary.data_entrega_confirmada'), true);
   assert.equal(isPageGap('items[0].cor'), true);
@@ -389,7 +394,7 @@ test('names the promised delivery and tells it apart from the amount and payment
   assert.equal(isPageGap('paymentCondition'), false);
   assert.equal(
     missingHeadline(['summary.data_entrega_confirmada']),
-    'Falta entrega prometida',
+    'Falta previsão de entrega',
   );
 });
 
@@ -419,9 +424,9 @@ test('derives the three steps to generate from missingFields only (PFI-15)', () 
     })),
     [
       {
-        action: 'Informar entrega prometida',
+        action: 'Informar previsão de entrega',
         key: 'delivery',
-        label: 'Entrega prometida',
+        label: 'Previsão de entrega',
         section: 'summary',
       },
       {
@@ -485,7 +490,7 @@ test('names what an item step lacks without inventing progress (PFI-15)', () => 
   };
   assert.equal(
     orderSteps(older)[1].missing,
-    'falta: cor do item 1, técnica do item 1 e mais 1 ponto',
+    'falta: cor do item 1, aplicação do item 1 e mais 1 ponto',
   );
   assert.equal(nextOrderStep(older)?.key, 'items');
 });

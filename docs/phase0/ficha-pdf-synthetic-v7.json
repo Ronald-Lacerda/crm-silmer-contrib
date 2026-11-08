@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "task": "OLIST-T25",
+  "rfc": "044",
+  "syntheticOnly": true,
+  "snapshotVersion": "synthetic-order-v7",
+  "templateVersion": "ficha-canonical-v7",
+  "generatedAt": "2026-11-08T12:00:00-03:00",
+  "order": {
+    "number": "31-CRM",
+    "fabCode": "01",
+    "status": "confirmado",
+    "orderDate": "2026-10-05",
+    "firstContactAt": "2026-10-01T13:40:00.000Z",
+    "paidOn": "2026-10-05",
+    "deliveredOn": null,
+    "totalPieces": 53,
+    "confirmedBy": {
+      "name": "Vendedora Exemplo"
+    },
+    "ficha": {
+      "summary": {
+        "cliente": "Cliente Demonstração",
+        "data_entrega_confirmada": "2026-10-30",
+        "aplicacao": null,
+        "nome": "Time Horizonte - Uniformes Sintéticos"
+      },
+      "items": [
+        {
+          "tipo": "CAMISETA COMUM",
+          "cor": "AZUL MARINHO",
+          "estampa": "ESCUDO NA FRENTE; NOME E NÚMERO NAS COSTAS",
+          "malhas": ["DRY FIT 100% POLIÉSTER"],
+          "gola": "GOLA REDONDA",
+          "modelo": "",
+          "cor_frente": "",
+          "cor_costas": "",
+          "cor_manga_direita": "",
+          "cor_manga_esquerda": "",
+          "vies_gola": "",
+          "vies_mangas": "",
+          "publico": "masculino",
+          "quantidade_informada": 20,
+          "grade": [
+            { "tamanho": "P", "quantidade": 4 },
+            { "tamanho": "M", "quantidade": 8 },
+            { "tamanho": "G", "quantidade": 6 },
+            { "tamanho": "GG", "quantidade": 2 }
+          ],
+          "tipo_servico": "SILK"
+        },
+        {
+          "tipo": "CAMISETA BABY LOOK",
+          "cor": "AZUL MARINHO",
+          "estampa": "ESCUDO NA FRENTE; NOME E NÚMERO NAS COSTAS",
+          "malhas": ["DRY FIT 100% POLIÉSTER"],
+          "gola": "GOLA REDONDA",
+          "modelo": "",
+          "cor_frente": "",
+          "cor_costas": "",
+          "cor_manga_direita": "",
+          "cor_manga_esquerda": "",
+          "vies_gola": "",
+          "vies_mangas": "",
+          "publico": "feminino",
+          "quantidade_informada": 12,
+          "grade": [
+            { "tamanho": "P", "quantidade": 4 },
+            { "tamanho": "M", "quantidade": 4 },
+            { "tamanho": "G", "quantidade": 2 }
+          ],
+          "tipo_servico": "SILK"
+        },
+        {
+          "tipo": "CAMISETA COMUM",
+          "cor": "AZUL MARINHO",
+          "estampa": "ESCUDO NA FRENTE",
+          "malhas": ["DRY FIT 100% POLIÉSTER"],
+          "gola": "GOLA REDONDA",
+          "modelo": "",
+          "cor_frente": "",
+          "cor_costas": "",
+          "cor_manga_direita": "",
+          "cor_manga_esquerda": "",
+          "vies_gola": "",
+          "vies_mangas": "",
+          "publico": "infantil",
+          "quantidade_informada": 8,
+          "grade": [
+            { "tamanho": "4", "quantidade": 2 },
+            { "tamanho": "6", "quantidade": 2 },
+            { "tamanho": "8", "quantidade": 2 },
+            { "tamanho": "10", "quantidade": 2 }
+          ],
+          "tipo_servico": "SILK"
+        },
+        {
+          "tipo": "BONÉ TRUCKER",
+          "cor": "PRETO COM TELA BRANCA",
+          "estampa": "LOGO NA FRENTE",
+          "malhas": ["BRIM"],
+          "gola": "NAO APLICAVEL",
+          "modelo": "",
+          "cor_frente": "",
+          "cor_costas": "",
+          "cor_manga_direita": "",
+          "cor_manga_esquerda": "",
+          "vies_gola": "",
+          "vies_mangas": "",
+          "publico": "unissex",
+          "quantidade_informada": null,
+          "grade": [{ "tamanho": "ÚNICO", "quantidade": 15 }],
+          "tipo_servico": "BORDADO"
+        }
+      ],
+      "observations": [
+        "Amostra sintética de um pedido dividido por público.",
+        "Separar os pacotes por público e por tamanho.",
+        "Não usar este documento para produção ou cobrança."
+      ],
+      "artwork": {
+        "feito_pelo_cliente": true,
+        "feito_pela_silmer": true,
+        "sem_estampa": false,
+        "files": []
+      }
+    }
+  }
+}

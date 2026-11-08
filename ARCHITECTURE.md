@@ -33,7 +33,7 @@ confirmação humana a `/export`: projeção e prévia liberadas, conferência f
 com liberação e diálogo explícito. O corpo é somente `previewToken`, com chave
 idempotente. Mudança/expiração/revogação invalida a revisão; envio incerto impede
 retry cego e remete à conferência administrativa. T12 concluída localmente;
-T13/T25 e os gates posteriores continuam separados. Geração real permanece
+T13 e os gates posteriores continuam separados. Geração real permanece
 desligada; flags/defaults/runtime reais não foram alterados. [Contrato, verificação e rollback](docs/runbooks/olist-phase4.md#t12--composição-e-conferência-por-pedido-08112026).
 Sem mudança de flags, migrações, credenciais, infraestrutura ou deploy.
 
@@ -50,8 +50,10 @@ e trata conflito sem sobrescrever rascunho; refresh não abre edição obsoleta.
 Respostas tardias não restauram consultas após mudança de conexão ou revogação.
 Sem transporte criador, migration, dependência ou infraestrutura nova; geração
 real permanece desligada. [Contrato, evidências e rollback](docs/runbooks/olist-phase4.md).
-T11 iniciou F4; T12 foi concluída na continuação acima. T13/T25 e os gates
-operacionais F5/F6 continuam pendentes.
+T11 iniciou F4; T12 foi concluída na continuação acima. T25 trouxe os rótulos
+Previsão de entrega/Aplicação e a `ficha-canonical-v7`, preparada e não
+selecionada (`PRINT_TEMPLATE` segue na v6). T13 e os gates operacionais F5/F6
+continuam pendentes.
 
 ## OLIST-T10 — guardas comerciais e recuperação (06/11/2026)
 

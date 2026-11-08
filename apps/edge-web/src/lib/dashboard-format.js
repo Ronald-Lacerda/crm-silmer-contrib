@@ -268,8 +268,8 @@ export function overdueIndicator(deliveries) {
     detail: total
       ? oldest
         ? `A mais antiga era para ${oldest}`
-        : 'Prometidas para antes de hoje e ainda não entregues'
-      : 'Nenhuma entrega prometida passou do dia',
+        : 'Previstas para antes de hoje e ainda não entregues'
+      : 'Nenhuma previsão de entrega passou do dia',
     tone: total ? 'error' : null,
     value: String(total),
   };
@@ -424,8 +424,8 @@ export function dueSoonIndicator(deliveries) {
   return {
     badge: '',
     detail: total
-      ? `Prometidas de hoje${until ? ` até ${until}` : ''}`
-      : 'Nenhuma entrega prometida para os próximos 7 dias',
+      ? `Previstas de hoje${until ? ` até ${until}` : ''}`
+      : 'Nenhuma previsão de entrega para os próximos 7 dias',
     tone: null,
     value: String(total),
   };

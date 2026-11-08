@@ -47,11 +47,11 @@ function dateBR(value) {
 const headState = computed(() => {
   const step = orderSteps(props.order).find((one) => one.key === 'delivery');
   if (step && !step.done) {
-    return { text: 'Falta entrega prometida', tone: 'missing' };
+    return { text: 'Falta previsão de entrega', tone: 'missing' };
   }
   const day = dateBR(summary.value.data_entrega_confirmada);
   if (day) return { text: `Entrega ${day}`, tone: 'ok' };
-  return { text: 'Sem entrega prometida', tone: 'neutral' };
+  return { text: 'Sem previsão de entrega', tone: 'neutral' };
 });
 
 async function startEditing() {
@@ -71,7 +71,7 @@ function cancel() {
 }
 
 // ADR 016: "Informar no Resumo" from "Gerar pedido" opens this editor on
-// Entrega prometida; with another section open, it only brings the summary
+// Previsão de entrega; with another section open, it only brings the summary
 // into view.
 const sheet = ref(null);
 watch(
@@ -161,7 +161,7 @@ async function save() {
         </div>
 
         <div class="op-field">
-          <label for="summary-entrega">Entrega prometida</label>
+          <label for="summary-entrega">Previsão de entrega</label>
           <input
             id="summary-entrega"
             ref="firstField"
@@ -218,7 +218,7 @@ async function save() {
           </dd>
         </div>
         <div>
-          <dt>Entrega prometida</dt>
+          <dt>Previsão de entrega</dt>
           <dd class="op-num">
             {{ dateBR(summary.data_entrega_confirmada) || '—' }}
           </dd>

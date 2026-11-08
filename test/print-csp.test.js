@@ -10,6 +10,7 @@ import {
   TEMPLATE_V4,
   TEMPLATE_V5,
   TEMPLATE_V6,
+  TEMPLATE_V7,
   renderOrderFicha,
 } from '../modules/orders/src/print/index.js';
 
@@ -39,6 +40,7 @@ test('the print route alone permits the exact styles of supported ficha template
     TEMPLATE_V4,
     TEMPLATE_V5,
     TEMPLATE_V6,
+    TEMPLATE_V7,
   ]) {
     const html = renderOrderFicha(fixture.order, template);
     const styles = [...html.matchAll(/<style>([\s\S]*?)<\/style>/gu)];
@@ -70,9 +72,14 @@ test('the print route alone permits the exact styles of supported ficha template
     );
   }
   assert.ok(
-    [TEMPLATE_V2, TEMPLATE_V3, TEMPLATE_V4, TEMPLATE_V5, TEMPLATE_V6].includes(
-      PRINT_TEMPLATE,
-    ),
+    [
+      TEMPLATE_V2,
+      TEMPLATE_V3,
+      TEMPLATE_V4,
+      TEMPLATE_V5,
+      TEMPLATE_V6,
+      TEMPLATE_V7,
+    ].includes(PRINT_TEMPLATE),
     'the active template must be included in the permitted set',
   );
   // ADR 027: the site shop's simplified ficha, picked by the order origin.

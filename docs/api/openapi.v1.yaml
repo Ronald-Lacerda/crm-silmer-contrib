@@ -2640,12 +2640,12 @@ paths:
         - name: delivery
           in: query
           description: >-
-            Painel: `overdue` lista os pedidos confirmados cuja entrega
-            prometida já passou sem "Entregue em"; `due_soon`, os prometidos de
-            hoje até seis dias depois (dias de São Paulo). Ordena pela entrega
-            prometida, devolve até 100 itens sem cursor e não combina com
-            `status`, `origin`, `q` ou `cursor`. Pedido da loja não tem entrega
-            prometida e fica fora.
+            Painel: `overdue` lista os pedidos confirmados cuja previsão
+            de entrega já passou sem "Entregue em"; `due_soon`, os previstos de
+            hoje até seis dias depois (dias de São Paulo). Ordena pela previsão
+            de entrega, devolve até 100 itens sem cursor e não combina com
+            `status`, `origin`, `q` ou `cursor`. Pedido da loja não tem previsão
+            de entrega e fica fora.
           schema: { type: string, enum: [overdue, due_soon] }
         - name: owner
           in: query
@@ -2757,7 +2757,7 @@ paths:
         storeNewOldestPaidAt é o instante em que a InfinitePay confirmou o Pix
         do mais antigo deles, nulo quando não há (ADR 031). `period` soma as
         vendas confirmadas cujo dia do pedido cai no período escolhido;
-        `deliveries` conta as entregas prometidas vencidas sem "Entregue em" e
+        `deliveries` conta as entregas com previsão vencida sem "Entregue em" e
         as dos próximos sete dias. `daily` (PNL-05) traz as vendas confirmadas
         de cada um dos últimos sete dias, terminando hoje, independente de
         `period`. Os dias são de São Paulo e calculados no servidor.
@@ -3034,9 +3034,9 @@ paths:
         omitido; declaração antiga só é aceita se igual à soma calculada.
         Exige forma de pagamento válida (campo paymentCondition), ao menos um item e,
         em cada item, os pontos principais das ADRs 016 e 020 (tipo, cor,
-        técnica em tipo_servico, ao menos um tecido, ao menos uma linha de
-        tamanho e gola), quem faz a arte do pedido (chave artwork) e a entrega
-        prometida do resumo como dia AAAA-MM-DD; paidOn e deliveredOn não
+        aplicação em tipo_servico, ao menos um tecido, ao menos uma linha de
+        tamanho e gola), quem faz a arte do pedido (chave artwork) e a previsão
+        de entrega do resumo como dia AAAA-MM-DD; paidOn e deliveredOn não
         bloqueiam. Recusa com 422 ORDER_NOT_CONFIRMABLE e as chaves de
         Order.missingFields que faltam. Grava valor, forma de pagamento,
         autor, horário e data do pedido. Numa nova confirmação depois
@@ -3153,7 +3153,7 @@ paths:
       description: >-
         PLA-10 / T136. Somente pedidos manuais sem conversa, confirmados, sem
         Entregue em e que não são testes, cujo responsável é a pessoa da sessão.
-        Ordenados pela entrega prometida e número; pedidos sem prazo vêm ao fim.
+        Ordenados pela previsão de entrega e número; pedidos sem prazo vêm ao fim.
       security: [{ sessionCookie: [] }]
       responses:
         '200':
@@ -6358,12 +6358,12 @@ components:
       description: >-
         Item da ficha (ADRs 016, 020 e 022). Principais, na ordem da tela: tipo
         (Tipo de roupa), cor, quantidade (soma da grade; nunca enviada),
-        tipo_servico (Técnica: silk, DTF, sublimação, bordado… ou Sem
+        tipo_servico (Aplicação: silk, DTF, sublimação, bordado… ou Sem
         estampa), malhas (Modelo de malha), grade (Tamanhos) e gola (Gola).
         Opcionais e sem bloquear (ADR 025): publico (masculino, feminino,
         infantil, unissex ou vazio) e quantidade_informada (referência do que
         o cliente disse; não entra no total). O bot pode
-        preencher uma técnica vazia; é obrigatória para confirmar, mas pode
+        preencher uma aplicação vazia; é obrigatória para confirmar, mas pode
         ficar vazia enquanto pendente. Adicionais, que não bloqueiam: estampa
         (Estampa (referência)), cores do tecido por parte e vies_mangas; modelo
         e vies_gola são legados. Mangas e viés aceitam NAO APLICAVEL. Um item pode ser
@@ -6442,8 +6442,9 @@ components:
         aplicacao:
           type: [string, 'null']
           description: >-
-            Técnica geral legada (ADR 020); não é mais escrita, editada nem
-            impressa a partir da v5. A técnica fica em cada item.
+            Campo geral legado (antes "Técnica", ADR 020); não é mais escrito,
+            editado nem impresso a partir da v5. A Aplicação fica em cada item
+            (tipo_servico).
         nome: { type: [string, 'null'] }
     FichaSummaryInput:
       type: object
@@ -6611,11 +6612,11 @@ components:
           description: >-
             O que ainda impede gerar o pedido pendente (ADRs 016 e 020),
             nesta ordem: items (nenhum item); items[N].tipo, items[N].cor,
-            items[N].tipo_servico (técnica), items[N].malhas, items[N].grade e
+            items[N].tipo_servico (aplicação), items[N].malhas, items[N].grade e
             items[N].gola (ponto principal que falta no item N, a partir de 0;
             a grade vale também pela quantidade); artwork (ninguém marcou
             quem faz a arte nem sem estampa);
-            summary.data_entrega_confirmada (entrega prometida ausente ou fora
+            summary.data_entrega_confirmada (previsão de entrega ausente ou fora
             do formato AAAA-MM-DD); finalAmount; e paymentCondition. Vazio em
             pedido confirmado. Os adicionais do item, o resto do resumo e as
             outras datas do lastro (paidOn, deliveredOn) nunca aparecem aqui:

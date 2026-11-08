@@ -180,7 +180,7 @@ test('Painel: sales, pending orders and deliveries tolerate a missing field', ()
   assert.equal(overdueIndicator(undefined).tone, null);
   assert.equal(
     dueSoonIndicator({ dueSoonCount: 3, dueSoonUntil: '2026-10-21' }).detail,
-    'Prometidas de hoje até 21/10',
+    'Previstas de hoje até 21/10',
   );
 });
 

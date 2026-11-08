@@ -15,6 +15,7 @@ import {
   TEMPLATE_V4,
   TEMPLATE_V5,
   TEMPLATE_V6,
+  TEMPLATE_V7,
   renderOrderFicha,
 } from '../modules/orders/src/print/index.js';
 import { printSnapshot } from '../modules/orders/src/print/print-snapshot.js';
@@ -46,6 +47,12 @@ const v4Gate = JSON.parse(
 const v6Gate = JSON.parse(
   await readFile(
     new URL('docs/phase0/ficha-pdf-approval-v6.json', rootUrl),
+    'utf8',
+  ),
+);
+const v7Gate = JSON.parse(
+  await readFile(
+    new URL('docs/phase0/ficha-pdf-approval-v7.json', rootUrl),
     'utf8',
   ),
 );
@@ -182,8 +189,24 @@ test('the switch agrees with the recorded v6 approval (PIM-10)', () => {
       gateV4: v4Gate,
       gateV5: v5Gate,
       gateV6: v6Gate,
+      gateV7: v7Gate,
       printTemplate: PRINT_TEMPLATE,
     }),
+  );
+  // OLIST-50: v7 is addressable but not selected while its sample waits for
+  // the PO; the switch refuses it without a recorded approval.
+  assert.notEqual(PRINT_TEMPLATE, TEMPLATE_V7);
+  assert.throws(
+    () =>
+      validateFichaPrintSwitch({
+        gate: v3Gate,
+        gateV4: v4Gate,
+        gateV5: v5Gate,
+        gateV6: v6Gate,
+        gateV7: v7Gate,
+        printTemplate: TEMPLATE_V7,
+      }),
+    /before its approval is recorded/u,
   );
   const stages = fichaV3ApprovalStages(v3Gate);
   if (!stages.provisional && !stages.final) {
@@ -333,6 +356,7 @@ test('the same order renders on all three templates through one function (PIM-10
   const v3 = renderOrderFicha(order, TEMPLATE_V3);
   const v4 = renderOrderFicha(order, TEMPLATE_V4);
   const v5 = renderOrderFicha(order, TEMPLATE_V5);
+  const v7 = renderOrderFicha(order, TEMPLATE_V7);
 
   assert.match(v2, /Entrega confirmada/u);
   // ADR 020: the order-wide technique is no longer written; v3 prints its
@@ -356,7 +380,14 @@ test('the same order renders on all three templates through one function (PIM-10
     v5,
     /4<\/b> Técnica<\/span><div class="point-value">SUBLIMAÇÃO/u,
   );
-  for (const html of [v2, v3, v4, v5]) {
+  // OLIST-49/50: v7 renames two labels and adds no money.
+  assert.match(
+    v7,
+    /4<\/b> Aplicação<\/span><div class="point-value">SUBLIMAÇÃO/u,
+  );
+  assert.match(v7, /Previsão de entrega<\/span><strong>24\/10\/2026</u);
+  assert.doesNotMatch(v7, /Técnica|Entrega prometida/u);
+  for (const html of [v2, v3, v4, v5, v7]) {
     assert.doesNotMatch(html, /Amostra sint|4\.820,00|R\$|pix/iu);
     assert.doesNotMatch(html, /null|undefined/u);
   }

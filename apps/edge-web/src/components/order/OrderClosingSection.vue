@@ -28,7 +28,7 @@ const BLOCKER_MESSAGES = Object.freeze({
   finalAmount: 'Informe o valor final aprovado pelo cliente.',
   paymentCondition: 'Escolha a forma de pagamento.',
   'summary.data_entrega_confirmada':
-    'Informe a entrega prometida no Resumo do pedido.',
+    'Informe a previsão de entrega no Resumo do pedido.',
 });
 const AMOUNT_FORMAT_MESSAGE = 'Use o formato 4.820,00.';
 // PFI-19 (RFC 024): the amount and the payment method are typed only in the
@@ -623,7 +623,7 @@ async function reopen() {
           <dd class="op-num">{{ itemsHeadline }}</dd>
         </div>
         <div>
-          <dt>Entrega prometida</dt>
+          <dt>Previsão de entrega</dt>
           <dd class="op-num">
             {{ dateBR(order.ficha?.summary?.data_entrega_confirmada) }}
           </dd>

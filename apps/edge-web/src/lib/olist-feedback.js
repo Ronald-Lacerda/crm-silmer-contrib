@@ -90,7 +90,7 @@ export function olistIssueLabel(issue, groups = []) {
   if (field === 'paymentCondition')
     return 'Forma de pagamento pendente no pedido.';
   if (field === 'summary.data_entrega_confirmada')
-    return 'Entrega prometida pendente no pedido.';
+    return 'Previsão de entrega pendente no pedido.';
   return (
     context +
     'Os dados do pedido ou do cadastro precisam de conferência antes da exportação.'

@@ -244,3 +244,38 @@ preservadas. Nenhum teste sintético comprova piloto, operação real ou amplia�
 
 T12 concluída no código; F4 continua aberta para T13/T25.
 Flags reais desligadas, sem deploy, cadastros/vendas reais, piloto ou ampliação.
+
+## T25 — rótulos e ficha-canonical-v7 (08/11/2026)
+
+OLIST-23–24 e 49–50. Mesma worktree/branch `codex/olist-phase4-t11`. Sem
+migration, flag, credencial, acesso ERP ou deploy; geração real segue desligada.
+
+### Contrato entregue
+
+- UI, erros, ARIA e resumos: **Previsão de entrega** substitui Entrega prometida
+  (`summary.data_entrega_confirmada`) e **Aplicação** substitui Técnica no campo 4
+  de cada item (`items[].tipo_servico`). Chaves, datas e API não mudam;
+  `summary.aplicacao` continua desativado. Filas e painel de entregas usam
+  Previstas/Previsto para. Os ids de campo `item-N-tecnica` viraram
+  `item-N-aplicacao`, com `for`/`aria-describedby` coerentes.
+- Não renomeados de propósito: `artwork_technique` (técnica do briefing da arte,
+  ADR 020) e usos de "técnica" no sentido de TI.
+- `ficha-canonical-v7` é a v6 com apenas esses dois rótulos trocados, mesma
+  folha de estilos (hash de CSP já admitido) e nenhum dinheiro novo. Exportada
+  por `TEMPLATE_V7`; `printSnapshot` a aceita como v4–v6. `PRINT_TEMPLATE`
+  **permanece v6**; o validador recusa a seleção da v7 enquanto
+  `docs/phase0/ficha-pdf-approval-v7.json` estiver pendente. A amostra sintética,
+  o PDF e os hashes ficam em `docs/phase0/` e `output/pdf/`. v2–v6, seus PDFs,
+  hashes e aprovações não foram alterados.
+
+### Pendências humanas para ativar a v7
+
+Aprovação da amostra pelo PO e gates físicos (Rose e Operação), registradas no
+approval-v7, e um commit à parte que troque `PRINT_TEMPLATE`. Nada disso foi
+feito. O PDF do Chromium não é reproduzível byte a byte: regenerar exige atualizar
+o hash do artefato no approval-v7. A conferência visual do layout é do PO.
+
+### Rollback T25
+
+Reverter a entrega de rótulos e os arquivos v7 em conjunto. Nenhum dado ou
+snapshot é alterado; pedidos continuam imprimindo na v6.

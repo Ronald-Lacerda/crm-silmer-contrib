@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "task": "OLIST-T25",
+  "rfc": "044",
+  "requirements": ["OLIST-49", "OLIST-50", "PIM-10"],
+  "syntheticOnly": true,
+  "snapshotVersion": "synthetic-order-v7",
+  "templateVersion": "ficha-canonical-v7",
+  "snapshotSha256": "648bc9d8c7d20c6b1d45ed7ec18e5113176632ada5e9bc0a1246a497757c751e",
+  "renderedHtmlSha256": "f44d3fefcc3b57caa843dfb5409d754e02801d04da176a35350632f447b160d8",
+  "artifact": {
+    "path": "output/pdf/ficha-canonica-sintetica-v7.pdf",
+    "sha256": "9d766781451232afc069e0c1028421d5b21a0aa025376dac0c6b1bd94b7f0ac4",
+    "pageCount": 3
+  },
+  "provisionalApproval": {
+    "status": "pending-po-review",
+    "approved": false,
+    "scope": "development/cloud-dev",
+    "reviewedBy": {
+      "role": "PO",
+      "name": null
+    },
+    "reviewedAt": null,
+    "snapshotSha256": "648bc9d8c7d20c6b1d45ed7ec18e5113176632ada5e9bc0a1246a497757c751e",
+    "renderedHtmlSha256": "f44d3fefcc3b57caa843dfb5409d754e02801d04da176a35350632f447b160d8",
+    "artifactSha256": "9d766781451232afc069e0c1028421d5b21a0aa025376dac0c6b1bd94b7f0ac4",
+    "decisionRef": "docs/phase0/FICHA-PDF-REVIEW-V7.md"
+  },
+  "approval": {
+    "status": "pending-human-approval",
+    "approved": false,
+    "requiredBefore": "production",
+    "signature": "physical",
+    "reviewedBy": {
+      "rose": null,
+      "operation": null
+    },
+    "reviewedAt": null,
+    "signedPaperKeptAt": null,
+    "criteria": {
+      "legibility": null,
+      "content": null,
+      "order": null,
+      "grade": null,
+      "totals": null,
+      "printing": null
+    },
+    "evidenceRef": null
+  },
+  "versioning": {
+    "overwriteApprovedVersion": false,
+    "correctionsRequireNewTemplateVersion": true,
+    "supersedesTemplateVersion": "ficha-canonical-v6"
+  }
+}

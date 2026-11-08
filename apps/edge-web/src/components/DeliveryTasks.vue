@@ -151,7 +151,7 @@ onBeforeUnmount(() => {
             Ver pedido {{ order.number }}
           </RouterLink>
           <span v-if="order.ficha?.summary?.data_entrega_confirmada">
-            Prometido para
+            Previsto para
             {{ dayLabel(order.ficha.summary.data_entrega_confirmada) }}
           </span>
         </span>
