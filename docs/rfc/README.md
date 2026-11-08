@@ -34,6 +34,9 @@
 
 ## Decisão de 06/11/2026
 
+- [047 — Enviar cobrança pela conversa](047-enviar-cobranca-pela-conversa.md),
+  backend decidido na ADR 066; frontend adiado até o redesign.
+
 - [051 — Triagem prioritária sem inferir regras comerciais](051-triagem-prioritaria-sem-inferir-regras-comerciais.md),
   aprovada na solicitação do proprietário, decidida na ADR 063 / VND-L05.
 

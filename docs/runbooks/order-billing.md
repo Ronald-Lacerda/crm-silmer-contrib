@@ -1,5 +1,32 @@
 # Cobranças InfinitePay — operação e recuperação
 
+## Backend do envio integrado, B01–B05 (06/11/2026)
+
+Migração expand `0063_order_billing_send_intents` cria intenções, snapshots
+de autorização/acordo e eventos append-only. A migração expand 0064 acompanha
+o estado real do transporte. API e worker integram as filas existentes com
+mensagem, comando, auditoria e invalidação da Inbox na mesma transação.
+Não alterar migrações anteriores; aplicar todas as migrações da versão antes
+de futura ativação, incluindo as entregas da master incorporadas em 08/11/2026.
+
+O backend foi validado com PostgreSQL e dados sintéticos; emissão e envio real
+continuam desligados. Não configurar `ORDER_BILLING_CHAT_SEND_ENABLED=true`
+no ambiente remoto antes da homologação. A interface integrada ainda depende
+do protótipo/design; contrato e implementação estão na
+[ADR 066](../adr/066-intencoes-de-cobranca-e-envio-transacional.md) e na
+[API de intenções](../api/order-billing-chat.md).
+
+`waiting_link` aguarda a composição; link existente válido/retry seguro podem
+compor imediatamente. Emissão cria o job financeiro na mesma transação;
+link existente/retry não criam outro job de checkout. O n8n financeiro não
+envia mensagens: a entrega usa a reserva humana e o preflight da Inbox.
+
+Rollback é por flag, preservando tabelas/URLs/recebimentos. Aplique a orientação
+financeira ao final deste runbook e mantenha recebimento/reconciliação dos
+links existentes. Não usar DROP ou apagar intenções/eventos para desfazer
+uma operação comercial. Banco local sintético não comprova deploy ou recovery
+remotos. Evidências de B02 no relatório de QA da entrega.
+
 [ADR 058](../adr/058-cobrancas-do-pedido-com-infinitepay.md),
 [RFC 049](../rfc/049-cobrancas-do-pedido-com-infinitepay.md),
 [COB-01–16](../../.specs/features/order-billing/spec.md) e
@@ -14,10 +41,11 @@ valor e gera link. 0% salva sem emitir; X% permite sinal e depois saldo;
 Compartilhamento é humano. “Pago parcialmente” não muda o status comercial
 nem qualifica quitação do Financeiro. A interface real não tem simulação.
 
-O runtime atual usa compartilhamento manual. O novo comando **Gerar e enviar
-cobrança** solicitado após a revisão da jornada está proposto na
-[RFC 047](../rfc/047-enviar-cobranca-pela-conversa.md), com protótipo em
-avaliação; ainda não foi integrado ao envio real da Inbox.
+A interface existente usa compartilhamento manual. O backend do comando
+**Gerar e enviar cobrança**, definido na
+[RFC 047](../rfc/047-enviar-cobranca-pela-conversa.md), está integrado com
+flags desligadas. Protótipo atualizado da entrada pelo chat precede a
+implementação da interface e não habilita envio real.
 
 Links em revisão, de pedido reaberto, vencidos ou com leitura desatualizada
 não são oferecidos para compartilhamento normal. O acesso ao link anterior
@@ -95,8 +123,9 @@ resolver a duplicidade antes de prosseguir, sem descartar recebimentos.
 
 1. Gates locais/CI, revisão e commit da entrega. Confirmar imagem/digest da
    versão aprovada; o push de branch por si só não comprova publicação.
-2. Aplicar migração expand `0055_order_billing` no ambiente alvo **antes de
-   habilitar flags**; conferir checksum e readiness. Não editar migrações
+2. Aplicar as migrações da versão, incluindo expand `0055_order_billing`,
+   `0063_order_billing_send_intents` e `0064_billing_send_transport`, no ambiente
+   alvo **antes de habilitar flags**; conferir checksum e readiness. Não editar migrações
    anteriores nem copiar um banco sintético para o remoto.
 3. Publicar API/worker/edge da mesma entrega, inicialmente sem emissão.
 4. Importar o workflow dedicado, preencher configuração não secreta,
@@ -137,6 +166,50 @@ manual antiga não prova valor recebido; conferir e corrigir o lastro antes
 da primeira emissão. Não contornar a API com SQL de ajuste em produção.
 
 ## Rollback
+
+### Envio integrado pela conversa (COB-CHAT-B03/B04)
+
+Aplicar as migrações expand 0063 e 0064 antes da imagem compatível; conferir
+checksums. `ORDER_BILLING_CHAT_SEND_ENABLED` permanece ausente/false por
+padrão na API e no worker e exige também `ORDER_BILLING_ENABLED=true`.
+Configuração true sem banco, autorização ou outbox funcional impede startup
+da API. A chave `INBOX_MESSAGE_ENVELOPE_KEY` cifra a mensagem; as chaves
+financeira e da identidade mantêm seus contextos separados.
+
+Antes de futura ativação, preparar uma cópia da exportação privada do
+workflow humano existente, preservando credenciais e IDs:
+
+```powershell
+node ops/n8n/billing-send-preflight.mjs <export-privado.json> <review-novo.json>
+```
+
+O patch local é idempotente, recusa drift/contexto parcial e não sobrescreve
+arquivos nem publica o workflow. O gerador Evolution histórico permanece
+intacto; aplique o patch explicitamente sobre o candidato inativo ou sobre
+uma exportação privada conferida. Conferir Basic técnico, os headers de execução e o nó
+preflight imediatamente anterior ao envio de texto humano marcado
+`billing_send:true`. Só `{valid:true}` permite envio. O fluxo financeiro
+continua criando links e recebendo callbacks, sem enviar WhatsApp diretamente.
+
+O desligamento da flag na API e no worker impede novas intenções/reservas e
+bloqueia mensagens ainda elegíveis, preservando link, histórico e recebimentos.
+Envio comum da Inbox permanece independente. Consulta e recebimento exigem
+`ORDER_BILLING_ENABLED=true` ou `ORDER_BILLING_RECEIVE_ENABLED=true` na API.
+Não apagar migrações/envelopes durante rollback. Intenções bloqueadas não
+voltam automaticamente à fila ao religar a flag.
+
+`waiting_link`/`queued` podem ser bloqueadas por pagamento/contexto alterado.
+`sending` precisa de preflight vigente; uma mudança depois do preflight não
+prova que o HTTP externo foi interrompido. Aguardar confirmação ou registrar
+incerteza. `unknown` exige conferência e não admite retry. `failed` só permite
+nova intenção humana quando há prova de falha anterior ao envio e link válido;
+falha de entrega com ID externo não satisfaz essa condição. Callback tardio
+da execução original pode completar o resultado sem duplicar o recebimento.
+
+Nenhuma publicação remota, flag real ou transação financeira foi executada
+por esta entrega. Frontend aguarda o redesign; homologação segue COB-OPS-01.
+
+### Emissão financeira
 
 Desligar `ORDER_BILLING_ENABLED` na API e no worker; manter
 `ORDER_BILLING_RECEIVE_ENABLED=true` na API e o workflow de callbacks ativo.

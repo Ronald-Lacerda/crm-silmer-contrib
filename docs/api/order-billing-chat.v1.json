@@ -1,0 +1,689 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CRM Silmer — intenções de envio de cobrança",
+    "version": "1.0.0",
+    "description": "COB-CHAT-B01 / ADR061. Contrato de backend; fronteira HTTP injetável testada, sem serviço persistente registrado em produção. Frontend adiado. Ver order-billing-chat.md."
+  },
+  "servers": [
+    {
+      "url": "/api/v1"
+    }
+  ],
+  "paths": {
+    "/orders/{orderId}/billing/send-intents": {
+      "parameters": [
+        {
+          "name": "orderId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      ],
+      "post": {
+        "operationId": "submitOrderBillingSendIntent",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": [],
+            "idempotencyKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendIntentCommand"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Intenção persistida; não comprova envio ou pagamento",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Intent"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Falha segura; ver códigos em order-billing-chat.md",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code"],
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{orderId}/billing/send-intents/{intentId}": {
+      "parameters": [
+        {
+          "name": "orderId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        {
+          "name": "intentId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      ],
+      "get": {
+        "operationId": "readOrderBillingSendIntent",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Projeção atual autorizada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Intent"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Falha segura; ver códigos em order-billing-chat.md",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code"],
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{orderId}/billing/history": {
+      "parameters": [
+        {
+          "name": "orderId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      ],
+      "get": {
+        "operationId": "readOrderBillingHistory",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Página de eventos e totais atuais; cursor opaco vinculado ao pedido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/History"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Falha segura; ver códigos em order-billing-chat.md",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["type", "title", "status", "code"],
+                  "properties": {
+                    "type": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "$ref": "./openapi.v1.yaml#/components/securitySchemes/sessionCookie"
+      },
+      "csrfHeader": {
+        "$ref": "./openapi.v1.yaml#/components/securitySchemes/csrfHeader"
+      },
+      "idempotencyKey": {
+        "$ref": "./openapi.v1.yaml#/components/securitySchemes/idempotencyKey"
+      }
+    },
+    "schemas": {
+      "SendIntentCommand": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "conversationId",
+              "expectedVersion",
+              "expectedBillingVersion",
+              "expectedConversationVersion",
+              "percent"
+            ],
+            "properties": {
+              "action": {
+                "const": "issue"
+              },
+              "conversationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[!-~]+$"
+              },
+              "expectedVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "expectedBillingVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "expectedConversationVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "percent": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "conversationId",
+              "expectedVersion",
+              "expectedBillingVersion",
+              "expectedConversationVersion",
+              "chargeId"
+            ],
+            "properties": {
+              "action": {
+                "const": "send_existing"
+              },
+              "conversationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[!-~]+$"
+              },
+              "expectedVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "expectedBillingVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "expectedConversationVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "chargeId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[!-~]+$"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "conversationId",
+              "expectedVersion",
+              "expectedBillingVersion",
+              "expectedConversationVersion"
+            ],
+            "properties": {
+              "action": {
+                "const": "balance"
+              },
+              "conversationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[!-~]+$"
+              },
+              "expectedVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "expectedBillingVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "expectedConversationVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "conversationId",
+              "expectedVersion",
+              "expectedBillingVersion",
+              "expectedConversationVersion",
+              "chargeId",
+              "amountCents",
+              "confirmedAgreement",
+              "confirmedProviderReview"
+            ],
+            "properties": {
+              "action": {
+                "const": "correct"
+              },
+              "conversationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[!-~]+$"
+              },
+              "expectedVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "expectedBillingVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "expectedConversationVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "chargeId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[!-~]+$"
+              },
+              "amountCents": {
+                "type": "integer",
+                "minimum": 100,
+                "maximum": 9007199254740991
+              },
+              "confirmedAgreement": {
+                "const": true
+              },
+              "confirmedProviderReview": {
+                "const": true
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "action",
+              "conversationId",
+              "expectedVersion",
+              "expectedBillingVersion",
+              "expectedConversationVersion",
+              "intentId",
+              "expectedIntentVersion"
+            ],
+            "properties": {
+              "action": {
+                "const": "retry"
+              },
+              "conversationId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[!-~]+$"
+              },
+              "expectedVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "expectedBillingVersion": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "expectedConversationVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "intentId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255,
+                "pattern": "^[!-~]+$"
+              },
+              "expectedIntentVersion": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              }
+            }
+          }
+        ]
+      },
+      "Intent": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "version",
+          "action",
+          "chargeId",
+          "conversationId",
+          "state",
+          "blockedReason",
+          "messageId",
+          "commandId",
+          "amountCents"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[!-~]+$"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "action": {
+            "enum": ["issue", "send_existing", "balance", "correct", "retry"]
+          },
+          "chargeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[!-~]+$"
+          },
+          "conversationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[!-~]+$"
+          },
+          "state": {
+            "enum": [
+              "waiting_link",
+              "queued",
+              "sending",
+              "sent",
+              "delivered",
+              "failed",
+              "unknown",
+              "blocked"
+            ]
+          },
+          "blockedReason": {
+            "enum": [
+              null,
+              "OWNER_CHANGED",
+              "ACTOR_DISABLED",
+              "CONVERSATION_CLOSED",
+              "AGREEMENT_CHANGED",
+              "CHARGE_EXPIRED",
+              "PAYMENT_CONFIRMED",
+              "INBOUND_CHANGED",
+              "SENDING_DISABLED"
+            ]
+          },
+          "messageId": {
+            "type": ["string", "null"],
+            "maxLength": 255
+          },
+          "commandId": {
+            "type": ["string", "null"],
+            "maxLength": 255
+          },
+          "amountCents": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "History": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "orderId",
+          "orderVersion",
+          "billingVersion",
+          "totalAmountCents",
+          "receivedAmountCents",
+          "balanceAmountCents",
+          "items",
+          "nextCursor"
+        ],
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "pattern": "^[!-~]+$"
+          },
+          "orderVersion": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "billingVersion": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "totalAmountCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "receivedAmountCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "balanceAmountCents": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "nextCursor": {
+            "type": ["string", "null"],
+            "maxLength": 255
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "kind",
+                "chargeId",
+                "intentId",
+                "amountCents",
+                "status",
+                "occurredAt"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255,
+                  "pattern": "^[!-~]+$"
+                },
+                "chargeId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 255,
+                  "pattern": "^[!-~]+$"
+                },
+                "intentId": {
+                  "type": ["string", "null"],
+                  "maxLength": 255
+                },
+                "kind": {
+                  "enum": [
+                    "charge",
+                    "receipt",
+                    "intent",
+                    "correction",
+                    "refund"
+                  ]
+                },
+                "amountCents": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991
+                },
+                "status": {
+                  "enum": [
+                    "waiting_link",
+                    "queued",
+                    "sending",
+                    "sent",
+                    "delivered",
+                    "failed",
+                    "unknown",
+                    "blocked",
+                    "creating",
+                    "waiting",
+                    "paid",
+                    "review",
+                    "closed"
+                  ]
+                },
+                "occurredAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

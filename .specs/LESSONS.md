@@ -56,6 +56,12 @@ Seen once or not yet corroborated. Tracked, not trusted.
 - evidence: MSG-01: concorrencia comprovada em .specs/features/inbound-media-inbox/validation.md (transient-media)
 - last seen: 2026-10-29T01:35:27Z
 
+### L-008 - Publique invalidação da conversa na mesma transação de toda mudança efetiva no estado de entrega da mensagem.
+- signal: `ac_gap` · recurrence: 1 feature(s) · scope: `inbox` · harmful: 0
+- features: order-billing
+- evidence: modules/n8n-integration/src/billing-send-guard.js:202 (inbox)
+- last seen: 2026-11-06T04:38:09Z
+
 ## Quarantined (failed when applied - ignore)
 
 A confirmed lesson that recurred alongside failure. Kept for the maintainer to review.

@@ -46,3 +46,30 @@ vigente após conferência; `close_unpaid` encerra risco local só após validad
 vencida e conferência explícita. Callback tardio continua em revisão. Não
 permitir saldo negativo nem inferir valor recebido de datas legadas.
 Devolução é registro de operação já feita no provedor, sem estorno pelo CRM.
+
+## Backend do envio integrado, BAPI-01–10
+
+Autorizado pelo proprietário em 06/11/2026; [ADR 066](../../../docs/adr/066-intencoes-de-cobranca-e-envio-transacional.md).
+Frontend adiado até o redesign. Contrato de comandos/respostas e erros:
+[API de intenções](../../../docs/api/order-billing-chat.md).
+
+| ID      | Critério de aceite                                                                                                                                                                                                                                                                                         |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BAPI-01 | WHEN uma intenção válida é submetida, THE API SHALL retornar 202 com identidade/versão/estado da intenção, sem afirmar envio ou pagamento. Publicar os schemas das cinco ações e leituras.                                                                                                                 |
+| BAPI-02 | WHEN corpo contém campo extra/ausente, tipo coercível, inteiro inseguro, 0% para emitir, correção abaixo de R$ 1 ou confirmação ausente, THE API SHALL recusar 400 antes de chamar o serviço. Saldo não aceita valor do cliente; texto/destino externo não são aceitos.                                    |
+| BAPI-03 | WHEN uma operação é solicitada, THE API SHALL exigir sessão humana e capacidade de leitura/gestão; escrita exige origem, CSRF e Idempotency-Key. Basic é recusado. Ator vem da sessão e versões/ACL são revalidadas pelo serviço.                                                                          |
+| BAPI-04 | WHILE escrita está desativada, THE API SHALL retornar 503 BILLING_DISABLED sem chamar submit e preservar leitura de intenção/histórico. Default da fronteira HTTP é escrita desativada.                                                                                                                    |
+| BAPI-05 | WHEN ocorre leitura ou erro, THE API SHALL emitir headers privados e projeção sem PII/URLs privadas/payloads. Histórico aceita apenas cursor e limit 1–50, default20; erros usam problem JSON seguro.                                                                                                      |
+| BAPI-06 | WHEN comandos concorrentes ou replay ocorrem, THE backend SHALL preservar uma intenção/efeito por ação autorizada, revalidar ACL sob lock e rejeitar divergência de payload/ator. Intenção, outbox e auditoria compartilham a transação.                                                                   |
+| BAPI-07 | WHEN link é criado e o contexto mudou, THE backend SHALL preservar URL cifrada e bloquear envio; callback duplicado não cria nova mensagem. Reserva final revalida ator, responsável/ciclo, acordo, saldo, validade e revisão inbound, preservando o responsável.                                          |
+| BAPI-08 | WHEN há correção ou cobrança do saldo, THE backend SHALL preservar recebimentos e links, calcular saldo no servidor, recusar outra cobrança ativa e bloquear emissão na quitação. Correção exige anterior vencida/encerrada sem pagamento e acordo/conferência explícitos; callback tardio requer revisão. |
+| BAPI-09 | WHEN transporte fica incerto, THE backend SHALL bloquear retry cego. Falha conhecida antes do envio permite nova intenção humana para o mesmo link válido e comando novo, sem consumir outra vez uma reserva anterior.                                                                                     |
+| BAPI-10 | WHILE emissão integrada está desligada, THE backend SHALL impedir novas intenções/reservas e conservar recebimento financeiro, consulta, conciliação e histórico. Transporte e recebimento mantêm estados independentes.                                                                                   |
+
+B01 cobre a fronteira HTTP de BAPI-01–05. B02 implementa
+admissão/idempotência durável, saldo/correção, locks e histórico, com testes
+PostgreSQL de BAPI-05/06/08 e guardas iniciais de BAPI-07/09. B03 implementa
+composição, callback e reserva/preflight finais de BAPI-07/09; B04 integra
+rotas/flags e recuperação de BAPI-10. Evidências e limites nos relatórios de QA.
+Não considerar
+um teste com serviço sintético como evidência transacional.

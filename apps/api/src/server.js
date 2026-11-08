@@ -30,6 +30,7 @@ import { createDashboardMetricsRuntime } from './dashboard-metrics-runtime.js';
 import { createConversationReminderApiRuntime } from './conversation-reminder-runtime.js';
 import { createLeadOutcomeApiRuntime } from './lead-outcome-runtime.js';
 import { createOrderBillingRuntime } from './order-billing-runtime.js';
+import { createOrderBillingChatRuntime } from './order-billing-chat-runtime.js';
 import { createHealthErrorsRuntime } from './health-errors-runtime.js';
 import { registerHealthErrorsRoutes } from './health-errors-routes.js';
 import { createShippingApiRuntime } from './shipping-runtime.js';
@@ -79,6 +80,7 @@ import { createSafeLogger, SERVICES } from '@crm-silmer/shared';
  *   leadOutcomes?: ReturnType<typeof createLeadOutcomeApiRuntime>,
  *   conversationReminders?: ReturnType<typeof createConversationReminderApiRuntime>,
  *   billing?: ReturnType<typeof createOrderBillingRuntime>,
+ *   billingChat?: ReturnType<typeof createOrderBillingChatRuntime>,
  *   healthErrors?: ReturnType<typeof createHealthErrorsRuntime>,
  *   operationalHealth?: ReturnType<typeof createOperationalHealth>,
  *   shipping?: ReturnType<typeof createShippingApiRuntime>,
@@ -346,12 +348,49 @@ export function createServerApi(runtime = {}) {
     environment.ORDER_BILLING_RECEIVE_ENABLED,
     'ORDER_BILLING_RECEIVE_ENABLED',
   );
+  const billingChatSendEnabled = readBooleanFlag(
+    environment.ORDER_BILLING_CHAT_SEND_ENABLED,
+    'ORDER_BILLING_CHAT_SEND_ENABLED',
+  );
+  if (
+    billingChatSendEnabled &&
+    (!billingEnabled ||
+      !runtime.database ||
+      typeof operations?.authorizeRead !== 'function' ||
+      typeof operations?.authorizeWrite !== 'function' ||
+      typeof n8n?.commandOutbox?.enqueueChannelMessage !== 'function')
+  ) {
+    throw new Error(
+      'ORDER_BILLING_CHAT_SEND_ENABLED requires ORDER_BILLING_ENABLED, database, operational access and n8n command outbox',
+    );
+  }
+  const billingChatSource =
+    runtime.billingChat ??
+    (runtime.database && operations && (billingEnabled || billingReceiveEnabled)
+      ? createOrderBillingChatRuntime(runtime.database, {
+          access: operations,
+          environment,
+          outboundMessageOutbox: n8n?.commandOutbox,
+        })
+      : undefined);
+  const billingChat = billingChatSource
+    ? {
+        ...Object.fromEntries(
+          Object.entries(billingChatSource).map(([name, value]) => [
+            name,
+            typeof value === 'function' ? value.bind(billingChatSource) : value,
+          ]),
+        ),
+        enabled: billingChatSendEnabled && billingChatSource.enabled === true,
+      }
+    : undefined;
   const billing =
     runtime.billing ??
     (runtime.database && operations && (billingEnabled || billingReceiveEnabled)
       ? createOrderBillingRuntime(runtime.database, {
           access: operations,
           environment,
+          billingChat,
         })
       : undefined);
   const api = createApi(
@@ -365,6 +404,7 @@ export function createServerApi(runtime = {}) {
       leadOutcomes,
       conversationReminders,
       billing,
+      billingChat,
       shipping,
       olist,
       automationAuth,

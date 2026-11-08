@@ -46,19 +46,70 @@ sete skips, mais 16 cenários finais do Pedido. Typecheck/lint/format/diff check
 detector sem achados e revisão independente sem pendências. Esta fatia não
 altera backend, migração, produção ou workflows remotos.
 
+## COB-PLAN-01 — Revisar o plano de continuação do PR 298
+
+COB-01/04/05/12–15 e preparação de COB-CHAT-01, revisão de 05/11/2026.
+
+- [x] Reconciliar PR, checks, código e tarefas em worktree separada.
+- [x] Comparar alternativas e registrar sequência, recuperação e limites na
+      [revisão da RFC 047](../../../docs/rfc/047-enviar-cobranca-pela-conversa.md#revisão-do-plano--05112026).
+- [x] Conferir links locais dos documentos alterados e `git diff --check`.
+
+Entrega documental; não aprova o protótipo nem conclui o envio integrado.
+Preserva as alterações locais de saúde operacional e a implementação do PR.
+
 ## COB-CHAT-01 — Novo fluxo solicitado: gerar e enviar na conversa
+
+### COB-CHAT-P01 — Preparar protótipo para avaliação
+
+- [x] Protótipo isolado de conversa/pedido com revisão compartilhada,
+      estados simulados e dados fictícios.
+- [x] Cenários de sinal, saldo, integral, 0%, link existente e recuperação.
+- [x] Conferência de teclado, foco, responsividade e axe claro/escuro.
+
+Artefato e roteiro: [protótipo](../../../docs/prototypes/README.md).
+Entrega do protótipo não significa avaliação ou aprovação pelo proprietário.
+
+### COB-CHAT-P02 — Prototipar correção e cobrança do saldo
+
+- [x] Histórico nas duas entradas com links, valores, recebido e saldo.
+- [x] Correção bloqueada com link válido, vencimento/conferência simulados,
+      revisão do novo valor e preservação do link anterior.
+- [x] Cobrar somente o restante após recebimento confirmado; preservar
+      pagamentos e bloquear nova cobrança após quitação.
+- [x] Cenários de navegador, axe, revisão QA e ajustes de foco/estado.
+
+Roteiro em [protótipo](../../../docs/prototypes/README.md).
+Aguardando avaliação humana; nenhuma integração real implementada.
+
+### COB-CHAT-P03 — Alinhar o protótipo ao design atual
+
+- [x] Conferir shell e telas nas fontes atuais e na master remota.
+- [x] Reutilizar CSS base/do Pedido e marca oficial; alinhar Inbox, seções da
+      ficha, fechamento lateral e navegação/acordeão no celular.
+- [x] Preservar correção/saldo, conferir navegador e axe claro/escuro.
+
+Entrega de fidelidade visual do protótipo, sem alteração no runtime do CRM.
+
+### Implementação integrada
 
 Proposta em [RFC 047](../../../docs/rfc/047-enviar-cobranca-pela-conversa.md).
 O proprietário escolheu link direto no chat com Pix e cartão; não QR Pix.
-Protótipo atualizado precede a implementação desta orquestração.
+Frontend adiado até o redesign. Autorização de backend em 06/11/2026 permite
+as tarefas B01–B04 sem depender da avaliação visual do protótipo.
+Ordem e critérios refinados na revisão COB-PLAN-01 da RFC 047; a URL gerada
+deve ser preservada mesmo quando o envio ficar bloqueado, e o envio deve
+reutilizar a transação/outbox da Inbox sem mudar o responsável da conversa.
 
-- [ ] Avaliar protótipo de Enviar cobrança no chat/pedido e revisão do destino/valor.
-- [ ] Decidir contrato/ADR e implementar intenção transacional, mensagem única,
+- [ ] Avaliar interface após redesign; manter revisão de destino/valor.
+- [x] Decidir contrato/ADR e implementar intenção transacional, mensagem única,
       guardas no enfileiramento/reserva e retorno real do transporte.
-- [ ] Cobrir concorrência, falhas, conversa alterada e operação por teclado/toque.
+- [x] Cobrir concorrência, falhas e conversa alterada no backend B01–B04.
+- [ ] Verificar operação por teclado/toque após a implementação do redesign.
 
-Esta proposta não é a capacidade de envio do runtime entregue em COB-DEL-01,
-que ainda depende do compartilhamento manual. Dashboard foi retirado do foco
+O backend B01–B04 acrescenta composição durável ao runtime de COB-DEL-01;
+a interface entregue anteriormente continua com compartilhamento manual até
+o redesign integrar o novo contrato. Dashboard foi retirado do foco
 desta fatia e sua entrega paralela deve ser preservada.
 
 Pendências preservadas para fatias próprias:
@@ -79,3 +130,104 @@ Pendências preservadas para fatias próprias:
 
 Gates locais não comprovam conta remota, deploy ou pagamento real. Evidências
 e passo a passo no [runbook](../../../docs/runbooks/order-billing.md).
+
+## Execution Plan
+
+Backend autorizado em 06/11/2026. Frontend adiado até o redesign de outra
+frente. A autorização de backend substitui a dependência de aprovação visual
+para estas tarefas; não significa aprovação do design do protótipo.
+Sequência: T1 → T2 → T3 → T4. Cada tarefa tem commit e push próprios.
+O verificador final acrescentou T5, correção de propagação de bloqueio na
+Inbox, dependente de T4; não amplia o escopo de frontend.
+
+## Test Coverage Matrix
+
+| Tarefa            | Critérios     | Camada / prova                                                                                                       |
+| ----------------- | ------------- | -------------------------------------------------------------------------------------------------------------------- |
+| T1 / COB-CHAT-B01 | BAPI-01–05    | Contrato HTTP: exemplos válidos e inválidos, sessão/CSRF, comandos estritos, respostas privadas e escrita desligada. |
+| T2 / COB-CHAT-B02 | BAPI-06–08    | PostgreSQL sintético: intenção, vínculo, idempotência, saldo/correção, locks, unicidade, rollback e auditoria.       |
+| T3 / COB-CHAT-B03 | BAPI-07–10    | Callback/reserva: duplicidade, mudança de responsável/acordo, pagamento antes do envio, falhas conhecidas/incertas.  |
+| T4 / COB-CHAT-B04 | BAPI-01–10    | Integração API/worker, flags/rollback, histórico e regressão de cobranças, Inbox e Financeiro.                       |
+| T5 / COB-CHAT-B05 | BAPI-06/07/10 | Invalidação privada e única ao bloquear; falha do evento reverte a transação e conserva a reentrega.                 |
+
+## Gate Check Commands
+
+- Contract: `node --test test/order-billing-chat-routes.test.js` e `npm run typecheck`, `npm run lint`, `npm run format:check`, `git diff --check`.
+- Database: `node --test --test-concurrency=1 test/order-billing-postgres-live.test.js` com PostgreSQL sintético dedicado e os novos testes transacionais da tarefa.
+- Full: `npm run validate` e os testes PostgreSQL específicos das tarefas.
+
+## Task Breakdown
+
+### T1: Contrato HTTP de intenção e consulta (COB-CHAT-B01)
+
+Depends on: none
+Where: apps/api/src/order-billing-chat-routes.js
+Tests: test/order-billing-chat-routes.test.js, exemplos válidos/negativos e privacidade; OpenAPI consistente com os comandos.
+Gate: Contract
+Done when: contrato normativo, OpenAPI e fronteira HTTP testada, sem runtime persistente nem frontend habilitado.
+Status: Complete
+
+Evidência: [contrato e QA](../../../docs/qa/order-billing-chat-contract-2026-11-06.md).
+Fronteira HTTP 10/10 e validate integrado com 1.775 aprovados/15 skips na
+rodada com nove testes de contrato; novo teste de capacidades/typecheck/lint
+repetidos após a rodada integrada. Não há runtime persistente habilitado.
+
+### T2: Persistência transacional (COB-CHAT-B02)
+
+Depends on: T1
+Where: apps/api/src/order-billing-chat-runtime.js
+Tests: intenção/versão/deduplicação, correção sem cancelamento, saldo, concorrência e rollback em PostgreSQL sintético.
+Gate: Database
+Done when: comandos e histórico duráveis no banco existente, migração expand nova, auditoria na mesma transação.
+Status: Complete
+
+Escopo B02: migração 0063, serviço PostgreSQL injetável e testes dedicados.
+Frontend, composição de mensagens e registro em server.js ficam adiados.
+Evidências: [QA de persistência](../../../docs/qa/order-billing-chat-persistence-2026-11-06.md).
+Gates: 16 cenários novos; matriz financeira PostgreSQL49/49, migrações4/4;
+validate1776 aprovados/16 skips condicionais e zero falhas. Revisão QA
+independente encerrada após corrigir a inversão de locks com unmerge.
+
+### T3: Composição com a Inbox e reserva final (COB-CHAT-B03)
+
+Depends on: T2
+Where: modules/n8n-integration/src/postgres-repository.js
+Tests: callback duplicado, responsável/ciclo/acordo alterados, usuário desativado, vencimento, recebimento antecipado e resultados incertos.
+Gate: Database
+Done when: callback conserva URL e resolve intenção atomicamente; reserva final impede efeito obsoleto sem alterar responsável ou forjar função.
+Status: Complete
+
+Evidências: [QA de composição/transporte](../../../docs/qa/order-billing-chat-transport-2026-11-06.md).
+PostgreSQL novo 13/13, B02 16/16, callbacks concorrentes, preflight, retry
+seguro/incerto e pagamento durante envio. Migração expand 0064, patch offline
+do workflow humano e guardas na fila existente; sem frontend ou envio real.
+
+### T4: Integrar backend e recuperação (COB-CHAT-B04)
+
+Depends on: T3
+Where: apps/api/src/server.js
+Tests: flags separadas, leitura no rollback, integração de rotas/worker e revisão QA independente.
+Gate: Full
+Done when: backend integrado e validado, emissão inicialmente desligada, runbook atualizado; frontend e homologação remota continuam separados.
+Status: Complete
+
+Evidências: [QA de integração](../../../docs/qa/order-billing-chat-integration-2026-11-06.md).
+Servidor/flags 8/8, validate 1.801 aprovados/17 skips condicionais e matriz
+PostgreSQL sintética de 86 cenários distintos aprovados. Flag inventariada
+sem valor habilitado; runbook inclui patch offline e rollback. Verificador
+final registra o fechamento de B01–B04, sem concluir frontend/COB-OPS-01.
+
+### T5: Propagar bloqueio na Inbox transacionalmente (COB-CHAT-B05)
+
+Depends on: T4
+Where: modules/n8n-integration/src/billing-send-guard.js
+Tests: evento de invalidação privado e único ao bloquear mensagem; falha do evento reverte pagamento/mensagem/intenção e permite reentrega do callback.
+Gate: Full
+Done when: bloqueio proativo atualiza a Inbox existente pela stream durável na mesma transação, sem duplicar evento ou expor conteúdo.
+Status: Complete
+
+Correção identificada pelo verificador independente de BAPI-06/07/10; frontend
+permanece adiado. Evidência final no relatório de validação do backend.
+Gate integrado repetido: 1.801 aprovados/17 skips; suíte PostgreSQL de
+transporte 15/15, incluindo bloqueio pelo worker, ausência de mensagem,
+evento único e falha com rollback/reentrega. Sem nova implementação de UI.

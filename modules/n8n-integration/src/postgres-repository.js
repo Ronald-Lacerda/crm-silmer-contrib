@@ -16,6 +16,11 @@ import {
   N8nValidationError,
 } from './errors.js';
 import { retainedMediaReference } from './retained-media-reference.js';
+import {
+  lockBillingSend,
+  billingSendBlockReason,
+  blockBillingSend,
+} from './billing-send-guard.js';
 
 /** @typedef {{query(sql: string, values?: unknown[]): Promise<{rows: any[]}>}} Queryable */
 /**
@@ -88,6 +93,7 @@ export class PostgresN8nIntegrationRepository {
    *   } | null,
    *   automationMessageCap?: number,
    *   requireHumanOrderCreation?: boolean,
+   *   billingSendEnabled?: boolean,
    * }} options
    */
   constructor({
@@ -99,6 +105,7 @@ export class PostgresN8nIntegrationRepository {
     orders = null,
     automationMessageCap = AUTOMATION_MESSAGE_CAP,
     requireHumanOrderCreation = false,
+    billingSendEnabled = false,
   }) {
     if (
       !database ||
@@ -124,6 +131,7 @@ export class PostgresN8nIntegrationRepository {
     this.messageEnvelopeKey = Buffer.from(messageEnvelopeKey);
     this.orders = orders;
     this.requireHumanOrderCreation = requireHumanOrderCreation;
+    this.billingSendEnabled = billingSendEnabled === true;
     if (!Number.isInteger(automationMessageCap) || automationMessageCap < 2) {
       throw new TypeError(
         'automationMessageCap must be an integer of at least 2',
@@ -657,8 +665,11 @@ export class PostgresN8nIntegrationRepository {
   /** @param {any} input @param {any} runtime */
   /** Read the immutable bound variant under the same lock order as reservation. @param {any} input */
   async readReservedMedia(input) {
-    return this.database.transaction(async (client) => {
+    const result = await this.database.transaction(async (client) => {
       await transactionBounds(client);
+      const intents = await lockBillingSend(client, {
+        commandId: input.commandId,
+      });
       const target = (
         await client.query(
           'SELECT conversation_id FROM crm.n8n_commands WHERE command_id=$1',
@@ -682,6 +693,18 @@ export class PostgresN8nIntegrationRepository {
       );
       if (!['image', 'audio', 'video'].includes(command.message_type))
         throw new N8nConflictError('Command has no retained media');
+      const now = input.now ? new Date(input.now) : new Date();
+      for (const intent of intents) {
+        const reason = await billingSendBlockReason(client, intent, {
+          enabled: this.billingSendEnabled,
+          now,
+          checkRevision: true,
+        });
+        if (reason) {
+          await blockBillingSend(client, intent.id, reason, now);
+          return null;
+        }
+      }
       const payload = decryptJson(
         command.payload_envelope,
         `n8n-command:${command.command_id}`,
@@ -709,6 +732,83 @@ export class PostgresN8nIntegrationRepository {
         lateMedia ? 'outcome_unknown' : 'processing',
       );
       return bound;
+    });
+    if (!result) throw new N8nConflictError('Billing send is blocked');
+    return result;
+  }
+
+  /** Revalidate the original active execution immediately before transport. @param {any} input */
+  async readReservedSend(input) {
+    return this.database.transaction(async (client) => {
+      await transactionBounds(client);
+      const now = input.now ? new Date(input.now) : new Date();
+      if (!Number.isFinite(now.getTime()))
+        throw new N8nValidationError('Invalid preflight clock');
+      const intents = await lockBillingSend(client, {
+        commandId: input.commandId,
+      });
+      const target = (
+        await client.query(
+          'SELECT conversation_id FROM crm.n8n_commands WHERE command_id=$1',
+          [input.commandId],
+        )
+      ).rows[0];
+      if (!target) throw new N8nNotFoundError('Command not found');
+      const conversation = (
+        await client.query(
+          'SELECT * FROM crm.conversations WHERE id=$1 FOR UPDATE',
+          [target.conversation_id],
+        )
+      ).rows[0];
+      const command = await selectPanelCommand(client, input.commandId);
+      const blocked = intents.find(
+        (/** @type {any} */ intent) => intent.state === 'blocked',
+      );
+      if (blocked) {
+        await assertBillingCallbackExecution(client, command, input);
+        return { valid: false, blockedReason: blocked.blocked_reason };
+      }
+      await assertReservedExecution(client, command, input);
+      for (const intent of intents) {
+        const reason = await billingSendBlockReason(client, intent, {
+          enabled: this.billingSendEnabled,
+          now,
+          checkRevision: true,
+        });
+        if (reason) {
+          await blockBillingSend(client, intent.id, reason, now);
+          return { valid: false, blockedReason: reason };
+        }
+      }
+      const payload = decryptJson(
+        command.payload_envelope,
+        `n8n-command:${command.command_id}`,
+        this.envelopeKey,
+      );
+      const bound =
+        command.message_type === 'text'
+          ? null
+          : (
+              await client.query(
+                'SELECT * FROM crm.chat_media WHERE message_id=$1 AND conversation_id=$2 FOR UPDATE',
+                [command.message_id, target.conversation_id],
+              )
+            ).rows[0];
+      assertPanelSendFence(
+        command,
+        conversation,
+        {
+          automationEpoch: payload.automation_epoch,
+          sourceRevision: payload.source_revision,
+          message: payload.message,
+        },
+        this.envelopeKey,
+        bound,
+        this.messageEnvelopeKey,
+        'sending',
+        'processing',
+      );
+      return { valid: true };
     });
   }
 
@@ -839,6 +939,12 @@ export class PostgresN8nIntegrationRepository {
           ? null
           : await resolveEventConversation(client, input));
       const eventInput = { ...input, conversationId: resolvedConversationId };
+      // Financial, identity and conversation locks always precede command/message locks.
+      const billingIntents = await lockBillingSend(client, {
+        commandId: input.commandId,
+        externalMessageId: input.externalMessageId,
+        conversationId: resolvedConversationId,
+      });
       let conversation = null;
       if (resolvedConversationId) {
         conversation = (
@@ -925,6 +1031,7 @@ export class PostgresN8nIntegrationRepository {
           processedAt,
           explicitTarget,
           panelCommand,
+          billingIntents[0] ?? null,
         );
         messageId = reservation.messageId;
         // The snapshot was read FOR UPDATE before the fence moved
@@ -960,7 +1067,7 @@ export class PostgresN8nIntegrationRepository {
             );
           }
         }
-        outcome.sendAuthorized = true;
+        outcome.sendAuthorized = reservation.sendAuthorized !== false;
         if (eventInput.briefingPatch) {
           projectionTarget = {
             conversation,
@@ -991,7 +1098,18 @@ export class PostgresN8nIntegrationRepository {
           }
         }
       } else if (eventInput.eventType === 'message.sent') {
-        const sent = await confirmReservedSend(client, eventInput, processedAt);
+        if (billingIntents.length)
+          await assertBillingCallbackExecution(
+            client,
+            await selectPanelCommand(client, eventInput.commandId),
+            eventInput,
+          );
+        const sent = await confirmReservedSend(
+          client,
+          eventInput,
+          processedAt,
+          billingIntents.length > 0,
+        );
         messageId = sent.messageId;
         outcome.deliveryStatus = sent.status;
       } else if (
@@ -1004,6 +1122,12 @@ export class PostgresN8nIntegrationRepository {
         outcome.deliveryStatus = delivery.status;
         outcome.changed = delivery.changed;
       } else if (eventInput.eventType === 'message.send.unknown') {
+        if (billingIntents.length)
+          await assertBillingCallbackExecution(
+            client,
+            await selectPanelCommand(client, eventInput.commandId),
+            eventInput,
+          );
         const uncertain = await markSendUnknown(
           client,
           eventInput,
@@ -1124,6 +1248,11 @@ export class PostgresN8nIntegrationRepository {
           );
           if (command.conversation_id !== eventInput.conversationId)
             throw new N8nConflictError('Failure target mismatch');
+          if (billingIntents.length)
+            await client.query(
+              "SELECT set_config('crm.billing_before_send_proven',$1,true)",
+              [eventInput.commandId],
+            );
           const message = await client.query(
             `UPDATE crm.messages SET status='failed',delivery_status='failed',delivery_status_at=$2,delivery_failure_code=$3 WHERE id=$1 AND status=$4 AND external_message_id IS NULL RETURNING id`,
             [
@@ -1201,7 +1330,7 @@ export class PostgresN8nIntegrationRepository {
         event_id: eventInput.eventId,
         processed_at: processedAt,
         ...(eventInput.eventType === 'message.send.requested'
-          ? { send_authorized: true }
+          ? { send_authorized: outcome.sendAuthorized === true }
           : {}),
         ...(outcome.handoffId ? { handoff_id: outcome.handoffId } : {}),
         ...('noticeCommandId' in outcome
@@ -2225,7 +2354,7 @@ export class PostgresN8nIntegrationRepository {
     return message.id;
   }
 
-  /** @param {Queryable} client @param {any} input @param {any} runtime @param {any} conversation @param {string} now @param {any} [subject] @param {any} [panelCommand] */
+  /** @param {Queryable} client @param {any} input @param {any} runtime @param {any} conversation @param {string} now @param {any} [subject] @param {any} [panelCommand] @param {any} [billingIntent] */
   async #reserveSend(
     client,
     input,
@@ -2234,11 +2363,28 @@ export class PostgresN8nIntegrationRepository {
     now,
     subject = null,
     panelCommand = null,
+    billingIntent = null,
   ) {
     if (!conversation || !input.commandId || !input.message) {
       throw new N8nConflictError('Send reservation is incomplete');
     }
     if (panelCommand) {
+      if (billingIntent) {
+        const reason = await billingSendBlockReason(client, billingIntent, {
+          enabled: this.billingSendEnabled,
+          now: new Date(now),
+          checkRevision: true,
+        });
+        if (reason) {
+          await blockBillingSend(
+            client,
+            billingIntent.id,
+            reason,
+            new Date(now),
+          );
+          return { messageId: panelCommand.message_id, sendAuthorized: false };
+        }
+      }
       if (input.briefingPatch) {
         throw new N8nConflictError(
           'A panel command cannot change agent briefing',
@@ -2645,6 +2791,43 @@ async function assertReservedExecution(
   return late;
 }
 
+/** External results may arrive after a timeout or ownership change, but only
+ * the execution that obtained the original reservation can report them.
+ * @param {Queryable} client @param {any} command @param {any} input */
+async function assertBillingCallbackExecution(client, command, input) {
+  if (
+    !command ||
+    command.action !== 'send_message' ||
+    command.actor_kind !== 'human' ||
+    command.message_author_kind !== 'human' ||
+    command.message_author_id !== command.actor_id ||
+    command.message_conversation_id !== command.conversation_id ||
+    command.message_execution_id !== input.technical.executionId
+  ) {
+    throw new N8nConflictError('Reservation execution mismatch');
+  }
+  const receipts = (
+    await client.query(
+      `SELECT workflow_key,workflow_version,execution_id,automation_epoch,source_revision FROM crm.n8n_events WHERE message_id=$1 AND conversation_id=$2 AND event_type='message.send.requested'`,
+      [command.message_id, command.conversation_id],
+    )
+  ).rows;
+  if (
+    receipts.length !== 1 ||
+    receipts[0].workflow_key !== input.technical.workflowKey ||
+    receipts[0].workflow_version !== input.technical.workflowVersion ||
+    receipts[0].execution_id !== input.technical.executionId ||
+    (input.automationEpoch !== null &&
+      input.automationEpoch !== undefined &&
+      Number(receipts[0].automation_epoch) !== input.automationEpoch) ||
+    (input.sourceRevision !== null &&
+      input.sourceRevision !== undefined &&
+      Number(receipts[0].source_revision) !== input.sourceRevision)
+  ) {
+    throw new N8nConflictError('Reservation execution mismatch');
+  }
+}
+
 /** @param {Queryable} client @param {string} commandId */
 async function selectPanelCommand(client, commandId) {
   return (
@@ -2832,8 +3015,13 @@ function isLowConfidenceHandoff(input) {
   );
 }
 
-/** @param {Queryable} client @param {any} input @param {string} now */
-async function confirmReservedSend(client, input, now) {
+/** @param {Queryable} client @param {any} input @param {string} now @param {boolean} [provenBillingExecution] */
+async function confirmReservedSend(
+  client,
+  input,
+  now,
+  provenBillingExecution = false,
+) {
   const message = (
     await client.query(
       `UPDATE crm.messages
@@ -2868,8 +3056,15 @@ async function confirmReservedSend(client, input, now) {
      SET status = 'sent', external_message_id = $2, updated_at = $3,
          last_error_code = NULL, retryable = false, retry_safe = false,
          completed_at = $3, locked_by = NULL, locked_until = NULL
-     WHERE command_id = $1 AND conversation_id = $4 AND status IN ('pending', 'processing', 'outcome_unknown')`,
-    [input.commandId, input.externalMessageId, now, input.conversationId],
+     WHERE command_id = $1 AND conversation_id = $4
+       AND (status IN ('pending', 'processing', 'outcome_unknown') OR ($5 AND status = 'failed'))`,
+    [
+      input.commandId,
+      input.externalMessageId,
+      now,
+      input.conversationId,
+      provenBillingExecution,
+    ],
   );
   return { messageId: message.id, status: message.delivery_status };
 }

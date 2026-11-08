@@ -37,6 +37,12 @@ function fixture(overrides = {}) {
           /** @type {any[]} */ values = [],
         ) {
           if (
+            sql.includes('SELECT order_id FROM crm.order_billing_charges') ||
+            sql.includes('FROM crm.order_billing_send_intents')
+          ) {
+            return { rows: [] };
+          }
+          if (
             sql.includes(
               'FROM crm.n8n_commands WHERE command_id = $1 FOR UPDATE',
             )
@@ -94,8 +100,19 @@ function fixture(overrides = {}) {
             sql.includes('UPDATE crm.messages') &&
             sql.includes('external_message_id')
           ) {
-            state.message.status = values[2];
-            state.message.delivery_status = values[3];
+            const confirmed =
+              state.message.status === 'sent' ||
+              state.message.external_message_id ||
+              ['sent', 'delivered', 'read'].includes(
+                state.message.delivery_status,
+              );
+            if (values[2] === 'sent' || !confirmed) {
+              state.message.status = values[2];
+              if (
+                !['delivered', 'read'].includes(state.message.delivery_status)
+              )
+                state.message.delivery_status = values[3];
+            }
             return { rows: [] };
           }
           if (
@@ -149,6 +166,29 @@ function fixture(overrides = {}) {
     }),
   };
 }
+
+test('worker uncertainty preserves a confirmed provider delivery', async () => {
+  for (const status of ['sent', 'delivered', 'read']) {
+    const { state, store } = fixture();
+    state.message.status = 'sent';
+    state.message.delivery_status = status;
+    state.message.external_message_id = 'provider-confirmed';
+    await store.markOutcomeUnknown('command-1', {
+      attemptId: 'attempt-1',
+      now: NOW,
+    });
+    assert.equal(state.message.status, 'sent');
+    assert.equal(state.message.delivery_status, status);
+  }
+});
+
+test('worker acknowledgement preserves a stronger provider receipt', async () => {
+  const { state, store } = fixture();
+  state.message.status = 'sent';
+  state.message.delivery_status = 'read';
+  await store.markDelivered('command-1', { attemptId: 'attempt-1', now: NOW });
+  assert.equal(state.message.delivery_status, 'read');
+});
 
 test('human send failure publishes one identifier-only event on a real transition', async () => {
   const { state, store } = fixture();

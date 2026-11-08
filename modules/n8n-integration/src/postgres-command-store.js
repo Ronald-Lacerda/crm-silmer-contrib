@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { decryptJson } from './crypto.js';
+import {
+  lockBillingSend,
+  billingSendBlockReason,
+  blockBillingSend,
+} from './billing-send-guard.js';
 
 const DEFAULT_LEASE_MS = 300_000;
 
 export class PostgresN8nCommandStore {
-  /** @param {{database: any, envelopeKey: Buffer}} options */
-  constructor({ database, envelopeKey }) {
+  /** @param {{database: any, envelopeKey: Buffer, billingSendEnabled?: boolean}} options */
+  constructor({ database, envelopeKey, billingSendEnabled = false }) {
     if (
       !database ||
       typeof database.query !== 'function' ||
@@ -18,6 +23,7 @@ export class PostgresN8nCommandStore {
     }
     this.database = database;
     this.envelopeKey = Buffer.from(envelopeKey);
+    this.billingSendEnabled = billingSendEnabled === true;
   }
 
   /** @param {string} commandId @param {Record<string, any>} [context] */
@@ -25,7 +31,15 @@ export class PostgresN8nCommandStore {
     technicalId(commandId, 'commandId');
     const now = context.now ? validDate(context.now) : new Date();
     return this.database.transaction(async (/** @type {any} */ client) => {
-      await recoverExpired(client, commandId, now);
+      if (
+        !(await allowBillingDelivery(
+          client,
+          commandId,
+          now,
+          this.billingSendEnabled,
+        ))
+      )
+        return null;
       const row = (
         await client.query(
           `SELECT command_id, fingerprint, payload_envelope, status,
@@ -68,7 +82,15 @@ export class PostgresN8nCommandStore {
       throw new TypeError('leaseMs must be between 1000 and 900000');
     }
     return this.database.transaction(async (/** @type {any} */ client) => {
-      await recoverExpired(client, commandId, now);
+      if (
+        !(await allowBillingDelivery(
+          client,
+          commandId,
+          now,
+          this.billingSendEnabled,
+        ))
+      )
+        return false;
       const row = (
         await client.query(
           `SELECT command.command_id, command.action, command.actor_kind,
@@ -174,10 +196,18 @@ export class PostgresN8nCommandStore {
         await client.query(
           `UPDATE crm.messages
            SET external_message_id = COALESCE(external_message_id, $2),
-               status = $3, delivery_status = $4, delivery_status_at = $5,
+               status = $3,
+               delivery_status = CASE WHEN delivery_status IN ('delivered','read')
+                                      THEN delivery_status ELSE $4 END,
+               delivery_status_at = CASE WHEN delivery_status IN ('delivered','read')
+                                         THEN delivery_status_at ELSE $5 END,
                sent_at = CASE WHEN $3 = 'sent' THEN COALESCE(sent_at, $5)
                               ELSE sent_at END
-           WHERE id = $1`,
+           WHERE id = $1 AND ($3 = 'sent' OR
+             (status <> 'sent' AND external_message_id IS NULL
+              AND delivery_status IS DISTINCT FROM 'sent'
+              AND delivery_status IS DISTINCT FROM 'delivered'
+              AND delivery_status IS DISTINCT FROM 'read'))`,
           [
             row.message_id,
             externalMessageId,
@@ -213,6 +243,9 @@ export function createPostgresN8nCommandStore(options) {
   return new PostgresN8nCommandStore({
     database: options?.database,
     envelopeKey,
+    billingSendEnabled:
+      options?.environment?.ORDER_BILLING_ENABLED === 'true' &&
+      options?.environment?.ORDER_BILLING_CHAT_SEND_ENABLED === 'true',
   });
 }
 
@@ -327,6 +360,7 @@ async function appendMessageDeliveryEvent(
 
 /** @param {any} client @param {string} commandId */
 async function lockCommandConversation(client, commandId) {
+  await lockBillingSend(client, { commandId });
   await client.query(
     `SELECT conversation.id
      FROM crm.conversations AS conversation
@@ -336,6 +370,27 @@ async function lockCommandConversation(client, commandId) {
      FOR UPDATE OF conversation`,
     [commandId],
   );
+}
+
+/** @param {any} client @param {string} commandId @param {Date} now @param {boolean} enabled */
+async function allowBillingDelivery(client, commandId, now, enabled) {
+  const intents = await lockBillingSend(client, { commandId });
+  // Recovery must run even when a billing intent is already sending: a lost
+  // worker acknowledgement must become unknown, never remain retryable.
+  await recoverExpired(client, commandId, now);
+  for (const intent of intents) {
+    if (intent.state !== 'queued') return false;
+    const reason = await billingSendBlockReason(client, intent, {
+      enabled,
+      now,
+      checkRevision: true,
+    });
+    if (reason) {
+      await blockBillingSend(client, intent.id, reason, now);
+      return false;
+    }
+  }
+  return true;
 }
 
 /** @param {any} client @param {string} commandId @param {Date} now */

@@ -45,6 +45,18 @@ falhas. SQL e cursor compartilham precisão em milissegundos; o fingerprint
 recusa cursores antigos. O relógio de espera, classificação e demais abas
 mantêm seus contratos. Sem migration ou infraestrutura nova.
 
+## Backend de envio de cobranças, 06/11/2026
+
+[ADR 066](docs/adr/066-intencoes-de-cobranca-e-envio-transacional.md) decide
+intenção humana durável no CRM e composição transacional com a Inbox, sem
+novo transporte. Contrato [BAPI-01–10](.specs/features/order-billing/spec.md)
+e [HTTP](docs/api/order-billing-chat.md). B01 entrega a fronteira injetável;
+persistência transacional está em B02 (migração 0063 e serviço injetável).
+B03 compõe mensagem, outbox e auditoria na mesma transação e revalida a
+reserva pelo transporte existente; migração expand 0064 conserva seu histórico.
+B04 integra API/worker com flag própria inicialmente desligada. Frontend
+aguarda redesign; publicação de workflows e homologação real ficam separadas.
+
 ## Triagem prioritária do Vendedor (06/11/2026)
 
 A [ADR 063](docs/adr/063-triagem-prioritaria-do-vendedor.md), autorizada pelo

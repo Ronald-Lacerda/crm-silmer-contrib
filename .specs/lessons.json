@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 8,
+  "next_id": 9,
   "lessons": [
     {
       "id": "L-001",
@@ -130,6 +130,24 @@
       ],
       "created": "2026-10-29T01:35:27Z",
       "last_seen": "2026-10-29T01:35:27Z"
+    },
+    {
+      "id": "L-008",
+      "key": "ac_gap::publique invalidacao da conversa na mesma transacao de toda mudanca efetiva no estado de entrega da mensagem",
+      "text": "Publique invalidação da conversa na mesma transação de toda mudança efetiva no estado de entrega da mensagem.",
+      "signal": "ac_gap",
+      "scope": "inbox",
+      "status": "candidate",
+      "features": [
+        "order-billing"
+      ],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": [
+        "modules/n8n-integration/src/billing-send-guard.js:202 (inbox)"
+      ],
+      "created": "2026-11-06T04:38:09Z",
+      "last_seen": "2026-11-06T04:38:09Z"
     }
   ]
 }
