@@ -13,29 +13,14 @@ permissions:
   contents: read
 
 jobs:
-  quality:
-    name: Lint, tests, E2E and dependencies
+  checks:
+    name: Static checks and E2E
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
       image_build_required: ${{ steps.image_scope.outputs.required }}
     permissions:
       contents: read
-    services:
-      postgres:
-        # Official PostgreSQL 17 image, verified by pull and pinned by digest.
-        # The public ECR mirror rejected CI pulls with "Data limit exceeded".
-        image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
-        env:
-          POSTGRES_DB: crm_silmer_test
-          POSTGRES_PASSWORD: issue12-ci-only
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d crm_silmer_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - name: Check out approved source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -118,10 +103,6 @@ jobs:
         run: npm run validate
       - name: Verify real edge media policies and upload limits
         run: node scripts/check-edge-media-proxy.mjs
-      - name: Run serialized PostgreSQL gates
-        env:
-          TEST_DATABASE_URL: postgresql://postgres:issue12-ci-only@127.0.0.1:5432/crm_silmer_test
-        run: npm run test:identity:live && npm run test:webhook:live && npm run test:worker:live && npm run test:deal:live && npm run test:finance:live && node --test --test-concurrency=1 test/order-billing-postgres-live.test.js test/inbox-postgres-live.test.js test/inbound-media-postgres-live.test.js test/n8n-integration-postgres-live.test.js test/chat-media-bind-postgres-live.test.js test/painel-summary-postgres-live.test.js test/contact-registration-postgres-live.test.js test/vendedor-evolucao-postgres-live.test.js test/shipping-postgres-live.test.js test/health-errors-postgres-live.test.js test/operational-signals-postgres-live.test.js test/health-errors-retention.test.js test/operation-read-postgres-live.test.js test/order-assistance-postgres-live.test.js test/dashboard-postgres-live.test.js test/dashboard-checkpoint-postgres-live.test.js test/dashboard-metrics-postgres-live.test.js test/lead-outcome-postgres-live.test.js test/inbox-buckets-postgres-live.test.js test/conversation-reminder-postgres-live.test.js
       - name: Run E2E and accessibility gates
         run: npm run test:e2e
       - name: Scan production dependencies
@@ -133,6 +114,61 @@ jobs:
       - name: Review dependency changes
         if: github.event_name == 'pull_request' && steps.dependency_scope.outputs.required == 'true'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+
+  postgres:
+    name: PostgreSQL tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        # Official PostgreSQL 17 image, verified by pull and pinned by digest.
+        # The public ECR mirror rejected CI pulls with "Data limit exceeded".
+        image: postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+        env:
+          POSTGRES_DB: crm_silmer_test
+          POSTGRES_PASSWORD: issue12-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d crm_silmer_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Check out approved source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci
+      - name: Run serialized PostgreSQL gates
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:issue12-ci-only@127.0.0.1:5432/crm_silmer_test
+        run: npm run test:identity:live && npm run test:webhook:live && npm run test:worker:live && npm run test:deal:live && npm run test:finance:live && node --test --test-concurrency=1 test/order-billing-postgres-live.test.js test/inbox-postgres-live.test.js test/inbound-media-postgres-live.test.js test/n8n-integration-postgres-live.test.js test/chat-media-bind-postgres-live.test.js test/painel-summary-postgres-live.test.js test/contact-registration-postgres-live.test.js test/vendedor-evolucao-postgres-live.test.js test/shipping-postgres-live.test.js test/health-errors-postgres-live.test.js test/operational-signals-postgres-live.test.js test/health-errors-retention.test.js test/operation-read-postgres-live.test.js test/order-assistance-postgres-live.test.js test/dashboard-postgres-live.test.js test/dashboard-checkpoint-postgres-live.test.js test/dashboard-metrics-postgres-live.test.js test/lead-outcome-postgres-live.test.js test/inbox-buckets-postgres-live.test.js test/conversation-reminder-postgres-live.test.js
+
+      - name: Reject generated diff
+        run: git diff --check && test -z "$(git status --short)"
+
+  # Keep the existing required check name and wait for both parallel jobs.
+  quality:
+    name: Lint, tests, E2E and dependencies
+    needs: [checks, postgres]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      image_build_required: ${{ needs.checks.outputs.image_build_required }}
+    steps:
+      - name: Require both test jobs to pass
+        env:
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          POSTGRES_RESULT: ${{ needs.postgres.result }}
+        run: test "$CHECKS_RESULT" = success && test "$POSTGRES_RESULT" = success
 
   images:
     name: Build and scan ${{ matrix.image }}

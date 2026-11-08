@@ -12,6 +12,10 @@ segurança. Ela **não satisfaz** o comportamento funcional de `MSG-02` nem de
 
 - Pull requests executam lint/checkJs, unitários, E2E com axe-core, auditoria
   de dependências, build/scan das duas imagens e `git diff --check`.
+- E2E e PostgreSQL executam em jobs paralelos; os testes de banco continuam
+  serializados em um banco dedicado. O check `Lint, tests, E2E and dependencies`
+  exige sucesso dos dois jobs antes de liberar as imagens. Para desfazer essa
+  organização, reverta o commit da tarefa OPS-CI-02 (INT-3 / T00.2).
 - O merge em `master` constrói `edge-web` e `runtime` uma única vez em layouts
   OCI locais, executa o Trivy antes de qualquer upload e somente então copia os
   mesmos manifestos, sem rebuild e preservando os digests, para a tag

@@ -15,6 +15,56 @@ function run(script) {
   });
 }
 
+test('parallel CI jobs block images unless both test jobs succeed', () => {
+  const workflow = readFileSync(
+    new URL('../.github/workflows/ci.yml', import.meta.url),
+    'utf8',
+  );
+  const jobs = Object.fromEntries(
+    [
+      ...workflow.matchAll(
+        /^ {2}(\w+):\n([\s\S]*?)(?=^ {2}\w+:|$(?![\s\S]))/gmu,
+      ),
+    ].map(([, name, body]) => [name, body]),
+  );
+
+  assert.doesNotMatch(jobs.checks, /^ {4}needs:|TEST_DATABASE_URL:/mu);
+  assert.doesNotMatch(jobs.postgres, /^ {4}needs:/mu);
+  assert.match(jobs.postgres, /Run serialized PostgreSQL gates/u);
+  assert.match(jobs.quality, /name: Lint, tests, E2E and dependencies/u);
+  assert.match(jobs.quality, /needs: \[checks, postgres\]/u);
+  assert.match(jobs.quality, /if: always\(\)/u);
+  assert.match(
+    jobs.quality,
+    /CHECKS_RESULT: \$\{\{ needs\.checks\.result \}\}/u,
+  );
+  assert.match(
+    jobs.quality,
+    /POSTGRES_RESULT: \$\{\{ needs\.postgres\.result \}\}/u,
+  );
+  assert.match(
+    jobs.quality,
+    /image_build_required: \$\{\{ needs\.checks\.outputs\.image_build_required \}\}/u,
+  );
+  assert.match(jobs.images, /needs: quality/u);
+  const gate = /^ {8}run: (.+)$/mu.exec(jobs.quality)?.[1];
+  assert.ok(gate);
+
+  for (const checks of ['success', 'failure', 'cancelled', 'skipped']) {
+    for (const postgres of ['success', 'failure', 'cancelled', 'skipped']) {
+      const result = run(
+        `CHECKS_RESULT=${checks}\nPOSTGRES_RESULT=${postgres}\n${gate}`,
+      );
+      assert.ifError(result.error);
+      assert.equal(
+        result.status === 0,
+        checks === 'success' && postgres === 'success',
+        `checks=${checks}, postgres=${postgres}`,
+      );
+    }
+  }
+});
+
 for (const path of [
   '.github/workflows/ci.yml',
   '.github/workflows/promote-approved-sha.yml',

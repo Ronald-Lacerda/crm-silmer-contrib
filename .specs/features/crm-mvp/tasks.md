@@ -1,5 +1,15 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## OPS-CI-02 — E2E e PostgreSQL em paralelo (08/11/2026)
+
+Manutenção interna de INT-3 / T00.2, autorizada pelo mantenedor.
+
+- [x] Separar PostgreSQL do job de validação/E2E, mantendo a suíte de banco
+      serializada e a mesma lista de testes.
+- [x] Preservar o nome do check obrigatório e exigir sucesso dos dois jobs
+      antes do build/scan das imagens, inclusive diante de falha ou skip.
+- Operação e rollback em [Supply chain](../../../docs/phase0/SUPPLY-CHAIN.md).
+
 ## INBOX-VEZ-01 — Caixa por vez de responder: API (08/11/2026)
 
 Fatia de API da [RFC 052](../../../docs/rfc/052-caixa-de-entrada-por-vez-de-responder.md)
