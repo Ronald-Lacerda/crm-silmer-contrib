@@ -17,10 +17,13 @@ import FilterSheet from '../components/FilterSheet.vue';
 import AnchoredPopover from '../components/AnchoredPopover.vue';
 import AssistantTakeoverContext from '../components/inbox/AssistantTakeoverContext.vue';
 import AudioRecorder from '../components/inbox/AudioRecorder.vue';
+import ConversationCard from '../components/inbox/ConversationCard.vue';
 import ConversationHandoffSummary from '../components/inbox/ConversationHandoffSummary.vue';
 import ConversationOrderAssistance from '../components/inbox/ConversationOrderAssistance.vue';
 import ConversationOrderSummary from '../components/inbox/ConversationOrderSummary.vue';
 import ConversationShippingQuote from '../components/inbox/ConversationShippingQuote.vue';
+import InboxTabs from '../components/inbox/InboxTabs.vue';
+import InboxTurnStrip from '../components/inbox/InboxTurnStrip.vue';
 import MediaMessage from '../components/inbox/MediaMessage.vue';
 import MessageDeliveryNotice from '../components/inbox/MessageDeliveryNotice.vue';
 import MessageTranscript from '../components/inbox/MessageTranscript.vue';
@@ -52,7 +55,6 @@ import {
   REMINDER_RANGE_MESSAGE,
   reminderInRange,
   minutesSince,
-  previewAuthor,
   splitBadges,
   turnClock,
   turnSpan,
@@ -212,8 +214,6 @@ const filtersOpen = ref(false);
 const draftOwnerScope = ref('all');
 const draftOrderReady = ref(false);
 const draftConsult = ref('open');
-/** @type {import('vue').Ref<HTMLButtonElement[]>} */
-const bucketTabs = ref([]);
 /**
  * One snapshot of the four tab totals, for the owner on screen; a failed
  * read hides the numbers rather than keeping stale ones.
@@ -225,12 +225,19 @@ const counts = ref({});
 const snoozeOpen = ref(false);
 const reminderAt = ref('');
 const reminderError = ref('');
-const reminderInput = ref(null);
-const snoozeToggle = ref(null);
+/**
+ * The turn strip draws the reminder form and the two triggers; it exposes the
+ * elements the focus goes back to (after a refusal, a closed form or dialog).
+ *
+ * @type {import('vue').Ref<any>}
+ */
+const turnStrip = ref(null);
+const reminderInput = computed(() => turnStrip.value?.reminderInput ?? null);
+const snoozeToggle = computed(() => turnStrip.value?.snoozeToggle ?? null);
+const lostTrigger = computed(() => turnStrip.value?.lostTrigger ?? null);
+const reopenTrigger = computed(() => turnStrip.value?.reopenTrigger ?? null);
 const lostDialog = ref(null);
-const lostTrigger = ref(null);
 const reopenDialog = ref(null);
-const reopenTrigger = ref(null);
 const reopenError = ref('');
 /**
  * P1-E: the conversation a Sem retorno / Perdidos command just moved to
@@ -658,23 +665,6 @@ const activeFilters = computed(() => {
   return filters;
 });
 const filteredByChoice = computed(() => activeFilters.value.length > 0);
-/** @param {string} value */
-function bucketCount(value) {
-  const count = counts.value[value];
-  return Number.isFinite(count) ? count : null;
-}
-/**
- * "Responder, 12 conversas": the count belongs to the tab's name. Without a
- * total the name says so, and never collides with the reply field, whose
- * label is also "Responder".
- *
- * @param {(typeof INBOX_BUCKETS)[number]} item
- */
-function bucketAccessibleName(item) {
-  const count = bucketCount(item.value);
-  if (count === null) return `${item.name}, total indisponível`;
-  return `${item.name}, ${count} ${count === 1 ? 'conversa' : 'conversas'}`;
-}
 /**
  * P1-C: the open conversation's turn (`bucket`, `lostOutcome`, `reminder`)
  * is read from the detail, which carries it by contract. The strip above the
@@ -862,24 +852,6 @@ async function selectBucket(value, focusList = true) {
   if (!focusList) return;
   await nextTick();
   listSummary.value?.focus({ preventScroll: true });
-}
-
-/** design.md §8 Tabs: arrows between tabs, Home/End, roving tabindex. @param {KeyboardEvent} event @param {number} index */
-async function bucketKeydown(event, index) {
-  const last = INBOX_BUCKETS.length - 1;
-  /** @type {Record<string, number>} */
-  const moves = {
-    ArrowLeft: index === 0 ? last : index - 1,
-    ArrowRight: index === last ? 0 : index + 1,
-    Home: 0,
-    End: last,
-  };
-  const target = moves[event.key];
-  if (target === undefined) return;
-  event.preventDefault();
-  await selectBucket(INBOX_BUCKETS[target].value, false);
-  await nextTick();
-  bucketTabs.value[target]?.focus();
 }
 
 /** PCX-18: filters are a draft until the sheet's explicit apply action. @param {Event} event */
@@ -2969,41 +2941,12 @@ onBeforeUnmount(() => {
     <div class="inbox-toolbar">
       <!-- RFC 052 (INBOX-VEZ-02): whose turn it is, one tab per conversation.
            Selection stays neutral (RFC 022); the count names the tab. -->
-      <div
+      <InboxTabs
         v-if="showBuckets"
-        class="inbox-tabs"
-        role="tablist"
-        aria-label="Vez de responder"
-      >
-        <button
-          v-for="(item, index) in INBOX_BUCKETS"
-          :id="`inbox-tab-${item.value}`"
-          :key="item.value"
-          :ref="(element) => (bucketTabs[index] = element)"
-          type="button"
-          role="tab"
-          class="inbox-tab"
-          aria-controls="inbox-bucket-panel"
-          :aria-selected="bucket === item.value ? 'true' : 'false'"
-          :aria-label="bucketAccessibleName(item)"
-          :tabindex="bucket === item.value ? 0 : -1"
-          @click="selectBucket(item.value)"
-          @keydown="bucketKeydown($event, index)"
-        >
-          <span class="inbox-tab-label">{{ item.label }}</span>
-          <span
-            v-if="bucketCount(item.value) !== null"
-            class="inbox-tab-count"
-            aria-hidden="true"
-            :data-tone="
-              item.value === 'respond' && bucketCount(item.value) > 0
-                ? 'attention'
-                : undefined
-            "
-            >{{ bucketCount(item.value) }}</span
-          >
-        </button>
-      </div>
+        :bucket="bucket"
+        :counts="counts"
+        @select="selectBucket"
+      />
 
       <!-- D6: on a phone the button leaves the toolbar and sits on the search
            row (the slot below); the same element, moved by the Teleport. -->
@@ -3243,65 +3186,13 @@ onBeforeUnmount(() => {
             :key="conversation.id"
           >
             <!-- RFC 052 card: who and how long; what was said; up to two seals. -->
-            <button
-              type="button"
-              class="conversation-row"
-              :data-conversation-id="conversation.id"
-              :aria-current="activeId === conversation.id ? 'true' : undefined"
-              @click="openConversation(conversation.id)"
-            >
-              <span class="conv-top">
-                <span class="conv-name" :title="conversation.contact.label">{{
-                  conversation.contact.label
-                }}</span>
-                <span
-                  class="conv-channel"
-                  :title="CHANNEL_LABELS[conversation.channel] ?? 'Canal'"
-                  ><AppIcon
-                    :name="
-                      conversation.channel === 'site_chat' ? 'globe' : 'message'
-                    "
-                  /><span class="sr-only">{{
-                    conversation.channel === 'site_chat'
-                      ? 'Site'
-                      : (CHANNEL_LABELS[conversation.channel] ?? 'Canal')
-                  }}</span></span
-                >
-                <span
-                  v-if="time"
-                  class="conv-waiting"
-                  :data-tone="time.tone"
-                  :title="time.title"
-                  ><span class="sr-only">{{ time.spoken }}.</span
-                  ><span aria-hidden="true">{{ time.label }}</span></span
-                >
-              </span>
-              <span v-if="conversation.lastMessage" class="conv-preview"
-                ><span v-if="previewAuthor(conversation.lastMessage)">{{
-                  previewAuthor(conversation.lastMessage)
-                }}</span
-                >{{ messageText(conversation.lastMessage) }}</span
-              >
-              <span v-if="badges.visible.length" class="conv-badges"
-                ><span
-                  v-for="badge in badges.visible"
-                  :key="badge.key"
-                  class="badge"
-                  :data-tone="badge.tone"
-                  ><AppIcon v-if="badge.key === 'delivery'" name="alert" />{{
-                    badge.label
-                  }}</span
-                ><span
-                  v-if="badges.hidden.length"
-                  class="badge"
-                  data-overflow="true"
-                  ><span aria-hidden="true">+{{ badges.hidden.length }}</span
-                  ><span class="sr-only">{{
-                    badges.hidden.map((badge) => badge.label).join(', ')
-                  }}</span></span
-                ></span
-              >
-            </button>
+            <ConversationCard
+              :conversation="conversation"
+              :time="time"
+              :badges="badges"
+              :current="activeId === conversation.id"
+              @open="openConversation"
+            />
           </li>
           <li v-if="nextCursor || moreNeedsRefresh" class="empty-list">
             <p v-if="moreError" role="alert">{{ moreError }}</p>
@@ -3855,134 +3746,25 @@ onBeforeUnmount(() => {
 
           <!-- INBOX-VEZ-03 (RFC 052): the customer's silence or a declared
                loss, decided here. Retomar is the reply itself, below. -->
-          <div
-            v-if="silentNotice"
-            class="inbox-notice inbox-turn-notice"
-            role="group"
-            aria-labelledby="inbox-turn-notice-text"
-          >
-            <div class="inbox-turn-row">
-              <p id="inbox-turn-notice-text">
-                {{ silentNotice.text }}
-                <span v-if="silentNotice.reminder">{{
-                  silentNotice.reminder
-                }}</span>
-              </p>
-              <div class="inline-actions">
-                <button
-                  ref="snoozeToggle"
-                  type="button"
-                  class="quiet"
-                  aria-controls="inbox-reminder-form"
-                  :aria-expanded="snoozeOpen ? 'true' : 'false'"
-                  @click="toggleSnooze"
-                >
-                  Lembrar depois
-                </button>
-                <button
-                  ref="lostTrigger"
-                  type="button"
-                  class="quiet"
-                  aria-haspopup="dialog"
-                  :aria-disabled="canMarkLost ? undefined : 'true'"
-                  :aria-describedby="
-                    canMarkLost ? undefined : 'inbox-outcome-reason'
-                  "
-                  @click="canMarkLost && openLostDialog()"
-                >
-                  Marcar perdido
-                </button>
-              </div>
-            </div>
-            <p
-              v-if="lossBlockedReason"
-              id="inbox-outcome-reason"
-              class="inbox-turn-hint"
-            >
-              {{ lossBlockedReason }}
-            </p>
-            <form
-              v-if="snoozeOpen"
-              id="inbox-reminder-form"
-              class="inbox-turn-form"
-              novalidate
-              aria-labelledby="inbox-reminder-title"
-              @submit.prevent="saveReminder"
-              @keydown.esc.prevent="closeSnooze"
-            >
-              <h3 id="inbox-reminder-title">Quando lembrar você?</h3>
-              <p>
-                A conversa sai de Sem retorno até o horário escolhido, em até 90
-                dias. Nenhuma mensagem é enviada ao cliente.
-              </p>
-              <label for="inbox-reminder-at">Data e horário de São Paulo</label>
-              <input
-                id="inbox-reminder-at"
-                ref="reminderInput"
-                v-model="reminderAt"
-                type="datetime-local"
-                required
-                :min="reminderBounds.min"
-                :max="reminderBounds.max"
-                :readonly="busy"
-                :aria-invalid="reminderError ? 'true' : undefined"
-                :aria-describedby="
-                  reminderError ? 'inbox-reminder-error' : undefined
-                "
-              />
-              <p
-                v-if="reminderError"
-                id="inbox-reminder-error"
-                class="inbox-turn-error"
-                role="alert"
-              >
-                {{ reminderError }}
-              </p>
-              <div class="inline-actions">
-                <button
-                  type="submit"
-                  :aria-disabled="busy ? 'true' : undefined"
-                >
-                  {{ busy ? 'Salvando…' : 'Salvar lembrete' }}
-                </button>
-                <button type="button" class="quiet" @click="closeSnooze">
-                  Cancelar
-                </button>
-              </div>
-            </form>
-          </div>
-          <div
-            v-else-if="lostNotice"
-            class="inbox-notice inbox-turn-notice"
-            role="group"
-            aria-labelledby="inbox-turn-notice-text"
-          >
-            <div class="inbox-turn-row">
-              <p id="inbox-turn-notice-text">{{ lostNotice }}</p>
-              <div class="inline-actions">
-                <button
-                  ref="reopenTrigger"
-                  type="button"
-                  class="quiet"
-                  aria-haspopup="dialog"
-                  :aria-disabled="busy || !canReopenLoss ? 'true' : undefined"
-                  :aria-describedby="
-                    canReopenLoss ? undefined : 'inbox-outcome-reason'
-                  "
-                  @click="openReopenDialog"
-                >
-                  Reabrir
-                </button>
-              </div>
-            </div>
-            <p
-              v-if="outcomeBlockedReason"
-              id="inbox-outcome-reason"
-              class="inbox-turn-hint"
-            >
-              {{ outcomeBlockedReason }}
-            </p>
-          </div>
+          <InboxTurnStrip
+            ref="turnStrip"
+            v-model:reminder-at="reminderAt"
+            :silent-notice="silentNotice"
+            :lost-notice="lostNotice"
+            :loss-blocked-reason="lossBlockedReason"
+            :outcome-blocked-reason="outcomeBlockedReason"
+            :can-mark-lost="canMarkLost"
+            :can-reopen-loss="canReopenLoss"
+            :busy="busy"
+            :snooze-open="snoozeOpen"
+            :reminder-error="reminderError"
+            :reminder-bounds="reminderBounds"
+            @toggle-snooze="toggleSnooze"
+            @close-snooze="closeSnooze"
+            @save-reminder="saveReminder"
+            @mark-lost="openLostDialog"
+            @reopen="openReopenDialog"
+          />
 
           <div v-if="!needsTakeover" class="inbox-composer">
             <!-- PCX-13: until a person has the conversation, taking it is the
