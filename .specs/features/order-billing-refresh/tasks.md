@@ -54,4 +54,9 @@ Where: docs/diagrams/order-billing-infinitepay.md
 Tests: conferência do fluxo contra API, outboxes, workflow e callbacks; separar transporte e pagamento.
 Gate: Diagram
 Done when: diagrama disponível no projeto e apresentado ao usuário, com limites de ativação claros.
-Status: Pending
+Status: Complete
+
+Diagrama em `docs/diagrams/order-billing-infinitepay.md`, preparado para
+exibição em Mermaid. Fluxo e recuperação conferidos contra os serviços,
+guardas e workflows locais: geração, transporte e pagamento separados;
+saldo/correção conservam histórico e recebimentos. Flags reais desligadas.
