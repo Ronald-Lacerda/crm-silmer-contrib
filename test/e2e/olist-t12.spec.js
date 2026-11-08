@@ -1466,3 +1466,508 @@ test('T12 an SSE event for another order preserves the open monetary draft and i
     value: { action: 'review_subtotal', groupId, lineId, subtotalCents: 600 },
   });
 });
+
+/** All /export traffic in these tests is intercepted. Synthetic flags do not
+ * alter runtime configuration, accounts or any provider state.
+ * @param {import('@playwright/test').Page} page
+ * @param {{projectionEnabled?:boolean,previewEnabled?:boolean,checkedEnabled?:boolean,checkedValid?:boolean,checkFailure?:{code:string,status:number},delayCheck?:boolean,delayExport?:boolean,exportAbort?:boolean,exportFailure?:{code:string,status:number},eligible?:boolean,exportResponse?:any}} [options] */
+async function setupHumanExport(page, options = {}) {
+  const fixture = previewFixture({
+    eligible: options.eligible ?? true,
+    creationEnabled: options.previewEnabled ?? true,
+  });
+  const state = await setup(page, {
+    profile: 'Vendedor',
+    projection: { creationEnabled: options.projectionEnabled ?? true },
+    preview: fixture,
+  });
+  const viewer = {
+    id: 'financial-synthetic',
+    name: 'Operador sintético',
+    email: 'operador@example.test',
+    functionName: 'Vendedor',
+    capabilities: [],
+    olistEnabled: true,
+    olistAuthorizationVersion: 2,
+  };
+  /** @type {any} */
+  let ledger = null;
+  /** @type {string[]} */
+  const exportKeys = [];
+  /** @type {() => void} */
+  let releaseCheck = () => {};
+  /** @type {() => void} */
+  let releaseExport = () => {};
+  /** @type {() => void} */
+  let releaseRevocation = () => {};
+  const checkGate = new Promise((resolve) => {
+    releaseCheck = () => resolve(null);
+  });
+  const exportGate = new Promise((resolve) => {
+    releaseExport = () => resolve(null);
+  });
+  const eventGate = new Promise((resolve) => {
+    releaseRevocation = () => resolve(null);
+  });
+  let nextEvent = {
+    type: 'identity.user.changed',
+    userId: 'financial-synthetic',
+    orderId: '',
+  };
+  await page.route('**/api/v1/sessions/current', (route) =>
+    route.fulfill({ json: { user: viewer } }),
+  );
+  await page.route('**/api/v1/events**', async (route) => {
+    await eventGate;
+    return route.fulfill({
+      contentType: 'text/event-stream',
+      body: `retry: 60000\n\nevent: ${nextEvent.type}\nid: t12-export-change\ndata: ${JSON.stringify(nextEvent)}\n\n`,
+    });
+  });
+  await page.route(`**/api/v1/orders/${orderId}/olist`, (route) => {
+    state.calls.push({ path: operation, method: 'GET', body: null });
+    return route.fulfill({
+      json: {
+        orderId,
+        number: '41-CRM',
+        status: 'pendente',
+        pendingFields: [],
+        creationEnabled: options.projectionEnabled ?? true,
+        operation: ledger,
+      },
+    });
+  });
+  await page.route(`**${operation}/preview/check`, async (route) => {
+    const req = route.request();
+    const body = req.postDataJSON();
+    state.calls.push({
+      path: `${operation}/preview/check`,
+      method: req.method(),
+      body,
+    });
+    expect(req.method()).toBe('POST');
+    expect(body).toEqual({ previewToken: fixture.previewToken });
+    expect(req.headers()['x-csrf-token']).toBe('t12-csrf');
+    if (options.delayCheck) await checkGate;
+    if (options.checkFailure)
+      return route.fulfill({
+        status: options.checkFailure.status,
+        json: { code: options.checkFailure.code, detail: privateCanary },
+      });
+    return route.fulfill({
+      json: {
+        valid: options.checkedValid ?? true,
+        creationEnabled: options.checkedEnabled ?? true,
+        expiresAt: fixture.expiresAt,
+      },
+    });
+  });
+  await page.route(`**${operation}/export`, async (route) => {
+    const req = route.request();
+    const body = req.postDataJSON();
+    state.calls.push({
+      path: `${operation}/export`,
+      method: req.method(),
+      body,
+    });
+    expect(req.method()).toBe('POST');
+    expect(body).toEqual({ previewToken: fixture.previewToken });
+    expect(req.headers()['x-csrf-token']).toBe('t12-csrf');
+    const key = req.headers()['idempotency-key'];
+    expect(key).toMatch(/^[A-Za-z0-9._:-]{1,128}$/u);
+    exportKeys.push(key);
+    if (options.delayExport) await exportGate;
+    if (options.exportAbort) return route.abort('timedout');
+    if (options.exportFailure)
+      return route.fulfill({
+        status: options.exportFailure.status,
+        json: { code: options.exportFailure.code, detail: privateCanary },
+      });
+    ledger = { state: 'queued', stage: 'customer', number: null };
+    return route.fulfill({
+      status: 202,
+      json: options.exportResponse ?? {
+        operationId: 'synthetic-export-id',
+        orderId,
+        number: '41-CRM',
+        state: ledger.state,
+        stage: ledger.stage,
+        creationEnabled: false,
+      },
+    });
+  });
+  return {
+    ...state,
+    exportKeys,
+    releaseCheck,
+    releaseExport,
+    orderChanged() {
+      nextEvent = { type: 'inbox.order.changed', userId: '', orderId };
+      releaseRevocation();
+    },
+    revoke() {
+      viewer.olistEnabled = false;
+      viewer.olistAuthorizationVersion++;
+      releaseRevocation();
+    },
+  };
+}
+
+/** @param {import('@playwright/test').Page} page */
+function humanGenerate(page) {
+  return page.getByRole('button', {
+    name: 'Gerar venda no Olist',
+    exact: true,
+  });
+}
+/** @param {import('@playwright/test').Page} page */
+function humanDialog(page) {
+  return page.getByRole('dialog', {
+    name: 'Gerar venda no Olist?',
+    exact: true,
+  });
+}
+
+for (const gates of [
+  { projection: false, preview: true },
+  { projection: true, preview: false },
+  { projection: false, preview: false },
+]) {
+  test(`T12 human export requires both flags: projection=${gates.projection} preview=${gates.preview}`, async ({
+    page,
+  }) => {
+    const state = await setupHumanExport(page, {
+      projectionEnabled: gates.projection,
+      previewEnabled: gates.preview,
+    });
+    await openAndPreview(page);
+    await expect(humanGenerate(page)).toHaveAttribute('aria-disabled', 'true');
+    await humanGenerate(page).dispatchEvent('click');
+    await expect(humanDialog(page)).toHaveCount(0);
+    expectNoEffectsOrGeneralRead(state);
+    expect(
+      state.calls.filter(({ path }) => path === `${operation}/preview/check`),
+    ).toHaveLength(0);
+  });
+}
+
+for (const check of [
+  { checkedEnabled: false, checkedValid: true },
+  { checkedEnabled: true, checkedValid: false },
+]) {
+  test(`T12 fresh check valid=${check.checkedValid} enabled=${check.checkedEnabled} cannot authorize export`, async ({
+    page,
+  }) => {
+    const state = await setupHumanExport(page, check);
+    await openAndPreview(page);
+    await humanGenerate(page).click();
+    await expect
+      .poll(
+        () =>
+          state.calls.filter(
+            ({ path }) => path === `${operation}/preview/check`,
+          ).length,
+      )
+      .toBe(1);
+    await expect(humanDialog(page)).toHaveCount(0);
+    expectNoEffectsOrGeneralRead(state);
+  });
+}
+
+for (const code of [
+  'OLIST_PREVIEW_STALE',
+  'OLIST_PREVIEW_EXPIRED',
+  'FORBIDDEN',
+]) {
+  test(`T12 human export stops when fresh check returns ${code}`, async ({
+    page,
+  }) => {
+    const state = await setupHumanExport(page, {
+      checkFailure: { code, status: code === 'FORBIDDEN' ? 403 : 409 },
+    });
+    await openAndPreview(page);
+    await humanGenerate(page).click();
+    await expect(page.getByRole('alert').last()).toBeVisible();
+    await expect(humanDialog(page)).toHaveCount(0);
+    await expect(page.getByText(privateCanary)).toHaveCount(0);
+    expectNoEffectsOrGeneralRead(state);
+  });
+}
+
+test('T12 human export requires explicit confirmation after a fresh check and sends one exact idempotent command', async ({
+  page,
+}) => {
+  const state = await setupHumanExport(page, { delayExport: true });
+  await openAndPreview(page);
+  await humanGenerate(page).click();
+  const dialog = humanDialog(page);
+  await expect(dialog).toBeVisible();
+  expect(
+    state.calls.filter(({ path }) => path === `${operation}/preview/check`),
+  ).toHaveLength(1);
+  expect(
+    state.calls.filter(({ path }) => path === `${operation}/export`),
+  ).toHaveLength(0);
+  await expect(dialog.getByRole('textbox')).toHaveCount(0);
+  const confirm = dialog.getByRole('button', {
+    name: 'Gerar venda conferida',
+    exact: true,
+  });
+  await confirm.focus();
+  await page.keyboard.press('Enter');
+  await expect
+    .poll(
+      () =>
+        state.calls.filter(({ path }) => path === `${operation}/export`).length,
+    )
+    .toBe(1);
+  await dialog.locator('button.primary').dispatchEvent('click');
+  await page.keyboard.press('Enter');
+  state.releaseExport();
+  await expect(dialog).toHaveCount(0);
+  expect(state.exportKeys).toHaveLength(1);
+  expect(
+    state.calls.filter(({ path }) => path === `${operation}/export`),
+  ).toHaveLength(1);
+  expect(
+    state.calls.findIndex(({ path }) => path === `${operation}/preview/check`),
+  ).toBeLessThan(
+    state.calls.findIndex(({ path }) => path === `${operation}/export`),
+  );
+  await page.reload();
+  await expect(
+    page.getByText('Operação Olist em acompanhamento', { exact: true }),
+  ).toBeVisible();
+  await expect(humanGenerate(page)).toHaveCount(0);
+  expect(
+    state.calls.filter(({ path }) => path === `${operation}/export`),
+  ).toHaveLength(1);
+});
+
+test('T12 cancelling the human export dialog restores focus and sends no export', async ({
+  page,
+}) => {
+  const state = await setupHumanExport(page);
+  await openAndPreview(page);
+  await humanGenerate(page).click();
+  await expect(humanDialog(page)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(humanDialog(page)).toHaveCount(0);
+  await expect(humanGenerate(page)).toBeFocused();
+  expectNoEffectsOrGeneralRead(state);
+});
+
+test('T12 a second generate activation during the fresh check cannot open duplicate dialogs', async ({
+  page,
+}) => {
+  const state = await setupHumanExport(page, { delayCheck: true });
+  await openAndPreview(page);
+  await humanGenerate(page).click();
+  await expect
+    .poll(
+      () =>
+        state.calls.filter(({ path }) => path === `${operation}/preview/check`)
+          .length,
+    )
+    .toBe(1);
+  await humanGenerate(page).dispatchEvent('click');
+  state.releaseCheck();
+  await expect(humanDialog(page)).toHaveCount(1);
+  expect(
+    state.calls.filter(({ path }) => path === `${operation}/preview/check`),
+  ).toHaveLength(1);
+  expectNoEffectsOrGeneralRead(state);
+});
+
+test('T12 a locally expired preview closes the human confirmation before any export', async ({
+  page,
+}) => {
+  await page.clock.install();
+  const state = await setupHumanExport(page);
+  await openAndPreview(page);
+  await humanGenerate(page).click();
+  await expect(humanDialog(page)).toBeVisible();
+  await page.clock.fastForward(601_000);
+  await expect(humanDialog(page)).toHaveCount(0);
+  await expect(page.getByText(/prévia expirou/iu).last()).toBeVisible();
+  expectNoEffectsOrGeneralRead(state);
+});
+
+test('T12 revoking the checkbox closes the human confirmation and clears its receipt', async ({
+  page,
+}) => {
+  const state = await setupHumanExport(page);
+  await openAndPreview(page);
+  await humanGenerate(page).click();
+  await expect(humanDialog(page)).toBeVisible();
+  state.revoke();
+  await expect(humanDialog(page)).toHaveCount(0);
+  await expect(humanGenerate(page)).toHaveCount(0);
+  expectNoEffectsOrGeneralRead(state);
+});
+
+test('T12 changing the selected order while a check is pending ignores its late success', async ({
+  page,
+}) => {
+  const state = await setupHumanExport(page, { delayCheck: true });
+  await openAndPreview(page);
+  await humanGenerate(page).click();
+  await expect
+    .poll(
+      () =>
+        state.calls.filter(({ path }) => path === `${operation}/preview/check`)
+          .length,
+    )
+    .toBe(1);
+  await page.goto('/olist?pedido=8c7ba95a-8b94-4dcb-a71d-3b73a663a778');
+  state.releaseCheck();
+  await expect(humanDialog(page)).toHaveCount(0);
+  expectNoEffectsOrGeneralRead(state);
+});
+
+for (const outcome of [
+  { exportAbort: true, name: 'timeout' },
+  {
+    exportFailure: { code: 'OLIST_UPSTREAM_REJECTED', status: 422 },
+    name: 'rejection',
+  },
+]) {
+  test(`T12 human export ${outcome.name} never offers blind retry or leaks provider errors`, async ({
+    page,
+  }) => {
+    const state = await setupHumanExport(page, outcome);
+    await openAndPreview(page);
+    await humanGenerate(page).click();
+    await humanDialog(page)
+      .getByRole('button', { name: 'Gerar venda conferida', exact: true })
+      .click();
+    await expect(
+      page.getByText(/incerto|não repita|conferência administrativa/iu).last(),
+    ).toBeVisible();
+    await expect(humanDialog(page)).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Gerar venda conferida', exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: /Tentar novamente|Repetir geração/u }),
+    ).toHaveCount(0);
+    await expect(page.getByText(privateCanary)).toHaveCount(0);
+    expect(
+      state.calls.filter(({ path }) => path === `${operation}/export`),
+    ).toHaveLength(1);
+    await page
+      .getByRole('button', { name: 'Atualizar preparação', exact: true })
+      .click();
+    expect(
+      state.calls.filter(({ path }) => path === `${operation}/export`),
+    ).toHaveLength(1);
+  });
+}
+
+test('T12 an SSE invalidation during the export POST preserves uncertainty and ignores a late accepted response', async ({
+  page,
+}) => {
+  const state = await setupHumanExport(page, { delayExport: true });
+  await openAndPreview(page);
+  await humanGenerate(page).click();
+  await humanDialog(page)
+    .getByRole('button', { name: 'Gerar venda conferida', exact: true })
+    .click();
+  await expect
+    .poll(
+      () =>
+        state.calls.filter(({ path }) => path === `${operation}/export`).length,
+    )
+    .toBe(1);
+  state.orderChanged();
+  await expect(humanDialog(page)).toHaveCount(0);
+  await expect(
+    page.getByText(
+      /resultado da solicitação precisa de conferência administrativa/iu,
+    ),
+  ).toBeVisible();
+  state.releaseExport();
+  await expect(humanGenerate(page)).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Conferir prévia Olist', exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole('button', { name: 'Atualizar preparação', exact: true })
+    .click();
+  await expect(humanGenerate(page)).toHaveCount(0);
+  expect(
+    state.calls.filter(({ path }) => path === `${operation}/export`),
+  ).toHaveLength(1);
+  expect(state.exportKeys).toHaveLength(1);
+});
+
+test('T12 a malformed accepted response cannot be reported as an ERP sale or permit a second command', async ({
+  page,
+}) => {
+  const state = await setupHumanExport(page, {
+    exportResponse: {
+      operationId: 'synthetic-export-id',
+      orderId,
+      number: 'ERP-UNTRUSTED-900',
+      state: 'queued',
+      stage: 'customer',
+      creationEnabled: false,
+    },
+  });
+  await openAndPreview(page);
+  await humanGenerate(page).click();
+  await humanDialog(page)
+    .getByRole('button', { name: 'Gerar venda conferida', exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      /resultado da solicitação precisa de conferência administrativa/iu,
+    ),
+  ).toBeVisible();
+  await expect(page.getByText('ERP-UNTRUSTED-900')).toHaveCount(0);
+  await expect(humanGenerate(page)).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Conferir prévia Olist', exact: true }),
+  ).toHaveCount(0);
+  expect(
+    state.calls.filter(({ path }) => path === `${operation}/export`),
+  ).toHaveLength(1);
+});
+
+for (const viewport of [
+  { width: 390, height: 844, name: 'mobile390' },
+  { width: 1366, height: 900, name: 'desktop1366' },
+]) {
+  test(`T12 human export review dialog has axe, keyboard and visual evidence ${viewport.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({
+      width: viewport.width,
+      height: viewport.height,
+    });
+    const state = await setupHumanExport(page);
+    await openAndPreview(page);
+    const generate = humanGenerate(page);
+    await generate.focus();
+    await page.keyboard.press('Enter');
+    const dialog = humanDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(
+      dialog.getByRole('button', { name: 'Voltar à prévia', exact: true }),
+    ).toBeFocused();
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    const box = await dialog.boundingBox();
+    expect(box?.x).toBeGreaterThanOrEqual(0);
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(
+      viewport.width,
+    );
+    await page.screenshot({
+      path: `var/olist-t12-export-dialog-${viewport.name}.png`,
+      fullPage: true,
+    });
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(generate).toBeFocused();
+    expectNoEffectsOrGeneralRead(state);
+  });
+}

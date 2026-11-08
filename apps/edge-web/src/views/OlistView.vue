@@ -394,7 +394,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
     <p class="olist-release-note">
-      A geração de vendas está desativada nesta etapa.
+      A disponibilidade da geração é conferida na prévia de cada pedido.
     </p>
 
     <section

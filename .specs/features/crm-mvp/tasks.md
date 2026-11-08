@@ -151,9 +151,10 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
       edição, listagem comercial ou Inbox ao perfil restrito; recibo só em memória.
 - [x] Metadados comerciais mínimos de trava entre contas e confirmação congelada,
       inclusive dono sem checkbox; pagamento/entrega com autorização independente.
-- [ ] Wiring da ação humana criadora `/export`: não incluído. Revisão automática
-      rejeitou esse caminho por conflito com geração real desligada; requer
-      autorização explícita antes de implementar. T12 permanece aberta nesse ponto.
+- [x] Após autorização explícita do proprietário em 08/11/2026, conectar a ação
+      humana a `/export`: gates de projeção/prévia/check, diálogo, CSRF, somente
+      token e chave idempotente; incerteza impede repetição. T12 concluída no código.
+      Flags reais permanecem desligadas, sem deploy ou criação real no ERP.
 
 OLIST-01–12, 21–24, 33–35 e 40–44; [contrato e evidências](../../../docs/runbooks/olist-phase4.md#t12--composição-e-conferência-por-pedido-08112026).
 Mesma branch `codex/olist-phase4-t11`; nenhum deploy, conta habilitada ou flag
@@ -170,7 +171,8 @@ real alterada. T13/T25 e as Fases 5–6 permanecem separadas.
 - [x] Teclado/foco/axe, estados negativos e reflow claro/escuro verificados.
 
 OLIST-03–05, 11, 22–25 e 48. [Contrato, evidências e rollback](../../../docs/runbooks/olist-phase4.md).
-T11 inicia a Fase 4; T12/T13/T25 continuam pendentes. Geração real desligada,
+T11 iniciou a Fase 4; T12 concluída na continuação acima. T13/T25 pendentes.
+Geração real desligada,
 sem deploy, habilitação, conexão real homologada ou piloto.
 
 ## OLIST-T10 — guardas comerciais e recuperação (06/11/2026)

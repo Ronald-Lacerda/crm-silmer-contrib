@@ -1,5 +1,6 @@
 <script setup>
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { openDialog } from '../../lib/ui.js';
 import { commandKey, request } from '../../lib/api-client.js';
 import {
   amountLabel,
@@ -28,6 +29,17 @@ const message = ref('');
 const error = ref('');
 const denied = ref(false);
 const notice = ref(null);
+const reviewOpen = ref(false);
+const reviewDialog = ref(null);
+const reviewToken = ref('');
+const reviewGate = ref(false);
+const checkDisabled = ref(false);
+const exportState = ref('idle');
+let exportKey = '';
+let exportTrigger = null;
+let attemptOrderId = '';
+const UNCERTAIN_MESSAGE =
+  'A solicitação pode ter sido recebida. Não repita a geração; peça a conferência administrativa da operação.';
 let controller;
 let disposed = false;
 let expiration = 0;
@@ -35,6 +47,20 @@ const base = computed(
   () => `/api/v1/orders/${encodeURIComponent(props.orderId)}/olist`,
 );
 const hasOperation = computed(() => Boolean(projection.value?.operation));
+const generationAllowed = computed(
+  () =>
+    canOperate.value &&
+    !denied.value &&
+    !props.disabled &&
+    !hasOperation.value &&
+    exportState.value === 'idle' &&
+    !checkDisabled.value &&
+    projection.value?.creationEnabled === true &&
+    preview.value?.creationEnabled === true &&
+    preview.value?.eligible === true &&
+    typeof preview.value?.previewToken === 'string' &&
+    preview.value.previewToken.length > 0,
+);
 const operationLabel = computed(() => {
   const state = projection.value?.operation?.state;
   if (state === 'confirmed' || state === 'linked')
@@ -61,8 +87,12 @@ function clearPreview() {
   expiration = 0;
   preview.value = null;
   message.value = '';
+  reviewGate.value = false;
+  reviewToken.value = '';
+  void closeReview();
 }
 function invalidate() {
+  if (exportState.value === 'submitting') markUncertain();
   controller?.abort();
   controller = undefined;
   busy.value = false;
@@ -117,12 +147,25 @@ async function load(interactive = false) {
   const data = await run('', undefined, interactive);
   if (!data) return;
   projection.value = data;
-  emit('operation', data.operation ?? null);
+  emit(
+    'operation',
+    data.operation ??
+      (['accepted', 'uncertain'].includes(exportState.value)
+        ? { unavailable: true }
+        : null),
+  );
 }
 async function confer() {
-  if (!canOperate.value || busy.value || props.disabled || hasOperation.value)
+  if (
+    !canOperate.value ||
+    busy.value ||
+    props.disabled ||
+    hasOperation.value ||
+    exportState.value !== 'idle'
+  )
     return;
   clearPreview();
+  checkDisabled.value = false;
   const data = await run('/preview', {});
   if (!data || !canOperate.value) return;
   preview.value = data;
@@ -151,7 +194,8 @@ async function validate() {
     !preview.value?.previewToken ||
     busy.value ||
     props.disabled ||
-    hasOperation.value
+    hasOperation.value ||
+    exportState.value !== 'idle'
   )
     return;
   const data = await run('/preview/check', {
@@ -161,14 +205,177 @@ async function validate() {
   if (data.valid !== true) {
     clearPreview();
     error.value = 'A prévia mudou. Confira novamente os dados do pedido.';
-  } else
-    message.value = 'Prévia validada. A geração de vendas continua desativada.';
+  } else {
+    checkDisabled.value = data.creationEnabled !== true;
+    message.value =
+      data.creationEnabled === true && generationAllowed.value
+        ? 'Prévia validada. Confira a geração e confirme somente se estiver de acordo.'
+        : 'Prévia validada. A geração de vendas continua desativada.';
+  }
   await focusNotice();
+}
+function receiptCurrent(token) {
+  return (
+    token === preview.value?.previewToken &&
+    Number.isFinite(Date.parse(preview.value?.expiresAt ?? '')) &&
+    Date.parse(preview.value.expiresAt) > Date.now()
+  );
+}
+function markUncertain() {
+  exportState.value = 'uncertain';
+  error.value = UNCERTAIN_MESSAGE;
+  if (attemptOrderId === props.orderId)
+    emit('operation', { unavailable: true });
+}
+async function closeReview() {
+  const dialog = reviewDialog.value;
+  if (dialog?.open) {
+    const closed = new Promise((resolve) =>
+      dialog.addEventListener('close', resolve, { once: true }),
+    );
+    dialog.close();
+    await closed;
+  }
+  reviewOpen.value = false;
+  reviewGate.value = false;
+  reviewToken.value = '';
+}
+async function cancelReview() {
+  if (exportState.value === 'submitting') return;
+  await closeReview();
+}
+async function requestExport(event) {
+  if (busy.value || !generationAllowed.value || reviewOpen.value) return;
+  const token = preview.value.previewToken;
+  if (!receiptCurrent(token)) {
+    clearPreview();
+    error.value =
+      'A prévia expirou. Confira uma nova prévia antes de continuar.';
+    await focusNotice();
+    return;
+  }
+  // Capture before awaiting: event.currentTarget is cleared after dispatch.
+  const trigger = event.currentTarget;
+  const data = await run('/preview/check', { previewToken: token });
+  if (!data || !canOperate.value) return;
+  if (data.valid !== true || !receiptCurrent(token)) {
+    clearPreview();
+    error.value =
+      'A prévia mudou ou expirou. Confira novamente os dados do pedido.';
+    await focusNotice();
+    return;
+  }
+  checkDisabled.value = data.creationEnabled !== true;
+  if (!generationAllowed.value) {
+    message.value =
+      'A geração de vendas continua desativada. Nenhuma solicitação foi enviada.';
+    await focusNotice();
+    return;
+  }
+  exportTrigger = trigger;
+  exportKey = commandKey();
+  reviewToken.value = token;
+  reviewGate.value = true;
+  reviewOpen.value = true;
+  await nextTick();
+  if (!disposed && generationAllowed.value && reviewDialog.value)
+    openDialog(reviewDialog.value, exportTrigger);
+}
+async function submitExport() {
+  if (
+    busy.value ||
+    !reviewOpen.value ||
+    !reviewGate.value ||
+    !generationAllowed.value
+  )
+    return;
+  const token = reviewToken.value;
+  if (!receiptCurrent(token)) {
+    clearPreview();
+    error.value =
+      'A prévia expirou. Confira uma nova prévia antes de continuar.';
+    await focusNotice();
+    return;
+  }
+  const own = new AbortController();
+  controller?.abort();
+  controller = own;
+  const id = props.orderId;
+  const number = projection.value.number;
+  attemptOrderId = id;
+  exportState.value = 'submitting';
+  busy.value = true;
+  error.value = '';
+  message.value = '';
+  try {
+    // Only this human confirmation reaches the local command. No ERP URL,
+    // prices, account, snapshot or authority is accepted from the browser.
+    const response = await request(`${base.value}/export`, {
+      method: 'POST',
+      body: { previewToken: token },
+      idempotencyKey: exportKey,
+      signal: own.signal,
+    });
+    if (
+      disposed ||
+      own.signal.aborted ||
+      controller !== own ||
+      props.orderId !== id
+    )
+      return;
+    const data = response.data;
+    if (
+      data?.orderId !== id ||
+      data?.number !== number ||
+      typeof data?.operationId !== 'string' ||
+      !data.operationId ||
+      typeof data?.state !== 'string' ||
+      typeof data?.stage !== 'string'
+    ) {
+      markUncertain();
+      clearPreview();
+    } else {
+      exportState.value = 'accepted';
+      // response.number is the CRM number, never the remote sale number.
+      projection.value = {
+        ...projection.value,
+        operation: { state: data.state, stage: data.stage, number: null },
+      };
+      clearPreview();
+      emit('operation', projection.value.operation);
+      message.value =
+        'Solicitação registrada para o pedido ' +
+        number +
+        '. Acompanhe a operação sem repetir o envio.';
+    }
+  } catch (cause) {
+    if (
+      disposed ||
+      own.signal.aborted ||
+      controller !== own ||
+      props.orderId !== id
+    )
+      return;
+    markUncertain();
+    clearPreview();
+    if ([401, 403].includes(Number(cause?.status))) {
+      denied.value = true;
+      projection.value = null;
+    }
+  } finally {
+    if (controller === own && !disposed) {
+      busy.value = false;
+      await closeReview();
+      await focusNotice();
+    }
+  }
 }
 watch(
   () => [props.orderId, props.revision],
-  () => {
+  (next, previous) => {
     invalidate();
+    if (!previous || next[0] !== previous[0]) exportState.value = 'idle';
+    checkDisabled.value = false;
     projection.value = null;
     denied.value = false;
     void load();
@@ -230,9 +437,19 @@ onBeforeUnmount(() => {
       </p>
     </div>
     <div class="op-sheet-body">
-      <p>
-        A geração de vendas está desativada. Conferir a prévia consulta os
-        cadastros e não cria cliente, produto ou venda no Olist.
+      <p :id="`olist-generation-${orderId}`">
+        {{
+          generationAllowed
+            ? 'A geração exige sua conferência e confirmação humana.'
+            : 'A geração de vendas está desativada.'
+        }}
+        Conferir a prévia consulta os cadastros e não cria cliente, produto ou
+        venda no Olist.
+      </p>
+      <p v-if="exportState === 'uncertain'" class="field-help">
+        O resultado da solicitação precisa de conferência administrativa.
+        Atualizar a preparação só consulta a operação; não autoriza repetir a
+        geração.
       </p>
       <p v-if="!canOperate" class="field-help">
         Seu usuário não está habilitado para conferir a prévia Olist.
@@ -382,6 +599,7 @@ onBeforeUnmount(() => {
       </template>
       <div class="form-actions">
         <button
+          v-if="!preview?.eligible || exportState !== 'idle' || hasOperation"
           type="button"
           :disabled="busy || disabled || denied"
           @click="load(true)"
@@ -389,7 +607,9 @@ onBeforeUnmount(() => {
           Atualizar preparação
         </button>
         <button
-          v-if="canOperate && !denied && !hasOperation"
+          v-if="
+            canOperate && !denied && !hasOperation && exportState === 'idle'
+          "
           type="button"
           :disabled="busy || disabled"
           @click="confer"
@@ -401,7 +621,8 @@ onBeforeUnmount(() => {
             canOperate &&
             preview?.eligible &&
             preview?.previewToken &&
-            !hasOperation
+            !hasOperation &&
+            exportState === 'idle'
           "
           type="button"
           :disabled="busy || disabled"
@@ -409,8 +630,67 @@ onBeforeUnmount(() => {
         >
           Validar prévia
         </button>
+        <button
+          v-if="
+            canOperate &&
+            preview?.eligible &&
+            !hasOperation &&
+            exportState === 'idle'
+          "
+          type="button"
+          :class="{ primary: generationAllowed }"
+          :aria-disabled="!generationAllowed || busy || undefined"
+          :aria-describedby="`olist-generation-${orderId}`"
+          @click="requestExport"
+        >
+          Gerar venda no Olist
+        </button>
       </div>
     </div>
+    <dialog
+      v-if="reviewOpen"
+      ref="reviewDialog"
+      class="op-dialog"
+      aria-modal="true"
+      aria-labelledby="olist-export-title"
+      aria-describedby="olist-export-description"
+      @cancel.prevent="cancelReview"
+    >
+      <h2 id="olist-export-title">Gerar venda no Olist?</h2>
+      <p id="olist-export-description">
+        A sequência poderá criar ou reutilizar o comprador, os produtos e os
+        tamanhos conferidos e gerar uma venda no Olist. Esta ação não confirma o
+        pedido no CRM.
+      </p>
+      <dl>
+        <div>
+          <dt>Pedido CRM</dt>
+          <dd>{{ projection?.number }}</dd>
+        </div>
+        <div>
+          <dt>Total conferido</dt>
+          <dd>{{ amountLabel(preview?.commercial?.totalCents) }}</dd>
+        </div>
+      </dl>
+      <p>
+        Confira a composição e o plano de cadastros antes de continuar. Se o
+        resultado ficar incerto, não repita a solicitação.
+      </p>
+      <div class="op-dialog-actions">
+        <button type="button" :disabled="busy" @click="cancelReview">
+          Voltar à prévia
+        </button>
+        <button
+          type="button"
+          class="primary"
+          :disabled="busy || !generationAllowed || !reviewGate"
+          :aria-busy="busy || undefined"
+          @click="submitExport"
+        >
+          {{ busy ? 'Solicitando…' : 'Gerar venda conferida' }}
+        </button>
+      </div>
+    </dialog>
   </section>
 </template>
 

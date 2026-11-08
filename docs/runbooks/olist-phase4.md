@@ -5,7 +5,7 @@
 Tarefa OLIST-T11, requisitos OLIST-03–05, 11, 22–25 e 48 da
 [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md), sobre as
 [guardas da Fase 3](olist-phase3.md#t10--guardas-comerciais-e-recuperação).
-T11 inicia a Fase 4; T12, T13 e T25 continuam pendentes. A geração real
+T11 iniciou a Fase 4; T12 concluída na continuação abaixo. T13/T25 pendentes. A geração real
 permanece desligada. Não há deploy, habilitação de operadora, conexão real,
 cadastro, venda ou piloto como parte desta entrega.
 
@@ -142,12 +142,28 @@ usuário, alteração de flags/credenciais, migrations, acesso ERP ou deploy.
   cadastros, pendências, valores e expiração são projetados pelo servidor;
   recibo existe só na memória do componente. Navegação, edição, mudança de
   versão/acesso e eventos invalidam a prévia. Nenhum polling ERP.
-- A UI não chama `/export`: geração real permanece desativada, inclusive com
-  prévia elegível. O wiring de uma ação criadora foi rejeitado pela revisão
-  automática de aprovação por conflito com a restrição de geração desligada;
-  não foi gravado ou contornado. Esse trecho precisa de autorização explícita
-  e revisão antes da futura ativação. T13/recuperação e T25/ficha v7 não foram
-  antecipadas nesta entrega.
+- Em 08/11/2026 o proprietário autorizou explicitamente conectar a ação humana
+  a `/export`, mantendo flags reais desligadas, sem deploy e sem criar cadastros
+  ou vendas reais no Olist. Essa autorização resolve a restrição da primeira
+  entrega `a8d99fef`; a ação foi implementada e exercitada somente com mocks.
+- Gerar venda exige checkbox atual, nenhuma operação/tentativa pendente, prévia
+  elegível com token vigente e `creationEnabled === true` tanto na projeção
+  quanto na prévia. O acionamento faz `/preview/check`; somente `valid: true`
+  e nova liberação positiva abrem o diálogo. Um segundo gesto humano confirma.
+  Diálogo é invalidado por versão, edição, sessão/habilitação, evento ou TTL.
+- O POST `/export` envia somente `{previewToken}`, CSRF e uma chave idempotente
+  capturada para a confirmação. O envio é único mesmo com acionamento duplicado.
+  Nenhum endpoint arbitrário, preço, total, conta ou autoridade vem do navegador.
+  A resposta `number` identifica o Pedido CRM, nunca o número da venda ERP.
+- Timeout, resposta inválida, rejeição ou interrupção depois de iniciado o POST
+  não oferecem repetição criadora. Leituras seguintes não restauram a ação nem
+  limpam a incerteza se a operação estiver ausente; conferência/reconciliação
+  administrativa é necessária. Aceitação mostra a operação sem novo envio;
+  reload lê o ledger. T13/recuperação detalhada e T25/ficha v7 continuam separadas.
+- Geração real permanece desativada: `configuration`, `project`, `preview` e
+  `checkPreview` reais continuam com `creationEnabled: false`; defaults/flags
+  de dispatcher não mudaram. Nenhuma conta, credencial, migration ou runtime
+  real foi modificado. Não executar as provas antigas para ativar esta UI.
 - Leitura comercial expõe somente `olistLocked` e
   `olistConfirmationAllowed`, calculados por todas as contas no ledger.
   Vendedor sem checkbox/revogado continua sem editar/reabrir pedido exportado.
@@ -157,6 +173,9 @@ usuário, alteração de flags/credenciais, migrations, acesso ERP ou deploy.
   infraestrutura não mudam.
 
 ### Verificação e limites
+
+Os números desta seção registram a primeira entrega `a8d99fef`. Os gates da
+continuação com a ação humana estão no fechamento abaixo.
 
 Fixtures e provedores exclusivamente sintéticos. Execução com Node 24.20.0 e
 npm 11.19.0 (`fnm exec --using 24.20.0 npm.cmd ...`), servidor de preview em
@@ -196,3 +215,32 @@ Reverter a entrega de frontend e metadados de leitura em conjunto. Não apagar
 composição/subtotais/complementos já persistidos nem alterar ledger/flags para
 liberar escrita. Escritas continuam protegidas pelo backend T10. Nenhuma down
 migration, exclusão de cadastro ou cancelamento ERP faz parte do rollback.
+
+### Fechamento da ação humana T12 — 08/11/2026
+
+Continuação autorizada sobre `a8d99fef`, na mesma branch. Testes do caminho
+liberado usam respostas sintéticas e interceptam integralmente `/export`;
+nenhuma chamada alcança API real, worker ou ERP. O teste de duplo acionamento
+usa seletor estável durante o estado Solicitando, preservando a asserção de um
+único comando, sem alterar asserções ou timeouts. Revisão QA/Segurança somente
+leitura sem finding bloqueante.
+
+| Gate da continuação              | Resultado                                                                                                                                                            |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run validate`               | 1982 aprovados, zero falhas/cancelamentos, 26 skips condicionais; tipos/lint/contratos/fronteiras/tokens/build aprovados                                             |
+| E2E focado T11 + T12             | 89/89, zero skips; inclui os 61 cenários T12, confirmação humana, duplo acionamento, TTL, revogação, SSE durante POST e resposta 202 inválida                        |
+| E2E integral sobre o build final | 566 aprovados, 7 skips previstos, zero falhas/flakes; dois workers, porta isolada 4189                                                                               |
+| axe/teclado/visual               | Diálogo conferido em 390 e 1366, sem violações; foco inicial no retorno seguro, Escape sem envio, acionamento único                                                  |
+| Detector mecânico                | Nenhum finding no painel e na rota examinados                                                                                                                        |
+| `npm audit --audit-level=high`   | Zero altas/críticas; uma baixa e cinco moderadas preexistentes, sem mudança de dependências                                                                          |
+| Links e `git diff --check`       | Aprovados                                                                                                                                                            |
+| Preservação operacional          | Nenhum diff em `.env.example`, configuração Olist, preview/check/project reais ou dispatcher; nenhuma chamada ERP, conta habilitada, credencial, migration ou deploy |
+
+Node 24.20.0/npm 11.19.0. Logs `var/olist-t12-export-*` e capturas
+`var/olist-t12-export-dialog-*.png`, ignorados pelo Git. Não houve novo ensaio
+SQL live: esta continuação altera somente interface, testes e documentação.
+As verificações negativas e de concorrência da API/worker existentes foram
+preservadas. Nenhum teste sintético comprova piloto, operação real ou ampliação.
+
+T12 concluída no código; F4 continua aberta para T13/T25.
+Flags reais desligadas, sem deploy, cadastros/vendas reais, piloto ou ampliação.
