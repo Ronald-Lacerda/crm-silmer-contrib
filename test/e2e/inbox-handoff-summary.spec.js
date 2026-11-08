@@ -1,6 +1,17 @@
 import { expect, test } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 
+/**
+ * Mirrors the API: in tab mode every returned item carries the requested
+ * `bucket`; the front rejects lists that omit it (stale API protection).
+ * @param {any[]} items
+ * @param {string} requestUrl
+ */
+function withBucket(items, requestUrl) {
+  const bucket = new URL(requestUrl).searchParams.get('bucket');
+  return bucket ? items.map((item) => ({ ...item, bucket })) : items;
+}
+
 // INBOX-HANDOFF-01 / AGT-03: the seller opens a transferred conversation and
 // reads what the agent handed over, without the summary moving focus.
 const SUMMARY =
@@ -75,7 +86,11 @@ async function setup(page, options = {}) {
       });
     if (path === '/api/v1/inbox/conversations')
       return route.fulfill({
-        json: { items: conversations, totalCount: 2, nextCursor: null },
+        json: {
+          items: withBucket(conversations, route.request().url()),
+          totalCount: 2,
+          nextCursor: null,
+        },
       });
     if (/^\/api\/v1\/inbox\/conversations\/[^/]+\/subjects$/.test(path))
       return route.fulfill({
@@ -261,7 +276,7 @@ test('INBOX-HANDOFF-02: names the seller the customer asked for', async ({
   await setup(page, { preferredSeller: 'Ana' });
   await page.goto('/inbox/conversation-1');
   const row = page.locator('[data-conversation-id="conversation-1"]');
-  await expect(row).toContainText('Assumir atendimento');
+  await expect(row).toContainText('Assumir');
   await expect(row).not.toContainText('Cliente pediu: Ana');
   await expect(
     page.locator('[data-conversation-id="conversation-2"]'),

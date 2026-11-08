@@ -1,3 +1,4 @@
+import { withBucket } from './inbox-bucket.js';
 import { pendingOrder } from './orders-mock.js';
 
 export const shippingInput = {
@@ -122,7 +123,11 @@ export async function mockConversationShipping(page, options = {}) {
     if (path === '/api/v1/users/assignable')
       return json({ users: [{ id: owner, name: 'Vendedora sintética' }] });
     if (path === '/api/v1/inbox/conversations')
-      return json({ items: conversations, totalCount: 2, nextCursor: null });
+      return json({
+        items: withBucket(conversations, request.url()),
+        totalCount: 2,
+        nextCursor: null,
+      });
     const subject =
       /^\/api\/v1\/inbox\/conversations\/shipping-conversation-(\d)\/subjects$/u.exec(
         path,

@@ -1,6 +1,17 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
+/**
+ * Mirrors the API: in tab mode every returned item carries the requested
+ * `bucket`; the front rejects lists that omit it (stale API protection).
+ * @param {any[]} items
+ * @param {string} requestUrl
+ */
+function withBucket(items, requestUrl) {
+  const bucket = new URL(requestUrl).searchParams.get('bucket');
+  return bucket ? items.map((item) => ({ ...item, bucket })) : items;
+}
+
 // INBOX-DELIVERY-02 (RFC 041): the agent's failed or uncertain replies show
 // their own code for support, explained in plain words. Synthetic data.
 
@@ -75,7 +86,11 @@ async function setup(
       });
     if (path === '/api/v1/inbox/conversations')
       return route.fulfill({
-        json: { items: [conversation], totalCount: 1, nextCursor: null },
+        json: {
+          items: withBucket([conversation], route.request().url()),
+          totalCount: 1,
+          nextCursor: null,
+        },
       });
     if (path.endsWith('/subjects'))
       return route.fulfill({

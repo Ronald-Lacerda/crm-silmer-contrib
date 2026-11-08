@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { withBucket } from './support/inbox-bucket.js';
 
 /** @param {import('@playwright/test').Page} page */
 async function mockConcurrentContact(page) {
@@ -111,7 +112,11 @@ async function mockConcurrentContact(page) {
     }
     if (path === '/api/v1/inbox/conversations') {
       return route.fulfill({
-        json: { items: [conversation()], totalCount: 1, nextCursor: null },
+        json: {
+          items: withBucket([conversation()], route.request().url()),
+          totalCount: 1,
+          nextCursor: null,
+        },
       });
     }
     if (path === '/api/v1/inbox/conversations/conversation-1') {

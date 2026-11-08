@@ -3,6 +3,17 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { readFile } from 'node:fs/promises';
 
 /**
+ * Mirrors the API: in tab mode every returned item carries the requested
+ * `bucket`; the front rejects lists that omit it (stale API protection).
+ * @param {any[]} items
+ * @param {string} requestUrl
+ */
+function withBucket(items, requestUrl) {
+  const bucket = new URL(requestUrl).searchParams.get('bucket');
+  return bucket ? items.map((item) => ({ ...item, bucket })) : items;
+}
+
+/**
  * INBOX-UX-03 / CP-10: fixtures deliberately separate the canonical header
  * order from a pending order linked only by subject. No real contact data.
  * @param {import('@playwright/test').Page} page
@@ -138,7 +149,10 @@ async function setupInbox(page, options = {}) {
     if (path === '/api/v1/inbox/conversations')
       return route.fulfill({
         json: {
-          items: conversation.terminalAt ? [] : [conversation],
+          items: withBucket(
+            conversation.terminalAt ? [] : [conversation],
+            route.request().url(),
+          ),
           totalCount: conversation.terminalAt ? 0 : 1,
           nextCursor: null,
         },
@@ -564,11 +578,9 @@ test('INBOX-UX-06: expanding preserves filters, the live thread and draft, and p
   await page.setViewportSize({ width: 1366, height: 657 });
   await setupInbox(page);
   await page.goto('/inbox/conversation-compact');
-  const attention = page
-    .getByRole('group', { name: 'Atalhos da Caixa' })
-    .getByRole('button', { name: /^Atender/u });
+  const attention = page.getByRole('tab', { name: /^Aguardando/u });
   await attention.click();
-  await expect(attention).toHaveAttribute('aria-pressed', 'true');
+  await expect(attention).toHaveAttribute('aria-selected', 'true');
   const reply = page.getByRole('textbox', { name: 'Responder', exact: true });
   await reply.fill('Rascunho sintético que deve permanecer.');
   const thread = await page.locator('.thread').elementHandle();
@@ -597,7 +609,7 @@ test('INBOX-UX-06: expanding preserves filters, the live thread and draft, and p
   await expect(expand).toBeFocused();
   await expect(page.locator('.inbox-list-pane')).toBeVisible();
   await expect(page.locator('.inbox-toolbar')).toBeVisible();
-  await expect(attention).toHaveAttribute('aria-pressed', 'true');
+  await expect(attention).toHaveAttribute('aria-selected', 'true');
   await expand.click();
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(expand).toBeHidden();
@@ -607,7 +619,7 @@ test('INBOX-UX-06: expanding preserves filters, the live thread and draft, and p
   await page.getByRole('link', { name: 'Conversas', exact: true }).click();
   await expect(page.locator('.inbox-list-pane')).toBeVisible();
   await expect(page.locator('.inbox-toolbar')).toBeVisible();
-  await expect(attention).toHaveAttribute('aria-pressed', 'true');
+  await expect(attention).toHaveAttribute('aria-selected', 'true');
   await expect(page).toHaveURL('/inbox');
   await page.setViewportSize({ width: 1366, height: 657 });
   await expect(page.locator('.inbox-list-pane')).toBeVisible();
@@ -692,10 +704,6 @@ test('INBOX-UX-04: archiving the last expanded conversation restores the empty l
   });
   await page.goto('/inbox/conversation-compact');
   await page
-    .getByRole('group', { name: 'Atalhos da Caixa' })
-    .getByRole('button', { name: /^Todas/u })
-    .click();
-  await page
     .getByRole('button', { name: 'Ampliar conversa', exact: true })
     .click();
   await expect(page.locator('.inbox-list-pane')).toBeHidden();
@@ -718,7 +726,7 @@ test('INBOX-UX-04: archiving the last expanded conversation restores the empty l
   await expect(page.locator('.inbox-list-pane')).toBeVisible();
   await expect(
     page.getByRole('heading', {
-      name: 'Nenhuma conversa por enquanto',
+      name: 'Ninguém esperando resposta',
       exact: true,
     }),
   ).toBeVisible();

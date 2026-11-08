@@ -2,6 +2,17 @@ import { expect, test } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 import { readFile } from 'node:fs/promises';
 
+/**
+ * Mirrors the API: in tab mode every returned item carries the requested
+ * `bucket`; the front rejects lists that omit it (stale API protection).
+ * @param {any[]} items
+ * @param {string} requestUrl
+ */
+function withBucket(items, requestUrl) {
+  const bucket = new URL(requestUrl).searchParams.get('bucket');
+  return bucket ? items.map((item) => ({ ...item, bucket })) : items;
+}
+
 /** @param {import('@playwright/test').Page} page @param {any} [options] */
 async function setup(page, options = {}) {
   const conversations = [1, 2].map((number) => ({
@@ -111,7 +122,11 @@ async function setup(page, options = {}) {
       });
     if (path === '/api/v1/inbox/conversations')
       return route.fulfill({
-        json: { items: conversations, totalCount: 2, nextCursor: null },
+        json: {
+          items: withBucket(conversations, route.request().url()),
+          totalCount: 2,
+          nextCursor: null,
+        },
       });
     if (/^\/api\/v1\/inbox\/conversations\/[^/]+\/subjects$/.test(path))
       return route.fulfill({

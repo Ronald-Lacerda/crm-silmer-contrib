@@ -114,13 +114,16 @@ for (const screen of SCREENS) {
       );
       // No notebook a primeira conversa abre ao lado da fila, com a resposta.
       if (!screen.phone)
-        await expect(page.getByLabel('Responder')).toBeVisible();
+        await expect(
+          page.getByLabel('Responder', { exact: true }),
+        ).toBeVisible();
 
       await budget(
         page,
         'Caixa: barra de filtros',
         { selector: '.inbox-toolbar, .inbox-search' },
-        5,
+        // RFC 052: quatro abas, a busca e Filtros.
+        6,
       );
       await budget(
         page,
@@ -167,7 +170,9 @@ for (const screen of SCREENS) {
       await mockInbox(page);
       for (const state of ['owner', 'owner-order']) {
         await page.goto(`/inbox/conversation-${state}`);
-        await expect(page.getByLabel('Responder')).toBeVisible();
+        await expect(
+          page.getByLabel('Responder', { exact: true }),
+        ).toBeVisible();
         await expect(
           page
             .locator('.conv-head')

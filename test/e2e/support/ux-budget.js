@@ -1,4 +1,5 @@
 import { expect } from '@playwright/test';
+import { withBucket } from './inbox-bucket.js';
 
 // T132 (RFC 024, ADR 036, design.md §16): conta os controles visíveis de uma
 // região para travar o orçamento de ações das jornadas. Controle é botão,
@@ -293,7 +294,7 @@ export async function mockInbox(page) {
     }
     if (path === '/api/v1/inbox/conversations') {
       return json({
-        items: conversations,
+        items: withBucket(conversations, route.request().url()),
         nextCursor: null,
         totalCount: conversations.length,
       });

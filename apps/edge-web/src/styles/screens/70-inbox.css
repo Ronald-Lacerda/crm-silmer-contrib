@@ -110,8 +110,8 @@
   min-block-size: var(--control-height-sm);
 }
 
-/* The three shortcuts, one segmented row. Selection is neutral (RFC 022):
-   the brand color is kept for the primary action of each region. */
+/* RFC 052: the four turn tabs, one segmented row. Selection is neutral
+   (RFC 022): the brand color is kept for the primary action of each region. */
 .inbox-tabs {
   display: flex;
   gap: 0.125rem;
@@ -142,8 +142,8 @@
   background: var(--color-surface-active);
 }
 
-.inbox-tabs .inbox-tab[aria-pressed='true'],
-.inbox-tabs .inbox-tab[aria-pressed='true']:hover:not(:disabled) {
+.inbox-tabs .inbox-tab[aria-selected='true'],
+.inbox-tabs .inbox-tab[aria-selected='true']:hover:not(:disabled) {
   color: var(--color-text);
   font-weight: 600;
   background: var(--color-surface);
@@ -169,7 +169,7 @@
 }
 
 /* design.md §4, RFC 024: on any touch screen, a tablet included, each
-   shortcut is a 44 px target with 8 px between them. */
+   tab is a 44 px target with 8 px between them. */
 @media (pointer: coarse) {
   .inbox-tabs {
     gap: var(--space-2);
@@ -180,10 +180,35 @@
   }
 }
 
-/* On a 390 px phone the 8 px gaps come out of each shortcut's padding, so
-   the three still fit on one line without scrolling. */
-@media (pointer: coarse) and (max-width: 768px) {
-  .inbox-tabs .inbox-tab {
+/* RFC 052: on a phone the four tabs are a 2×2 grid across the width, so
+   they fit down to 320 px without scrolling sideways. */
+@media (max-width: 768px) {
+  .inbox-page .inbox-tabs[role='tablist'] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+    inline-size: 100%;
+    overflow: visible;
+  }
+
+  .inbox-page .inbox-tabs[role='tablist'] .inbox-tab {
+    justify-content: space-between;
+    min-inline-size: 0;
+    min-block-size: var(--target-min);
+    padding-inline: var(--space-3) var(--space-2);
+    white-space: nowrap;
+  }
+
+  .inbox-tabs[role='tablist'] .inbox-tab-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* At 320 px a narrower inset keeps "Sem retorno" and "Aguardando" whole
+   beside their counts. */
+@media (max-width: 359px) {
+  .inbox-page .inbox-tabs[role='tablist'] .inbox-tab {
     padding-inline: var(--space-2);
   }
 }
@@ -267,6 +292,9 @@
 
 /* Up to 100 conversations load at once; they scroll inside the column. */
 .inbox-list {
+  /* The containing block of the cards' screen-reader text: without it the
+     absolutely positioned spans escape the scroller and stretch the page. */
+  position: relative;
   flex: 1;
   min-block-size: 0;
   margin: 0;
@@ -279,13 +307,16 @@
 }
 
 .inbox-list .conversation-row {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   justify-content: stretch;
   align-items: start;
-  gap: var(--space-2);
+  /* RFC 052: three short lines (who/when, what, seals) in the height the
+     two-line card used. */
+  gap: var(--space-1);
   inline-size: 100%;
-  padding: var(--space-4) var(--space-3);
+  padding: var(--space-3);
   font-weight: 400;
   text-align: start;
   background: transparent;
@@ -323,7 +354,7 @@
 }
 
 .conv-name {
-  flex: 1;
+  flex: 0 1 auto;
   min-inline-size: 0;
   overflow: hidden;
   font-size: var(--text-sm);
@@ -332,39 +363,65 @@
   white-space: nowrap;
 }
 
-.conv-new {
+/* RFC 052: the channel follows the name; its word is for screen readers. */
+.conv-channel {
+  display: inline-flex;
   flex: none;
+  align-self: center;
   color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
 }
 
-/* PCX-15: one aligned wait, never the timestamp of an automatic reply. */
+.conv-channel .app-icon {
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
+}
+
+/* RFC 052: how long it has been whose turn, right-aligned. Muted unless
+   Responder passed 15 business minutes (ADR 061). */
 .conv-waiting {
   flex: none;
-  color: var(--status-warning-text);
+  margin-inline-start: auto;
+  color: var(--color-text-muted);
   font-size: var(--text-xs);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
-.conv-next-action {
-  display: -webkit-box;
+.conv-waiting[data-tone='warning'] {
+  color: var(--status-warning-text);
+  font-weight: 600;
+}
+
+/* The last message, one line, as the list already reads it. */
+.conv-preview {
+  min-inline-size: 0;
   overflow: hidden;
   color: var(--color-text-muted);
   font-size: var(--text-xs);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.conv-next-action[data-tone='error'] {
-  color: var(--status-error-text);
-  font-weight: 600;
+/* At most two seals and a "+N" that names the rest (design.md §18). A seal
+   never breaks inside; in the 14rem column the second one wraps whole. */
+.conv-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  min-inline-size: 0;
+  padding-block-start: var(--space-1);
 }
 
-.conv-next-action[data-tone='ready'] {
-  color: var(--color-ready-text);
-  font-weight: 600;
+.conv-badges .badge {
+  flex: none;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+.conv-badges .app-icon {
+  flex: none;
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
 }
 
 .handoff-reason {
@@ -1769,6 +1826,43 @@
 .inbox-search input {
   min-inline-size: 0;
 }
+/* D6: on a phone "Filtros" joins the search on one row (the slot receives the
+   button); on larger screens the slot stays empty and takes no space. */
+.inbox-search-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.inbox-search-row .search-field {
+  flex: 1 1 0;
+  min-inline-size: 0;
+}
+.inbox-filters-slot {
+  display: contents;
+}
+.inbox-filters-slot > .inbox-filters-button {
+  flex: none;
+  min-block-size: var(--target-min);
+}
+/* P1-D: the list error carries its retry beside the text. */
+.inbox-list-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+.inbox-list-error > p {
+  flex: 1 1 14rem;
+  margin: 0;
+}
+.inbox-list-error button {
+  min-block-size: var(--control-height-sm);
+}
+@media (max-width: 768px), (pointer: coarse) {
+  .inbox-list-error button {
+    min-block-size: var(--target-min);
+  }
+}
 .inbox-filters-button {
   min-block-size: var(--control-height);
 }
@@ -1847,20 +1941,102 @@
   border-start-start-radius: 0;
   border-end-start-radius: 0;
 }
-.conv-next-action {
-  display: flex;
-  gap: var(--space-1);
-  align-items: start;
-  overflow-wrap: anywhere;
-}
-.conv-next-action .app-icon {
+/* INBOX-VEZ-03 (RFC 052): the strip above the reply in Sem retorno and
+   Perdidos. Same surface as the other notices; its actions are quiet so the
+   reply keeps the region's one primary action. */
+.inbox-conversation > .inbox-turn-notice {
   flex: none;
-  inline-size: var(--text-sm);
-  block-size: var(--text-sm);
-  margin-block-start: var(--space-1);
+  color: var(--color-text);
+  font-size: var(--text-sm);
 }
-.conv-next-action[data-tone='warning'] {
-  color: var(--status-warning-text);
+.inbox-turn-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+}
+.inbox-turn-row > p {
+  flex: 1 1 14rem;
+  margin: 0;
+}
+.inbox-turn-row > p > span {
+  color: var(--color-text-muted);
+}
+.inbox-turn-row .inline-actions {
+  margin: 0;
+}
+.inbox-turn-notice button {
+  min-block-size: var(--control-height-sm);
+  padding: var(--space-1) var(--space-3);
+}
+.inbox-turn-form {
+  display: grid;
+  gap: var(--space-2);
+  margin-block-start: var(--space-3);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--color-border-subtle);
+}
+.inbox-turn-form h3 {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.inbox-turn-form p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+.inbox-turn-form label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+}
+.inbox-turn-form input {
+  max-inline-size: 18rem;
+  font-size: var(--text-base);
+}
+.inbox-turn-form .inline-actions {
+  margin: 0;
+}
+.inbox-turn-error,
+.inbox-turn-form .inbox-turn-error {
+  color: var(--status-error-text);
+}
+/* Why a loss action is unavailable: text, never only a disabled look. */
+.inbox-turn-hint {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+.filter-sheet-hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+@media (max-width: 768px), (pointer: coarse) {
+  .inbox-turn-notice button {
+    min-block-size: var(--target-min);
+  }
+}
+/* MET-06: the loss reasons, one 44 px choice each. */
+.lost-dialog fieldset {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-3);
+}
+.lost-dialog fieldset label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-block-size: var(--target-min);
+}
+/* Selection is neutral (design.md §3), as in the Filtros sheet. */
+.lost-dialog input[type='radio'] {
+  accent-color: var(--color-focus);
+}
+.lost-dialog textarea {
+  inline-size: 100%;
+  font-size: var(--text-base);
 }
 .handoff-reason {
   padding-block: var(--space-2);

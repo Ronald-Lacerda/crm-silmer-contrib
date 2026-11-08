@@ -233,7 +233,6 @@ Rollback reimplanta a imagem anterior de API/frontend em conjunto. Não exige
 restaurar banco, reabrir conversa, desfazer claim ou repetir envio. A causa de
 um handoff unsupported real é investigação própria do workflow/telemetria.
 
-
 ## Evidência local — INBOX-UX-05
 
 `npm run validate` aprovado com 1.690 testes aprovados e 10 ignorados.
@@ -255,3 +254,33 @@ Ele cobre grupos e posições empatadas com microssegundos, paginação completa
 total global, outros responsáveis, agente, terminais e cursor por escopo/ator.
 Não declarar implantação apenas com estes testes: publicar API compatível
 antes do frontend e conferir CI, SHA/health e bundle servido no alvo.
+
+## Caixa por vez de responder (RFC 052): ordem de deploy
+
+- A API INBOX-VEZ-01 vai antes do front. Só depois do deploy da API o front
+  novo deve ser publicado.
+- Front novo com API antiga mostra um estado de erro na lista, no lugar das
+  quatro abas. Isso é o esperado: a validação não deve ser removida para
+  esconder a falha.
+- Rollback volta o front primeiro e, depois, a API, como já consta na RFC 052.
+
+### Comportamento do front (INBOX-VEZ-02/03)
+
+- Chamadas da tela: `GET /inbox/conversations?bucket=…&owner=…[&orderReady=true]
+[&assignedUserId=…]`, `GET /inbox/buckets` (mesmos filtros) e, nas consultas
+  Encerradas/Arquivadas, `terminal=true`/`archived=true` sem `bucket`. O front
+  nunca envia `orderReady` sem `bucket` (a API responde 400 `INVALID_FILTER`):
+  "Só pedidos prontos" fica desabilitado nas consultas.
+- Marcar perdido lê `GET /conversations/:id/lead-outcome` ao abrir o diálogo e
+  envia `outcomeVersion` como `expectedOutcomeVersion` (maior que 0 se a perda já
+  foi reaberta). A nota nunca é lida nem guardada pela tela. Conversa e versões
+  ficam congeladas ao abrir; 403/409 fecham o diálogo, recarregam e mostram o
+  motivo em português. A ação fica desabilitada, com o motivo escrito, quando a
+  pessoa não é o dono (nem administrador), o agente atende, não há dono ou há
+  pedido pendente/confirmado. "Lembrar depois" vale para qualquer vendedor.
+- Lembrete: `remindAt` de agora a 90 dias (o campo limita o intervalo; 422
+  `INVALID_REMINDER_DATE` tem mensagem própria).
+- As abas e contadores são lidos de novo a cada 60 s, só com a aba do navegador
+  visível, porque 72 h de silêncio, o fim de um lembrete e o agente parado não
+  geram evento SSE. Com páginas de "Ver mais conversas" carregadas, só os
+  contadores são relidos.

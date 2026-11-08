@@ -26,12 +26,29 @@ requisitos PCX-19a–j. Sem migration e sem dependência nova. Branch de trabalh
   `test/lead-outcome-postgres-live.test.js`. Sem migration, nada a aplicar.
   Medição do p95 em volume real pendente (ADR 065).
 
-Pendentes, sem checkbox marcado:
+## INBOX-VEZ-02/03 — Caixa por vez de responder: UI (08/11/2026)
 
-- [ ] INBOX-VEZ-02 — UI: abas, seletor de responsável, card, chip Pedido pronto,
-      mapeamento das URLs antigas, E2E e axe.
-- [ ] INBOX-VEZ-03 — Sem retorno e Perdidos: Retomar, Adiar e Marcar perdido
-      dentro da inbox, reaproveitando ACT-05 e MET-07.
+Front da [RFC 052](../../../docs/rfc/052-caixa-de-entrada-por-vez-de-responder.md),
+decisões D1–D10 do PO. Deploy: API (INBOX-VEZ-01) antes do front; ver
+`docs/runbooks/inbox-prioridades.md`.
+
+- [x] INBOX-VEZ-02 — Abas Responder/Aguardando/Sem retorno/Perdidos com contagem
+      do snapshot, seletor de responsável, card em três linhas, chip Pedido
+      pronto, Consultar (Encerradas/Arquivadas), mapeamento das URLs antigas,
+      relógio do alerta projetado a partir de `turnAsOf`, estado de erro quando a
+      resposta vem sem `bucket`, releitura de 60 s com a aba visível.
+- [x] INBOX-VEZ-03 — Faixa na conversa: Lembrar depois (`POST /reminder`),
+      Marcar perdido e Reabrir (`lead-outcome`, versão lida do servidor ao abrir),
+      só para dono ou administrador em atendimento humano, com motivo visível
+      quando indisponível. Retomar é abrir a conversa e responder.
+- Evidência local em 08/11/2026: lint, typecheck, format, build, 24 testes de
+  `inbox-turn` e suíte Playwright completa (587 aprovados, 7 ignorados, 0
+  falhas), com axe nas telas novas. Revisão independente sem P1; os P2
+  (comando em conversa errada, linhas da aba anterior, troca de conversa com
+  rascunho) foram corrigidos com teste. Testes dos atalhos antigos (Atender,
+  Fechar pedidos, Todas) foram substituídos por `test/e2e/inbox-vez.spec.js`.
+- Pendente: validar contra API e banco reais no ambiente (E2E usa mock);
+  medir o p95 em volume real; P3 de extração de `InboxView.vue`.
 
 ## OPS-DEPS-01 — correção da auditoria npm (07/11/2026)
 

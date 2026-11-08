@@ -1,5 +1,6 @@
 import { AxeBuilder } from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { withBucket } from './support/inbox-bucket.js';
 import { mockPainel } from './support/painel-mock.js';
 
 // OA-01..12: fictional conversations only. This feature must never send a
@@ -92,7 +93,11 @@ async function setup(page, options = {}) {
       });
     if (path === '/api/v1/users/assignable') return json({ users: [] });
     if (path === '/api/v1/inbox/conversations')
-      return json({ items: conversations, totalCount: 2, nextCursor: null });
+      return json({
+        items: withBucket(conversations, route.request().url()),
+        totalCount: 2,
+        nextCursor: null,
+      });
     if (/\/subjects$/u.test(path))
       return json({
         subjects: [],

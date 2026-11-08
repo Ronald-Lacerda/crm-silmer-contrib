@@ -37,84 +37,61 @@ import {
   messageText,
 } from '../lib/format.js';
 import { elapsedSince, orderStatusLabel } from '../lib/order-format.js';
+import { conversationHandoffTitle } from '../lib/inbox-priority.js';
 import {
-  conversationHandoffTitle,
-  conversationNextAction,
-  conversationWaitingSince,
-} from '../lib/inbox-priority.js';
+  INBOX_BUCKETS,
+  LOSS_REASONS,
+  conversationBadges,
+  listMatchesBucket,
+  lossReasonLabel,
+  LOSS_FORBIDDEN,
+  bucketForRoute,
+  ownerForRoute,
+  turnCommandError,
+  REMINDER_MAX_DAYS,
+  REMINDER_RANGE_MESSAGE,
+  reminderInRange,
+  minutesSince,
+  previewAuthor,
+  splitBadges,
+  turnClock,
+  turnSpan,
+} from '../lib/inbox-turn.js';
+import {
+  defaultReminder,
+  reminderInstant,
+  reminderLabel,
+} from '../lib/dashboard-actions.js';
 import { openDialog } from '../lib/ui.js';
 
 const ADMIN_CAPABILITY = 'COMMERCIAL_ADMIN';
 const LIVE_REFRESH_DELAY_MS = 250;
 /**
- * PCX-02 (D19): the Inbox is filtered by who has to act next, not by the
- * internal state of the conversation. A pending handoff is the whole of
- * "Aguardando vendedor", so the other two exclude it — an agent that stopped
- * and is waiting must never be counted as still working the conversation.
- *
- * PCX-14 (RFC 024): these are the "Situação" of the "Filtros" sheet; the
- * archived conversations (PCX-05) are its last option.
+ * RFC 052: 72 h of silence, the end of a reminder and a stalled agent change a
+ * conversation's tab without any event. The tabs and counts are read again.
  */
-const STATE_TABS = Object.freeze([
-  Object.freeze({ label: 'Todas', params: {}, value: 'all' }),
-  Object.freeze({
-    label: 'Atender',
-    params: { workQueue: 'attention' },
-    value: 'attention',
-  }),
-  Object.freeze({
-    label: 'Fechar pedidos',
-    params: { workQueue: 'closing' },
-    value: 'closing',
-  }),
-  Object.freeze({
-    label: 'Aguardando vendedor',
-    params: { pendingHandoff: 'true' },
-    value: 'waiting',
-  }),
-  Object.freeze({
-    label: `Com ${brand.assistant.reference}`,
-    params: { automationState: 'assistant', pendingHandoff: 'false' },
-    value: 'assistant',
-  }),
-  Object.freeze({
-    label: 'Com vendedor',
-    params: { automationState: 'human', pendingHandoff: 'false' },
-    value: 'human',
-  }),
-  Object.freeze({
-    archived: true,
-    label: 'Arquivadas',
-    params: {},
-    value: 'archived',
-  }),
-]);
-/** PCX-05: whose conversations are listed — "Responsável" in the sheet. */
-const QUEUE_FILTERS = Object.freeze([
-  { label: 'Todas', value: 'all' },
-  { label: 'Minhas', value: 'mine' },
-  { label: 'Sem responsável', value: 'unassignedHumanHandoff' },
+const PERIODIC_REFRESH_MS = 60_000;
+/**
+ * RFC 052 (INBOX-VEZ-02): "Responsável" in the Filtros sheet applies to every
+ * tab and to their counts. Todos is the default (decision of 22/10/2026:
+ * everyone sees everything; whoever answers first becomes the owner).
+ */
+const OWNER_SCOPES = Object.freeze([
+  Object.freeze({ label: 'Todos', value: 'all' }),
+  Object.freeze({ label: 'Minhas', value: 'mine' }),
+  Object.freeze({ label: 'Sem dono', value: 'unassigned' }),
 ]);
 /**
- * PCX-14: the three questions of every day, one tap each, with their totals.
- * Each is a fixed pair of the two filters; any other pair is named in the
- * summary under the toolbar.
+ * RFC 052: closed and archived conversations leave the tabs and are read as
+ * a consultation; the archived list keeps PCX-05's behaviour.
  */
-const SHORTCUTS = Object.freeze([
-  Object.freeze({
-    label: 'Atender',
-    queue: 'all',
-    tab: 'attention',
-    value: 'attention',
-  }),
-  Object.freeze({
-    label: 'Fechar pedidos',
-    queue: 'all',
-    tab: 'closing',
-    value: 'closing',
-  }),
-  Object.freeze({ label: 'Todas', queue: 'all', tab: 'all', value: 'all' }),
+const CONSULT_OPTIONS = Object.freeze([
+  Object.freeze({ label: 'Em andamento (abas)', value: 'open' }),
+  Object.freeze({ label: 'Encerradas', value: 'closed' }),
+  Object.freeze({ label: 'Arquivadas', value: 'archived' }),
 ]);
+/** Per browser, never per account: only the choice, no customer data. */
+const OWNER_STORAGE_KEY = 'crm.inbox.owner';
 const LIST_TIME = new Intl.DateTimeFormat('pt-BR', {
   hour: '2-digit',
   minute: '2-digit',
@@ -185,43 +162,88 @@ const contactDetail = ref(null);
 const closeError = ref('');
 let contactController;
 const query = ref('');
-// Painel: each indicator opens the Inbox already filtered
-// (`?fila=minhas|sem-responsavel`, `?situacao=aguardando|agente|vendedor`,
-// `?responsavel=<userId>` for one seller's conversations, PNL-06).
+// Painel and older links open the Inbox already filtered. RFC 052 maps them
+// onto the tabs instead of breaking them: `?aba=` names a tab, `?fila=` the
+// owner, `?situacao=` the old queues and `?responsavel=<userId>` one
+// seller's conversations (PNL-06).
 const route = useRoute();
-const ROUTE_STATE_TAB = Object.freeze({
-  atender: 'attention',
-  fechar: 'closing',
-  agente: 'assistant',
-  aguardando: 'waiting',
-  vendedor: 'human',
-});
-const ROUTE_QUEUE = Object.freeze({
-  minhas: 'mine',
-  'sem-responsavel': 'unassignedHumanHandoff',
-});
-const stateTab = ref(
-  ROUTE_STATE_TAB[String(route.query.situacao ?? '')] ?? 'all',
-);
-const queueFilter = ref(ROUTE_QUEUE[String(route.query.fila ?? '')] ?? 'all');
-// PNL-06: the manager's "Ver conversas de <vendedor>" lists that person's
-// conversations. It only applies while no owner queue is chosen.
-const ownerFilter = ref(
-  queueFilter.value === 'all' && typeof route.query.responsavel === 'string'
+const routeSituation = String(route.query.situacao ?? '');
+const routePerson =
+  typeof route.query.responsavel === 'string'
     ? route.query.responsavel.trim()
-    : '',
+    : '';
+/** @returns {string} */
+function storedOwnerScope() {
+  try {
+    const value = globalThis.localStorage?.getItem(OWNER_STORAGE_KEY) ?? '';
+    return OWNER_SCOPES.some((item) => item.value === value) ? value : 'all';
+  } catch {
+    return 'all';
+  }
+}
+/** @param {string} value */
+function rememberOwnerScope(value) {
+  try {
+    globalThis.localStorage?.setItem(OWNER_STORAGE_KEY, value);
+  } catch {
+    // Private mode or blocked storage: the choice lasts for this visit only.
+  }
+}
+// D10: `?situacao=agente` is the agent's own turn, so it opens Aguardando;
+// `aguardando` and `vendedor` were the human turn and open Responder.
+const bucket = ref(
+  bucketForRoute(route.query.aba) ??
+    (routeSituation === 'agente' ? 'awaiting' : 'respond'),
 );
+// D1: "Atender" was "mine and unassigned"; it now opens Responder for
+// everyone. `?fila=` wins over it, and no link writes the saved preference.
+const ownerScope = ref(
+  ownerForRoute(route.query.fila) ??
+    (routeSituation === 'atender' || routePerson ? 'all' : storedOwnerScope()),
+);
+const orderReadyOnly = ref(routeSituation === 'fechar');
+const consult = ref(routeSituation === 'arquivadas' ? 'archived' : 'open');
+// PNL-06: the manager's "Ver conversas de <vendedor>" lists that person's
+// conversations. It only applies while no owner scope is chosen.
+const ownerFilter = ref(ownerScope.value === 'all' ? routePerson : '');
 const filtersButton = ref(null);
 const filterSheet = ref(null);
 const filtersOpen = ref(false);
-const draftTab = ref('all');
-const draftQueue = ref('all');
+const draftOwnerScope = ref('all');
+const draftOrderReady = ref(false);
+const draftConsult = ref('open');
+/** @type {import('vue').Ref<HTMLButtonElement[]>} */
+const bucketTabs = ref([]);
 /**
- * Totals of the shortcuts, by shortcut value; a failed one is absent.
+ * One snapshot of the four tab totals, for the owner on screen; a failed
+ * read hides the numbers rather than keeping stale ones.
  *
  * @type {import('vue').Ref<Record<string, number>>}
  */
 const counts = ref({});
+// INBOX-VEZ-03 preview: Sem retorno and Perdidos act inside the conversation.
+const snoozeOpen = ref(false);
+const reminderAt = ref('');
+const reminderError = ref('');
+const reminderInput = ref(null);
+const snoozeToggle = ref(null);
+const lostDialog = ref(null);
+const lostTrigger = ref(null);
+const reopenDialog = ref(null);
+const reopenTrigger = ref(null);
+const reopenError = ref('');
+/**
+ * P1-E: the conversation a Sem retorno / Perdidos command just moved to
+ * another tab. It stays open (and selected) until the user opens another.
+ */
+let keepOpenId = '';
+/** The last command was refused as out of date or not allowed (403/409). */
+let lastCommandRefused = false;
+/** P1-D: the API answered a tab without the turn contract (older server). */
+const listUnsupported = ref(false);
+const lostReason = ref('');
+const lostNote = ref('');
+const lostError = ref('');
 const loading = ref(true);
 const detailLoading = ref(false);
 const busy = ref(false);
@@ -326,38 +348,22 @@ const subjectCommandKeys = new Map();
 const separatedSubjects = new Map();
 let refreshTimer = 0;
 let waitingClockTimer;
+let periodicTimer;
+let lastPeriodicAt = 0;
 let orderChangedLive = false;
 let threadFollowsLatest = true;
 
+// RFC 052: each tab's order is computed in SQL before the limit (longest wait
+// in Responder, failures on top); the search only narrows it, in that order.
 const filtered = computed(() => {
   const needle = query.value.trim().toLocaleLowerCase('pt-BR');
-  const matching = needle
+  return needle
     ? conversations.value.filter((conversation) =>
         `${conversation.contact.label} ${conversation.channel === 'site_chat' ? (conversation.contact.phone ?? '') : conversation.contact.externalId} ${messageText(conversation.lastMessage)}`
           .toLocaleLowerCase('pt-BR')
           .includes(needle),
       )
     : conversations.value;
-  if (!['waiting', 'attention', 'closing'].includes(stateTab.value))
-    return matching;
-  // PCX-04: whoever has waited longest is read first. The read model already
-  // answers in this order, but the rule is kept where the waiting time is
-  // rendered so a local search or a silent refresh cannot reshuffle the queue.
-  return [...matching].sort((left, right) =>
-    String(
-      left.queuePosition ??
-        conversationWaitingSince(left) ??
-        left.updatedAt ??
-        '',
-    ).localeCompare(
-      String(
-        right.queuePosition ??
-          conversationWaitingSince(right) ??
-          right.updatedAt ??
-          '',
-      ),
-    ),
-  );
 });
 const visibleConversationLabel = computed(() => {
   const count = filtered.value.length;
@@ -615,49 +621,125 @@ const createOrderInHeader = computed(
 const createOrderInMore = computed(
   () => canOfferOrder.value && !createOrderInHeader.value,
 );
-const showArchived = computed(() => stateTab.value === 'archived');
-/** PCX-14: the shortcut the two filters add up to, if any. */
-const activeShortcut = computed(() =>
-  ownerFilter.value
-    ? ''
-    : (SHORTCUTS.find(
-        (shortcut) =>
-          shortcut.tab === stateTab.value &&
-          shortcut.queue === queueFilter.value,
-      )?.value ?? ''),
+const showArchived = computed(() => consult.value === 'archived');
+/** RFC 052: the tabs answer "whose turn is it"; a consultation has none. */
+const showBuckets = computed(() => consult.value === 'open');
+const activeBucket = computed(
+  () =>
+    INBOX_BUCKETS.find((item) => item.value === bucket.value) ??
+    INBOX_BUCKETS[0],
 );
 /**
- * PCX-14: a pair no shortcut covers is named, one removable filter per axis.
- * Empty while a shortcut is pressed: the shortcut already says it.
+ * PCX-14 / RFC 052: what narrows the tab is named, one removable chip each.
+ * The tab itself is never a chip: the tablist already says it.
  */
 const activeFilters = computed(() => {
-  /** @type {Array<{key: 'owner'|'queue'|'tab', label: string}>} */
+  /** @type {Array<{key: 'person'|'scope'|'ready'|'consult', label: string}>} */
   const filters = [];
-  if (activeShortcut.value) return filters;
   if (ownerFilter.value) {
     const name = assignableUsers.value.find(
       (user) => user.id === ownerFilter.value,
     )?.name;
     filters.push({
-      key: 'owner',
+      key: 'person',
       label: name ? `Conversas de ${name}` : 'Conversas do vendedor',
     });
   }
-  const tab = STATE_TABS.find((item) => item.value === stateTab.value);
-  if (tab && tab.value !== 'all')
-    filters.push({ key: 'tab', label: tab.label });
-  const queue = QUEUE_FILTERS.find((item) => item.value === queueFilter.value);
-  if (queue && queue.value !== 'all') {
-    filters.push({ key: 'queue', label: queue.label });
-  }
+  const scope = OWNER_SCOPES.find((item) => item.value === ownerScope.value);
+  if (scope && scope.value !== 'all')
+    filters.push({ key: 'scope', label: scope.label });
+  if (orderReadyOnly.value)
+    filters.push({ key: 'ready', label: 'Pedido pronto' });
+  const consultation = CONSULT_OPTIONS.find(
+    (item) => item.value === consult.value,
+  );
+  if (consultation && consultation.value !== 'open')
+    filters.push({ key: 'consult', label: consultation.label });
   return filters;
 });
-const filteredByChoice = computed(
-  () =>
-    stateTab.value !== 'all' ||
-    queueFilter.value !== 'all' ||
-    Boolean(ownerFilter.value),
+const filteredByChoice = computed(() => activeFilters.value.length > 0);
+/** @param {string} value */
+function bucketCount(value) {
+  const count = counts.value[value];
+  return Number.isFinite(count) ? count : null;
+}
+/**
+ * "Responder, 12 conversas": the count belongs to the tab's name. Without a
+ * total the name says so, and never collides with the reply field, whose
+ * label is also "Responder".
+ *
+ * @param {(typeof INBOX_BUCKETS)[number]} item
+ */
+function bucketAccessibleName(item) {
+  const count = bucketCount(item.value);
+  if (count === null) return `${item.name}, total indisponível`;
+  return `${item.name}, ${count} ${count === 1 ? 'conversa' : 'conversas'}`;
+}
+/**
+ * P1-C: the open conversation's turn (`bucket`, `lostOutcome`, `reminder`)
+ * is read from the detail, which carries it by contract. The strip above the
+ * reply must not depend on the conversation being in the loaded list page.
+ */
+const activeTurn = computed(() => active.value);
+/**
+ * MET-06/07: the API records a loss, or its correction, only for the owner of
+ * the conversation or an administrator, and only while a person (not the
+ * agent) is attending it. The strip says why instead of failing on click.
+ */
+const outcomeBlockedReason = computed(() => {
+  const conversation = active.value;
+  if (!conversation || isTerminal.value) return '';
+  if (conversation.automationState !== 'human')
+    return `Só é possível com atendimento humano; ${brand.assistant.reference} ainda atende.`;
+  if (!owner.value) return 'Assuma a conversa para marcar ou corrigir a perda.';
+  if (owner.value.id === currentUserId.value || isAdmin.value) return '';
+  return 'Só quem atende a conversa ou um administrador pode marcar ou corrigir a perda.';
+});
+/** Declaring a loss also needs no order in progress (LEAD_HAS_ORDER). */
+const lossBlockedReason = computed(() => {
+  if (outcomeBlockedReason.value) return outcomeBlockedReason.value;
+  if (!active.value || isTerminal.value) return '';
+  if (hasPendingOrder.value || active.value.order?.status === 'confirmado')
+    return 'Há pedido em aberto; encerre ou cancele o pedido antes de marcar como perdida.';
+  return '';
+});
+const canMarkLost = computed(
+  () => Boolean(active.value) && !isTerminal.value && !lossBlockedReason.value,
 );
+const canReopenLoss = computed(
+  () =>
+    Boolean(active.value) && !isTerminal.value && !outcomeBlockedReason.value,
+);
+/** INBOX-VEZ-03: the customer went quiet; retake, remind or declare a loss. */
+const silentNotice = computed(() => {
+  const turn = activeTurn.value;
+  if (turn?.bucket !== 'silent' || isTerminal.value) return null;
+  const minutes = minutesSince(turn.turnSince, now.value);
+  return {
+    text:
+      minutes === null
+        ? 'Cliente sem responder há mais de 72 horas.'
+        : `Cliente sem responder há ${turnSpan(minutes).spoken}.`,
+    reminder: turn.reminder?.remindAt
+      ? `Lembrete para ${reminderLabel(turn.reminder.remindAt)}.`
+      : '',
+  };
+});
+const lostNotice = computed(() => {
+  const outcome = activeTurn.value?.lostOutcome;
+  if (activeTurn.value?.bucket !== 'lost' || !outcome) return null;
+  const date = new Date(String(outcome.occurredAt ?? ''));
+  const when = Number.isNaN(date.getTime())
+    ? ''
+    : date.toDateString() === now.value.toDateString()
+      ? `hoje às ${LIST_TIME.format(date)}`
+      : `em ${listWhen(outcome.occurredAt)}`;
+  return [
+    'Marcada como perdida',
+    lossReasonLabel(outcome.reasonCode),
+    ...(when ? [when] : []),
+  ].join(' · ');
+});
 const canArchiveActive = computed(
   () => canArchive.value && !active.value?.archivedAt,
 );
@@ -737,65 +819,74 @@ function messageWhen(value) {
     : `${listWhen(value)}, ${time}`;
 }
 
-/** @param {string} value a shortcut value */
-function shortcutCount(value) {
-  const count = counts.value[value];
-  return Number.isFinite(count) ? count : null;
-}
-
 /**
- * @param {{tab?: string, queue?: string, owner?: string}} [filter] the
- *   situation, the owner queue and one person's id; the ones on screen by
- *   default
- * @param {number} [limit] 1 when only the total is wanted
+ * RFC 052: one tab, the owner scope and the "Pedido pronto" chip; or, as a
+ * consultation, the closed or archived conversations without tabs.
+ *
+ * @param {number} [limit]
  * @param {string} [cursor] opaque cursor returned by the same official scope
  */
-function listUrl(
-  {
-    tab: tabValue = stateTab.value,
-    queue = queueFilter.value,
-    owner = ownerFilter.value,
-  } = {},
-  limit = 100,
-  cursor = '',
-) {
-  const tab =
-    STATE_TABS.find((item) => item.value === tabValue) ?? STATE_TABS[0];
-  const params = new URLSearchParams({
-    archived: String(tab.archived === true),
-    limit: String(limit),
-  });
-  // PCX-17: Todas keeps the official urgency order, including owner filters.
-  if (tab.value === 'all') params.set('sort', 'urgency');
+function listUrl(limit = 100, cursor = '') {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (consult.value === 'archived') params.set('archived', 'true');
+  else if (consult.value === 'closed') params.set('terminal', 'true');
+  else params.set('bucket', bucket.value);
+  params.set('owner', ownerScope.value);
+  // The API takes `orderReady` only with a tab (400 INVALID_FILTER otherwise).
+  if (orderReadyOnly.value && consult.value === 'open')
+    params.set('orderReady', 'true');
+  if (ownerScope.value === 'all' && ownerFilter.value)
+    params.set('assignedUserId', ownerFilter.value);
   if (cursor) params.set('cursor', cursor);
-  for (const [name, value] of Object.entries(tab.params)) {
-    params.set(name, value);
-  }
-  if (queue === 'mine' && currentUserId.value) {
-    params.set('assignedUserId', currentUserId.value);
-  }
-  if (queue === 'unassignedHumanHandoff') {
-    params.set('unassignedHumanHandoff', 'true');
-  }
-  if (queue === 'all' && owner) params.set('assignedUserId', owner);
   return `/api/v1/inbox/conversations?${params.toString()}`;
 }
 
+/** The four totals of the same owner scope, in one snapshot. */
+function bucketsUrl() {
+  const params = new URLSearchParams({ owner: ownerScope.value });
+  if (orderReadyOnly.value) params.set('orderReady', 'true');
+  if (ownerScope.value === 'all' && ownerFilter.value)
+    params.set('assignedUserId', ownerFilter.value);
+  return `/api/v1/inbox/buckets?${params.toString()}`;
+}
+
 /**
- * PCX-14: a shortcut sets both filters at once, so the list is read once.
+ * Choosing a tab keeps the open conversation and its draft. A click, Enter
+ * or Space takes the focus to the list's summary, which announces the new
+ * total; the arrows keep it on the tabs.
  *
- * @param {(typeof SHORTCUTS)[number]} shortcut
+ * @param {string} value @param {boolean} [focusList]
  */
-function selectShortcut(shortcut) {
-  ownerFilter.value = '';
-  stateTab.value = shortcut.tab;
-  queueFilter.value = shortcut.queue;
+async function selectBucket(value, focusList = true) {
+  bucket.value = value;
+  if (!focusList) return;
+  await nextTick();
+  listSummary.value?.focus({ preventScroll: true });
+}
+
+/** design.md §8 Tabs: arrows between tabs, Home/End, roving tabindex. @param {KeyboardEvent} event @param {number} index */
+async function bucketKeydown(event, index) {
+  const last = INBOX_BUCKETS.length - 1;
+  /** @type {Record<string, number>} */
+  const moves = {
+    ArrowLeft: index === 0 ? last : index - 1,
+    ArrowRight: index === last ? 0 : index + 1,
+    Home: 0,
+    End: last,
+  };
+  const target = moves[event.key];
+  if (target === undefined) return;
+  event.preventDefault();
+  await selectBucket(INBOX_BUCKETS[target].value, false);
+  await nextTick();
+  bucketTabs.value[target]?.focus();
 }
 
 /** PCX-18: filters are a draft until the sheet's explicit apply action. @param {Event} event */
 function openFilters(event) {
-  draftTab.value = stateTab.value;
-  draftQueue.value = queueFilter.value;
+  draftOwnerScope.value = ownerScope.value;
+  draftOrderReady.value = orderReadyOnly.value;
+  draftConsult.value = consult.value;
   filtersOpen.value = true;
   /** @type {any} */ (filterSheet.value)?.open(
     /** @type {HTMLElement} */ (event.currentTarget),
@@ -803,15 +894,23 @@ function openFilters(event) {
 }
 
 function applySheetFilters() {
-  // An owner queue chosen in the sheet replaces one person's conversations.
-  if (draftQueue.value !== 'all') ownerFilter.value = '';
-  stateTab.value = draftTab.value;
-  queueFilter.value = draftQueue.value;
+  // An owner scope chosen in the sheet replaces one person's conversations.
+  if (draftOwnerScope.value !== 'all') ownerFilter.value = '';
+  // D1: a link may open the sheet on "Todos" over a saved "Minhas"; applying
+  // another filter must not rewrite the preference unless the person changed it.
+  if (draftOwnerScope.value !== ownerScope.value)
+    rememberOwnerScope(draftOwnerScope.value);
+  ownerScope.value = draftOwnerScope.value;
+  // "Só pedidos prontos" narrows the tabs; a consultation has none.
+  orderReadyOnly.value =
+    draftConsult.value === 'open' ? draftOrderReady.value : false;
+  consult.value = draftConsult.value;
 }
 
 function clearSheetDraft() {
-  draftTab.value = 'all';
-  draftQueue.value = 'all';
+  draftOwnerScope.value = 'all';
+  draftOrderReady.value = false;
+  draftConsult.value = 'open';
 }
 
 async function toggleConversationWidth() {
@@ -823,21 +922,26 @@ async function toggleConversationWidth() {
  * PCX-14: removes one filter of the summary. The focus stays in the summary
  * while it has a filter left, and goes to "Filtros" once it is gone.
  *
- * @param {'owner'|'queue'|'tab'} key
+ * @param {'person'|'scope'|'ready'|'consult'} key
  */
 async function removeFilter(key) {
-  if (key === 'tab') stateTab.value = 'all';
-  else if (key === 'owner') ownerFilter.value = '';
-  else queueFilter.value = 'all';
+  if (key === 'person') ownerFilter.value = '';
+  else if (key === 'scope') {
+    ownerScope.value = 'all';
+    rememberOwnerScope('all');
+  } else if (key === 'ready') orderReadyOnly.value = false;
+  else consult.value = 'open';
   await nextTick();
   focusAfterFilterChange();
 }
 
-/** Back to every conversation; the focus lands on "Filtros". */
+/** Back to the tabs for everyone; the focus lands on "Filtros". */
 async function clearFilters() {
   ownerFilter.value = '';
-  stateTab.value = 'all';
-  queueFilter.value = 'all';
+  if (ownerScope.value !== 'all') rememberOwnerScope('all');
+  ownerScope.value = 'all';
+  orderReadyOnly.value = false;
+  consult.value = 'open';
   await nextTick();
   focusAfterFilterChange();
 }
@@ -849,18 +953,405 @@ function focusAfterFilterChange() {
   (next ?? /** @type {HTMLElement|null} */ (filtersButton.value))?.focus();
 }
 
-/** INBOX-UX-02: one operational label, never a stack of technical badges. @param {Record<string, any>} conversation */
-function nextAction(conversation) {
-  const name = assignableUsers.value.find(
-    (user) => user.id === conversation.assignedUser?.id,
-  )?.name;
-  return conversationNextAction(conversation, currentUserId.value, name);
+/**
+ * RFC 052, line 1 of the card: how long it has been whose turn. Responder
+ * counts business minutes (ADR 061) and turns to alert after 15; the
+ * customer's turn counts calendar time; Perdidos shows the day of the loss.
+ *
+ * @param {Record<string, any>} conversation
+ * @returns {{label: string, spoken: string, title: string, tone?: string}|null}
+ */
+function cardTime(conversation) {
+  const kind = showBuckets.value ? (conversation.bucket ?? '') : '';
+  if (kind === 'lost') {
+    const at = conversation.lostOutcome?.occurredAt;
+    const label = listWhen(at);
+    return label
+      ? {
+          label,
+          spoken: `Marcada como perdida em ${label}`,
+          title: `Marcada como perdida em ${dateTimeBR(at)}`,
+        }
+      : null;
+  }
+  if (!kind) {
+    const at = conversation.lastMessage?.occurredAt ?? conversation.updatedAt;
+    const label = listWhen(at);
+    return label
+      ? {
+          label,
+          spoken: `Última mensagem em ${label}`,
+          title: `Última mensagem em ${dateTimeBR(at)}`,
+        }
+      : null;
+  }
+  // P1-A: the anchor comes from the API; the clock (30 s) projects the rest.
+  // A list without the turn contract never gets here (P1-D).
+  const clock = turnClock(conversation, now.value);
+  if (!clock.label) return null;
+  const since = conversation.turnSince;
+  if (kind === 'respond')
+    return {
+      label: clock.label,
+      spoken: clock.offHours
+        ? 'Fora do expediente'
+        : `Esperando resposta há ${clock.spoken}${
+            clock.alert ? '. Prazo de 15 minutos excedido' : ''
+          }`,
+      // turnSince is the failed send, or the earlier of the customer's message
+      // and the pending transfer: the title only claims what it always is.
+      title: `Esperando resposta desde ${dateTimeBR(since)}`,
+      tone: clock.alert ? 'warning' : undefined,
+    };
+  // Aguardando with the agent still inside its window starts at the
+  // customer's message, not at an answer.
+  if (
+    conversation.automationState === 'assistant' &&
+    conversation.lastMessage?.direction === 'inbound'
+  )
+    return {
+      label: clock.label,
+      spoken: `Cliente escreveu há ${clock.spoken}; ${brand.assistant.reference} está atendendo`,
+      title: `Cliente escreveu em ${dateTimeBR(since)}`,
+    };
+  return {
+    label: clock.label,
+    spoken: `Cliente sem responder há ${clock.spoken}`,
+    title: `Última resposta em ${dateTimeBR(since)}`,
+  };
 }
 
-/** PCX-15: official human wait; automatic messages do not reset its clock. @param {Record<string, any>} conversation */
-function waitingFor(conversation) {
-  const since = conversationWaitingSince(conversation);
-  return since ? elapsedSince(since, now.value) : '';
+/** Time and seals of each visible row, computed once per change. */
+const rowCards = computed(() =>
+  filtered.value.map((conversation) => ({
+    conversation,
+    time: cardTime(conversation),
+    badges: cardBadges(conversation),
+  })),
+);
+
+/** Two seals on the card, the rest counted and read in full. @param {Record<string, any>} conversation */
+function cardBadges(conversation) {
+  const all = conversationBadges(conversation, {
+    actorId: currentUserId.value,
+    bucket: showBuckets.value ? conversation.bucket : undefined,
+    ownerName: assignableUsers.value.find(
+      (user) => user.id === conversation.assignedUser?.id,
+    )?.name,
+    reminderLabel,
+  });
+  const { shown, hidden } = splitBadges(all);
+  return { visible: shown, hidden };
+}
+
+/** São Paulo's calendar day, the default for a reminder. */
+function todayInSaoPaulo() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now.value);
+}
+
+const SAO_PAULO_LOCAL = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** A datetime-local value (São Paulo wall time) for an instant. @param {number} at */
+function localValue(at) {
+  return SAO_PAULO_LOCAL.format(new Date(at)).replace(' ', 'T');
+}
+
+/** The field accepts what the API does: from now up to 90 days ahead. */
+const reminderBounds = computed(() => ({
+  min: localValue(now.value.getTime()),
+  max: localValue(
+    now.value.getTime() + REMINDER_MAX_DAYS * 86_400_000 - 60_000,
+  ),
+}));
+
+/** INBOX-VEZ-03: the reminder form of the Central de ações (ACT-05). */
+async function toggleSnooze() {
+  if (snoozeOpen.value) {
+    await closeSnooze();
+    return;
+  }
+  reminderError.value = '';
+  reminderAt.value =
+    reminderAt.value ||
+    defaultReminder(todayInSaoPaulo(), now.value.toISOString());
+  snoozeOpen.value = true;
+  await nextTick();
+  /** @type {HTMLInputElement|null} */ (reminderInput.value)?.focus();
+}
+
+async function closeSnooze() {
+  snoozeOpen.value = false;
+  reminderError.value = '';
+  await nextTick();
+  /** @type {HTMLElement|null} */ (snoozeToggle.value)?.focus();
+}
+
+async function saveReminder() {
+  if (!active.value || busy.value) return;
+  const conversationId = active.value.id;
+  const instant = reminderInstant(reminderAt.value);
+  if (!instant || !reminderInRange(instant, new Date())) {
+    reminderError.value = REMINDER_RANGE_MESSAGE;
+    await nextTick();
+    /** @type {HTMLInputElement|null} */ (reminderInput.value)?.focus();
+    return;
+  }
+  const saved = await runCommand(
+    'reminder',
+    { remindAt: instant, expectedVersion: active.value.version },
+    `Lembrete salvo para ${reminderLabel(instant)}. Nada foi enviado ao cliente.`,
+    true,
+  );
+  if (!saved) {
+    // The refusal belongs next to the field while the form is still there; a
+    // conversation that left Sem retorno keeps it in the pane.
+    if (
+      snoozeOpen.value &&
+      silentNotice.value &&
+      activeId.value === conversationId
+    ) {
+      reminderError.value = error.value;
+      error.value = '';
+      await nextTick();
+      /** @type {HTMLInputElement|null} */ (reminderInput.value)?.focus();
+    }
+    return;
+  }
+  snoozeOpen.value = false;
+  reminderAt.value = '';
+  await focusConversationTitle(null, conversationId);
+}
+
+/**
+ * P1-E: after a command that takes the conversation out of the current tab,
+ * the focus goes to its title, never to `body`. A dialog is closed first and
+ * its own close handler (`openDialog` returns the focus to the trigger) runs
+ * before this continues, so the title wins. If the selection moved to another
+ * conversation meanwhile, that conversation's title is not ours to focus.
+ *
+ * @param {HTMLDialogElement|null} [dialog]
+ * @param {string} [conversationId] the conversation the command was about
+ */
+async function focusConversationTitle(dialog = null, conversationId = '') {
+  if (dialog?.open) {
+    await new Promise((resolve) => {
+      dialog.addEventListener('close', resolve, { once: true });
+      dialog.close();
+    });
+  }
+  await nextTick();
+  if (conversationId && activeId.value !== conversationId) return;
+  conversationHeading.value?.focus();
+}
+
+/**
+ * The loss and the reopening act on what the person saw when the dialog
+ * opened: conversation, its version and the outcome version are frozen then.
+ * A live refresh that moves the selection voids the dialog (see activeId).
+ *
+ * @type {{id: string, version: number, outcomeVersion: number|null}}
+ */
+let lostFrozen = { id: '', version: 0, outcomeVersion: null };
+/** @type {{id: string, version: number, outcomeVersion: number}} */
+let reopenFrozen = { id: '', version: 0, outcomeVersion: 1 };
+
+/** Closing (or finishing) forgets the frozen values and what was typed. */
+function clearLostDialogState() {
+  lostFrozen = { id: '', version: 0, outcomeVersion: null };
+  lostReason.value = '';
+  lostNote.value = '';
+  lostError.value = '';
+}
+
+function clearReopenDialogState() {
+  reopenFrozen = { id: '', version: 0, outcomeVersion: 1 };
+  reopenError.value = '';
+}
+
+/**
+ * MET-06: the API wants the version of the latest outcome event of the
+ * conversation, which is above zero once a loss was reopened. The list never
+ * carries it while the loss is not active, so the owner reads it on opening.
+ * The note that the same answer may carry is dropped here, unread.
+ *
+ * @param {string} conversationId
+ * @returns {Promise<number|null>}
+ */
+async function readOutcomeVersion(conversationId) {
+  try {
+    const response = await request(
+      `/api/v1/conversations/${encodeURIComponent(conversationId)}/lead-outcome`,
+    );
+    const version = Number(response.data?.outcomeVersion);
+    return Number.isSafeInteger(version) && version >= 0 ? version : null;
+  } catch {
+    return null;
+  }
+}
+
+/** MET-06: a declared loss, with a reason from the closed list. */
+async function openLostDialog() {
+  const dialog = lostDialog.value;
+  if (
+    !(dialog instanceof HTMLDialogElement) ||
+    !active.value ||
+    !canMarkLost.value
+  )
+    return;
+  clearLostDialogState();
+  const conversationId = active.value.id;
+  lostFrozen = {
+    id: conversationId,
+    version: active.value.version,
+    outcomeVersion: activeTurn.value?.lostOutcome?.version ?? null,
+  };
+  openDialog(dialog, /** @type {HTMLElement} */ (lostTrigger.value));
+  if (lostFrozen.outcomeVersion === null) {
+    const version = await readOutcomeVersion(conversationId);
+    if (lostFrozen.id === conversationId) lostFrozen.outcomeVersion = version;
+  }
+}
+
+async function confirmLost() {
+  if (!active.value || busy.value) return;
+  // The dialog belongs to the conversation it was opened for (a live refresh
+  // may have moved the selection): never send its answers to another one.
+  const conversationId = lostFrozen.id;
+  if (!conversationId || active.value.id !== conversationId) {
+    lostDialog.value?.close();
+    return;
+  }
+  const note = lostNote.value.trim();
+  if (!lostReason.value) {
+    lostError.value = 'Escolha o motivo da perda.';
+    return;
+  }
+  if (lostReason.value === 'outro' && !note) {
+    lostError.value = 'Descreva o motivo em até 140 caracteres.';
+    return;
+  }
+  if (lostFrozen.outcomeVersion === null) {
+    busy.value = true;
+    const version = await readOutcomeVersion(conversationId);
+    busy.value = false;
+    // The selection may have moved while the version was being read: nothing
+    // is sent for a conversation that is no longer the one on screen.
+    if (
+      lostFrozen.id !== conversationId ||
+      active.value?.id !== conversationId
+    ) {
+      lostDialog.value?.close();
+      return;
+    }
+    if (version === null) {
+      lostError.value =
+        'Não foi possível conferir a conversa agora. Tente novamente.';
+      return;
+    }
+    lostFrozen.outcomeVersion = version;
+  }
+  const marked = await runCommand(
+    'lead-outcome',
+    {
+      outcome: 'lost',
+      reasonCode: lostReason.value,
+      ...(lostReason.value === 'outro' ? { note } : {}),
+      expectedConversationVersion: lostFrozen.version,
+      expectedOutcomeVersion: lostFrozen.outcomeVersion,
+    },
+    'Conversa marcada como perdida. Uma nova mensagem do cliente a devolve para Responder.',
+    true,
+    conversationId,
+  );
+  if (marked) {
+    await focusConversationTitle(
+      /** @type {HTMLDialogElement|null} */ (lostDialog.value),
+      conversationId,
+    );
+  } else if (lastCommandRefused) {
+    // A refusal (403/409) says the frozen values can no longer be right: the
+    // dialog closes, the reason stays in the pane and the focus goes to the
+    // conversation title.
+    await focusConversationTitle(
+      /** @type {HTMLDialogElement|null} */ (lostDialog.value),
+      conversationId,
+    );
+  } else {
+    // One message, next to the field: the pane keeps none of it.
+    lostError.value = error.value;
+    error.value = '';
+  }
+}
+
+/** D9: reopening is a correction of the loss; it asks once, in a short dialog. */
+function openReopenDialog() {
+  const dialog = reopenDialog.value;
+  const outcome = activeTurn.value?.lostOutcome;
+  if (
+    !(dialog instanceof HTMLDialogElement) ||
+    busy.value ||
+    !active.value ||
+    !outcome ||
+    !canReopenLoss.value
+  )
+    return;
+  clearReopenDialogState();
+  reopenFrozen = {
+    id: active.value.id,
+    version: active.value.version,
+    outcomeVersion: outcome.version ?? 1,
+  };
+  openDialog(dialog, /** @type {HTMLElement} */ (reopenTrigger.value));
+}
+/** MET-07: a manual reopening is a correction; the loss leaves the counts. */
+async function confirmReopen() {
+  if (!active.value || busy.value) return;
+  const conversationId = reopenFrozen.id;
+  if (!conversationId || active.value.id !== conversationId) {
+    reopenDialog.value?.close();
+    return;
+  }
+  const reopened = await runCommand(
+    'lead-outcome',
+    {
+      outcome: 'reopened',
+      expectedConversationVersion: reopenFrozen.version,
+      expectedOutcomeVersion: reopenFrozen.outcomeVersion,
+    },
+    'Conversa reaberta. Ela volta para a aba da vez.',
+    true,
+    conversationId,
+  );
+  if (reopened) {
+    await focusConversationTitle(
+      /** @type {HTMLDialogElement|null} */ (reopenDialog.value),
+      conversationId,
+    );
+  } else if (lastCommandRefused) {
+    // A refusal (403/409) says the frozen values can no longer be right: the
+    // dialog closes, the reason stays in the pane and the focus goes to the
+    // conversation title.
+    await focusConversationTitle(
+      /** @type {HTMLDialogElement|null} */ (reopenDialog.value),
+      conversationId,
+    );
+  } else {
+    reopenError.value = error.value;
+    error.value = '';
+  }
 }
 
 /** Phones show one pane at a time: the list or the open conversation. */
@@ -1018,7 +1509,7 @@ async function unarchiveConversation() {
     },
     'Conversa desarquivada e restaurada à Caixa de Entrada.',
   );
-  if (restored && showArchived.value) stateTab.value = 'all';
+  if (restored && showArchived.value) consult.value = 'open';
 }
 
 /**
@@ -1303,13 +1794,19 @@ async function checkMessageDelivery(messageId) {
   }
 }
 
-/** @param {unknown} cause */
-function describeError(cause) {
+/** @param {unknown} cause @param {string} [path] the command that failed */
+function describeError(cause, path = '') {
   const status = Number(/** @type {any} */ (cause)?.status);
   const requestId = /** @type {any} */ (cause)?.problem?.request_id;
   const suffix = requestId ? ` (id ${requestId})` : '';
-  if (/** @type {any} */ (cause)?.code === 'NON_PRODUCTION_CONVERSATION')
+  const code = String(/** @type {any} */ (cause)?.code ?? '');
+  if (code === 'NON_PRODUCTION_CONVERSATION')
     return 'Esta conversa é de teste e não envia mensagens pelo WhatsApp.';
+  // RFC 052: the loss and reminder commands refuse with a code of their own.
+  const known = turnCommandError(code);
+  if (known) return `${known}${suffix}`;
+  if (status === 403 && path === 'lead-outcome')
+    return `${LOSS_FORBIDDEN}${suffix}`;
   if (status === 403) {
     return `Sem permissão para esta ação. A conversa pode estar com outro vendedor.${suffix}`;
   }
@@ -1343,18 +1840,20 @@ async function loadInbox(silent = false) {
     });
     if (controller !== listController) return;
     moreNeedsRefresh.value = false;
+    // P1-D: a server older than RFC 052 ignores `bucket` and answers the same
+    // list for every tab. Show an error, never that list and never its totals.
+    if (
+      consult.value === 'open' &&
+      !listMatchesBucket(response.data.items, bucket.value)
+    ) {
+      showListUnsupported();
+      await selectVisibleConversation();
+      return;
+    }
+    listUnsupported.value = false;
     conversations.value = response.data.items;
     totalCount.value = response.data.totalCount;
     nextCursor.value = response.data.nextCursor ?? '';
-    if (
-      activeShortcut.value &&
-      (queueFilter.value !== 'mine' || currentUserId.value)
-    ) {
-      counts.value = {
-        ...counts.value,
-        [activeShortcut.value]: Number(response.data.totalCount),
-      };
-    }
     now.value = new Date();
     listError.value = '';
     void loadCounts();
@@ -1376,6 +1875,19 @@ async function loadInbox(silent = false) {
       }
     }
   }
+}
+
+/** P1-D: the list state for a server without the turn contract. */
+function showListUnsupported() {
+  conversations.value = [];
+  totalCount.value = 0;
+  nextCursor.value = '';
+  counts.value = {};
+  countController?.abort();
+  listUnsupported.value = true;
+  listError.value =
+    'Esta versão do servidor ainda não oferece as abas por vez de responder. Tente de novo em alguns minutos.';
+  now.value = new Date();
 }
 
 /** PCX-17: append the official next page without disturbing the open conversation.
@@ -1405,10 +1917,19 @@ async function loadMoreConversations(event) {
     actor === currentUserId.value &&
     scope === listUrl();
   try {
-    const response = await request(listUrl({}, 100, cursor), {
+    const response = await request(listUrl(100, cursor), {
       signal: controller.signal,
     });
     if (!isCurrent()) return;
+    // P1-D also guards the later pages: never append what is not this tab's.
+    if (
+      consult.value === 'open' &&
+      !listMatchesBucket(response.data.items, bucket.value)
+    ) {
+      showListUnsupported();
+      await selectVisibleConversation();
+      return;
+    }
     const returnedCursor = response.data.nextCursor ?? '';
     if (returnedCursor === cursor) throw new Error('CURSOR_DID_NOT_ADVANCE');
     const known = new Set(conversations.value.map((item) => item.id));
@@ -1422,14 +1943,6 @@ async function loadMoreConversations(event) {
     conversations.value = [...conversations.value, ...additions];
     nextCursor.value = returnedCursor;
     totalCount.value = response.data.totalCount;
-    if (
-      activeShortcut.value &&
-      (queueFilter.value !== 'mine' || currentUserId.value)
-    )
-      counts.value = {
-        ...counts.value,
-        [activeShortcut.value]: Number(response.data.totalCount),
-      };
     await nextTick();
     if (!isCurrent()) return;
     if (conversationList.value) conversationList.value.scrollTop = scrollTop;
@@ -1458,42 +1971,54 @@ async function loadMoreConversations(event) {
 }
 
 /**
- * The other shortcuts only need their totals: one `limit=1` read each, in
- * parallel. A failed total hides its number rather than keeping a stale one,
- * and "Minhas" has none until the session says who is reading.
+ * RFC 052: the four tab totals come from one snapshot of the same owner
+ * scope, so the numbers never disagree with each other. A failed read hides
+ * them rather than keeping stale ones; a consultation shows no tabs.
  */
 async function loadCounts() {
   countController?.abort();
+  if (!showBuckets.value) {
+    counts.value = {};
+    return;
+  }
   const controller = new AbortController();
   countController = controller;
-  const others = SHORTCUTS.filter(
-    (shortcut) => shortcut.value !== activeShortcut.value,
-  );
-  const results = await Promise.allSettled(
-    others.map((shortcut) =>
-      shortcut.queue === 'mine' && !currentUserId.value
-        ? Promise.reject(new Error('Sessão sem usuário'))
-        : request(listUrl({ ...shortcut, owner: '' }, 1), {
-            signal: controller.signal,
-          }),
-    ),
-  );
-  if (controller !== countController) return;
-  const next = { ...counts.value };
-  results.forEach((result, index) => {
-    const value = others[index].value;
-    const total = Number(
-      result.status === 'fulfilled' ? result.value.data.totalCount : NaN,
-    );
-    if (Number.isFinite(total)) next[value] = total;
-    else delete next[value];
-  });
-  counts.value = next;
+  try {
+    const response = await request(bucketsUrl(), {
+      signal: controller.signal,
+    });
+    if (controller !== countController) return;
+    /** @type {Record<string, number>} */
+    const next = {};
+    for (const item of INBOX_BUCKETS) {
+      const total = Number(response.data?.[item.value]);
+      if (Number.isFinite(total)) next[item.value] = total;
+    }
+    counts.value = next;
+  } catch (cause) {
+    if (
+      controller === countController &&
+      /** @type {any} */ (cause)?.name !== 'AbortError'
+    )
+      counts.value = {};
+  }
 }
 
 /** @param {boolean} [silent] */
 async function refreshInbox(silent = false) {
   await loadInbox(silent);
+}
+
+/**
+ * Work in progress in the open conversation: an unsent draft, or the keyboard
+ * in its composer. The list must not take the conversation away from it.
+ */
+function holdsComposer() {
+  const id = activeId.value;
+  if (!id) return false;
+  if ((replyDrafts.value.get(id) ?? '').trim()) return true;
+  const focused = globalThis.document.activeElement;
+  return Boolean(focused?.closest?.('.inbox-composer'));
 }
 
 /**
@@ -1515,7 +2040,12 @@ async function selectVisibleConversation(refreshActive = true) {
     return;
   }
   const visible = filtered.value;
-  const stillVisible = visible.some((item) => item.id === activeId.value);
+  // P1-E: a conversation a command just moved to another tab stays selected,
+  // and so does one with an unsent draft or the keyboard in its composer.
+  const stillVisible =
+    visible.some((item) => item.id === activeId.value) ||
+    (Boolean(keepOpenId) && keepOpenId === activeId.value) ||
+    holdsComposer();
   const nextId = stillVisible ? activeId.value : (visible[0]?.id ?? '');
   if (!nextId) {
     activeId.value = '';
@@ -1540,6 +2070,7 @@ async function selectConversation(id, silent = false) {
   const controller = new AbortController();
   detailController = controller;
   if (activeId.value !== id) {
+    keepOpenId = '';
     error.value = '';
     actionMessage.value = '';
     orderConfirmationDialog.value?.close();
@@ -1941,13 +2472,32 @@ function subjectLabel(subject) {
   return number ? `Assunto sem pedido (${number})` : 'Assunto sem pedido';
 }
 
-/** @param {string} path @param {Record<string, unknown>} body @param {string} successMessage */
-async function runCommand(path, body, successMessage) {
+/**
+ * @param {string} path
+ * @param {Record<string, unknown>} body
+ * @param {string} successMessage
+ * @param {boolean} [keepOpen] the command moves the conversation to another
+ *   tab; it stays open and its detail is read again (P1-C, P1-E)
+ * @param {string} [targetId] the conversation the command was decided for; a
+ *   selection that moved meanwhile sends nothing
+ */
+async function runCommand(
+  path,
+  body,
+  successMessage,
+  keepOpen = false,
+  targetId = '',
+) {
+  lastCommandRefused = false;
   if (!active.value || busy.value || mediaSending.value) return;
+  if (targetId && active.value.id !== targetId) return false;
   const conversationId = active.value.id;
   busy.value = true;
   error.value = '';
   actionMessage.value = '';
+  // Before the POST: a live refresh during the request must not drop the
+  // conversation the command is about to move to another tab.
+  if (keepOpen) keepOpenId = conversationId;
   try {
     await request(
       `/api/v1/conversations/${encodeURIComponent(conversationId)}/${path}`,
@@ -1959,10 +2509,20 @@ async function runCommand(path, body, successMessage) {
     );
     if (activeId.value === conversationId) actionMessage.value = successMessage;
     await loadInbox(true);
+    // The list may have failed or been refused (P1-D): the strip still needs
+    // the detail's new bucket.
+    if (keepOpen && listError.value && activeId.value === conversationId)
+      await selectConversation(conversationId, true);
     return true;
   } catch (cause) {
-    if (activeId.value === conversationId) error.value = describeError(cause);
-    if (/** @type {any} */ (cause)?.status === 409) await loadInbox(true);
+    if (keepOpenId === conversationId) keepOpenId = '';
+    if (activeId.value === conversationId)
+      error.value = describeError(cause, path);
+    const status = /** @type {any} */ (cause)?.status;
+    lastCommandRefused = status === 403 || status === 409;
+    // 409: the conversation moved. 403 on a loss: ownership moved.
+    if (status === 409 || (status === 403 && path === 'lead-outcome'))
+      await loadInbox(true);
     return false;
   } finally {
     busy.value = false;
@@ -2003,6 +2563,8 @@ async function sendReply() {
       reason: 'Resposta humana na Caixa de Entrada',
     },
     'Mensagem aceita para envio.',
+    true,
+    conversationId,
   );
   if (sent) {
     if (replyDrafts.value !== draftScope) return;
@@ -2018,6 +2580,8 @@ async function sendReply() {
 
 async function mediaSent() {
   actionMessage.value = 'Mensagem aceita para envio.';
+  // The conversation the seller is answering stays open when it changes tab.
+  if (activeId.value) keepOpenId = activeId.value;
   await loadInbox(true);
 }
 
@@ -2242,8 +2806,39 @@ function scheduleLiveRefresh() {
 }
 
 watch(query, () => void selectVisibleConversation(false));
-// A shortcut or the sheet may change both filters at once: one read.
-watch([stateTab, queueFilter, ownerFilter], () => void refreshInbox());
+// A consultation has no tabs, so "Só pedidos prontos" cannot apply to it.
+watch(draftConsult, (value) => {
+  if (value !== 'open') draftOrderReady.value = false;
+});
+// The sheet may change several filters at once: one read.
+watch(
+  [bucket, ownerScope, orderReadyOnly, consult, ownerFilter],
+  (next, previous) => {
+    keepOpenId = '';
+    // The rows (and, when the scope itself changed, the totals) of the
+    // previous tab must not sit under the new tab's name, clickable, while
+    // the list loads or if it fails.
+    conversations.value = [];
+    totalCount.value = 0;
+    nextCursor.value = '';
+    moreError.value = '';
+    moreNeedsRefresh.value = false;
+    if (next.slice(1).some((value, index) => value !== previous[index + 1]))
+      counts.value = {};
+    void refreshInbox();
+  },
+);
+// The reminder form and the loss belong to one conversation.
+watch(activeId, () => {
+  // Their commands name the conversation on screen; a new one voids them.
+  lostDialog.value?.close();
+  reopenDialog.value?.close();
+  clearLostDialogState();
+  clearReopenDialogState();
+  snoozeOpen.value = false;
+  reminderAt.value = '';
+  reminderError.value = '';
+});
 watch(
   () => props.conversationId,
   async (id, previous) => {
@@ -2294,8 +2889,45 @@ watch(liveConnection, (state, previous) => {
     void refreshInbox(true);
   }
 });
+/**
+ * A silent read of the tab and its counts, only while this browser tab is
+ * visible and nothing is being sent or loaded. It never moves the focus or
+ * the scroll: rows keep their keys. Pages appended by "Ver mais" would be
+ * dropped by a reload, so then only the counts follow.
+ */
+async function periodicRefresh() {
+  lastPeriodicAt = Date.now();
+  if (globalThis.document.visibilityState !== 'visible') return;
+  if (loading.value || loadingMore.value || busy.value) return;
+  if (
+    snoozeOpen.value ||
+    renaming.value ||
+    globalThis.document.querySelector('dialog[open]')
+  )
+    return;
+  if (conversations.value.length > 100) {
+    void loadCounts();
+    return;
+  }
+  await refreshInbox(true);
+}
+
+function visibilityChanged() {
+  if (
+    globalThis.document.visibilityState === 'visible' &&
+    Date.now() - lastPeriodicAt >= PERIODIC_REFRESH_MS
+  )
+    void periodicRefresh();
+}
+
 onMounted(() => {
   phoneQuery?.addEventListener('change', phoneChanged);
+  lastPeriodicAt = Date.now();
+  periodicTimer = globalThis.setInterval(
+    () => void periodicRefresh(),
+    PERIODIC_REFRESH_MS,
+  );
+  globalThis.document.addEventListener('visibilitychange', visibilityChanged);
   heading.value?.focus();
   void refreshInbox();
   void loadAssignableUsers();
@@ -2319,6 +2951,11 @@ onBeforeUnmount(() => {
   subjectController?.abort();
   if (refreshTimer) globalThis.clearTimeout(refreshTimer);
   globalThis.clearInterval(waitingClockTimer);
+  globalThis.clearInterval(periodicTimer);
+  globalThis.document.removeEventListener(
+    'visibilitychange',
+    visibilityChanged,
+  );
 });
 </script>
 
@@ -2330,49 +2967,67 @@ onBeforeUnmount(() => {
   >
     <h1 ref="heading" class="inbox-title" tabindex="-1">Caixa de Entrada</h1>
     <div class="inbox-toolbar">
-      <!-- PCX-18: horizontal shortcuts; official queues and urgency are preserved. -->
-      <div class="inbox-tabs" role="group" aria-label="Atalhos da Caixa">
+      <!-- RFC 052 (INBOX-VEZ-02): whose turn it is, one tab per conversation.
+           Selection stays neutral (RFC 022); the count names the tab. -->
+      <div
+        v-if="showBuckets"
+        class="inbox-tabs"
+        role="tablist"
+        aria-label="Vez de responder"
+      >
         <button
-          v-for="shortcut in SHORTCUTS"
-          :key="shortcut.value"
+          v-for="(item, index) in INBOX_BUCKETS"
+          :id="`inbox-tab-${item.value}`"
+          :key="item.value"
+          :ref="(element) => (bucketTabs[index] = element)"
           type="button"
+          role="tab"
           class="inbox-tab"
-          :aria-pressed="activeShortcut === shortcut.value"
-          @click="selectShortcut(shortcut)"
+          aria-controls="inbox-bucket-panel"
+          :aria-selected="bucket === item.value ? 'true' : 'false'"
+          :aria-label="bucketAccessibleName(item)"
+          :tabindex="bucket === item.value ? 0 : -1"
+          @click="selectBucket(item.value)"
+          @keydown="bucketKeydown($event, index)"
         >
-          <span class="inbox-tab-label">{{ shortcut.label }}</span>
+          <span class="inbox-tab-label">{{ item.label }}</span>
           <span
-            v-if="shortcutCount(shortcut.value) !== null"
+            v-if="bucketCount(item.value) !== null"
             class="inbox-tab-count"
+            aria-hidden="true"
             :data-tone="
-              shortcut.value === 'waiting' && shortcutCount(shortcut.value) > 0
+              item.value === 'respond' && bucketCount(item.value) > 0
                 ? 'attention'
                 : undefined
             "
-            >{{ shortcutCount(shortcut.value) }}</span
+            >{{ bucketCount(item.value) }}</span
           >
         </button>
       </div>
 
-      <button
-        ref="filtersButton"
-        type="button"
-        class="soft inbox-filters-button"
-        aria-haspopup="dialog"
-        aria-label="Filtros"
-        title="Filtrar conversas"
-        :aria-expanded="filtersOpen"
-        :data-active="activeFilters.length ? 'true' : undefined"
-        @click="openFilters"
-      >
-        Filtros
-        <span v-if="activeFilters.length" class="inbox-tab-count"
-          >{{ activeFilters.length
-          }}<span class="sr-only">
-            {{ activeFilters.length === 1 ? 'ativo' : 'ativos' }}</span
-          ></span
+      <!-- D6: on a phone the button leaves the toolbar and sits on the search
+           row (the slot below); the same element, moved by the Teleport. -->
+      <Teleport to="#inbox-filters-slot" defer :disabled="!isPhone">
+        <button
+          ref="filtersButton"
+          type="button"
+          class="soft inbox-filters-button"
+          aria-haspopup="dialog"
+          aria-label="Filtros"
+          title="Filtrar conversas"
+          :aria-expanded="filtersOpen"
+          :data-active="activeFilters.length ? 'true' : undefined"
+          @click="openFilters"
         >
-      </button>
+          Filtros
+          <span v-if="activeFilters.length" class="inbox-tab-count"
+            >{{ activeFilters.length
+            }}<span class="sr-only">
+              {{ activeFilters.length === 1 ? 'ativo' : 'ativos' }}</span
+            ></span
+          >
+        </button>
+      </Teleport>
 
       <div
         v-if="activeFilters.length"
@@ -2428,35 +3083,57 @@ onBeforeUnmount(() => {
       @close="filtersOpen = false"
     >
       <fieldset class="filter-sheet-group">
-        <legend>Situação</legend>
+        <legend>Responsável</legend>
         <label
-          v-for="tab in STATE_TABS"
-          :key="tab.value"
+          v-for="scope in OWNER_SCOPES"
+          :key="scope.value"
           class="filter-sheet-option"
         >
           <input
-            v-model="draftTab"
+            v-model="draftOwnerScope"
             type="radio"
-            name="inbox-situacao"
-            :value="tab.value"
+            name="inbox-responsavel"
+            :value="scope.value"
           />
-          {{ tab.label }}
+          {{ scope.label }}
         </label>
       </fieldset>
       <fieldset class="filter-sheet-group">
-        <legend>Responsável</legend>
+        <legend>Pedido</legend>
+        <!-- RFC 052: "Fechar pedidos" is no longer a queue; it narrows any tab. -->
+        <label class="filter-sheet-option">
+          <input
+            v-model="draftOrderReady"
+            type="checkbox"
+            :disabled="draftConsult !== 'open'"
+            :aria-describedby="
+              draftConsult !== 'open' ? 'inbox-ready-hint' : undefined
+            "
+          />
+          Só pedidos prontos
+        </label>
+        <p
+          v-if="draftConsult !== 'open'"
+          id="inbox-ready-hint"
+          class="filter-sheet-hint"
+        >
+          Vale só para conversas em andamento.
+        </p>
+      </fieldset>
+      <fieldset class="filter-sheet-group">
+        <legend>Consultar</legend>
         <label
-          v-for="queue in QUEUE_FILTERS"
-          :key="queue.value"
+          v-for="option in CONSULT_OPTIONS"
+          :key="option.value"
           class="filter-sheet-option"
         >
           <input
-            v-model="draftQueue"
+            v-model="draftConsult"
             type="radio"
-            name="inbox-responsavel"
-            :value="queue.value"
+            name="inbox-consultar"
+            :value="option.value"
           />
-          {{ queue.label }}
+          {{ option.label }}
         </label>
       </fieldset>
     </FilterSheet>
@@ -2476,38 +3153,60 @@ onBeforeUnmount(() => {
         Atualizar
       </button>
     </div>
-    <p v-if="listError" role="alert" class="inbox-notice" data-tone="error">
-      {{ listError }}
-    </p>
+    <div
+      v-if="listError"
+      class="inbox-notice inbox-list-error"
+      data-tone="error"
+    >
+      <p role="alert">{{ listError }}</p>
+      <button
+        type="button"
+        class="quiet"
+        :aria-disabled="loading ? 'true' : undefined"
+        @click="!loading && refreshInbox()"
+      >
+        Tentar de novo
+      </button>
+    </div>
 
     <div
       class="inbox-workspace"
       :data-context="active && contextOpen ? 'open' : 'closed'"
     >
-      <div class="inbox-list-pane">
+      <div
+        id="inbox-bucket-panel"
+        class="inbox-list-pane"
+        :role="showBuckets ? 'tabpanel' : undefined"
+        :aria-label="
+          showBuckets ? `Conversas em ${activeBucket.name}` : undefined
+        "
+      >
         <div class="inbox-search" role="search">
           <label for="inbox-search" class="sr-only"
             >Buscar nas conversas exibidas</label
           >
-          <div class="search-field">
-            <AppIcon class="inbox-search-icon" name="search" />
-            <input
-              id="inbox-search"
-              ref="searchInput"
-              v-model="query"
-              type="search"
-              placeholder="Buscar contato, telefone ou mensagem"
-              aria-describedby="inbox-search-help"
-            />
-            <button
-              v-if="query"
-              type="button"
-              class="quiet"
-              aria-label="Limpar busca"
-              @click="clearSearch"
-            >
-              Limpar
-            </button>
+          <div class="inbox-search-row">
+            <div class="search-field">
+              <AppIcon class="inbox-search-icon" name="search" />
+              <input
+                id="inbox-search"
+                ref="searchInput"
+                v-model="query"
+                type="search"
+                placeholder="Buscar contato, telefone ou mensagem"
+                aria-describedby="inbox-search-help"
+              />
+              <button
+                v-if="query"
+                type="button"
+                class="quiet"
+                aria-label="Limpar busca"
+                @click="clearSearch"
+              >
+                Limpar
+              </button>
+            </div>
+            <span id="inbox-filters-slot" class="inbox-filters-slot"></span>
           </div>
 
           <AppHint id="inbox-search-help" class="inbox-search-hint"
@@ -2522,16 +3221,15 @@ onBeforeUnmount(() => {
           role="status"
           tabindex="-1"
         >
-          {{ loading ? 'Carregando conversas…' : visibleConversationLabel }}
-          <span v-if="!loading && stateTab === 'all'">
-            · Mais urgentes primeiro</span
-          >
-          <span
-            v-else-if="
-              !loading && ['attention', 'closing', 'waiting'].includes(stateTab)
-            "
-          >
-            · Maior espera primeiro</span
+          {{
+            loading
+              ? 'Carregando conversas…'
+              : listUnsupported
+                ? 'Lista indisponível'
+                : visibleConversationLabel
+          }}
+          <span v-if="!loading && showBuckets && !listUnsupported">
+            · {{ activeBucket.order }}</span
           >
         </p>
         <ul
@@ -2540,7 +3238,11 @@ onBeforeUnmount(() => {
           aria-label="Conversas"
           :aria-busy="loading || loadingMore"
         >
-          <li v-for="conversation in filtered" :key="conversation.id">
+          <li
+            v-for="{ conversation, time, badges } in rowCards"
+            :key="conversation.id"
+          >
+            <!-- RFC 052 card: who and how long; what was said; up to two seals. -->
             <button
               type="button"
               class="conversation-row"
@@ -2553,28 +3255,51 @@ onBeforeUnmount(() => {
                   conversation.contact.label
                 }}</span>
                 <span
-                  v-if="conversation.state === 'nova' && !conversation.handoff"
-                  class="conv-new"
-                  >Nova</span
+                  class="conv-channel"
+                  :title="CHANNEL_LABELS[conversation.channel] ?? 'Canal'"
+                  ><AppIcon
+                    :name="
+                      conversation.channel === 'site_chat' ? 'globe' : 'message'
+                    "
+                  /><span class="sr-only">{{
+                    conversation.channel === 'site_chat'
+                      ? 'Site'
+                      : (CHANNEL_LABELS[conversation.channel] ?? 'Canal')
+                  }}</span></span
                 >
                 <span
-                  v-if="waitingFor(conversation)"
+                  v-if="time"
                   class="conv-waiting"
-                  :title="`Aguardando desde ${dateTimeBR(conversationWaitingSince(conversation))}`"
-                  ><span class="sr-only">Espera: </span
-                  >{{ waitingFor(conversation) }}</span
+                  :data-tone="time.tone"
+                  :title="time.title"
+                  ><span class="sr-only">{{ time.spoken }}.</span
+                  ><span aria-hidden="true">{{ time.label }}</span></span
                 >
               </span>
-              <span
-                class="conv-next-action"
-                :data-tone="nextAction(conversation).tone || undefined"
-                ><AppIcon
-                  v-if="nextAction(conversation).tone === 'error'"
-                  name="alert"
-                /><AppIcon
-                  v-else-if="nextAction(conversation).tone === 'warning'"
-                  name="alert"
-                />{{ nextAction(conversation).label }}</span
+              <span v-if="conversation.lastMessage" class="conv-preview"
+                ><span v-if="previewAuthor(conversation.lastMessage)">{{
+                  previewAuthor(conversation.lastMessage)
+                }}</span
+                >{{ messageText(conversation.lastMessage) }}</span
+              >
+              <span v-if="badges.visible.length" class="conv-badges"
+                ><span
+                  v-for="badge in badges.visible"
+                  :key="badge.key"
+                  class="badge"
+                  :data-tone="badge.tone"
+                  ><AppIcon v-if="badge.key === 'delivery'" name="alert" />{{
+                    badge.label
+                  }}</span
+                ><span
+                  v-if="badges.hidden.length"
+                  class="badge"
+                  data-overflow="true"
+                  ><span aria-hidden="true">+{{ badges.hidden.length }}</span
+                  ><span class="sr-only">{{
+                    badges.hidden.map((badge) => badge.label).join(', ')
+                  }}</span></span
+                ></span
               >
             </button>
           </li>
@@ -2596,7 +3321,12 @@ onBeforeUnmount(() => {
               }}
             </button>
           </li>
-          <li v-if="!loading && !filtered.length" class="empty-list">
+          <li
+            v-if="
+              !loading && !filtered.length && !listUnsupported && !listError
+            "
+            class="empty-list"
+          >
             <template v-if="query">
               <h2>Nenhuma conversa encontrada</h2>
               <p>Revise a busca informada.</p>
@@ -2610,8 +3340,8 @@ onBeforeUnmount(() => {
               </button>
             </template>
             <template v-else>
-              <h2>Nenhuma conversa por enquanto</h2>
-              <p>Quando um cliente escrever, a conversa aparece aqui.</p>
+              <h2>{{ activeBucket.emptyTitle }}</h2>
+              <p>{{ activeBucket.emptyText }}</p>
             </template>
           </li>
         </ul>
@@ -3122,6 +3852,137 @@ onBeforeUnmount(() => {
               toggleContext(true);
             "
           />
+
+          <!-- INBOX-VEZ-03 (RFC 052): the customer's silence or a declared
+               loss, decided here. Retomar is the reply itself, below. -->
+          <div
+            v-if="silentNotice"
+            class="inbox-notice inbox-turn-notice"
+            role="group"
+            aria-labelledby="inbox-turn-notice-text"
+          >
+            <div class="inbox-turn-row">
+              <p id="inbox-turn-notice-text">
+                {{ silentNotice.text }}
+                <span v-if="silentNotice.reminder">{{
+                  silentNotice.reminder
+                }}</span>
+              </p>
+              <div class="inline-actions">
+                <button
+                  ref="snoozeToggle"
+                  type="button"
+                  class="quiet"
+                  aria-controls="inbox-reminder-form"
+                  :aria-expanded="snoozeOpen ? 'true' : 'false'"
+                  @click="toggleSnooze"
+                >
+                  Lembrar depois
+                </button>
+                <button
+                  ref="lostTrigger"
+                  type="button"
+                  class="quiet"
+                  aria-haspopup="dialog"
+                  :aria-disabled="canMarkLost ? undefined : 'true'"
+                  :aria-describedby="
+                    canMarkLost ? undefined : 'inbox-outcome-reason'
+                  "
+                  @click="canMarkLost && openLostDialog()"
+                >
+                  Marcar perdido
+                </button>
+              </div>
+            </div>
+            <p
+              v-if="lossBlockedReason"
+              id="inbox-outcome-reason"
+              class="inbox-turn-hint"
+            >
+              {{ lossBlockedReason }}
+            </p>
+            <form
+              v-if="snoozeOpen"
+              id="inbox-reminder-form"
+              class="inbox-turn-form"
+              novalidate
+              aria-labelledby="inbox-reminder-title"
+              @submit.prevent="saveReminder"
+              @keydown.esc.prevent="closeSnooze"
+            >
+              <h3 id="inbox-reminder-title">Quando lembrar você?</h3>
+              <p>
+                A conversa sai de Sem retorno até o horário escolhido, em até 90
+                dias. Nenhuma mensagem é enviada ao cliente.
+              </p>
+              <label for="inbox-reminder-at">Data e horário de São Paulo</label>
+              <input
+                id="inbox-reminder-at"
+                ref="reminderInput"
+                v-model="reminderAt"
+                type="datetime-local"
+                required
+                :min="reminderBounds.min"
+                :max="reminderBounds.max"
+                :readonly="busy"
+                :aria-invalid="reminderError ? 'true' : undefined"
+                :aria-describedby="
+                  reminderError ? 'inbox-reminder-error' : undefined
+                "
+              />
+              <p
+                v-if="reminderError"
+                id="inbox-reminder-error"
+                class="inbox-turn-error"
+                role="alert"
+              >
+                {{ reminderError }}
+              </p>
+              <div class="inline-actions">
+                <button
+                  type="submit"
+                  :aria-disabled="busy ? 'true' : undefined"
+                >
+                  {{ busy ? 'Salvando…' : 'Salvar lembrete' }}
+                </button>
+                <button type="button" class="quiet" @click="closeSnooze">
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+          <div
+            v-else-if="lostNotice"
+            class="inbox-notice inbox-turn-notice"
+            role="group"
+            aria-labelledby="inbox-turn-notice-text"
+          >
+            <div class="inbox-turn-row">
+              <p id="inbox-turn-notice-text">{{ lostNotice }}</p>
+              <div class="inline-actions">
+                <button
+                  ref="reopenTrigger"
+                  type="button"
+                  class="quiet"
+                  aria-haspopup="dialog"
+                  :aria-disabled="busy || !canReopenLoss ? 'true' : undefined"
+                  :aria-describedby="
+                    canReopenLoss ? undefined : 'inbox-outcome-reason'
+                  "
+                  @click="openReopenDialog"
+                >
+                  Reabrir
+                </button>
+              </div>
+            </div>
+            <p
+              v-if="outcomeBlockedReason"
+              id="inbox-outcome-reason"
+              class="inbox-turn-hint"
+            >
+              {{ outcomeBlockedReason }}
+            </p>
+          </div>
 
           <div v-if="!needsTakeover" class="inbox-composer">
             <!-- PCX-13: until a person has the conversation, taking it is the
@@ -3650,6 +4511,112 @@ onBeforeUnmount(() => {
           </button>
           <button type="submit" class="primary" :disabled="busy">
             Arquivar conversa
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <!-- INBOX-VEZ-03 / MET-06: a loss is declared with a reason, never
+         inferred. Not destructive: a new message reopens it. -->
+    <dialog
+      ref="lostDialog"
+      class="command-dialog lost-dialog"
+      aria-labelledby="lost-dialog-title"
+      aria-describedby="lost-dialog-description"
+      @cancel="busy && $event.preventDefault()"
+      @close="clearLostDialogState"
+    >
+      <form novalidate @submit.prevent="confirmLost">
+        <h2 id="lost-dialog-title">Marcar como perdido</h2>
+        <p id="lost-dialog-description">
+          A conversa sai de Sem retorno. Se o cliente escrever de novo, ela
+          volta para Responder.
+        </p>
+        <fieldset>
+          <legend>Motivo da perda</legend>
+          <label v-for="reason in LOSS_REASONS" :key="reason.value">
+            <input
+              v-model="lostReason"
+              type="radio"
+              name="lost-reason"
+              :value="reason.value"
+              required
+              @change="lostError = ''"
+            />
+            {{ reason.label }}
+          </label>
+        </fieldset>
+        <template v-if="lostReason === 'outro'">
+          <label for="lost-note">Detalhe</label>
+          <textarea
+            id="lost-note"
+            v-model="lostNote"
+            rows="2"
+            maxlength="140"
+            autocomplete="off"
+            spellcheck="false"
+            required
+            aria-describedby="lost-note-hint"
+          ></textarea>
+          <AppHint id="lost-note-hint"
+            >Obrigatório para Outro, até 140 caracteres. Fica fora dos
+            relatórios.</AppHint
+          >
+        </template>
+        <p v-if="lostError" role="alert" class="inbox-turn-error">
+          {{ lostError }}
+        </p>
+        <div class="inline-actions">
+          <button
+            type="button"
+            :aria-disabled="busy ? 'true' : undefined"
+            @click="!busy && lostDialog?.close()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            class="primary"
+            :aria-disabled="busy ? 'true' : undefined"
+            :aria-busy="busy ? 'true' : undefined"
+          >
+            {{ busy ? 'Salvando…' : 'Marcar perdido' }}
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <!-- D9: reopening corrects a loss that was marked; it asks once. -->
+    <dialog
+      ref="reopenDialog"
+      class="command-dialog reopen-dialog"
+      aria-labelledby="reopen-dialog-title"
+      aria-describedby="reopen-dialog-description"
+      @cancel="busy && $event.preventDefault()"
+      @close="clearReopenDialogState"
+    >
+      <form @submit.prevent="confirmReopen">
+        <h2 id="reopen-dialog-title">Corrigir perda?</h2>
+        <p id="reopen-dialog-description">
+          A conversa deixa de contar como perdida e volta para a aba da vez. Use
+          quando a perda foi marcada por engano.
+        </p>
+        <p v-if="reopenError" role="alert" class="inbox-turn-error">
+          {{ reopenError }}
+        </p>
+        <div class="inline-actions">
+          <button
+            type="button"
+            :aria-disabled="busy ? 'true' : undefined"
+            @click="!busy && reopenDialog?.close()"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            class="primary"
+            :aria-disabled="busy ? 'true' : undefined"
+            :aria-busy="busy ? 'true' : undefined"
+          >
+            {{ busy ? 'Salvando…' : 'Corrigir perda' }}
           </button>
         </div>
       </form>

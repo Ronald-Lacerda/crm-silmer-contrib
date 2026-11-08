@@ -132,6 +132,13 @@ const ICONS = Object.freeze({
     'M5.5 17a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5',
     'M18.5 17a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5',
   ],
+  // RFC 052: the conversation's channel on the Inbox card.
+  message: ['M7.9 20A9 9 0 1 0 4 16.1L2 22Z'],
+  globe: [
+    'M2 12a10 10 0 1 0 20 0a10 10 0 1 0-20 0',
+    'M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20',
+    'M2 12h20',
+  ],
   bot: [
     'M12 3V1',
     'M8 3h8a4 4 0 0 1 4 4v11H4V7a4 4 0 0 1 4-4Z',
