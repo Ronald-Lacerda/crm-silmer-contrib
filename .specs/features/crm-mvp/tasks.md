@@ -81,8 +81,16 @@ decisões D1–D10 do PO. Deploy: API (INBOX-VEZ-01) antes do front; ver
       `?situacao=` e `?fila=` abrem a aba esperada; 320 px sem rolagem lateral;
       sem erro de console nem resposta 4xx/5xx. No celular, a barra inferior
       continuava visível com o formulário aberto no master e some com a PR 314.
-- Pendente: medir o p95 em volume real; extrair de `InboxView.vue` as regras de card,
-  tempo, faixa de turno e mapeamento das URLs antigas (resto do P3).
+- [x] INBOX-VEZ-07 — Resto do P3: regras puras saem de `InboxView.vue` para
+      `lib/inbox-turn.js`: `inboxStateFromRoute` (links antigos, D1/D10),
+      `inboxListUrl`/`inboxBucketsUrl`, `turnCardTime` e o registro
+      `BADGE_RULES` (`{key, priority, leadsIn, tone, applies, label}`), onde a
+      cobrança pela conversa (RFC 047) e o cancelamento Olist entram como uma
+      entrada cada. Sem mudança de comportamento, texto, ARIA, contrato ou
+      migration. `InboxView.vue`: 4065 → 3996 linhas. Testes novos em
+      `test/inbox-turn-rules.test.js`; nenhum existente foi editado; `npm test`
+      1956 aprovados, 0 falhas; Playwright completo 587 aprovados, 7 ignorados.
+- Pendente: medir o p95 em volume real.
 
 ## OPS-DEPS-01 — correção da auditoria npm (07/11/2026)
 

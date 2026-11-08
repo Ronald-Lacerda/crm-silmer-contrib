@@ -50,11 +50,12 @@ import {
   conversationBadges,
   listMatchesBucket,
   LOSS_FORBIDDEN,
-  bucketForRoute,
-  ownerForRoute,
+  inboxBucketsUrl,
+  inboxListUrl,
+  inboxStateFromRoute,
+  turnCardTime,
   turnCommandError,
   splitBadges,
-  turnClock,
 } from '../lib/inbox-turn.js';
 import { reminderLabel } from '../lib/dashboard-actions.js';
 import { openDialog } from '../lib/ui.js';
@@ -162,11 +163,6 @@ const query = ref('');
 // owner, `?situacao=` the old queues and `?responsavel=<userId>` one
 // seller's conversations (PNL-06).
 const route = useRoute();
-const routeSituation = String(route.query.situacao ?? '');
-const routePerson =
-  typeof route.query.responsavel === 'string'
-    ? route.query.responsavel.trim()
-    : '';
 /** @returns {string} */
 function storedOwnerScope() {
   try {
@@ -184,23 +180,16 @@ function rememberOwnerScope(value) {
     // Private mode or blocked storage: the choice lasts for this visit only.
   }
 }
-// D10: `?situacao=agente` is the agent's own turn, so it opens Aguardando;
-// `aguardando` and `vendedor` were the human turn and open Responder.
-const bucket = ref(
-  bucketForRoute(route.query.aba) ??
-    (routeSituation === 'agente' ? 'awaiting' : 'respond'),
-);
-// D1: "Atender" was "mine and unassigned"; it now opens Responder for
-// everyone. `?fila=` wins over it, and no link writes the saved preference.
-const ownerScope = ref(
-  ownerForRoute(route.query.fila) ??
-    (routeSituation === 'atender' || routePerson ? 'all' : storedOwnerScope()),
-);
-const orderReadyOnly = ref(routeSituation === 'fechar');
-const consult = ref(routeSituation === 'arquivadas' ? 'archived' : 'open');
+// D1/D10 and the old links: see inboxStateFromRoute. No link writes the
+// saved preference.
+const initialState = inboxStateFromRoute(route.query, storedOwnerScope());
+const bucket = ref(initialState.bucket);
+const ownerScope = ref(initialState.ownerScope);
+const orderReadyOnly = ref(initialState.orderReadyOnly);
+const consult = ref(initialState.consult);
 // PNL-06: the manager's "Ver conversas de <vendedor>" lists that person's
 // conversations. It only applies while no owner scope is chosen.
-const ownerFilter = ref(ownerScope.value === 'all' ? routePerson : '');
+const ownerFilter = ref(initialState.ownerFilter);
 const filtersButton = ref(null);
 const filterSheet = ref(null);
 const filtersOpen = ref(false);
@@ -788,35 +777,30 @@ function messageWhen(value) {
     : `${listWhen(value)}, ${time}`;
 }
 
+/** The screen's current scope, as the list and totals URLs read it. */
+function queryState() {
+  return {
+    bucket: bucket.value,
+    consult: consult.value,
+    ownerScope: ownerScope.value,
+    orderReadyOnly: orderReadyOnly.value,
+    ownerFilter: ownerFilter.value,
+  };
+}
+
 /**
- * RFC 052: one tab, the owner scope and the "Pedido pronto" chip; or, as a
- * consultation, the closed or archived conversations without tabs.
+ * RFC 052: the list's URL for the current scope (see inboxListUrl).
  *
  * @param {number} [limit]
  * @param {string} [cursor] opaque cursor returned by the same official scope
  */
 function listUrl(limit = 100, cursor = '') {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (consult.value === 'archived') params.set('archived', 'true');
-  else if (consult.value === 'closed') params.set('terminal', 'true');
-  else params.set('bucket', bucket.value);
-  params.set('owner', ownerScope.value);
-  // The API takes `orderReady` only with a tab (400 INVALID_FILTER otherwise).
-  if (orderReadyOnly.value && consult.value === 'open')
-    params.set('orderReady', 'true');
-  if (ownerScope.value === 'all' && ownerFilter.value)
-    params.set('assignedUserId', ownerFilter.value);
-  if (cursor) params.set('cursor', cursor);
-  return `/api/v1/inbox/conversations?${params.toString()}`;
+  return inboxListUrl(queryState(), limit, cursor);
 }
 
 /** The four totals of the same owner scope, in one snapshot. */
 function bucketsUrl() {
-  const params = new URLSearchParams({ owner: ownerScope.value });
-  if (orderReadyOnly.value) params.set('orderReady', 'true');
-  if (ownerScope.value === 'all' && ownerFilter.value)
-    params.set('assignedUserId', ownerFilter.value);
-  return `/api/v1/inbox/buckets?${params.toString()}`;
+  return inboxBucketsUrl(queryState());
 }
 
 /**
@@ -905,71 +889,18 @@ function focusAfterFilterChange() {
 }
 
 /**
- * RFC 052, line 1 of the card: how long it has been whose turn. Responder
- * counts business minutes (ADR 061) and turns to alert after 15; the
- * customer's turn counts calendar time; Perdidos shows the day of the loss.
+ * RFC 052, line 1 of the card (the rules live in turnCardTime).
  *
  * @param {Record<string, any>} conversation
- * @returns {{label: string, spoken: string, title: string, tone?: string}|null}
  */
 function cardTime(conversation) {
-  const kind = showBuckets.value ? (conversation.bucket ?? '') : '';
-  if (kind === 'lost') {
-    const at = conversation.lostOutcome?.occurredAt;
-    const label = listWhen(at);
-    return label
-      ? {
-          label,
-          spoken: `Marcada como perdida em ${label}`,
-          title: `Marcada como perdida em ${dateTimeBR(at)}`,
-        }
-      : null;
-  }
-  if (!kind) {
-    const at = conversation.lastMessage?.occurredAt ?? conversation.updatedAt;
-    const label = listWhen(at);
-    return label
-      ? {
-          label,
-          spoken: `Última mensagem em ${label}`,
-          title: `Última mensagem em ${dateTimeBR(at)}`,
-        }
-      : null;
-  }
-  // P1-A: the anchor comes from the API; the clock (30 s) projects the rest.
-  // A list without the turn contract never gets here (P1-D).
-  const clock = turnClock(conversation, now.value);
-  if (!clock.label) return null;
-  const since = conversation.turnSince;
-  if (kind === 'respond')
-    return {
-      label: clock.label,
-      spoken: clock.offHours
-        ? 'Fora do expediente'
-        : `Esperando resposta há ${clock.spoken}${
-            clock.alert ? '. Prazo de 15 minutos excedido' : ''
-          }`,
-      // turnSince is the failed send, or the earlier of the customer's message
-      // and the pending transfer: the title only claims what it always is.
-      title: `Esperando resposta desde ${dateTimeBR(since)}`,
-      tone: clock.alert ? 'warning' : undefined,
-    };
-  // Aguardando with the agent still inside its window starts at the
-  // customer's message, not at an answer.
-  if (
-    conversation.automationState === 'assistant' &&
-    conversation.lastMessage?.direction === 'inbound'
-  )
-    return {
-      label: clock.label,
-      spoken: `Cliente escreveu há ${clock.spoken}; ${brand.assistant.reference} está atendendo`,
-      title: `Cliente escreveu em ${dateTimeBR(since)}`,
-    };
-  return {
-    label: clock.label,
-    spoken: `Cliente sem responder há ${clock.spoken}`,
-    title: `Última resposta em ${dateTimeBR(since)}`,
-  };
+  return turnCardTime(conversation, {
+    showBuckets: showBuckets.value,
+    now: now.value,
+    formatWhen: listWhen,
+    formatDateTime: dateTimeBR,
+    assistantReference: brand.assistant.reference,
+  });
 }
 
 /** Time and seals of each visible row, computed once per change. */

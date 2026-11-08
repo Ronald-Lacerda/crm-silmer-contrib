@@ -278,20 +278,141 @@ export function turnClock(conversation, now) {
   };
 }
 
-/** @typedef {{key: string, label: string, tone?: 'error'|'warning'|'success'|'info'}} Badge */
+/** @typedef {'error'|'warning'|'success'|'info'} BadgeTone */
+/** @typedef {{key: string, label: string, tone?: BadgeTone}} Badge */
+/** @typedef {{bucket?: string, actorId?: string, ownerName?: string, reminderLabel?: (instant: unknown) => string}} BadgeContext */
+/**
+ * One seal of the card, declared once. `priority` orders the seals by default
+ * (lower first: what blocks the reply, then what helps decide, then who has
+ * it); `leadsIn` names the tabs where this seal goes first, so it never falls
+ * into "+N" (P1-B). `tone` is fixed or computed; no tone means a neutral seal.
+ *
+ * @typedef {object} BadgeRule
+ * @property {string} key
+ * @property {number} priority
+ * @property {string[]} [leadsIn] tabs (bucket values) where the seal leads
+ * @property {BadgeTone | ((conversation: Record<string, any>, context: BadgeContext) => BadgeTone|undefined)} [tone]
+ * @property {(conversation: Record<string, any>, context: BadgeContext) => boolean} applies
+ * @property {(conversation: Record<string, any>, context: BadgeContext) => string} label
+ */
 
-const DEFAULT_BADGE_ORDER = [
-  'delivery',
-  'claim',
-  'urgent',
-  'stalled',
-  'ready',
-  'reminder',
-  'owner',
-  'lost',
-];
-/** The seal that must never fall into "+N" on each tab (P1-B). */
-const BADGE_FIRST = { lost: 'lost', silent: 'reminder' };
+/** @param {Record<string, any>} conversation */
+function deliveryStatus(conversation) {
+  return (
+    conversation.deliveryIssue?.status ??
+    conversation.lastMessage?.deliveryStatus
+  );
+}
+
+/**
+ * Assumir: no owner and waiting to be taken, either by a pending transfer or
+ * as a new conversation that has no handoff yet.
+ *
+ * @param {Record<string, any>} conversation
+ */
+function waitingToBeTaken(conversation) {
+  return (
+    !conversation.assignedUser &&
+    (conversation.handoff?.status === 'pending' ||
+      (conversation.state === 'nova' && !conversation.handoff))
+  );
+}
+
+/**
+ * Who has the conversation: another seller, or nobody (unless the agent is
+ * still handling it). The seller's own conversations carry no seal.
+ *
+ * @param {Record<string, any>} conversation
+ * @param {BadgeContext} context
+ */
+function ownerSeal(conversation, context) {
+  const owner = conversation.assignedUser;
+  if (owner && owner.id !== context.actorId) {
+    const name = String(context.ownerName || owner.name || '').trim();
+    return name ? `Com ${name.split(/\s+/u)[0]}` : 'Com outro vendedor';
+  }
+  if (!owner && conversation.automationState !== 'assistant') return 'Sem dono';
+  return '';
+}
+
+/**
+ * The declarative registry of card seals. A new seal is ONE entry here: give
+ * it a `key`, a `priority` between its neighbours, an `applies` test and a
+ * `label`; ordering, the per-tab lead and the "+N" split need no other edit.
+ * Planned entries (not shipped here): the charge opened from the conversation
+ * (RFC 047) and the Olist cancellation, each a single rule with its own
+ * priority (a blocking seal goes before 'ready'; an informative one after
+ * 'owner'). No rule may read `title`.
+ *
+ * @type {ReadonlyArray<BadgeRule>}
+ */
+export const BADGE_RULES = Object.freeze([
+  {
+    key: 'delivery',
+    priority: 10,
+    tone: (conversation) =>
+      deliveryStatus(conversation) === 'failed' ? 'error' : 'warning',
+    applies: (conversation) =>
+      ['failed', 'outcome_unknown'].includes(deliveryStatus(conversation)),
+    label: (conversation) =>
+      deliveryStatus(conversation) === 'failed'
+        ? 'Falha de envio'
+        : 'Envio incerto',
+  },
+  {
+    key: 'claim',
+    priority: 20,
+    tone: 'warning',
+    applies: waitingToBeTaken,
+    label: () => 'Assumir',
+  },
+  {
+    key: 'urgent',
+    priority: 30,
+    tone: 'warning',
+    applies: (conversation) => conversation.handoff?.reasonCode === 'urgency',
+    label: () => 'Urgente',
+  },
+  {
+    key: 'stalled',
+    priority: 40,
+    tone: 'warning',
+    applies: (conversation) => conversation.assistantStalled === true,
+    label: () => `${brand.assistant.name} parou`,
+  },
+  {
+    key: 'ready',
+    priority: 50,
+    tone: 'success',
+    applies: (conversation) => orderReadyToReview(conversation),
+    label: () => 'Pedido pronto',
+  },
+  {
+    key: 'reminder',
+    priority: 60,
+    leadsIn: ['silent'],
+    tone: 'info',
+    applies: (conversation) => Boolean(conversation.reminder?.remindAt),
+    label: (conversation, context) =>
+      context.reminderLabel
+        ? `Lembrete ${context.reminderLabel(conversation.reminder.remindAt)}`
+        : 'Lembrete',
+  },
+  {
+    key: 'owner',
+    priority: 70,
+    applies: (conversation, context) => ownerSeal(conversation, context) !== '',
+    label: ownerSeal,
+  },
+  {
+    key: 'lost',
+    priority: 80,
+    leadsIn: ['lost'],
+    applies: (conversation) => Boolean(conversation.lostOutcome),
+    label: (conversation) =>
+      `Perdido · ${lossReasonLabel(conversation.lostOutcome.reasonCode)}`,
+  },
+]);
 
 /**
  * The card's seals, ordered by tab: what blocks the reply first, then what
@@ -299,66 +420,26 @@ const BADGE_FIRST = { lost: 'lost', silent: 'reminder' };
  * retorno the reminder leads. No seal depends on `title`.
  *
  * @param {Record<string, any>} conversation
- * @param {{bucket?: string, actorId?: string, ownerName?: string, reminderLabel?: (instant: unknown) => string}} [context]
+ * @param {BadgeContext} [context]
  * @returns {Badge[]}
  */
 export function conversationBadges(conversation, context = {}) {
-  /** @type {Badge[]} */
-  const badges = [];
-  const delivery =
-    conversation.deliveryIssue?.status ??
-    conversation.lastMessage?.deliveryStatus;
-  if (delivery === 'failed')
-    badges.push({ key: 'delivery', label: 'Falha de envio', tone: 'error' });
-  else if (delivery === 'outcome_unknown')
-    badges.push({ key: 'delivery', label: 'Envio incerto', tone: 'warning' });
-  const owner = conversation.assignedUser;
-  // Assumir: no owner and waiting to be taken, either by a pending transfer
-  // or as a new conversation that has no handoff yet.
-  const waitingToBeTaken =
-    conversation.handoff?.status === 'pending' ||
-    (conversation.state === 'nova' && !conversation.handoff);
-  if (waitingToBeTaken && !owner)
-    badges.push({ key: 'claim', label: 'Assumir', tone: 'warning' });
-  if (conversation.handoff?.reasonCode === 'urgency')
-    badges.push({ key: 'urgent', label: 'Urgente', tone: 'warning' });
-  if (conversation.assistantStalled === true)
-    badges.push({
-      key: 'stalled',
-      label: `${brand.assistant.name} parou`,
-      tone: 'warning',
-    });
-  if (orderReadyToReview(conversation))
-    badges.push({ key: 'ready', label: 'Pedido pronto', tone: 'success' });
-  if (owner && owner.id !== context.actorId) {
-    const name = String(context.ownerName || owner.name || '').trim();
-    badges.push({
-      key: 'owner',
-      label: name ? `Com ${name.split(/\s+/u)[0]}` : 'Com outro vendedor',
-    });
-  } else if (!owner && conversation.automationState !== 'assistant') {
-    badges.push({ key: 'owner', label: 'Sem dono' });
+  /** @type {Array<{badge: Badge, rank: number}>} */
+  const ranked = [];
+  for (const rule of BADGE_RULES) {
+    if (!rule.applies(conversation, context)) continue;
+    /** @type {Badge} */
+    const badge = { key: rule.key, label: rule.label(conversation, context) };
+    const tone =
+      typeof rule.tone === 'function'
+        ? rule.tone(conversation, context)
+        : rule.tone;
+    if (tone) badge.tone = tone;
+    const leads =
+      context.bucket !== undefined && rule.leadsIn?.includes(context.bucket);
+    ranked.push({ badge, rank: leads ? -1 : rule.priority });
   }
-  if (conversation.lostOutcome)
-    badges.push({
-      key: 'lost',
-      label: `Perdido · ${lossReasonLabel(conversation.lostOutcome.reasonCode)}`,
-    });
-  if (conversation.reminder?.remindAt)
-    badges.push({
-      key: 'reminder',
-      label: context.reminderLabel
-        ? `Lembrete ${context.reminderLabel(conversation.reminder.remindAt)}`
-        : 'Lembrete',
-      tone: 'info',
-    });
-  const first =
-    context.bucket === 'lost' || context.bucket === 'silent'
-      ? BADGE_FIRST[context.bucket]
-      : null;
-  const rank = (/** @type {Badge} */ badge) =>
-    badge.key === first ? -1 : DEFAULT_BADGE_ORDER.indexOf(badge.key);
-  return badges.sort((a, b) => rank(a) - rank(b));
+  return ranked.sort((a, b) => a.rank - b.rank).map((item) => item.badge);
 }
 
 /**
@@ -461,4 +542,154 @@ export function bucketForRoute(value) {
 /** `?fila=` names the owner scope. @param {unknown} value @returns {string|null} */
 export function ownerForRoute(value) {
   return ROUTE_OWNERS.get(String(value ?? '')) ?? null;
+}
+
+/**
+ * Old links and the saved preference, turned into the Inbox's first state.
+ * `?aba=` names a tab, `?fila=` the owner scope, `?situacao=` the old queues
+ * and `?responsavel=<userId>` one seller's conversations (PNL-06).
+ *
+ * D1: `situacao=atender` opens Responder for everyone; `?fila=` wins over it.
+ * D10: `agente` is the agent's own turn and opens Aguardando; `aguardando`
+ * and `vendedor` were the human turn and open Responder. No link writes the
+ * saved preference: it only fills in when nothing in the link says otherwise.
+ *
+ * @param {Record<string, unknown>|null|undefined} query the route's query
+ * @param {string} [storedOwnerScope] the saved owner scope, 'all' by default
+ * @returns {{bucket: string, ownerScope: string, orderReadyOnly: boolean, consult: string, ownerFilter: string}}
+ */
+export function inboxStateFromRoute(query, storedOwnerScope = 'all') {
+  const situation = String(query?.situacao ?? '');
+  const person =
+    typeof query?.responsavel === 'string' ? query.responsavel.trim() : '';
+  const bucket =
+    bucketForRoute(query?.aba) ??
+    (situation === 'agente' ? 'awaiting' : 'respond');
+  const ownerScope =
+    ownerForRoute(query?.fila) ??
+    (situation === 'atender' || person ? 'all' : storedOwnerScope);
+  return {
+    bucket,
+    ownerScope,
+    orderReadyOnly: situation === 'fechar',
+    consult: situation === 'arquivadas' ? 'archived' : 'open',
+    // PNL-06: only applies while no owner scope is chosen.
+    ownerFilter: ownerScope === 'all' ? person : '',
+  };
+}
+
+/**
+ * @typedef {object} InboxQueryState
+ * @property {string} bucket
+ * @property {string} consult 'open' | 'closed' | 'archived'
+ * @property {string} ownerScope 'all' | 'mine' | 'unassigned'
+ * @property {boolean} orderReadyOnly
+ * @property {string} ownerFilter a seller's user id; only with ownerScope 'all'
+ */
+
+/**
+ * RFC 052: one tab, the owner scope and the "Pedido pronto" chip; or, as a
+ * consultation, the closed or archived conversations without tabs.
+ *
+ * @param {InboxQueryState} state
+ * @param {number} [limit]
+ * @param {string} [cursor] opaque cursor returned by the same official scope
+ */
+export function inboxListUrl(state, limit = 100, cursor = '') {
+  const params = new globalThis.URLSearchParams({ limit: String(limit) });
+  if (state.consult === 'archived') params.set('archived', 'true');
+  else if (state.consult === 'closed') params.set('terminal', 'true');
+  else params.set('bucket', state.bucket);
+  params.set('owner', state.ownerScope);
+  // The API takes `orderReady` only with a tab (400 INVALID_FILTER otherwise).
+  if (state.orderReadyOnly && state.consult === 'open')
+    params.set('orderReady', 'true');
+  if (state.ownerScope === 'all' && state.ownerFilter)
+    params.set('assignedUserId', state.ownerFilter);
+  if (cursor) params.set('cursor', cursor);
+  return `/api/v1/inbox/conversations?${params.toString()}`;
+}
+
+/**
+ * The four totals of the same owner scope, in one snapshot.
+ *
+ * @param {Pick<InboxQueryState, 'ownerScope'|'orderReadyOnly'|'ownerFilter'>} state
+ */
+export function inboxBucketsUrl(state) {
+  const params = new globalThis.URLSearchParams({ owner: state.ownerScope });
+  if (state.orderReadyOnly) params.set('orderReady', 'true');
+  if (state.ownerScope === 'all' && state.ownerFilter)
+    params.set('assignedUserId', state.ownerFilter);
+  return `/api/v1/inbox/buckets?${params.toString()}`;
+}
+
+/**
+ * RFC 052, line 1 of the card: how long it has been whose turn. Responder
+ * counts business minutes (ADR 061) and turns to alert after 15; the
+ * customer's turn counts calendar time; Perdidos shows the day of the loss.
+ * Outside the tabs (a consultation) it shows the last message instead.
+ *
+ * @param {Record<string, any>} conversation
+ * @param {{showBuckets: boolean, now: Date, formatWhen: (value: unknown) => string, formatDateTime: (value: unknown) => string, assistantReference: string}} context
+ * @returns {{label: string, spoken: string, title: string, tone?: string}|null}
+ */
+export function turnCardTime(conversation, context) {
+  const { now, formatWhen, formatDateTime } = context;
+  const kind = context.showBuckets ? (conversation.bucket ?? '') : '';
+  if (kind === 'lost') {
+    const at = conversation.lostOutcome?.occurredAt;
+    const label = formatWhen(at);
+    return label
+      ? {
+          label,
+          spoken: `Marcada como perdida em ${label}`,
+          title: `Marcada como perdida em ${formatDateTime(at)}`,
+        }
+      : null;
+  }
+  if (!kind) {
+    const at = conversation.lastMessage?.occurredAt ?? conversation.updatedAt;
+    const label = formatWhen(at);
+    return label
+      ? {
+          label,
+          spoken: `Última mensagem em ${label}`,
+          title: `Última mensagem em ${formatDateTime(at)}`,
+        }
+      : null;
+  }
+  // P1-A: the anchor comes from the API; the clock (30 s) projects the rest.
+  // A list without the turn contract never gets here (P1-D).
+  const clock = turnClock(conversation, now);
+  if (!clock.label) return null;
+  const since = conversation.turnSince;
+  if (kind === 'respond')
+    return {
+      label: clock.label,
+      spoken: clock.offHours
+        ? 'Fora do expediente'
+        : `Esperando resposta há ${clock.spoken}${
+            clock.alert ? '. Prazo de 15 minutos excedido' : ''
+          }`,
+      // turnSince is the failed send, or the earlier of the customer's message
+      // and the pending transfer: the title only claims what it always is.
+      title: `Esperando resposta desde ${formatDateTime(since)}`,
+      tone: clock.alert ? 'warning' : undefined,
+    };
+  // Aguardando with the agent still inside its window starts at the
+  // customer's message, not at an answer.
+  if (
+    conversation.automationState === 'assistant' &&
+    conversation.lastMessage?.direction === 'inbound'
+  )
+    return {
+      label: clock.label,
+      spoken: `Cliente escreveu há ${clock.spoken}; ${context.assistantReference} está atendendo`,
+      title: `Cliente escreveu em ${formatDateTime(since)}`,
+    };
+  return {
+    label: clock.label,
+    spoken: `Cliente sem responder há ${clock.spoken}`,
+    title: `Última resposta em ${formatDateTime(since)}`,
+  };
 }
