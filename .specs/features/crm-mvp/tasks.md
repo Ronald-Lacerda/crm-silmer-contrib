@@ -65,6 +65,12 @@ decisões D1–D10 do PO. Deploy: API (INBOX-VEZ-01) antes do front; ver
       `apps/edge-web/src/components/inbox/`, com testes unitários de caminho
       feliz, erro e conflito de versão. Sem mudança de texto, ARIA, ordem de
       foco, contrato de API ou migration. `InboxView.vue`: 4407 → 4065 linhas.
+- [x] INBOX-VEZ-06 — P2 da revisão da RFC 052: em celular, o formulário
+      Lembrar depois esconde a barra inferior como o compositor (`:focus-within`
+      em `.inbox-turn-form`); os totais das abas são lidos em paralelo com a
+      lista, não depois dela. Teste E2E novo em `inbox-vez.spec.js`; Playwright
+      completo 587 aprovados e 7 ignorados mais o teste novo (um teste de áudio
+      do Firefox falhou só sob carga e passa isolado, também sem a mudança).
 - Pendente: validar contra API e banco reais no ambiente (E2E usa mock);
   medir o p95 em volume real; extrair de `InboxView.vue` as regras de card,
   tempo, faixa de turno e mapeamento das URLs antigas (resto do P3).

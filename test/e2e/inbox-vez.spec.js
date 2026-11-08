@@ -1518,3 +1518,30 @@ test.describe('8f: os links antigos abrem o estado certo', () => {
     });
   }
 });
+
+test('P2: no celular, abrir Lembrar depois esconde a barra inferior e cancelar a devolve', async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await open(
+    page,
+    context,
+    '/inbox/s-sabrina?aba=sem-retorno',
+    {},
+    { ready: '.inbox-turn-notice' },
+  );
+  const bar = page.locator('.mobile-nav');
+  await expect(bar).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Lembrar depois', exact: true })
+    .click();
+  // The date field takes the focus; the bar steps aside, as for the composer.
+  await expect(page.locator('#inbox-reminder-at')).toBeFocused();
+  await expect(bar).toBeHidden();
+  await page
+    .locator('#inbox-reminder-form')
+    .getByRole('button', { name: 'Cancelar' })
+    .click();
+  await expect(bar).toBeVisible();
+});

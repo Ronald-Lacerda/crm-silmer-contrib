@@ -1475,6 +1475,9 @@ async function loadInbox(silent = false) {
   const controller = new AbortController();
   listController = controller;
   if (!silent) loading.value = true;
+  // RFC 052 P2: the totals and the list are read in parallel; a slow or failed
+  // list no longer leaves the tabs without their numbers.
+  void loadCounts();
   try {
     const response = await request(listUrl(), {
       signal: controller.signal,
@@ -1497,7 +1500,6 @@ async function loadInbox(silent = false) {
     nextCursor.value = response.data.nextCursor ?? '';
     now.value = new Date();
     listError.value = '';
-    void loadCounts();
     await selectVisibleConversation();
   } catch (cause) {
     if (

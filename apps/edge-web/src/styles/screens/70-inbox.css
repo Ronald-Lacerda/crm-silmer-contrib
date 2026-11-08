@@ -1422,11 +1422,13 @@
 
   /* Keep the reply steady when focus moves from the text to Send. Showing
      navigation during that tap would move the button before its click. */
-  html:has(.inbox-composer:focus-within) .mobile-nav {
+  html:has(.inbox-composer:focus-within) .mobile-nav,
+  html:has(.inbox-turn-form:focus-within) .mobile-nav {
     display: none;
   }
 
-  html:has(.inbox-composer:focus-within) #main-content {
+  html:has(.inbox-composer:focus-within) #main-content,
+  html:has(.inbox-turn-form:focus-within) #main-content {
     padding-block-end: 0;
   }
 
