@@ -1,5 +1,57 @@
 # Protótipo de envio de cobrança
 
+## Versão atual — Inbox da master de 08/11/2026
+
+O protótipo atual usa **o App, a Inbox, os componentes e os tokens reais** da
+master `15edc73b`. Um servidor Vite local acrescenta o botão de cobrança ao
+lado de **Cotar frete**, somente em memória; nenhum arquivo da aplicação é
+alterado para habilitar essa prévia.
+
+Na raiz do repositório, execute:
+
+```powershell
+rtk proxy node docs/prototypes/billing-chat-preview.mjs
+```
+
+Abra **http://127.0.0.1:4189/inbox/billing-preview**. O endereço HTML antigo
+redireciona para essa versão. O servidor deve permanecer aberto durante a
+avaliação. Para encerrar, use Ctrl+C. `BILLING_PREVIEW_PORT` permite outra
+porta, caso necessário.
+
+1. No chat, escreva um rascunho e clique no botão de cartão **Gerar e enviar
+   cobrança**, ao lado do caminhão **Cotar frete**.
+2. Confira pedido/destino, escolha sinal ou integral e revise valor, saldo e
+   mensagem. Confirme e acompanhe geração, fila, envio e entrega simulados.
+   Fechar o diálogo preserva o rascunho e não interrompe a simulação.
+3. Em **Controles da avaliação**, escolha **Link existente**. **Corrigir
+   cobrança** explica o bloqueio enquanto o link está válido. Simule vencimento
+   e encerramento, informe R$ 240 e declare o acordo e a conferência para
+   revisar a correção. O histórico conserva o link anterior de R$ 360.
+4. Simule o pagamento de R$ 240. **Saldo restante** oferece R$ 960, calculado
+   a partir do recebido. A quitação bloqueia novas cobranças.
+5. Compare **Falha comprovada antes do envio** (mesmo link, nova tentativa)
+   com **Resultado do envio incerto** (sem retry). O cenário de sinal pago
+   demonstra recebido R$ 360 e saldo R$ 840.
+6. Verifique tema claro/escuro, celular e Tab/Shift+Tab/Enter/Escape; fechar
+   devolve o foco ao botão do chat.
+
+As rotas `/api/v1` são atendidas exclusivamente por fixtures locais. Escritas
+reais são recusadas e rotas desconhecidas devolvem 404, sem proxy/fallback.
+Links `pagamento.exemplo.test` são fictícios. Não há n8n, InfinitePay, WhatsApp,
+banco, credencial, flag real ou persistência externa. Todo estado fica no
+processo do preview; trocar cenário/reiniciar o servidor reinicia a simulação.
+
+Verificação reproduzível, com servidor próprio em porta aleatória:
+
+```powershell
+rtk proxy node node_modules/@playwright/test/cli.js test --config docs/prototypes/billing-chat.playwright.config.mjs
+```
+
+## Histórico do protótipo anterior
+
+O roteiro abaixo documenta a versão HTML anterior, substituída pela prévia
+Vue acima. Não representa o estado atual do backend ou do design.
+
 COB-CHAT-P01, preparação de COB-CHAT-01 / COB-12, [RFC 047](../rfc/047-enviar-cobranca-pela-conversa.md).
 
 Abra `billing-chat.html` por um servidor local iniciado na raiz do repositório:

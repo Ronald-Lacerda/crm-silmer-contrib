@@ -45,7 +45,15 @@ Where: docs/prototypes/
 Tests: botão abre revisão no chat; gerar/enviar, saldo, correção e histórico; foco, Escape, preservação do rascunho, mobile e axe.
 Gate: Prototype
 Done when: protótipo local avaliável reutiliza design atual e fixtures isoladas, sem integrar efeitos reais.
-Status: Pending
+Status: Complete
+
+Preview `http://127.0.0.1:4189/inbox/billing-preview`: App/Inbox/componentes
+reais da master, com ação de cobrança acrescentada pelo Vite somente em
+memória. Todas as APIs são fixtures locais, sem proxy ou comandos reais.
+Cinco E2E aprovados: sinal e rascunho/foco; correção com links anteriores
+visíveis, saldo e quitação; falha segura/resultado incerto; axe claro/escuro
+em 1440/390/320 px; recusa das APIs reais. Typecheck/lint/formatação aprovados.
+Regressão adicional da Inbox atual e do Financeiro: 79 E2E aprovados.
 
 ### T3: Mostrar o funcionamento da InfinitePay
 
