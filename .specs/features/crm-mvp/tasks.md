@@ -71,8 +71,17 @@ decisões D1–D10 do PO. Deploy: API (INBOX-VEZ-01) antes do front; ver
       lista, não depois dela. Teste E2E novo em `inbox-vez.spec.js`; Playwright
       completo 587 aprovados e 7 ignorados mais o teste novo (um teste de áudio
       do Firefox falhou só sob carga e passa isolado, também sem a mudança).
-- Pendente: validar contra API e banco reais no ambiente (E2E usa mock);
-  medir o p95 em volume real; extrair de `InboxView.vue` as regras de card,
+- [x] Validação da tela contra API e banco reais (08/11/2026): PostgreSQL 17.10
+      local, 58 migrations, API e edge reais, dados sintéticos e Chromium.
+      Abas e contagens batem (4/1/2/0 e depois 5/1/1/0); Lembrar depois é por
+      pessoa (some para quem adiou, fica com selo para a outra pessoa); Marcar
+      perdido e Corrigir perda movem a conversa entre Sem retorno e Perdidos;
+      uma mensagem nova do cliente leva a conversa a Responder em cerca de 1 s
+      pelo SSE; `terminal=true` lista Encerradas; os links antigos
+      `?situacao=` e `?fila=` abrem a aba esperada; 320 px sem rolagem lateral;
+      sem erro de console nem resposta 4xx/5xx. No celular, a barra inferior
+      continuava visível com o formulário aberto no master e some com a PR 314.
+- Pendente: medir o p95 em volume real; extrair de `InboxView.vue` as regras de card,
   tempo, faixa de turno e mapeamento das URLs antigas (resto do P3).
 
 ## OPS-DEPS-01 — correção da auditoria npm (07/11/2026)
