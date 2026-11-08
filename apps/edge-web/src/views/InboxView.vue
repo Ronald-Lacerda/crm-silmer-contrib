@@ -27,6 +27,9 @@ import InboxTurnStrip from '../components/inbox/InboxTurnStrip.vue';
 import MediaMessage from '../components/inbox/MediaMessage.vue';
 import MessageDeliveryNotice from '../components/inbox/MessageDeliveryNotice.vue';
 import MessageTranscript from '../components/inbox/MessageTranscript.vue';
+import { useConversationTitleFocus } from '../components/inbox/useConversationTitleFocus.js';
+import { useInboxOutcome } from '../components/inbox/useInboxOutcome.js';
+import { useInboxReminder } from '../components/inbox/useInboxReminder.js';
 import { commandKey, request } from '../lib/api-client.js';
 import {
   preferredSellerFirstName,
@@ -46,24 +49,14 @@ import {
   LOSS_REASONS,
   conversationBadges,
   listMatchesBucket,
-  lossReasonLabel,
   LOSS_FORBIDDEN,
   bucketForRoute,
   ownerForRoute,
   turnCommandError,
-  REMINDER_MAX_DAYS,
-  REMINDER_RANGE_MESSAGE,
-  reminderInRange,
-  minutesSince,
   splitBadges,
   turnClock,
-  turnSpan,
 } from '../lib/inbox-turn.js';
-import {
-  defaultReminder,
-  reminderInstant,
-  reminderLabel,
-} from '../lib/dashboard-actions.js';
+import { reminderLabel } from '../lib/dashboard-actions.js';
 import { openDialog } from '../lib/ui.js';
 
 const ADMIN_CAPABILITY = 'COMMERCIAL_ADMIN';
@@ -221,24 +214,14 @@ const draftConsult = ref('open');
  * @type {import('vue').Ref<Record<string, number>>}
  */
 const counts = ref({});
-// INBOX-VEZ-03 preview: Sem retorno and Perdidos act inside the conversation.
-const snoozeOpen = ref(false);
-const reminderAt = ref('');
-const reminderError = ref('');
 /**
  * The turn strip draws the reminder form and the two triggers; it exposes the
  * elements the focus goes back to (after a refusal, a closed form or dialog).
+ * INBOX-VEZ-03: Sem retorno and Perdidos act inside the conversation.
  *
  * @type {import('vue').Ref<any>}
  */
 const turnStrip = ref(null);
-const reminderInput = computed(() => turnStrip.value?.reminderInput ?? null);
-const snoozeToggle = computed(() => turnStrip.value?.snoozeToggle ?? null);
-const lostTrigger = computed(() => turnStrip.value?.lostTrigger ?? null);
-const reopenTrigger = computed(() => turnStrip.value?.reopenTrigger ?? null);
-const lostDialog = ref(null);
-const reopenDialog = ref(null);
-const reopenError = ref('');
 /**
  * P1-E: the conversation a Sem retorno / Perdidos command just moved to
  * another tab. It stays open (and selected) until the user opens another.
@@ -248,9 +231,6 @@ let keepOpenId = '';
 let lastCommandRefused = false;
 /** P1-D: the API answered a tab without the turn contract (older server). */
 const listUnsupported = ref(false);
-const lostReason = ref('');
-const lostNote = ref('');
-const lostError = ref('');
 const loading = ref(true);
 const detailLoading = ref(false);
 const busy = ref(false);
@@ -665,70 +645,69 @@ const activeFilters = computed(() => {
   return filters;
 });
 const filteredByChoice = computed(() => activeFilters.value.length > 0);
-/**
- * P1-C: the open conversation's turn (`bucket`, `lostOutcome`, `reminder`)
- * is read from the detail, which carries it by contract. The strip above the
- * reply must not depend on the conversation being in the loaded list page.
- */
-const activeTurn = computed(() => active.value);
-/**
- * MET-06/07: the API records a loss, or its correction, only for the owner of
- * the conversation or an administrator, and only while a person (not the
- * agent) is attending it. The strip says why instead of failing on click.
- */
-const outcomeBlockedReason = computed(() => {
-  const conversation = active.value;
-  if (!conversation || isTerminal.value) return '';
-  if (conversation.automationState !== 'human')
-    return `Só é possível com atendimento humano; ${brand.assistant.reference} ainda atende.`;
-  if (!owner.value) return 'Assuma a conversa para marcar ou corrigir a perda.';
-  if (owner.value.id === currentUserId.value || isAdmin.value) return '';
-  return 'Só quem atende a conversa ou um administrador pode marcar ou corrigir a perda.';
+// INBOX-VEZ-03 (RFC 052): Lembrar depois, Marcar perdido and Corrigir perda
+// act inside the conversation. The commands, dialogs, version checks and the
+// focus afterwards live in the composables; `runCommand` stays here, shared
+// with the other commands of the pane.
+const { focusConversationTitle } = useConversationTitleFocus({
+  activeId,
+  conversationHeading,
 });
-/** Declaring a loss also needs no order in progress (LEAD_HAS_ORDER). */
-const lossBlockedReason = computed(() => {
-  if (outcomeBlockedReason.value) return outcomeBlockedReason.value;
-  if (!active.value || isTerminal.value) return '';
-  if (hasPendingOrder.value || active.value.order?.status === 'confirmado')
-    return 'Há pedido em aberto; encerre ou cancele o pedido antes de marcar como perdida.';
-  return '';
+const {
+  snoozeOpen,
+  reminderAt,
+  reminderError,
+  reminderBounds,
+  silentNotice,
+  toggleSnooze,
+  closeSnooze,
+  saveReminder,
+} = useInboxReminder({
+  active,
+  activeId,
+  busy,
+  error,
+  isTerminal,
+  now,
+  turnStrip,
+  runCommand,
+  focusConversationTitle,
 });
-const canMarkLost = computed(
-  () => Boolean(active.value) && !isTerminal.value && !lossBlockedReason.value,
-);
-const canReopenLoss = computed(
-  () =>
-    Boolean(active.value) && !isTerminal.value && !outcomeBlockedReason.value,
-);
-/** INBOX-VEZ-03: the customer went quiet; retake, remind or declare a loss. */
-const silentNotice = computed(() => {
-  const turn = activeTurn.value;
-  if (turn?.bucket !== 'silent' || isTerminal.value) return null;
-  const minutes = minutesSince(turn.turnSince, now.value);
-  return {
-    text:
-      minutes === null
-        ? 'Cliente sem responder há mais de 72 horas.'
-        : `Cliente sem responder há ${turnSpan(minutes).spoken}.`,
-    reminder: turn.reminder?.remindAt
-      ? `Lembrete para ${reminderLabel(turn.reminder.remindAt)}.`
-      : '',
-  };
-});
-const lostNotice = computed(() => {
-  const outcome = activeTurn.value?.lostOutcome;
-  if (activeTurn.value?.bucket !== 'lost' || !outcome) return null;
-  const date = new Date(String(outcome.occurredAt ?? ''));
-  const when = Number.isNaN(date.getTime())
-    ? ''
-    : date.toDateString() === now.value.toDateString()
-      ? `hoje às ${LIST_TIME.format(date)}`
-      : `em ${listWhen(outcome.occurredAt)}`;
-  return [
-    'Marcada como perdida',
-    lossReasonLabel(outcome.reasonCode),
-    ...(when ? [when] : []),
-  ].join(' · ');
+const {
+  lostDialog,
+  reopenDialog,
+  lostReason,
+  lostNote,
+  lostError,
+  reopenError,
+  outcomeBlockedReason,
+  lossBlockedReason,
+  canMarkLost,
+  canReopenLoss,
+  lostNotice,
+  clearLostDialogState,
+  clearReopenDialogState,
+  openLostDialog,
+  confirmLost,
+  openReopenDialog,
+  confirmReopen,
+} = useInboxOutcome({
+  active,
+  activeId,
+  busy,
+  error,
+  isTerminal,
+  owner,
+  currentUserId,
+  isAdmin,
+  hasPendingOrder,
+  now,
+  turnStrip,
+  runCommand,
+  wasCommandRefused: () => lastCommandRefused,
+  focusConversationTitle,
+  listWhen,
+  timeOfDay: (date) => LIST_TIME.format(date),
 });
 const canArchiveActive = computed(
   () => canArchive.value && !active.value?.archivedAt,
@@ -1014,316 +993,6 @@ function cardBadges(conversation) {
   });
   const { shown, hidden } = splitBadges(all);
   return { visible: shown, hidden };
-}
-
-/** São Paulo's calendar day, the default for a reminder. */
-function todayInSaoPaulo() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now.value);
-}
-
-const SAO_PAULO_LOCAL = new Intl.DateTimeFormat('sv-SE', {
-  timeZone: 'America/Sao_Paulo',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-  hourCycle: 'h23',
-});
-
-/** A datetime-local value (São Paulo wall time) for an instant. @param {number} at */
-function localValue(at) {
-  return SAO_PAULO_LOCAL.format(new Date(at)).replace(' ', 'T');
-}
-
-/** The field accepts what the API does: from now up to 90 days ahead. */
-const reminderBounds = computed(() => ({
-  min: localValue(now.value.getTime()),
-  max: localValue(
-    now.value.getTime() + REMINDER_MAX_DAYS * 86_400_000 - 60_000,
-  ),
-}));
-
-/** INBOX-VEZ-03: the reminder form of the Central de ações (ACT-05). */
-async function toggleSnooze() {
-  if (snoozeOpen.value) {
-    await closeSnooze();
-    return;
-  }
-  reminderError.value = '';
-  reminderAt.value =
-    reminderAt.value ||
-    defaultReminder(todayInSaoPaulo(), now.value.toISOString());
-  snoozeOpen.value = true;
-  await nextTick();
-  /** @type {HTMLInputElement|null} */ (reminderInput.value)?.focus();
-}
-
-async function closeSnooze() {
-  snoozeOpen.value = false;
-  reminderError.value = '';
-  await nextTick();
-  /** @type {HTMLElement|null} */ (snoozeToggle.value)?.focus();
-}
-
-async function saveReminder() {
-  if (!active.value || busy.value) return;
-  const conversationId = active.value.id;
-  const instant = reminderInstant(reminderAt.value);
-  if (!instant || !reminderInRange(instant, new Date())) {
-    reminderError.value = REMINDER_RANGE_MESSAGE;
-    await nextTick();
-    /** @type {HTMLInputElement|null} */ (reminderInput.value)?.focus();
-    return;
-  }
-  const saved = await runCommand(
-    'reminder',
-    { remindAt: instant, expectedVersion: active.value.version },
-    `Lembrete salvo para ${reminderLabel(instant)}. Nada foi enviado ao cliente.`,
-    true,
-  );
-  if (!saved) {
-    // The refusal belongs next to the field while the form is still there; a
-    // conversation that left Sem retorno keeps it in the pane.
-    if (
-      snoozeOpen.value &&
-      silentNotice.value &&
-      activeId.value === conversationId
-    ) {
-      reminderError.value = error.value;
-      error.value = '';
-      await nextTick();
-      /** @type {HTMLInputElement|null} */ (reminderInput.value)?.focus();
-    }
-    return;
-  }
-  snoozeOpen.value = false;
-  reminderAt.value = '';
-  await focusConversationTitle(null, conversationId);
-}
-
-/**
- * P1-E: after a command that takes the conversation out of the current tab,
- * the focus goes to its title, never to `body`. A dialog is closed first and
- * its own close handler (`openDialog` returns the focus to the trigger) runs
- * before this continues, so the title wins. If the selection moved to another
- * conversation meanwhile, that conversation's title is not ours to focus.
- *
- * @param {HTMLDialogElement|null} [dialog]
- * @param {string} [conversationId] the conversation the command was about
- */
-async function focusConversationTitle(dialog = null, conversationId = '') {
-  if (dialog?.open) {
-    await new Promise((resolve) => {
-      dialog.addEventListener('close', resolve, { once: true });
-      dialog.close();
-    });
-  }
-  await nextTick();
-  if (conversationId && activeId.value !== conversationId) return;
-  conversationHeading.value?.focus();
-}
-
-/**
- * The loss and the reopening act on what the person saw when the dialog
- * opened: conversation, its version and the outcome version are frozen then.
- * A live refresh that moves the selection voids the dialog (see activeId).
- *
- * @type {{id: string, version: number, outcomeVersion: number|null}}
- */
-let lostFrozen = { id: '', version: 0, outcomeVersion: null };
-/** @type {{id: string, version: number, outcomeVersion: number}} */
-let reopenFrozen = { id: '', version: 0, outcomeVersion: 1 };
-
-/** Closing (or finishing) forgets the frozen values and what was typed. */
-function clearLostDialogState() {
-  lostFrozen = { id: '', version: 0, outcomeVersion: null };
-  lostReason.value = '';
-  lostNote.value = '';
-  lostError.value = '';
-}
-
-function clearReopenDialogState() {
-  reopenFrozen = { id: '', version: 0, outcomeVersion: 1 };
-  reopenError.value = '';
-}
-
-/**
- * MET-06: the API wants the version of the latest outcome event of the
- * conversation, which is above zero once a loss was reopened. The list never
- * carries it while the loss is not active, so the owner reads it on opening.
- * The note that the same answer may carry is dropped here, unread.
- *
- * @param {string} conversationId
- * @returns {Promise<number|null>}
- */
-async function readOutcomeVersion(conversationId) {
-  try {
-    const response = await request(
-      `/api/v1/conversations/${encodeURIComponent(conversationId)}/lead-outcome`,
-    );
-    const version = Number(response.data?.outcomeVersion);
-    return Number.isSafeInteger(version) && version >= 0 ? version : null;
-  } catch {
-    return null;
-  }
-}
-
-/** MET-06: a declared loss, with a reason from the closed list. */
-async function openLostDialog() {
-  const dialog = lostDialog.value;
-  if (
-    !(dialog instanceof HTMLDialogElement) ||
-    !active.value ||
-    !canMarkLost.value
-  )
-    return;
-  clearLostDialogState();
-  const conversationId = active.value.id;
-  lostFrozen = {
-    id: conversationId,
-    version: active.value.version,
-    outcomeVersion: activeTurn.value?.lostOutcome?.version ?? null,
-  };
-  openDialog(dialog, /** @type {HTMLElement} */ (lostTrigger.value));
-  if (lostFrozen.outcomeVersion === null) {
-    const version = await readOutcomeVersion(conversationId);
-    if (lostFrozen.id === conversationId) lostFrozen.outcomeVersion = version;
-  }
-}
-
-async function confirmLost() {
-  if (!active.value || busy.value) return;
-  // The dialog belongs to the conversation it was opened for (a live refresh
-  // may have moved the selection): never send its answers to another one.
-  const conversationId = lostFrozen.id;
-  if (!conversationId || active.value.id !== conversationId) {
-    lostDialog.value?.close();
-    return;
-  }
-  const note = lostNote.value.trim();
-  if (!lostReason.value) {
-    lostError.value = 'Escolha o motivo da perda.';
-    return;
-  }
-  if (lostReason.value === 'outro' && !note) {
-    lostError.value = 'Descreva o motivo em até 140 caracteres.';
-    return;
-  }
-  if (lostFrozen.outcomeVersion === null) {
-    busy.value = true;
-    const version = await readOutcomeVersion(conversationId);
-    busy.value = false;
-    // The selection may have moved while the version was being read: nothing
-    // is sent for a conversation that is no longer the one on screen.
-    if (
-      lostFrozen.id !== conversationId ||
-      active.value?.id !== conversationId
-    ) {
-      lostDialog.value?.close();
-      return;
-    }
-    if (version === null) {
-      lostError.value =
-        'Não foi possível conferir a conversa agora. Tente novamente.';
-      return;
-    }
-    lostFrozen.outcomeVersion = version;
-  }
-  const marked = await runCommand(
-    'lead-outcome',
-    {
-      outcome: 'lost',
-      reasonCode: lostReason.value,
-      ...(lostReason.value === 'outro' ? { note } : {}),
-      expectedConversationVersion: lostFrozen.version,
-      expectedOutcomeVersion: lostFrozen.outcomeVersion,
-    },
-    'Conversa marcada como perdida. Uma nova mensagem do cliente a devolve para Responder.',
-    true,
-    conversationId,
-  );
-  if (marked) {
-    await focusConversationTitle(
-      /** @type {HTMLDialogElement|null} */ (lostDialog.value),
-      conversationId,
-    );
-  } else if (lastCommandRefused) {
-    // A refusal (403/409) says the frozen values can no longer be right: the
-    // dialog closes, the reason stays in the pane and the focus goes to the
-    // conversation title.
-    await focusConversationTitle(
-      /** @type {HTMLDialogElement|null} */ (lostDialog.value),
-      conversationId,
-    );
-  } else {
-    // One message, next to the field: the pane keeps none of it.
-    lostError.value = error.value;
-    error.value = '';
-  }
-}
-
-/** D9: reopening is a correction of the loss; it asks once, in a short dialog. */
-function openReopenDialog() {
-  const dialog = reopenDialog.value;
-  const outcome = activeTurn.value?.lostOutcome;
-  if (
-    !(dialog instanceof HTMLDialogElement) ||
-    busy.value ||
-    !active.value ||
-    !outcome ||
-    !canReopenLoss.value
-  )
-    return;
-  clearReopenDialogState();
-  reopenFrozen = {
-    id: active.value.id,
-    version: active.value.version,
-    outcomeVersion: outcome.version ?? 1,
-  };
-  openDialog(dialog, /** @type {HTMLElement} */ (reopenTrigger.value));
-}
-/** MET-07: a manual reopening is a correction; the loss leaves the counts. */
-async function confirmReopen() {
-  if (!active.value || busy.value) return;
-  const conversationId = reopenFrozen.id;
-  if (!conversationId || active.value.id !== conversationId) {
-    reopenDialog.value?.close();
-    return;
-  }
-  const reopened = await runCommand(
-    'lead-outcome',
-    {
-      outcome: 'reopened',
-      expectedConversationVersion: reopenFrozen.version,
-      expectedOutcomeVersion: reopenFrozen.outcomeVersion,
-    },
-    'Conversa reaberta. Ela volta para a aba da vez.',
-    true,
-    conversationId,
-  );
-  if (reopened) {
-    await focusConversationTitle(
-      /** @type {HTMLDialogElement|null} */ (reopenDialog.value),
-      conversationId,
-    );
-  } else if (lastCommandRefused) {
-    // A refusal (403/409) says the frozen values can no longer be right: the
-    // dialog closes, the reason stays in the pane and the focus goes to the
-    // conversation title.
-    await focusConversationTitle(
-      /** @type {HTMLDialogElement|null} */ (reopenDialog.value),
-      conversationId,
-    );
-  } else {
-    reopenError.value = error.value;
-    error.value = '';
-  }
 }
 
 /** Phones show one pane at a time: the list or the open conversation. */
@@ -2800,17 +2469,6 @@ watch(
     void refreshInbox();
   },
 );
-// The reminder form and the loss belong to one conversation.
-watch(activeId, () => {
-  // Their commands name the conversation on screen; a new one voids them.
-  lostDialog.value?.close();
-  reopenDialog.value?.close();
-  clearLostDialogState();
-  clearReopenDialogState();
-  snoozeOpen.value = false;
-  reminderAt.value = '';
-  reminderError.value = '';
-});
 watch(
   () => props.conversationId,
   async (id, previous) => {
