@@ -47,8 +47,17 @@ decisões D1–D10 do PO. Deploy: API (INBOX-VEZ-01) antes do front; ver
   (comando em conversa errada, linhas da aba anterior, troca de conversa com
   rascunho) foram corrigidos com teste. Testes dos atalhos antigos (Atender,
   Fechar pedidos, Todas) foram substituídos por `test/e2e/inbox-vez.spec.js`.
+- [x] INBOX-VEZ-04 — Extração do template de `InboxView.vue` para `InboxTabs`,
+      `ConversationCard` e `InboxTurnStrip`, sem mudança de comportamento.
+- [x] INBOX-VEZ-05 — Extração da lógica de Lembrar depois (ACT-05), Marcar
+      perdido e Corrigir perda (MET-06/07, D9) para `useInboxReminder`,
+      `useInboxOutcome` e `useConversationTitleFocus`, em
+      `apps/edge-web/src/components/inbox/`, com testes unitários de caminho
+      feliz, erro e conflito de versão. Sem mudança de texto, ARIA, ordem de
+      foco, contrato de API ou migration. `InboxView.vue`: 4407 → 4065 linhas.
 - Pendente: validar contra API e banco reais no ambiente (E2E usa mock);
-  medir o p95 em volume real; P3 de extração de `InboxView.vue`.
+  medir o p95 em volume real; extrair de `InboxView.vue` as regras de card,
+  tempo, faixa de turno e mapeamento das URLs antigas (resto do P3).
 
 ## OPS-DEPS-01 — correção da auditoria npm (07/11/2026)
 
