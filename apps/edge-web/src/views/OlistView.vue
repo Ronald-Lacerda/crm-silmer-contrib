@@ -8,6 +8,8 @@ import {
   ref,
   watch,
 } from 'vue';
+import { useRoute } from 'vue-router';
+import OrderOlistPanel from '../components/order/OrderOlistPanel.vue';
 import { commandKey, request } from '../lib/api-client.js';
 import { consumeOlistCallback } from '../lib/olist-callback.js';
 import OlistMappingsPanel from '../components/OlistMappingsPanel.vue';
@@ -19,6 +21,16 @@ const props = defineProps({
   showError: { type: Function, required: true },
 });
 const base = '/api/v1/integrations/olist';
+const route = useRoute();
+const selectedOrderId = computed(() => {
+  const id = route.query.pedido;
+  return typeof id === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      id,
+    )
+    ? id
+    : '';
+});
 const user = computed(() => props.session.user ?? props.session);
 const canManage = computed(() =>
   (user.value.capabilities ?? []).includes('COMMERCIAL_ADMIN'),
@@ -125,7 +137,7 @@ async function lookup() {
   if (!canOperate.value || lookupBusy.value) return;
   const value = query.value.trim();
   if (
-    !/^(?:\d{1,12}-CRM|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/iu.test(
+    !/^(?:[0-9]{2,15}-CRM|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/iu.test(
       value,
     )
   ) {
@@ -456,6 +468,9 @@ onBeforeUnmount(() => {
           Existe uma operação Olist em acompanhamento.
         </p>
         <p v-else>Nenhuma venda Olist vinculada.</p>
+        <RouterLink :to="{ path: '/olist', query: { pedido: result.orderId } }"
+          >Conferir pedido no Olist</RouterLink
+        >
       </div>
     </section>
     <p v-else class="surface">
@@ -463,6 +478,18 @@ onBeforeUnmount(() => {
       administrador pode conceder essa habilitação em Usuários.
     </p>
 
+    <OrderOlistPanel
+      v-if="canOperate && selectedOrderId"
+      :key="selectedOrderId"
+      :order-id="selectedOrderId"
+    />
+    <p
+      v-else-if="canOperate && route.query.pedido"
+      class="inline-error"
+      role="alert"
+    >
+      Identificador de pedido inválido. Localize o pedido pelo número completo.
+    </p>
     <section
       v-if="canManage"
       class="surface"

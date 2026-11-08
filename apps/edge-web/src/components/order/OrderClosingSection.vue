@@ -80,17 +80,34 @@ const blockerNotes = ref([]);
  */
 let opener = null;
 
+const confirmVersion = ref(0);
+const confirmationStale = ref(false);
+const calculatedPricing = computed(() => Boolean(props.order.pricing));
+const confirmationHint = computed(() =>
+  calculatedPricing.value
+    ? 'O total vem dos subtotais revisados. A forma de pagamento é conferida ao gerar.'
+    : ASKED_WHEN_GENERATING,
+);
 const isPending = computed(() => props.order.status === 'pendente');
 // LOJ-34 (ADR 031): a site order shows this panel confirmed, like an order
 // generated here, with what the site confirmed and no reopening.
 const isStore = computed(() => isStoreOrder(props.order));
 const fichaPrinted = computed(() => fichaPrintedLabel(props.order));
-const canCommand = computed(() => editing.canEdit.value && !isStore.value);
+const canCommand = computed(
+  () => (editing.canConfirm ?? editing.canEdit).value && !isStore.value,
+);
+const canReopen = computed(() => editing.canEdit.value && !isStore.value);
 const sectionOpenElsewhere = computed(
   () => editing.editingSection.value !== '',
 );
 const missing = computed(() => (props.order.missingFields ?? []).map(String));
-const amountValid = computed(() => parseBrl(amountText.value) !== null);
+const amountValid = computed(() =>
+  calculatedPricing.value
+    ? props.order.pricing.complete === true &&
+      Number.isSafeInteger(props.order.pricing.totalCents) &&
+      props.order.pricing.totalCents > 0
+    : parseBrl(amountText.value) !== null,
+);
 const items = computed(() => props.order.ficha?.items ?? []);
 const itemsHeadline = computed(() => {
   const count = items.value.length;
@@ -117,12 +134,12 @@ const pendingLabels = computed(() =>
 );
 const readiness = computed(() => {
   if (pendingLabels.value.length > 0) {
-    return `Falta para gerar: ${joinPt(pendingLabels.value)}. ${ASKED_WHEN_GENERATING}`;
+    return `Falta para gerar: ${joinPt(pendingLabels.value)}. ${confirmationHint.value}`;
   }
   if (sectionOpenElsewhere.value) {
     return 'Salve ou cancele a seção em edição antes de gerar.';
   }
-  return `Tudo pronto. ${ASKED_WHEN_GENERATING}`;
+  return `Tudo pronto. ${confirmationHint.value}`;
 });
 
 /** @param {unknown} value */
@@ -217,7 +234,7 @@ function blockerErrors(fields) {
  * @returns {Promise<'busy'|'section'|'step'|'dialog'>}
  */
 async function requestGenerate(trigger) {
-  if (busy.value) return 'busy';
+  if (busy.value || !canCommand.value) return 'busy';
   if (sectionOpenElsewhere.value) return 'section';
   if (nextStep.value) {
     void editing.goToSection(nextStep.value.section);
@@ -229,13 +246,17 @@ async function requestGenerate(trigger) {
   errorMessage.value = '';
   justGenerated.value = false;
   opener = trigger instanceof globalThis.HTMLElement ? trigger : null;
+  confirmationStale.value = false;
+  confirmVersion.value = props.order.version;
   confirmOpen.value = true;
   await nextTick();
   if (!dialog.value) return 'dialog';
   if (opener) openDialog(dialog.value, opener);
   else dialog.value.showModal?.();
   // The first field of the dialog, whatever the helper focused.
-  amountInput.value?.focus();
+  if (calculatedPricing.value)
+    dialog.value?.querySelector('input[name="payment-condition"]')?.focus();
+  else amountInput.value?.focus();
   return 'dialog';
 }
 
@@ -250,6 +271,22 @@ function generateFromFooter(trigger) {
 }
 
 defineExpose({ generateFromFooter });
+watch(
+  () => props.order.version,
+  (version) => {
+    if (confirmOpen.value && version !== confirmVersion.value && !busy.value) {
+      confirmationStale.value = true;
+      dialogMessage.value =
+        'Este pedido mudou. Volte e confira o pedido atual antes de confirmar.';
+    }
+  },
+);
+watch(canCommand, (allowed) => {
+  if (!allowed && confirmOpen.value && !busy.value) void closeDialog();
+});
+watch(canReopen, (allowed) => {
+  if (!allowed && reopenOpen.value && !busy.value) closeReopen();
+});
 
 /**
  * Closes the dialog without writing anything. Esc and "Voltar" give the
@@ -307,11 +344,14 @@ async function focusFirstError() {
  * way is ignored.
  */
 async function submitGenerate() {
-  if (busy.value) return;
+  if (busy.value || confirmationStale.value || !canCommand.value) return;
   dialogMessage.value = '';
   /** @type {Record<string, string>} */
   const errors = {};
-  if (!amountValid.value) errors.finalAmount = AMOUNT_FORMAT_MESSAGE;
+  if (!amountValid.value)
+    errors.finalAmount = calculatedPricing.value
+      ? 'Revise os subtotais dos itens antes de gerar.'
+      : AMOUNT_FORMAT_MESSAGE;
   if (paymentCondition.value === '') {
     errors.paymentCondition = BLOCKER_MESSAGES.paymentCondition;
   }
@@ -327,7 +367,8 @@ async function submitGenerate() {
 async function generate() {
   busy.value = true;
   const result = await editing.command('confirm', {
-    amountText: amountText.value.trim(),
+    ...(calculatedPricing.value ? {} : { amountText: amountText.value.trim() }),
+    expectedVersion: confirmVersion.value,
     paymentCondition: paymentCondition.value,
   });
   busy.value = false;
@@ -367,6 +408,7 @@ async function generate() {
   }
   // 409, 403, the server down or the connection lost: the dialog stays open
   // with what happened, nothing recorded, and the focus on the message.
+  if (result.status === 409) confirmationStale.value = true;
   dialogMessage.value = result.status === 0 ? OFFLINE_MESSAGE : result.message;
   await nextTick();
   dialogAlert.value?.focus();
@@ -377,6 +419,7 @@ async function generate() {
  * floor may already be using, so it asks first and says what happens.
  */
 async function requestReopen() {
+  if (!canReopen.value || busy.value) return;
   errorMessage.value = '';
   justGenerated.value = false;
   reopenOpen.value = true;
@@ -390,6 +433,7 @@ function closeReopen() {
 }
 
 async function reopen() {
+  if (!canReopen.value || busy.value) return;
   const number = props.order.number;
   busy.value = true;
   const result = await editing.command('reopen', {});
@@ -531,7 +575,7 @@ async function reopen() {
           Pedido da loja não é reaberto: valor e itens vieram do pagamento.
         </p>
 
-        <div v-if="!isPending && canCommand" class="op-reopen">
+        <div v-if="!isPending && canReopen" class="op-reopen">
           <button
             type="button"
             class="quiet"
@@ -562,7 +606,12 @@ async function reopen() {
       <h2 id="generate-title">Gerar o pedido {{ order.number }}?</h2>
       <p id="generate-description">
         O pedido é confirmado, a data do pedido passa a ser hoje e o PDF da
-        ficha fica disponível. Para mudar algo depois, reabra o pedido.
+        ficha fica disponível.
+        {{
+          order.olistLocked
+            ? 'O conteúdo já conferido no Olist permanece protegido.'
+            : 'Para mudar algo depois, reabra o pedido.'
+        }}
       </p>
       <dl>
         <div>
@@ -596,7 +645,20 @@ async function reopen() {
           {{ dialogMessage }}
         </p>
 
-        <div class="op-field">
+        <div v-if="calculatedPricing" class="op-field">
+          <span>Total calculado do pedido</span>
+          <output class="op-num">{{
+            amountLabel(order.pricing.totalCents)
+          }}</output>
+          <p class="op-hint">
+            Soma dos subtotais revisados por tamanho. Para mudar o total, revise
+            os itens antes de gerar.
+          </p>
+          <p v-if="fieldErrors.finalAmount" class="op-field-error" role="alert">
+            {{ fieldErrors.finalAmount }}
+          </p>
+        </div>
+        <div v-else class="op-field">
           <label for="closing-amount">Valor final</label>
           <div class="op-amount">
             <span aria-hidden="true">R$</span>
@@ -644,6 +706,7 @@ async function reopen() {
                 v-model="paymentCondition"
                 type="radio"
                 name="payment-condition"
+                :disabled="order.olistLocked === true"
                 :value="option.value"
                 :aria-invalid="
                   Boolean(fieldErrors.paymentCondition) || undefined
@@ -672,7 +735,8 @@ async function reopen() {
           <button
             type="submit"
             class="primary op-generate"
-            :aria-disabled="busy || undefined"
+            :aria-disabled="busy || confirmationStale || undefined"
+            :disabled="confirmationStale"
             :aria-busy="busy || undefined"
           >
             <OrderIcon name="ficha" />

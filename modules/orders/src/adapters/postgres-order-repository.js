@@ -1154,6 +1154,33 @@ export class PostgresOrderRepository {
     return transaction ? work(transaction) : this.#database.transaction(work);
   }
 
+  /** Read-only commercial metadata, across every ERP account. A pending
+   * completed export may be confirmed only when every commercial lock is
+   * confirmed/linked; uncertain or unfinished work keeps that exception shut.
+   * @param {Order[]} orders
+   * @returns {Promise<Map<string,{locked:boolean,confirmationAllowed:boolean}>>} */
+  async readOlistCommercialMetadata(orders) {
+    const byId = new Map(orders.map((order) => [order.id, order]));
+    const locks = await readOlistCommercialLocks(this.#database, [
+      ...byId.keys(),
+    ]);
+    const metadata = new Map();
+    for (const lock of locks) {
+      const order = byId.get(lock.order_id);
+      if (!order) continue;
+      const previous = metadata.get(lock.order_id);
+      metadata.set(lock.order_id, {
+        locked: true,
+        confirmationAllowed:
+          (previous?.confirmationAllowed ?? true) &&
+          order.status === 'pendente' &&
+          !order.cancelledAt &&
+          ['confirmed', 'linked'].includes(lock.state),
+      });
+    }
+    return metadata;
+  }
+
   /** @param {Order[]} orders @returns {Promise<Set<string>>} */
   async readFrozenOrderIds(orders) {
     return new Set(

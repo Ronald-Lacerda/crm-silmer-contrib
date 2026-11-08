@@ -141,6 +141,24 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 ## OLIST-T20b — Início da Fase 3 (05/11/2026)
 
+## OLIST-T12 — composição e prévia por Pedido (08/11/2026)
+
+- [x] Editor por IDs de grupo/tamanho, subtotal negociado e total calculado
+      somente leitura; revisão humana separada de quantidade/atributos/tamanho.
+- [x] Complementos autorizados de legado/loja sem inferir preço, alterar ficha,
+      checkout, gateway ou o valor histórico.
+- [x] Projeção/prévia/validação Olist por pedido e perfil habilitado, sem conceder
+      edição, listagem comercial ou Inbox ao perfil restrito; recibo só em memória.
+- [x] Metadados comerciais mínimos de trava entre contas e confirmação congelada,
+      inclusive dono sem checkbox; pagamento/entrega com autorização independente.
+- [ ] Wiring da ação humana criadora `/export`: não incluído. Revisão automática
+      rejeitou esse caminho por conflito com geração real desligada; requer
+      autorização explícita antes de implementar. T12 permanece aberta nesse ponto.
+
+OLIST-01–12, 21–24, 33–35 e 40–44; [contrato e evidências](../../../docs/runbooks/olist-phase4.md#t12--composição-e-conferência-por-pedido-08112026).
+Mesma branch `codex/olist-phase4-t11`; nenhum deploy, conta habilitada ou flag
+real alterada. T13/T25 e as Fases 5–6 permanecem separadas.
+
 ## OLIST-T11 — interface administrativa Olist (07/11/2026)
 
 - [x] Conexão/reconexão/desconexão administrativa e callback limpo/consumo único,

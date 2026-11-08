@@ -106,3 +106,93 @@ recebimento. Desconectar é ação administrativa separada e versionada.
 Próxima tarefa: T12, fluxo e grade por Pedido. Depois T13 e T25; gates de QA,
 operação e piloto das Fases 5–6 continuam obrigatórios. Nada nesta tela libera
 inclusões reais, amplia usuários ou troca o template da ficha.
+
+## T12 — composição e conferência por Pedido (08/11/2026)
+
+OLIST-01–12, 21–24, 33–35 e 40–44. Implementação na mesma worktree/branch
+`codex/olist-phase4-t11`, preservando as Fases 2–3 e T11. Sem habilitação de
+usuário, alteração de flags/credenciais, migrations, acesso ERP ou deploy.
+
+### Contrato entregue
+
+- Pedido novo adota explicitamente a composição por tamanho. IDs são emitidos
+  pelo servidor; comandos de atributos/grupos/linhas, reordenação, duplicação,
+  quantidade e revisão de subtotal referenciam esses IDs. Não substituir o
+  grafo de preços nem enviar flags de revisão ou um total arbitrário.
+- Grade apresenta tamanho, quantidade, subtotal e subtotal do grupo/total do
+  backend. Quantidade, atributos ou nome do tamanho alterados exigem revisão
+  humana separada. Subtotal vazio salva rascunho; total incompleto aparece como
+  indisponível, sem soma parcial ou arredondamento no navegador.
+- Composição gerenciada e legado enriquecido confirmam com total calculado
+  somente leitura e condição de pagamento. A versão é capturada ao abrir o
+  editor/diálogo. 409 conserva o rascunho e exige cancelar/rever, sem troca
+  silenciosa da versão. Contrato de resposta legado sem pricing é preservado
+  para compatibilidade; pendências reais de composição levam a Itens.
+- Legado usa `/price-breakdown`: composição suplementar por IDs, nenhum valor
+  inferido do total histórico. Loja oferece somente complemento autorizado de
+  entrega, técnica e cadastro; preços vêm da projeção oficial, sem mudar
+  checkout, pagamento, ficha ou travas. Habilitação Olist não concede escrita
+  comercial; loja exige administrador.
+- `/olist?pedido=<UUID>` usa somente a projeção Olist e permite conferir a prévia
+  de qualquer origem/status/dono ao humano habilitado, inclusive Financeiro,
+  sem ler pedido comercial, lista irrestrita, contatos ou Inbox. Busca por
+  número/UUID segue a mesma sintaxe do backend. No detalhe comercial há painel
+  equivalente; Admin sem checkbox não ganha conferência/geração.
+- Prévia usa `{}` e validação usa somente `{previewToken}`. Dados, plano de
+  cadastros, pendências, valores e expiração são projetados pelo servidor;
+  recibo existe só na memória do componente. Navegação, edição, mudança de
+  versão/acesso e eventos invalidam a prévia. Nenhum polling ERP.
+- A UI não chama `/export`: geração real permanece desativada, inclusive com
+  prévia elegível. O wiring de uma ação criadora foi rejeitado pela revisão
+  automática de aprovação por conflito com a restrição de geração desligada;
+  não foi gravado ou contornado. Esse trecho precisa de autorização explícita
+  e revisão antes da futura ativação. T13/recuperação e T25/ficha v7 não foram
+  antecipadas nesta entrega.
+- Leitura comercial expõe somente `olistLocked` e
+  `olistConfirmationAllowed`, calculados por todas as contas no ledger.
+  Vendedor sem checkbox/revogado continua sem editar/reabrir pedido exportado.
+  Pendente só confirma com conteúdo igual quando todas as travas estão em
+  `confirmed`/`linked`; resultado incerto em outra conta impede essa exceção.
+  Pagamento e entrega conservam sua ACL independente. Guardas de escrita e
+  infraestrutura não mudam.
+
+### Verificação e limites
+
+Fixtures e provedores exclusivamente sintéticos. Execução com Node 24.20.0 e
+npm 11.19.0 (`fnm exec --using 24.20.0 npm.cmd ...`), servidor de preview em
+porta dedicada 4189, sem builds concorrentes.
+
+| Gate                           | Resultado                                                                                                                                           |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run validate` final       | Aprovado: 1982 testes, zero falhas/cancelamentos, 26 skips condicionais; formatação, tipos, lint, fronteiras, tokens, validadores e build aprovados |
+| E2E completo                   | 545 aprovados, 7 skips previstos, zero falhas/flakes; dois workers                                                                                  |
+| T12 final após refinamentos    | 41/41 aprovados, zero skips; um worker; inclui duas abas e evento SSE de outro pedido sem perda do rascunho                                         |
+| Contrato/runtime e preço exato | 53/53 rotas/mídia isolados e 49/49 domínio de formatação/runtime; testes mínimos da trava multi-conta e fronteira de inteiro seguro                 |
+| axe/teclado/visual             | Zero violações nos cenários exercitados, capturas conferidas em 320 escuro, 390 claro e 1366 desktop; reflow e foco/erro associados                 |
+| Detector visual mecânico       | Nenhum finding nos arquivos examinados                                                                                                              |
+| `npm audit --audit-level=high` | Zero altas/críticas; uma baixa e cinco moderadas preexistentes, dependências preservadas                                                            |
+| Links e `git diff --check`     | Aprovados                                                                                                                                           |
+
+A primeira E2E integral teve três falhas de foco na loja: a consulta inicial
+secundária capturava foco do título. Corrigido sem alterar asserções; a rodada
+integral seguinte passou. O contrato explícito de chaves Order foi ampliado
+para os dois metadados documentados. Um teste de mídia excedeu seu timeout de três segundos na
+primeira execução paralela e passou isolado; o validate completo final passou sem
+mudar testes ou limites. O último refinamento remove duplicação visual e
+invalida a prévia em evento global sem fechar rascunho comercial; validate e
+os 41 cenários T12 foram repetidos sobre esse código.
+
+Não houve novo ensaio PostgreSQL live: as leituras reutilizam o helper SQL de
+locks existente; o agrupamento entre contas e contrato público têm testes
+sintéticos. Não se declara homologação operacional a partir dessas evidências.
+Build mantém o aviso preexistente de chunk maior que 500 kB.
+
+Logs/capturas em `var/olist-t12-*`, fora do Git. Nenhum teste local equivale a
+homologação no ERP, EasyPanel, aprovação da ficha ou piloto.
+
+### Rollback T12
+
+Reverter a entrega de frontend e metadados de leitura em conjunto. Não apagar
+composição/subtotais/complementos já persistidos nem alterar ledger/flags para
+liberar escrita. Escritas continuam protegidas pelo backend T10. Nenhuma down
+migration, exclusão de cadastro ou cancelamento ERP faz parte do rollback.

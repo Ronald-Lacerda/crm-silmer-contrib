@@ -8,6 +8,7 @@ import {
 } from '../apps/api/src/order-runtime.js';
 import { InMemoryIdempotencyRecordStore } from '../modules/integration-reliability/src/index.js';
 import { InMemoryOrderRepository } from '../modules/orders/src/adapters/in-memory-order-repository.js';
+import { PostgresOrderRepository } from '../modules/orders/src/adapters/postgres-order-repository.js';
 import { syntheticItems } from './fixtures/order-items.js';
 import { orderContextsFrom } from './fixtures/order-contexts.js';
 
@@ -552,5 +553,165 @@ test('OLIST-T20b adoption replays the same IDs once, audits no pricing payload a
       value: { action: 'duplicate_group', groupId: 'forged' },
     }),
     { code: 'IDEMPOTENCY_KEY_REUSED' },
+  );
+});
+
+test('T12 commercial readers receive current Olist locks without needing an Olist grant', async () => {
+  const { runtime, repository } = harness();
+  const { order } = await create(runtime, OWNER, 'conversation-1');
+  const manual = await runtime.createForContact(
+    command(OWNER, { contactId: 'contact-1' }),
+  );
+  assert.equal((await runtime.get(order.id)).order.olistLocked, false);
+  assert.equal(
+    (await runtime.get(order.id)).order.olistConfirmationAllowed,
+    false,
+  );
+  let allowConfirmation = true;
+  Object.assign(repository, {
+    readOlistCommercialMetadata: async (/** @type {any[]} */ orders) =>
+      new Map(
+        orders
+          .filter((entry) => entry.id === order.id)
+          .map((entry) => [
+            entry.id,
+            {
+              locked: true,
+              confirmationAllowed: allowConfirmation,
+              remoteId: 'private-erp-id-must-not-cross-boundary',
+            },
+          ]),
+      ),
+    readFrozenOrderIds: async () => new Set([order.id]),
+  });
+  const current = (await runtime.get(order.id)).order;
+  assert.equal(current.olistLocked, true);
+  assert.equal(current.olistConfirmationAllowed, true);
+  assert.equal(current.version, order.version);
+  assert.equal(current.seller?.id, OWNER.id);
+  assert.equal(Object.hasOwn(current, 'olistEnabled'), false);
+  assert.doesNotMatch(JSON.stringify(current), /private-erp-id/u);
+  const listed = await runtime.list();
+  assert.equal(
+    listed.items.find((entry) => entry.id === order.id)?.olistLocked,
+    true,
+  );
+  assert.equal(
+    listed.items.find((entry) => entry.id === manual.id)?.olistLocked,
+    false,
+  );
+  assert.equal(
+    (await runtime.currentForConversation('conversation-1')).order
+      ?.olistConfirmationAllowed,
+    true,
+  );
+  allowConfirmation = false;
+  assert.equal(
+    (await runtime.get(order.id)).order.olistConfirmationAllowed,
+    false,
+  );
+  // Payment/delivery keep their own authorization and do not reopen a ficha.
+  const paid = await runtime.recordMilestones(
+    command(OWNER, {
+      orderId: order.id,
+      expectedVersion: order.version,
+      paidOn: '2026-09-12',
+      deliveredOn: null,
+    }),
+  );
+  assert.equal(paid.paidOn, '2026-09-12');
+  assert.equal(paid.status, 'pendente');
+  assert.equal(paid.olistLocked, true);
+  assert.equal(paid.olistConfirmationAllowed, false);
+});
+
+test('T12 old adapters report a freeze conservatively and a failed ledger read cannot look unlocked', async () => {
+  const { runtime, repository } = harness();
+  const { order } = await create(runtime, OWNER, 'conversation-1');
+  Object.assign(repository, {
+    readFrozenOrderIds: async () => new Set([order.id]),
+  });
+  const current = (await runtime.get(order.id)).order;
+  assert.equal(current.olistLocked, true);
+  assert.equal(current.olistConfirmationAllowed, false);
+  Object.assign(repository, {
+    readOlistCommercialMetadata: async () => {
+      throw new Error('synthetic-ledger-unavailable');
+    },
+  });
+  await assert.rejects(runtime.get(order.id), /synthetic-ledger-unavailable/u);
+});
+
+test('T12 PostgreSQL metadata aggregates all account locks and only completed active pending orders may confirm', async () => {
+  /** @type {{order_id:string,state:string}[]} */
+  let rows = [];
+  /** @type {{sql:string,values:any[]}[]} */
+  const reads = [];
+  const repository = new PostgresOrderRepository({
+    database: {
+      query: async (
+        /** @type {string} */ sql,
+        /** @type {unknown[]} */ values = [],
+      ) => {
+        reads.push({ sql, values });
+        return { rows };
+      },
+      transaction: async () => {
+        throw new Error('read-only metadata must not write');
+      },
+    },
+    envelopeKey: Buffer.alloc(32, 19),
+  });
+  const seed = /** @type {any} */ ({
+    id: 'pending',
+    status: 'pendente',
+    cancelledAt: null,
+  });
+  assert.deepEqual(await repository.readOlistCommercialMetadata([]), new Map());
+  assert.equal(reads.length, 0);
+  rows = [
+    { order_id: 'pending', state: 'confirmed' },
+    { order_id: 'pending', state: 'linked' },
+    { order_id: 'confirmed', state: 'confirmed' },
+    { order_id: 'cancelled', state: 'linked' },
+  ];
+  const orders = [
+    seed,
+    { ...seed, id: 'confirmed', status: 'confirmado' },
+    { ...seed, id: 'cancelled', cancelledAt: '2026-11-08T10:00:00Z' },
+  ];
+  let metadata = await repository.readOlistCommercialMetadata(orders);
+  assert.deepEqual(metadata.get('pending'), {
+    locked: true,
+    confirmationAllowed: true,
+  });
+  assert.deepEqual(metadata.get('confirmed'), {
+    locked: true,
+    confirmationAllowed: false,
+  });
+  assert.deepEqual(metadata.get('cancelled'), {
+    locked: true,
+    confirmationAllowed: false,
+  });
+  assert.deepEqual(reads[0].values, [['pending', 'confirmed', 'cancelled']]);
+  assert.doesNotMatch(reads[0].sql, /account_key\s*=/u);
+  assert.match(reads[0].sql, /olist_attempts/u);
+  assert.match(reads[0].sql, /olist_export_resources/u);
+  for (const state of ['reserved', 'uncertain', 'invalidated', 'rejected']) {
+    rows = [
+      { order_id: 'pending', state: 'confirmed' },
+      { order_id: 'pending', state },
+    ];
+    metadata = await repository.readOlistCommercialMetadata([seed]);
+    assert.deepEqual(
+      metadata.get('pending'),
+      { locked: true, confirmationAllowed: false },
+      state,
+    );
+  }
+  rows = [];
+  assert.deepEqual(
+    await repository.readOlistCommercialMetadata([seed]),
+    new Map(),
   );
 });

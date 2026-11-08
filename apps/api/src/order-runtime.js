@@ -176,6 +176,15 @@ export function createOrderRuntime(options) {
    */
   async function present(orders) {
     if (orders.length === 0) return [];
+    // T12: commercial readers need the same cross-account freeze as writers.
+    // Only booleans cross this boundary; no ERP identity or grant is exposed.
+    const olistMetadata = options.repository.readOlistCommercialMetadata
+      ? await options.repository.readOlistCommercialMetadata(orders)
+      : new Map(
+          [
+            ...((await options.repository.readFrozenOrderIds?.(orders)) ?? []),
+          ].map((id) => [id, { locked: true, confirmationAllowed: false }]),
+        );
     const conversationIds = [
       ...new Set(
         orders
@@ -247,6 +256,12 @@ export function createOrderRuntime(options) {
       lastMessage: latestMessageStates.get(order.conversationId) ?? null,
       leadTimeBusinessDays: order.leadTimeBusinessDays ?? null,
       locked: order.origin === 'loja' || Boolean(order.cancelledAt),
+      olistLocked: olistMetadata.get(order.id)?.locked === true,
+      olistConfirmationAllowed:
+        order.status === 'pendente' &&
+        !order.cancelledAt &&
+        olistMetadata.get(order.id)?.locked === true &&
+        olistMetadata.get(order.id)?.confirmationAllowed === true,
       missingFields: order.missingFields,
       number: order.number,
       orderDate: order.orderDate,

@@ -35,7 +35,9 @@ const isManual = computed(
 // is generated — payment and delivery usually come later — and never needs a
 // reopen.
 const canEdit = computed(
-  () => editing.canEdit.value && !(isManual.value && billingReadonly.value),
+  () =>
+    (editing.canEditMilestones ?? editing.canEdit).value &&
+    !(isManual.value && billingReadonly.value),
 );
 const otherSectionOpen = computed(
   () => editing.editingSection.value !== '' && !isEditing.value,

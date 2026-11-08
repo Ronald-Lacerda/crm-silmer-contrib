@@ -10,6 +10,8 @@ import {
   watch,
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import OrderOlistPanel from '../components/order/OrderOlistPanel.vue';
+import OrderPriceBreakdown from '../components/order/OrderPriceBreakdown.vue';
 import OrderClosingSection from '../components/order/OrderClosingSection.vue';
 import OrderBillingSection from '../components/order/OrderBillingSection.vue';
 import OrderArtworkSection from '../components/order/OrderArtworkSection.vue';
@@ -81,6 +83,8 @@ const shareAvailable = canSharePdf();
 // PFI-06: one section in edit at a time, decided here so two open forms can
 // never disagree about the version they are saving over.
 const editingSection = ref('');
+const editingVersion = ref(null);
+const olistOperation = ref(null);
 // ADR 016: "Gerar pedido" sends the seller to the section that fills a
 // missing point; the section opens its own editor when it can.
 /** @type {import('vue').Ref<{section: string, at: number}|null>} */
@@ -114,11 +118,33 @@ const isAdmin = computed(() =>
  * neither the owner nor an administrator sees the whole page, and no button
  * that the API would refuse with 403.
  */
-const canEdit = computed(
+const commercialAccess = computed(
   () =>
     Boolean(order.value) &&
     (isAdmin.value || order.value.seller?.id === sessionUser.value?.id),
 );
+const olistLocked = computed(() =>
+  Boolean(
+    order.value?.olistLocked ||
+    olistOperation.value?.unavailable ||
+    (olistOperation.value &&
+      !['invalidated', 'rejected'].includes(olistOperation.value.state)),
+  ),
+);
+const canEdit = computed(
+  () =>
+    commercialAccess.value && !order.value?.cancelledAt && !olistLocked.value,
+);
+const canEditMilestones = computed(
+  () => commercialAccess.value && !order.value?.cancelledAt,
+);
+const canConfirm = computed(
+  () =>
+    commercialAccess.value &&
+    !order.value?.cancelledAt &&
+    (!olistLocked.value || order.value?.olistConfirmationAllowed === true),
+);
+const olistEnabled = computed(() => sessionUser.value?.olistEnabled === true);
 const customerName = computed(
   () => order.value?.ficha?.summary?.cliente || 'Cliente não informado',
 );
@@ -152,7 +178,8 @@ const showProgress = computed(
  * edited, so the editor's own Salvar and Cancelar stay in reach.
  */
 const mobileAction = computed(() => {
-  if (!order.value || editingSection.value !== '') return '';
+  if (!order.value || editingSection.value !== '' || order.value.cancelledAt)
+    return '';
   if (
     isPhone.value &&
     openSection.value === 'billing' &&
@@ -160,7 +187,7 @@ const mobileAction = computed(() => {
   )
     return '';
   if (!isPending.value) return 'pdf';
-  if (!canEdit.value || isStore.value) return '';
+  if (!canConfirm.value || isStore.value) return '';
   return nextStep.value ? 'step' : 'generate';
 });
 const itemCount = computed(() => order.value?.ficha?.items?.length ?? 0);
@@ -207,7 +234,10 @@ async function saveSection(section, value) {
     const response = await request(
       `/api/v1/orders/${encodeURIComponent(props.orderId)}/sections/${section}`,
       {
-        body: { expectedVersion: order.value.version, value },
+        body: {
+          expectedVersion: editingVersion.value ?? order.value.version,
+          value,
+        },
         idempotencyKey: commandKey(),
         method: 'PATCH',
       },
@@ -238,7 +268,10 @@ async function runCommand(action, body) {
     const response = await request(
       `/api/v1/orders/${encodeURIComponent(props.orderId)}/${action}`,
       {
-        body: { ...body, expectedVersion: order.value.version },
+        body: {
+          ...body,
+          expectedVersion: body.expectedVersion ?? order.value.version,
+        },
         idempotencyKey: commandKey(),
         method: 'POST',
       },
@@ -293,7 +326,10 @@ async function saveMilestones(value) {
     const response = await request(
       `/api/v1/orders/${encodeURIComponent(props.orderId)}/milestones`,
       {
-        body: { ...value, expectedVersion: order.value.version },
+        body: {
+          ...value,
+          expectedVersion: editingVersion.value ?? order.value.version,
+        },
         idempotencyKey: commandKey(),
         method: 'PATCH',
       },
@@ -374,6 +410,21 @@ async function generatePdf(share = false) {
  * @param {string} section
  */
 function goToSection(section) {
+  const gaps = order.value?.missingFields ?? [];
+  if (
+    section === 'items' &&
+    !order.value?.ficha?.sizePricing &&
+    order.value?.confirmedAt &&
+    gaps.some((field) =>
+      /^(?:sizePricing|priceBreakdown)(?:\.|$)/u.test(field),
+    ) &&
+    !gaps.some((field) => /^items(?:\[|$)/u.test(field))
+  ) {
+    const target = globalThis.document?.querySelector('.order-source h2');
+    target?.scrollIntoView?.({ block: 'center' });
+    target?.focus();
+    return;
+  }
   if (section !== ORDER_REVIEW_SECTION) {
     editRequest.value = { at: Date.now(), section };
     return;
@@ -495,6 +546,8 @@ watch(editRequest, (next) => {
 
 provide('orderEditing', {
   canEdit,
+  canConfirm,
+  canEditMilestones,
   command: runCommand,
   editingSection,
   editRequest,
@@ -517,6 +570,7 @@ provide('orderEditing', {
       refreshTimer = 0;
       pendingLiveRefresh = true;
     }
+    editingVersion.value = order.value?.version ?? null;
     editingSection.value = section;
     if (isAccordionSection(section) && openSection.value !== section) {
       openSection.value = section;
@@ -525,6 +579,7 @@ provide('orderEditing', {
   },
   stop() {
     editingSection.value = '';
+    editingVersion.value = null;
     if (pendingLiveRefresh) {
       pendingLiveRefresh = false;
       scheduleLiveRefresh();
@@ -735,7 +790,14 @@ onBeforeUnmount(() => {
       <button v-if="error" type="button" @click="load(true)">
         Tentar novamente
       </button>
-      <p v-if="isStore" class="op-readonly">
+      <p v-if="order.cancelledAt" class="op-readonly">
+        Pedido cancelado. A edição e a geração estão bloqueadas.
+      </p>
+      <p v-else-if="olistLocked" class="op-readonly">
+        Pedido protegido por uma operação Olist. A composição não pode ser
+        editada ou reaberta.
+      </p>
+      <p v-else-if="isStore" class="op-readonly">
         <OrderIcon name="lock" />
         Pedido da loja do site: travado, sem edição.
       </p>
@@ -752,6 +814,7 @@ onBeforeUnmount(() => {
           <OrderStoreCorrection
             v-if="
               isAdmin &&
+              canEdit &&
               !order.isTest &&
               [
                 'bloquinho-22',
@@ -803,6 +866,20 @@ onBeforeUnmount(() => {
           </p>
         </aside>
       </div>
+
+      <OrderPriceBreakdown
+        v-if="!order.ficha?.sizePricing && (isStore || order.confirmedAt)"
+        :order="order"
+        :can-edit="canEdit && (!isStore || isAdmin)"
+        @changed="load(true)"
+      />
+      <OrderOlistPanel
+        v-if="olistEnabled || isAdmin"
+        :order-id="order.id"
+        :revision="order.version"
+        :disabled="editingSection !== ''"
+        @operation="olistOperation = $event"
+      />
 
       <div
         v-if="mobileAction"

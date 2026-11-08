@@ -107,6 +107,21 @@ test('parses the typed amount in Brazilian format into integer cents', () => {
   assert.equal(parseBrl('1.234.567,89'), 123456789);
 });
 
+test('parses subtotal cents exactly at the safe integer boundary', () => {
+  assert.equal(parseBrl('90.071.992.547.409,91'), Number.MAX_SAFE_INTEGER);
+  assert.equal(parseBrl('90.071.992.547.409,89'), 9007199254740989);
+  assert.equal(parseBrl('90.071.992.547.409,92'), null);
+});
+
+test('routes subtotal review blockers to the items instead of an independent amount', () => {
+  const missingFields = ['sizePricing.group.line', 'paymentCondition'];
+  assert.equal(nextOrderStep({ missingFields })?.section, 'items');
+  assert.deepEqual(missingFieldLabels(missingFields), [
+    'subtotais por tamanho a revisar',
+    'forma de pagamento',
+  ]);
+});
+
 test('refuses malformed amounts in the browser, before the request', () => {
   // PFI-11: the dot-decimal form is a different number, never a guess.
   for (const text of ['4,820.00', 'abc', '', '0', '0,00', '-1', '1,234']) {

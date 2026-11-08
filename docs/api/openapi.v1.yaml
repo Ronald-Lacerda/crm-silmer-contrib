@@ -6522,6 +6522,8 @@ components:
           origin,
           isTest,
           locked,
+          olistLocked,
+          olistConfirmationAllowed,
           storeNumber,
           leadTimeBusinessDays,
           gatewayPayment,
@@ -6545,6 +6547,17 @@ components:
             Pedido da loja: escritas comerciais usuais são recusadas
             (409 ORDER_LOCKED); cancelamento local usa comando dedicado por Admin.
             Pedido cancelado também fica locked e é terminal (409 ORDER_CANCELLED).
+        olistLocked:
+          type: boolean
+          description: >-
+            Trava comercial Olist considerando operações e efeitos de todas as
+            contas, independente da habilitação do leitor. Não concede acesso ERP.
+        olistConfirmationAllowed:
+          type: boolean
+          description: >-
+            Exceção somente para confirmar pendente ativo sem mudar conteúdo:
+            todas as travas Olist devem estar confirmed ou linked. Não permite
+            editar ou reabrir e não altera a autorização comercial da API.
         storeNumber:
           type: [string, 'null']
           pattern: '^LJ-[0-9A-F]{8}$'

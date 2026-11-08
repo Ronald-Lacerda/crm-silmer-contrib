@@ -14,6 +14,7 @@ import {
 } from '../../lib/order-format.js';
 import OrderIcon from './OrderIcon.vue';
 import OrderSheetHead from './OrderSheetHead.vue';
+import OrderPricedItemsSection from './OrderPricedItemsSection.vue';
 
 const SECTION = 'items';
 // The value the ficha prints when a garment has no sleeve or no viés (PFI-07).
@@ -73,6 +74,8 @@ const editing = inject('orderEditing');
 const form = ref(null);
 const draft = ref([]);
 const saving = ref(false);
+const initializing = ref(false);
+const hasPricing = computed(() => Array.isArray(props.order.ficha.sizePricing));
 const errorMessage = ref('');
 /** @type {import('vue').Ref<Record<string, string>>} */
 const lineErrors = ref({});
@@ -82,9 +85,15 @@ const announcement = ref('');
 /** @type {import('vue').Ref<Record<string, boolean>>} */
 const extrasOpen = ref({});
 
-const isEditing = computed(() => editing.editingSection.value === SECTION);
+const isEditing = computed(
+  () => editing.editingSection.value === SECTION && !initializing.value,
+);
 const canEdit = computed(
-  () => editing.canEdit.value && props.order.status === 'pendente',
+  () =>
+    !hasPricing.value &&
+    !initializing.value &&
+    editing.canEdit.value &&
+    props.order.status === 'pendente',
 );
 const otherSectionOpen = computed(
   () => editing.editingSection.value !== '' && !isEditing.value,
@@ -257,7 +266,22 @@ function blankItem() {
   };
 }
 
+async function initializePricing() {
+  if (!canEdit.value || otherSectionOpen.value || initializing.value) return;
+  initializing.value = true;
+  errorMessage.value = '';
+  editing.start(SECTION);
+  const result = await editing.save('size-pricing', { action: 'initialize' });
+  initializing.value = false;
+  editing.stop();
+  if (!result.ok) errorMessage.value = result.message;
+  await nextTick();
+  if (result.ok) document.getElementById('size-pricing-instructions')?.focus();
+  else sheet.value?.querySelector('[role="alert"]')?.focus();
+}
+
 async function startEditing() {
+  if (hasPricing.value || initializing.value) return;
   // structuredClone refuses a reactive proxy (DataCloneError); the ficha is
   // plain JSON data, so a JSON round trip is the copy that works here.
   draft.value = JSON.parse(JSON.stringify(props.order.ficha.items)).map(
@@ -444,7 +468,9 @@ async function save() {
 </script>
 
 <template>
+  <OrderPricedItemsSection v-if="hasPricing" :order="order" />
   <section
+    v-else
     ref="sheet"
     class="op-sheet"
     :data-editing="isEditing || undefined"
@@ -464,7 +490,13 @@ async function save() {
       @edit="startEditing"
     />
 
-    <p v-if="errorMessage" role="alert" class="op-alert" :hidden="!open">
+    <p
+      v-if="errorMessage"
+      role="alert"
+      tabindex="-1"
+      class="op-alert"
+      :hidden="!open"
+    >
       {{ errorMessage }}
     </p>
 
@@ -1041,6 +1073,23 @@ async function save() {
       <p v-if="!shownItems.length" class="op-empty">
         Nenhum item no pedido ainda.
       </p>
+      <div v-if="(canEdit || initializing) && order.confirmedAt == null">
+        <button
+          type="button"
+          :disabled="initializing || otherSectionOpen"
+          @click="initializePricing"
+        >
+          {{
+            initializing
+              ? 'Preparando subtotais…'
+              : 'Usar subtotais por tamanho'
+          }}
+        </button>
+        <p class="op-hint">
+          Os subtotais começam vazios e precisam de revisão humana. Nenhum preço
+          é inferido do valor anterior.
+        </p>
+      </div>
       <p class="op-hint">
         A quantidade de cada item e o total do pedido saem dos tamanhos e nunca
         são digitados.

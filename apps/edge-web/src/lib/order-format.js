@@ -122,13 +122,15 @@ export function handoffReasonLabel(reasonCode) {
  *   amount this operation can charge.
  */
 export function parseBrl(text) {
-  if (typeof text !== 'string') return null;
+  if (typeof text !== 'string' || text.length > 64) return null;
   const match = BRL_AMOUNT.exec(text.trim());
   if (!match) return null;
-  const reais = Number(match[1].replaceAll('.', ''));
-  const cents = Number((match[2] ?? '').padEnd(2, '0'));
-  const total = reais * 100 + cents;
-  return Number.isSafeInteger(total) && total > 0 ? total : null;
+  const reais = BigInt(match[1].replaceAll('.', ''));
+  const cents = BigInt((match[2] ?? '').padEnd(2, '0'));
+  const total = reais * 100n + cents;
+  return total > 0n && total <= BigInt(Number.MAX_SAFE_INTEGER)
+    ? Number(total)
+    : null;
 }
 
 /** @param {unknown} cents @returns {string} e.g. `4.820,00`, or '' when unset */
@@ -174,6 +176,10 @@ export function missingFieldLabels(missingFields) {
 /** @param {string} field */
 function missingFieldLabel(field) {
   if (field === 'items') return 'nenhum item';
+  if (field === 'sizePricing' || field.startsWith('sizePricing.'))
+    return 'subtotais por tamanho a revisar';
+  if (field === 'priceBreakdown' || field.startsWith('priceBreakdown.'))
+    return 'composição de preços a revisar';
   if (field === 'artwork') return 'quem faz a arte';
   if (field === 'summary.data_entrega_confirmada') return 'entrega prometida';
   if (field === 'finalAmount') return 'valor final';
@@ -225,7 +231,12 @@ const ORDER_STEPS = Object.freeze([
     action: 'Completar itens',
     key: 'items',
     label: 'Itens',
-    owns: isItemGap,
+    owns: (field) =>
+      isItemGap(field) ||
+      field === 'sizePricing' ||
+      field.startsWith('sizePricing.') ||
+      field === 'priceBreakdown' ||
+      field.startsWith('priceBreakdown.'),
     section: 'items',
   },
   {

@@ -19,6 +19,21 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## Olist T12 — interface de composição e prévia (08/11/2026)
+
+A T12 aplica os contratos existentes das ADRs 057/062/067/068 à interface:
+composição por IDs, subtotais e total backend, revisão após alterações e
+complementos autorizados de legado/loja. `/olist?pedido=<UUID>` permite
+projeção/prévia ao habilitado sem abrir edição comercial ou Inbox. Metadados
+booleanos de trava na leitura comercial consideram todas as contas e não
+concedem capacidade Olist; pagamento e entrega conservam autorização própria.
+
+Geração real permanece desligada. O wiring criador `/export` foi rejeitado
+pela revisão automática de aprovação e não foi incluído; T12 fica aberta nesse
+ponto até autorização explícita. T13/T25 e os gates posteriores continuam
+separados. [Contrato, verificação e rollback](docs/runbooks/olist-phase4.md#t12--composição-e-conferência-por-pedido-08112026).
+Sem mudança de flags, migrações, credenciais, infraestrutura ou deploy.
+
 ## OLIST-T11 — interface administrativa Olist (07/11/2026)
 
 OLIST-03–05, 11, 22–25 e 48: `/olist` oferece conexão/reconexão/desconexão,

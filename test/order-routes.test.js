@@ -56,6 +56,8 @@ const ORDER_KEYS = [
   'locked',
   'missingFields',
   'number',
+  'olistLocked',
+  'olistConfirmationAllowed',
   'orderDate',
   'origin',
   'paidOn',
