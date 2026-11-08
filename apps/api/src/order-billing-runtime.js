@@ -110,7 +110,7 @@ function owns(actor, order) {
   );
 }
 
-/** @param {any} database @param {{access:any,environment?:Record<string,string|undefined>,clock?:()=>Date,idFactory?:()=>string}} options */
+/** @param {any} database @param {{access:any,environment?:Record<string,string|undefined>,clock?:()=>Date,idFactory?:()=>string,billingChat?:any}} options */
 export function createOrderBillingRuntime(database, options) {
   const environment = options.environment ?? process.env;
   const enabled = environment.ORDER_BILLING_ENABLED === 'true';
@@ -381,6 +381,7 @@ export function createOrderBillingRuntime(database, options) {
   }
   /** @param {any} client @param {string} chargeId */
   async function chargeContext(client, chargeId) {
+    await options.billingChat?.lockCharge(client, uuid(chargeId));
     const existing = (
       await client.query(
         'SELECT order_id FROM crm.order_billing_charges WHERE id=$1',
@@ -539,6 +540,11 @@ export function createOrderBillingRuntime(database, options) {
         const context = await chargeContext(client, input.chargeId);
         const { order, plan, charge } = context;
         if (
+          options.billingChat &&
+          !(await options.billingChat.checkoutAllowed(client, charge.id))
+        )
+          return { allowed: false, chargeId: charge.id };
+        if (
           !enabled ||
           charge.status !== 'queued' ||
           new Date(charge.valid_until) <= clock() ||
@@ -581,6 +587,11 @@ export function createOrderBillingRuntime(database, options) {
             ).url !== url
           )
             throw new BillingError(409, 'BILLING_CHECKOUT_CONFLICT');
+          await options.billingChat?.checkoutCreated(
+            client,
+            charge.id,
+            input.correlationId,
+          );
           return { recorded: true, chargeId: charge.id };
         }
         await client.query(
@@ -602,6 +613,11 @@ export function createOrderBillingRuntime(database, options) {
           [order.id, clock()],
         );
         await automaticAudit(client, context, 'created', input.correlationId);
+        await options.billingChat?.checkoutCreated(
+          client,
+          charge.id,
+          input.correlationId,
+        );
         return { recorded: true, chargeId: charge.id };
       });
     },
@@ -674,6 +690,11 @@ export function createOrderBillingRuntime(database, options) {
             ).url !== receiptUrl
           )
             throw new BillingError(409, 'BILLING_RECEIPT_CONFLICT');
+          await options.billingChat?.paymentRecorded(
+            client,
+            charge.id,
+            input.correlationId,
+          );
           return { recorded: true, chargeId: charge.id, duplicate: true };
         }
         const existing = await paymentsFor(client, order.id);
@@ -726,6 +747,11 @@ export function createOrderBillingRuntime(database, options) {
         // A cancelled order is immutable (migration 0070): the receipt stays
         // as unapplied evidence for human review, the order row is untouched.
         if (!order.cancelled_at) await refreshSettlement(client, order.id);
+        await options.billingChat?.paymentRecorded(
+          client,
+          charge.id,
+          input.correlationId,
+        );
         await automaticAudit(
           client,
           context,

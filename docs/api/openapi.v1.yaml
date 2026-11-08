@@ -1,4 +1,7 @@
 openapi: 3.1.0
+x-order-billing-chat-contract:
+  status: boundary-only-not-registered
+  document: ./order-billing-chat.v1.json
 info:
   title: CRM Silmer API
   version: 1.0.0

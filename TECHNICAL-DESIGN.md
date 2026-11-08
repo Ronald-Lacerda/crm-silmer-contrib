@@ -72,6 +72,20 @@ o repositório da Inbox ordena Responder pela última mensagem e ID decrescentes
 O fingerprint versiona somente Responder com `latest-message-v1`, recusando
 cursores da antiga ordem. Classificação, alertas e consultas legadas permanecem.
 
+## Contrato de intenção de cobrança, COB-CHAT-B01 (06/11/2026)
+
+[ADR 066](docs/adr/066-intencoes-de-cobranca-e-envio-transacional.md) e
+[API](docs/api/order-billing-chat.md): POST de intenção discriminada, GET de
+intenção e histórico privado paginado. Fronteira injetável e escrita false
+por padrão. B02 implementa contexto/versões,
+idempotência e histórico sob transação na migração expand 0063, preservando
+as filas existentes e a identidade do ator. B03 compõe callback,
+mensagem/outbox/auditoria na mesma transação e reserva final; migração 0064
+projeta estados reais, sem retry de efeito incerto. O transporte humano
+revalida comandos `billing_send:true` pelo preflight autenticado antes do HTTP
+externo. B04 integra rotas, serviço e flags na API/worker sem interromper
+recebimento. Nenhuma flag habilitada nem workflow remoto publicado. Frontend adiado.
+
 ## Triagem prioritária do Vendedor — VND-L05 (06/11/2026)
 
 [ADR 063](docs/adr/063-triagem-prioritaria-do-vendedor.md), AGT-01–05/08:

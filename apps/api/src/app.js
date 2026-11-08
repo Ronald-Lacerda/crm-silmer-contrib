@@ -25,10 +25,12 @@ import { registerDashboardMetricsRoutes } from './dashboard-metrics-routes.js';
 import { registerConversationReminderRoutes } from './conversation-reminder-routes.js';
 import { registerLeadOutcomeRoutes } from './lead-outcome-routes.js';
 import { registerOrderBillingRoutes } from './order-billing-routes.js';
+import { registerOrderBillingChatRoutes } from './order-billing-chat-routes.js';
 import { registerShippingRoutes } from './shipping-routes.js';
 import { registerOlistRoutes } from './olist-routes.js';
 import { registerN8nRoutes } from './n8n-routes.js';
 import { registerN8nCommandMediaRoutes } from './n8n-command-media-routes.js';
+import { registerN8nBillingPreflightRoutes } from './n8n-billing-preflight-routes.js';
 import { registerOperationRoutes } from './operation-routes.js';
 import { registerOrderRoutes } from './order-routes.js';
 import { registerOrderAssistanceRoutes } from './order-assistance-routes.js';
@@ -71,6 +73,7 @@ export const WEBHOOK_REQUESTS_PER_SECOND = 20;
  *   leadOutcomes?: any,
  *   conversationReminders?: any,
  *   billing?: any,
+ *   billingChat?: any,
  *   shipping?: any,
  *   olist?: any,
  *   orderPdfRenderer?: (html: string) => Promise<Buffer>,
@@ -263,6 +266,18 @@ export function createApi(options = {}, runtime = {}) {
       return context;
     });
   }
+  if (runtime.n8n?.readReservedSend) {
+    registerN8nBillingPreflightRoutes(
+      api,
+      runtime.n8n,
+      (/** @type {any} */ request) => ({
+        correlationId:
+          requests.get(request)?.correlationId ?? 'billing-preflight-request',
+        requestId:
+          requests.get(request)?.requestId ?? 'billing-preflight-request',
+      }),
+    );
+  }
 
   if (runtime.conversations) {
     registerConversationRoutes(api, runtime.conversations, (request) => {
@@ -406,6 +421,17 @@ export function createApi(options = {}, runtime = {}) {
       correlationId: requests.get(request)?.correlationId ?? 'billing-request',
       requestId: requests.get(request)?.requestId ?? 'billing-request',
     }));
+  }
+  if (runtime.billingChat) {
+    registerOrderBillingChatRoutes(
+      api,
+      runtime.billingChat,
+      (request) => ({
+        correlationId:
+          requests.get(request)?.correlationId ?? 'billing-chat-request',
+      }),
+      { enabled: runtime.billingChat.enabled === true },
+    );
   }
   if (runtime.orderAssistance) {
     registerOrderAssistanceRoutes(api, runtime.orderAssistance, (request) => ({

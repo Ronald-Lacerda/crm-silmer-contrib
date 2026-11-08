@@ -189,7 +189,7 @@ Cobrir positivos, negativos e concorrentes: pagamento×entrega, legado, novo
 valor, transferência×decisão, nova mensagem, fechamento, replay, snooze vencido,
 prazo ausente, loja, teste, outra conta, Financeiro, CSRF, snapshot repetido,
 falha parcial e timeout. Testes live usam somente dados sintéticos.
-Não inclui cobrança InfinitePay da RFC 045, novo status comercial, coortes ou
+Não inclui cobrança InfinitePay da RFC 049, novo status comercial, coortes ou
 follow-up automático. A perda declarada de MET-06–08 não é status comercial:
 é desfecho de lead em registro próprio (emenda ADR 061). PNL-01–03 ganham a composição desta central; PNL-04 não
 altera o destino atual do login.

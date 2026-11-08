@@ -38,6 +38,9 @@
 - [068 — Cancelamento local terminal pré-exportação](068-cancelamento-local-terminal-pre-exportacao.md),
   RFC 050 / OLIST-T23: marcador separado dos dois status comerciais, motivo
   cifrado, ACL comercial, disputa com reserva de venda e histórico financeiro preservado.
+
+- [066 — Intenções de cobrança e envio transacional](066-intencoes-de-cobranca-e-envio-transacional.md),
+  RFC 047 / COB-CHAT-B01–B04; backend autorizado e frontend adiado até o redesign.
 - [063 — Triagem prioritária do Vendedor](063-triagem-prioritaria-do-vendedor.md),
   RFC 051 / VND-L05: dúvidas comerciais e alternativas sem regra inferida,
   urgência antes da ficha completa e perguntas só de campos faltantes.

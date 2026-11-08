@@ -1,5 +1,15 @@
 # Regras do CRM Silmer
 
+## Backend de envio integrado, 06/11/2026
+
+A [ADR 066](docs/adr/066-intencoes-de-cobranca-e-envio-transacional.md)
+autoriza backend de intenção humana durável com filas existentes. Correção
+pode definir outro valor de cobrança limitado ao saldo após vencimento,
+encerramento sem pagamento e conferência da anterior, sem mudar o total
+comercial ou apagar links/recebimentos. Reserva final e callbacks conservam
+as guardas de autorização/idempotência. Frontend adiado até o redesign;
+contrato HTTP isolado não comprova integração ou autoriza ativação remota.
+
 ## Olist — escopo inicial de centavos exatos (05/11/2026)
 
 A [ADR 062](docs/adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) /

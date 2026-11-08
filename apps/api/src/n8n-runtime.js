@@ -60,6 +60,9 @@ export function createN8nApiRuntime(database, options = {}) {
     messageEnvelopeKey,
     orders: options.orders,
     requireHumanOrderCreation: true,
+    billingSendEnabled:
+      environment.ORDER_BILLING_ENABLED === 'true' &&
+      environment.ORDER_BILLING_CHAT_SEND_ENABLED === 'true',
   });
   const service = createN8nIntegrationService({
     repository,
@@ -155,6 +158,8 @@ export function createN8nApiRuntime(database, options = {}) {
       repository.readSiteMessages(input),
     readReservedMedia: (/** @type {any} */ input) =>
       repository.readReservedMedia(input),
+    readReservedSend: (/** @type {any} */ input) =>
+      repository.readReservedSend(input),
     /**
      * The MVP agent's `order.intent_confirmed` event, kept out of the n8n
      * integration service: order creation is idempotent by conversation

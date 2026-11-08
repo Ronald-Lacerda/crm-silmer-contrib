@@ -1,0 +1,1282 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  />
+  <title>Silmer — Avaliar envio de cobrança</title>
+  <link rel="stylesheet" href="../../apps/edge-web/src/tokens.css" />
+  <style>
+    @font-face {
+      font-family: Poppins;
+      src: url(assets/poppins-latin-400-normal.woff2);
+      font-weight: 400;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: Poppins;
+      src: url(assets/poppins-latin-600-normal.woff2);
+      font-weight: 600;
+      font-display: swap;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      background: var(--color-page);
+      color: var(--color-text);
+      font: 14px/1.6 var(--font-family-sans);
+    }
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+      color: inherit;
+    }
+    button,
+    select,
+    input {
+      min-height: 44px;
+    }
+    button {
+      cursor: pointer;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      background: var(--color-surface);
+      padding: 9px 16px;
+      font-weight: 600;
+    }
+    button:hover {
+      background: var(--color-surface-raised);
+    }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .primary {
+      background: var(--color-accent-solid);
+      color: var(--color-on-accent);
+      border-color: var(--color-accent-solid);
+    }
+    .primary:hover {
+      background: var(--color-accent-solid-hover);
+    }
+    :focus-visible {
+      outline: 3px solid var(--color-focus);
+      outline-offset: 3px;
+    }
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0 0 12px;
+    }
+    h1 {
+      font-size: 24px;
+    }
+    h2 {
+      font-size: 21px;
+    }
+    h3 {
+      font-size: 16px;
+    }
+    small,
+    .muted {
+      color: var(--color-text-muted);
+    }
+    small {
+      font-size: 13px;
+    }
+    .lab {
+      padding: 12px 24px;
+      border-bottom: 1px solid var(--color-border);
+      background: var(--color-surface-raised);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+    .lab strong {
+      color: var(--color-link);
+    }
+    select,
+    input,
+    textarea {
+      border: 1px solid var(--color-border);
+      background: var(--color-surface);
+      border-radius: var(--radius-md);
+      padding: 9px;
+      max-width: 100%;
+    }
+    .shell {
+      display: grid;
+      grid-template-columns: 190px 1fr;
+      min-height: calc(100vh - 84px);
+    }
+    nav {
+      padding: 28px 16px;
+      border-right: 1px solid var(--color-border);
+      background: var(--color-surface);
+    }
+    .brand {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -1px;
+      margin: 0 12px 32px;
+    }
+    nav button {
+      width: 100%;
+      text-align: left;
+      margin-bottom: 8px;
+      border-color: transparent;
+    }
+    nav button[aria-pressed='true'] {
+      background: var(--color-selected);
+      color: var(--color-link);
+    }
+    main {
+      padding: 28px;
+      max-width: 1340px;
+      width: 100%;
+      margin: auto;
+    }
+    .heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 13px;
+      padding: 3px 10px;
+      border-radius: var(--radius-pill);
+      color: var(--status-success-text);
+      background: var(--status-success-surface);
+    }
+    .workspace {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      background: var(--color-surface);
+      min-height: 570px;
+    }
+    .list {
+      border-right: 1px solid var(--color-border);
+      padding: 20px;
+      background: var(--color-surface-raised);
+    }
+    .contact {
+      padding: 14px;
+      background: var(--color-selected);
+      border-radius: var(--radius-md);
+      margin-top: 18px;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .chat {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .chat-head {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .timeline {
+      padding: 24px;
+      flex: 1;
+      min-height: 240px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .bubble {
+      max-width: 86%;
+      border: 1px solid var(--color-border);
+      padding: 14px 18px;
+      border-radius: var(--radius-lg);
+      align-self: flex-start;
+      white-space: pre-line;
+    }
+    .bubble.out {
+      align-self: flex-end;
+      background: var(--color-selected);
+    }
+    .bubble small {
+      display: block;
+      margin-top: 8px;
+    }
+    .compose {
+      padding: 18px;
+      border-top: 1px solid var(--color-border);
+    }
+    textarea {
+      width: 100%;
+      resize: vertical;
+      min-height: 72px;
+    }
+    .compose .row {
+      margin-top: 10px;
+    }
+    .order-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr);
+      gap: 22px;
+    }
+    .panel {
+      padding: 24px;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+    }
+    dl {
+      margin: 16px 0;
+    }
+    dl > div {
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--color-border);
+    }
+    dt {
+      color: var(--color-text-muted);
+    }
+    dd {
+      margin: 0;
+      font-weight: 600;
+      text-align: right;
+    }
+    .amount {
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.6px;
+    }
+    .notice {
+      padding: 14px 16px;
+      border-radius: var(--radius-md);
+      background: var(--status-info-surface);
+      color: var(--status-info-text);
+      margin: 14px 0;
+    }
+    .warning {
+      background: var(--status-warning-surface);
+      color: var(--status-warning-text);
+    }
+    .error {
+      background: var(--status-error-surface);
+      color: var(--status-error-text);
+    }
+    dialog {
+      padding: 0;
+      width: min(570px, calc(100% - 24px));
+      max-height: 90dvh;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      background: var(--color-surface);
+      color: var(--color-text);
+      box-shadow: var(--shadow-overlay);
+    }
+    dialog::backdrop {
+      background: var(--color-overlay);
+    }
+    .dialog-head {
+      padding: 22px 24px 12px;
+    }
+    .dialog-body {
+      padding: 0 24px 20px;
+    }
+    .dialog-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--color-border);
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+    .choice {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      margin: 10px 0;
+      cursor: pointer;
+    }
+    .choice:has(:checked) {
+      border-color: var(--color-focus);
+      background: var(--color-selected);
+    }
+    input[type='radio'] {
+      accent-color: var(--color-focus);
+      width: 18px;
+    }
+    .choice small {
+      display: block;
+    }
+    .choice b {
+      font-size: 15px;
+    }
+    .message-preview {
+      padding: 16px;
+      border-left: 3px solid var(--color-focus);
+      background: var(--color-surface-raised);
+      white-space: pre-line;
+      overflow-wrap: anywhere;
+    }
+    .steps {
+      list-style: none;
+      padding: 0;
+    }
+    .steps li {
+      padding: 10px 0;
+      border-bottom: 1px solid var(--color-border);
+    }
+    .steps strong {
+      display: block;
+    }
+    .steps small {
+      display: block;
+    }
+    .screen[hidden],
+    [hidden] {
+      display: none !important;
+    }
+    #global-status {
+      margin-top: 16px;
+    }
+    .review-note {
+      margin-top: 22px;
+    }
+    #percent {
+      width: 90px;
+    }
+    #order-select {
+      width: 100%;
+    }
+    @media (max-width: 800px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+      nav {
+        display: flex;
+        align-items: center;
+        padding: 10px 16px;
+        border-right: 0;
+        border-bottom: 1px solid var(--color-border);
+        gap: 8px;
+      }
+      .brand {
+        font-size: 22px;
+        margin: 0 16px 0 0;
+      }
+      nav button {
+        width: auto;
+        margin: 0;
+      }
+      main {
+        padding: 18px;
+      }
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+      .list {
+        display: none;
+      }
+      .order-grid {
+        grid-template-columns: 1fr;
+      }
+      .lab {
+        padding: 12px 16px;
+      }
+      .lab small {
+        width: 100%;
+      }
+      .heading {
+        align-items: flex-start;
+      }
+      .chat-head {
+        padding: 16px;
+      }
+      .timeline {
+        padding: 16px;
+      }
+      .row {
+        flex-wrap: wrap;
+      }
+    }
+    @media (max-width: 400px) {
+      main {
+        padding: 12px;
+      }
+      .dialog-body,
+      .dialog-head {
+        padding-left: 18px;
+        padding-right: 18px;
+      }
+      .dialog-footer {
+        padding: 14px 18px;
+      }
+      .dialog-footer button {
+        flex: 1;
+      }
+      .lab select {
+        width: 100%;
+      }
+      .heading h1 {
+        font-size: 21px;
+      }
+      .bubble {
+        max-width: 96%;
+      }
+    }
+  </style>
+  <link rel="stylesheet" href="billing-layout.css" />
+  <section class="lab" aria-label="Controles de avaliação do protótipo">
+    <strong>Protótipo para avaliação</strong
+    ><label for="scenario">Cenário</label
+    ><select id="scenario">
+      <option value="signal">Sinal de 30%</option>
+      <option value="balance">Sinal pago → cobrar saldo</option>
+      <option value="full">Pagamento integral</option>
+      <option value="zero">Sem entrada (0%)</option>
+      <option value="existing">Link já gerado</option>
+      <option value="failure">Falha antes do envio</option>
+      <option value="unknown">Envio com resultado incerto</option>
+      <option value="transfer">Responsável muda durante geração</option>
+      <option value="earlypaid">Pagamento antes do envio</option>
+      <option value="expired">Link vencido</option>
+      <option value="unlinked">Pedido sem conversa</option>
+      <option value="pending">Pedido pendente</option>
+      <option value="forbidden">Sem permissão</option></select
+    ><button id="theme">Tema escuro</button><button id="reset">Reiniciar</button
+    ><small>Dados fictícios. Nenhuma cobrança ou mensagem real é criada.</small>
+  </section>
+  <div class="shell app-shell" data-sidebar="compact">
+    <aside class="app-sidebar">
+      <div
+        class="brand"
+        id="prototype-brand"
+        role="img"
+        aria-label="Silmer"
+      ></div>
+      <nav aria-label="Navegação do protótipo">
+        <button
+          id="nav-chat"
+          aria-pressed="true"
+          aria-label="Caixa de Entrada"
+          title="Caixa de Entrada"
+        >
+          <svg class="prototype-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+            /></svg
+          ><span class="nav-label">Caixa de Entrada</span>
+        </button>
+        <button
+          id="nav-order"
+          aria-pressed="false"
+          aria-label="Pedidos"
+          title="Pedidos"
+        >
+          <svg class="prototype-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z M14 2v4a2 2 0 0 0 2 2h4 M16 13H8 M16 17H8"
+            /></svg
+          ><span class="nav-label">Pedidos</span>
+        </button>
+      </nav>
+      <span class="sidebar-account-avatar" aria-label="Vendedor Exemplo"
+        >VE</span
+      >
+    </aside>
+    <div class="app-frame">
+      <header class="app-topbar">
+        <p class="topbar-trail">
+          <span class="topbar-company">Silmer</span
+          ><span aria-hidden="true">›</span
+          ><strong id="prototype-page-title">Caixa de Entrada</strong>
+        </p>
+        <div class="topbar-tools">
+          <span class="topbar-role">Vendedor Exemplo</span>
+        </div>
+      </header>
+      <main>
+        <section id="chat-screen" class="screen">
+          <div class="heading">
+            <div>
+              <h1>Caixa de Entrada</h1>
+              <p class="muted">Atendimento humano</p>
+            </div>
+            <span class="badge" id="ownership">Você é o responsável</span>
+          </div>
+          <div class="prototype-tabs" aria-label="Atalhos da Caixa">
+            <span class="active">Minhas <b>1</b></span
+            ><span>Aguardando</span><span>Todas</span>
+          </div>
+          <div class="workspace">
+            <aside class="list">
+              <div class="prototype-search">
+                <label for="prototype-search">Buscar conversas</label
+                ><input
+                  id="prototype-search"
+                  placeholder="Nome ou telefone"
+                  readonly
+                  aria-describedby="search-demo"
+                /><span id="search-demo" class="sr-only"
+                  >Busca ilustrativa neste protótipo.</span
+                >
+              </div>
+              <strong>Minhas conversas</strong>
+              <div class="contact">
+                <b>Cliente Exemplo</b><br /><small>Uniformes da equipe</small>
+                <p>Podemos fechar com o sinal.</p>
+              </div>
+            </aside>
+            <div class="chat">
+              <header class="chat-head">
+                <div class="row">
+                  <div class="contact-name">
+                    <span class="avatar" aria-hidden="true">CE</span>
+                    <div>
+                      <strong>Cliente Exemplo</strong><br /><small
+                        >WhatsApp · em atendimento</small
+                      >
+                    </div>
+                  </div>
+                  <div class="row">
+                    <button id="open-order">Abrir pedido 42-CRM</button
+                    ><button
+                      id="toggle-billing-context"
+                      aria-expanded="true"
+                      aria-controls="chat-history"
+                    >
+                      Cobranças
+                    </button>
+                  </div>
+                </div>
+              </header>
+              <div class="timeline" id="messages">
+                <div class="muted" style="text-align: center; font-size: 13px">
+                  Hoje · dados de demonstração
+                </div>
+                <div class="bubble">
+                  Podemos fechar com o sinal. Você me envia o link para
+                  pagar?<small>Cliente Exemplo · 14:32</small>
+                </div>
+              </div>
+              <footer class="compose">
+                <label for="draft">Mensagem</label
+                ><textarea id="draft">
+Vou conferir o prazo da produção e já te aviso.</textarea>
+                <div class="row">
+                  <button id="chat-bill" class="primary">Enviar cobrança</button
+                  ><small>Seu rascunho será preservado.</small>
+                </div>
+              </footer>
+            </div>
+          </div>
+        </section>
+        <section id="order-screen" class="screen op-page" hidden>
+          <header class="heading op-head">
+            <div class="op-head-text">
+              <div class="op-head-title">
+                <h1>Pedido 42-CRM</h1>
+                <span class="op-status badge" id="order-status"
+                  >Confirmado</span
+                >
+              </div>
+              <p>Cliente Exemplo — Uniformes da equipe · Atendimento</p>
+            </div>
+            <div class="op-head-actions">
+              <button id="open-chat">Abrir conversa</button>
+            </div>
+          </header>
+          <div class="op-layout">
+            <div class="op-main">
+              <section class="op-sheet">
+                <div class="op-sheet-head">
+                  <h2>Resumo do pedido</h2>
+                  <p class="op-sheet-state">Dados do atendimento</p>
+                </div>
+                <div class="prototype-sheet-body">
+                  <dl class="prototype-summary">
+                    <div>
+                      <dt>Cliente</dt>
+                      <dd>Cliente Exemplo</dd>
+                    </div>
+                    <div>
+                      <dt>Nome do pedido</dt>
+                      <dd>Uniformes da equipe</dd>
+                    </div>
+                    <div>
+                      <dt>Responsável</dt>
+                      <dd>Vendedor Exemplo</dd>
+                    </div>
+                    <div>
+                      <dt>Origem</dt>
+                      <dd>WhatsApp</dd>
+                    </div>
+                  </dl>
+                </div>
+              </section>
+              <section class="op-sheet">
+                <div class="op-sheet-head">
+                  <h2>Datas do pedido</h2>
+                  <p class="op-sheet-state">Entrega prometida</p>
+                </div>
+                <div class="prototype-sheet-body">
+                  <dl class="prototype-summary">
+                    <div>
+                      <dt>Confirmado em</dt>
+                      <dd>05/11/2026</dd>
+                    </div>
+                    <div>
+                      <dt>Entrega prometida</dt>
+                      <dd>20/11/2026</dd>
+                    </div>
+                  </dl>
+                </div>
+              </section>
+              <section class="op-sheet">
+                <div class="op-sheet-head">
+                  <h2>Cobranças</h2>
+                  <p class="op-sheet-state">
+                    Pagamento separado da confirmação
+                  </p>
+                </div>
+                <div id="billing-body" class="prototype-sheet-body">
+                  <dl class="prototype-summary">
+                    <div>
+                      <dt>Saldo a receber</dt>
+                      <dd class="amount" id="order-balance">R$ 1.200,00</dd>
+                    </div>
+                    <div>
+                      <dt>Recebimentos</dt>
+                      <dd id="order-received">
+                        Nenhum recebimento confirmado.
+                      </dd>
+                    </div>
+                  </dl>
+                  <div id="eligibility" class="notice">
+                    O link permite Pix e cartão. O cliente escolhe no checkout.
+                  </div>
+                  <button class="primary" id="order-bill">
+                    Enviar cobrança
+                  </button>
+                  <p class="review-note muted">
+                    Destino: Cliente Exemplo, na conversa vinculada. Revise
+                    antes de enviar.
+                  </p>
+                </div>
+              </section>
+              <section class="op-sheet">
+                <div class="op-sheet-head">
+                  <h2>Itens do pedido</h2>
+                  <p class="op-sheet-state">1 item · 40 peças</p>
+                </div>
+                <div class="prototype-sheet-body">
+                  <strong>Camiseta · Azul-marinho</strong>
+                  <p class="muted">40 peças · Algodão · Silk · Gola redonda</p>
+                </div>
+              </section>
+              <section class="op-sheet">
+                <div class="op-sheet-head">
+                  <h2>Arte do pedido</h2>
+                  <p class="op-sheet-state">Cliente envia</p>
+                </div>
+                <div class="prototype-sheet-body">
+                  <p class="muted">Arte vinculada à ficha do pedido.</p>
+                </div>
+              </section>
+            </div>
+            <aside class="op-rail">
+              <section class="op-sheet prototype-closing">
+                <div class="op-sheet-head">
+                  <h2>Fechamento</h2>
+                  <p class="op-sheet-state">Confirmado</p>
+                </div>
+                <div class="prototype-sheet-body">
+                  <dl>
+                    <div>
+                      <dt>Valor final</dt>
+                      <dd class="amount">R$ 1.200,00</dd>
+                    </div>
+                    <div>
+                      <dt>Condição</dt>
+                      <dd>Sinal e saldo</dd>
+                    </div>
+                    <div>
+                      <dt>Total de peças</dt>
+                      <dd>40</dd>
+                    </div>
+                  </dl>
+                  <p class="prototype-readonly">
+                    A cobrança não altera a confirmação comercial nem o valor
+                    aprovado.
+                  </p>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </section>
+        <div id="global-status" role="status" aria-live="polite"></div>
+        <p class="review-note muted">
+          Para avaliar: escolha um cenário, entre pela conversa ou pelo pedido e
+          use “Enviar cobrança”. Alterar o cenário reinicia a simulação.
+        </p>
+      </main>
+    </div>
+  </div>
+  <dialog id="flow" aria-labelledby="dialog-title">
+    <header class="dialog-head">
+      <small id="step-label">Cobrança do pedido 42-CRM</small>
+      <h2 id="dialog-title">Enviar cobrança</h2>
+    </header>
+    <div id="body" class="dialog-body"></div>
+    <footer class="dialog-footer">
+      <button id="back">Cancelar</button
+      ><button id="next" class="primary">Revisar cobrança</button>
+    </footer>
+  </dialog>
+  <script type="module">
+    import { brand } from '../../apps/edge-web/src/brand/index.js';
+    document.querySelector('#prototype-brand').innerHTML =
+      `<svg viewBox="${brand.monogram.viewBox}" aria-hidden="true"><path d="${brand.monogram.path}"/></svg>`;
+    const $ = (s) => document.querySelector(s),
+      money = (n) =>
+        new Intl.NumberFormat('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        }).format(n / 100);
+    let step = 0,
+      selected = 'signal',
+      pct = 30,
+      received = 0,
+      state = '',
+      link = false,
+      chargeAmount = 0,
+      chargeKind = '',
+      correctionAmount = null,
+      history = [],
+      activeCharge = null,
+      intent = '',
+      origin,
+      timers = [],
+      generation = 0;
+    const scenario = () => $('#scenario').value;
+    const total = 120000;
+    const amount = () =>
+      correctionAmount !== null
+        ? correctionAmount
+        : selected === 'signal'
+          ? Math.round((total * pct) / 100)
+          : total - received;
+    const kind = () =>
+      correctionAmount !== null
+        ? 'Cobrança corrigida'
+        : selected === 'signal'
+          ? 'Sinal'
+          : received
+            ? 'Saldo'
+            : 'Pagamento integral';
+    const message = () =>
+      `Olá! Segue a cobrança do pedido 42-CRM — ${kind().toLowerCase()}: ${money(amount())}.\nVocê pode pagar com Pix ou cartão pelo link:\n${link ? `checkout.exemplo.invalid/pedido-42-${activeCharge.id}` : '[Novo link será gerado ao confirmar]'}\nApós a confirmação do pagamento, o saldo será ${money(Math.max(0, total - received - amount()))}.`;
+    function screen(name) {
+      document.querySelector('#prototype-page-title').textContent =
+        name === 'chat' ? 'Caixa de Entrada' : 'Pedidos';
+      $('#chat-screen').hidden = name !== 'chat';
+      $('#order-screen').hidden = name !== 'order';
+      $('#nav-chat').setAttribute('aria-pressed', String(name === 'chat'));
+      $('#nav-order').setAttribute('aria-pressed', String(name === 'order'));
+    }
+    function reset() {
+      generation++;
+      timers.forEach(clearTimeout);
+      timers = [];
+      if ($('#flow').open) $('#flow').close();
+      received = scenario() === 'balance' ? 36000 : 0;
+      selected = ['full', 'zero', 'balance'].includes(scenario())
+        ? 'full'
+        : 'signal';
+      pct = 30;
+      state = '';
+      chargeAmount = 0;
+      correctionAmount = null;
+      intent = '';
+      history = [];
+      activeCharge = null;
+      if (['existing', 'balance', 'expired'].includes(scenario())) {
+        activeCharge = {
+          id: 1,
+          amount: 36000,
+          kind: 'Sinal',
+          status:
+            scenario() === 'balance'
+              ? 'paid'
+              : scenario() === 'expired'
+                ? 'expired'
+                : 'waiting',
+        };
+        history.push(activeCharge);
+      }
+      link = scenario() === 'existing';
+      $('#messages')
+        .querySelectorAll('.out')
+        .forEach((e) => e.remove());
+      $('#global-status').textContent = '';
+      sync();
+    }
+    function sync() {
+      $('#ownership').textContent =
+        scenario() === 'forbidden'
+          ? 'Responsável: outro vendedor'
+          : state === 'blocked'
+            ? 'Conversa transferida'
+            : 'Você é o responsável';
+      const reason = {
+        unlinked:
+          'Este pedido não possui conversa vinculada. A geração e o compartilhamento manual continuam disponíveis no CRM.',
+        pending: 'Confirme o pedido antes de gerar uma cobrança.',
+        forbidden:
+          'Somente o responsável atual ou administrador pode enviar esta cobrança.',
+        expired:
+          'O link anterior venceu. Confira a cobrança antes de emitir outra.',
+      }[scenario()];
+      if (reason) document.getElementById('global-status').textContent = reason;
+      $('#order-balance').textContent = money(total - received);
+      $('#order-received').textContent = received
+        ? `Recebimento confirmado: ${money(received)}.`
+        : 'Nenhum recebimento confirmado.';
+      $('#order-status').textContent =
+        scenario() === 'pending' ? 'Pendente' : 'Confirmado';
+      $('#eligibility').textContent =
+        reason || 'O link permite Pix e cartão. O cliente escolhe no checkout.';
+      $('#eligibility').classList.toggle('warning', !!reason);
+      for (const id of ['chat-bill', 'order-bill']) {
+        $('#' + id).disabled = !!reason || received >= total;
+        $('#' + id).textContent =
+          received >= total
+            ? 'Pedido quitado'
+            : state
+              ? 'Acompanhar cobrança'
+              : link
+                ? 'Enviar link existente'
+                : 'Enviar cobrança';
+      }
+      $('#open-chat').disabled = scenario() === 'unlinked';
+      historyView();
+    }
+    function open(e) {
+      origin = e.currentTarget;
+      intent = '';
+      step = state ? 2 : 0;
+      render();
+      $('#flow').showModal();
+    }
+    function render() {
+      if (step === 3 || step === 4) {
+        correctionView();
+        return;
+      }
+      const body = $('#body');
+      $('#back').textContent =
+        step === 0 ? 'Cancelar' : step === 1 ? 'Voltar' : 'Fechar';
+      $('#next').hidden = false;
+      $('#next').disabled = false;
+      $('#step-label').textContent =
+        step === 2
+          ? 'Acompanhamento da cobrança'
+          : 'Pedido 42-CRM · Cliente Exemplo';
+      if (step === 0) {
+        $('#dialog-title').textContent = link
+          ? 'Enviar link existente'
+          : 'Escolher cobrança';
+        body.innerHTML = `<label for="order-select">Pedido nesta conversa</label><select id="order-select"><option>42-CRM · Uniformes · R$ 1.200,00</option><option>43-CRM · Aventais · pendente (indisponível)</option></select><p class="muted">Somente pedidos confirmados podem ser cobrados.</p>${link ? '<div class="notice">Já existe um link válido de R$ 360,00. O envio usará esse mesmo link.</div>' : received ? `<div class="notice">Sinal de ${money(received)} confirmado. Saldo disponível: ${money(total - received)}.</div>` : scenario() === 'zero' ? '<div class="notice">Condição sem entrada (0%). Salve sem emitir ou cobre o integral por uma nova decisão humana.</div>' : `<label class="choice"><input type="radio" name="kind" value="signal" ${selected === 'signal' ? 'checked' : ''}><span><b>Sinal percentual</b><small>O saldo será cobrado depois por ação humana.</small></span></label><label for="percent">Percentual do sinal</label><input id="percent" type="number" min="1" max="99" step="1" value="${pct}"><span> %</span>`}${!link ? `<label class="choice"><input type="radio" name="kind" value="full" ${selected === 'full' ? 'checked' : ''}><span><b>${received ? 'Cobrar saldo disponível' : 'Pagamento integral'}</b><small>${money(total - received)}</small></span></label>` : ''}<div id="calculation" class="notice"></div><p>Um único link com Pix e cartão. Parcelamento escolhido pelo cliente na InfinitePay.</p>${scenario() === 'zero' ? '<button id="save-zero">Salvar sem entrada</button>' : ''}`;
+        $('#order-select').options[1].disabled = true;
+        body.querySelectorAll('[name=kind]').forEach(
+          (e) =>
+            (e.onchange = () => {
+              selected = e.value;
+              calculate();
+            }),
+        );
+        if ($('#percent'))
+          $('#percent').oninput = () => {
+            pct = Number($('#percent').value);
+            calculate();
+          };
+        if ($('#save-zero'))
+          $('#save-zero').onclick = () => {
+            $('#global-status').textContent =
+              'Condição salva sem entrada. Nenhuma cobrança ou mensagem foi criada.';
+            $('#flow').close();
+          };
+        calculate();
+        $('#next').textContent = 'Revisar cobrança';
+      } else if (step === 1) {
+        $('#dialog-title').textContent =
+          intent === 'correction'
+            ? 'Revisar cobrança corrigida'
+            : 'Revisar antes de enviar';
+        body.innerHTML = `<dl><div><dt>Pedido</dt><dd>42-CRM · Uniformes</dd></div><div><dt>Enviar para</dt><dd>Cliente Exemplo<br><small>WhatsApp · conversa atual</small></dd></div><div><dt>${kind()}</dt><dd>${money(amount())}</dd></div><div><dt>Saldo após pagamento</dt><dd>${money(total - received - amount())}</dd></div></dl><h3>Mensagem que será enviada</h3><div class="message-preview"></div><p class="muted">${link ? 'O mesmo link válido será usado.' : 'Validade do link: 24 horas.'} Gerar ou enviar não confirma o pagamento.</p>`;
+        body.querySelector('.message-preview').textContent = message();
+        if (intent === 'correction') {
+          const note = document.createElement('p');
+          note.className = 'notice warning';
+          note.textContent =
+            'O link anterior permanece no histórico como vencido e conferido, sem pagamento. A nova cobrança terá outro link. O valor total do pedido continua R$ 1.200,00.';
+          body.prepend(note);
+        }
+        $('#next').textContent = link
+          ? 'Enviar link existente'
+          : 'Gerar e enviar cobrança';
+      } else progress();
+    }
+    function calculate() {
+      const valid =
+        amount() >= 100 &&
+        amount() <= total - received &&
+        (selected !== 'signal' ||
+          (Number.isInteger(pct) &&
+            pct > 0 &&
+            pct < 100 &&
+            amount() >= 100 &&
+            total - amount() >= 100));
+      $('#calculation').textContent = valid
+        ? `${kind()}: ${money(amount())}. Saldo após pagamento: ${money(total - received - amount())}.`
+        : 'Informe um percentual inteiro entre 1 e 99. Cada parte precisa ter ao menos R$ 1,00.';
+      $('#next').disabled = !valid;
+    }
+    function later(fn, delay) {
+      const g = generation;
+      timers.push(
+        setTimeout(() => {
+          if (g === generation) fn();
+        }, delay),
+      );
+    }
+    function start() {
+      chargeAmount = amount();
+      chargeKind = kind();
+      if (!link) {
+        activeCharge = {
+          id: history.length + 1,
+          amount: chargeAmount,
+          kind: chargeKind,
+          status: 'creating',
+        };
+        history.push(activeCharge);
+      }
+      state = link ? 'queued' : 'creating';
+      step = 2;
+      render();
+      sync();
+      if (!link)
+        later(() => {
+          link = true;
+          activeCharge.status = 'waiting';
+          state =
+            scenario() === 'transfer'
+              ? 'blocked'
+              : scenario() === 'earlypaid'
+                ? 'paid'
+                : 'queued';
+          if (state === 'paid') {
+            received += chargeAmount;
+            activeCharge.status = 'paid';
+          }
+          render();
+          sync();
+        }, 900);
+      later(() => {
+        if (['blocked', 'paid'].includes(state)) return;
+        state =
+          scenario() === 'failure'
+            ? 'failed'
+            : scenario() === 'unknown'
+              ? 'unknown'
+              : 'sent';
+        if (state === 'sent') addMessage();
+        render();
+        sync();
+      }, 1900);
+      later(() => {
+        if (state === 'sent') {
+          state = 'delivered';
+          render();
+          sync();
+        }
+      }, 2900);
+    }
+    function addMessage() {
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble out';
+      bubble.textContent = message();
+      const small = document.createElement('small');
+      small.textContent = 'Você · envio simulado';
+      bubble.append(small);
+      $('#messages').append(bubble);
+    }
+    function progress() {
+      const texts = {
+        creating: [
+          'Gerando link',
+          'Você pode fechar esta janela. O acompanhamento continuará aqui.',
+        ],
+        queued: [
+          'Mensagem na fila',
+          'Link gerado. Aguardando o transporte da conversa.',
+        ],
+        sent: [
+          'Mensagem enviada',
+          'O transporte confirmou o envio. A entrega ainda não foi confirmada.',
+        ],
+        delivered: [
+          'Mensagem entregue',
+          'Entrega confirmada. A cobrança aguarda pagamento.',
+        ],
+        failed: [
+          'A mensagem não foi enviada',
+          'A falha ocorreu antes do envio. O link foi preservado. Você pode revisar e tentar enviar esse mesmo link.',
+        ],
+        unknown: [
+          'Resultado do envio a conferir',
+          'O link foi gerado, mas não foi possível confirmar o envio. Confira o histórico do transporte antes de qualquer nova tentativa.',
+        ],
+        blocked: [
+          'Envio bloqueado',
+          'O responsável pela conversa mudou durante a geração. O link foi guardado. O responsável atual precisa revisar destino e valor.',
+        ],
+        paid: [
+          'Envio interrompido: pagamento confirmado',
+          'O pagamento chegou antes do envio. Nenhuma mensagem de cobrança foi enviada.',
+        ],
+      };
+      const [title, desc] = texts[state];
+      $('#dialog-title').textContent = title;
+      $('#body').innerHTML =
+        `<div role="status" aria-live="polite" class="notice ${['failed', 'unknown', 'blocked'].includes(state) ? 'warning' : ''}">${desc}</div><ol class="steps"><li><strong>${link ? '✓ Link gerado' : '1. Gerando link'}</strong><small>${chargeKind} · ${money(chargeAmount)} · validade de 24 horas</small></li><li><strong>2. ${title}</strong><small>Cliente Exemplo · WhatsApp · pedido 42-CRM</small></li><li><strong>3. ${state === 'paid' ? 'Pagamento confirmado' : 'Aguardando pagamento'}</strong><small>${state === 'paid' ? 'Recebimento verificado na simulação.' : 'Apenas o recebimento verificado atualiza o saldo.'}</small></li></ol>`;
+      $('#next').hidden = state !== 'failed';
+      $('#next').textContent = 'Revisar envio do mesmo link';
+      $('#global-status').textContent = title + '. ' + desc;
+    }
+    $('#next').onclick = () => {
+      if (step === 3) {
+        step = 4;
+        correctionView();
+        $('#new-amount').focus();
+        return;
+      }
+      if (step === 4) {
+        correctionAmount = Math.round(Number($('#new-amount').value) * 100);
+        selected = 'full';
+        link = false;
+        state = '';
+        intent = 'correction';
+        step = 1;
+        render();
+        $('#dialog-title').tabIndex = -1;
+        $('#dialog-title').focus();
+        return;
+      }
+      if (step === 0) {
+        step = 1;
+        render();
+      } else if (step === 1) start();
+      else {
+        step = 1;
+        $('#scenario').value = 'existing';
+        render();
+      }
+      $('#dialog-title').tabIndex = -1;
+      $('#dialog-title').focus();
+    };
+    $('#back').onclick = () => {
+      if (step === 4) {
+        step = 3;
+        correctionView();
+        return;
+      }
+      if (step === 1 && intent === 'correction') {
+        step = 4;
+        correctionView();
+        return;
+      }
+      if (step === 1) {
+        step = 0;
+        render();
+      } else $('#flow').close();
+    };
+    $('#flow').addEventListener('close', () => {
+      if (origin?.isConnected) origin.focus();
+      else
+        document.querySelector('.screen:not([hidden]) [data-correct]')?.focus();
+    });
+    $('#chat-bill').onclick = open;
+    $('#order-bill').onclick = open;
+    $('#nav-chat').onclick = () => screen('chat');
+    $('#nav-order').onclick = () => screen('order');
+    $('#open-order').onclick = () => screen('order');
+    $('#open-chat').onclick = () => screen('chat');
+    $('#toggle-billing-context').onclick = () => {
+      const context = $('#chat-history');
+      context.hidden = !context.hidden;
+      $('#toggle-billing-context').setAttribute(
+        'aria-expanded',
+        String(!context.hidden),
+      );
+    };
+    $('#scenario').onchange = reset;
+    $('#reset').onclick = reset;
+    $('#theme').onclick = () => {
+      const dark = document.documentElement.dataset.theme !== 'dark';
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      $('#theme').textContent = dark ? 'Tema claro' : 'Tema escuro';
+    };
+    function historyView() {
+      for (const scope of ['chat', 'order']) {
+        let box = $('#' + scope + '-history');
+        if (!box) {
+          box = document.createElement('section');
+          box.id = scope + '-history';
+          box.className = 'panel';
+          box.style.marginTop = '18px';
+          (scope === 'order' ? $('#billing-body') : $('.workspace')).append(
+            box,
+          );
+        }
+        const waiting = history.some((c) =>
+          ['waiting', 'creating'].includes(c.status),
+        );
+        const blocked = ['forbidden', 'pending', 'unlinked'].includes(
+          scenario(),
+        );
+        box.innerHTML = `<h2>Histórico de cobranças</h2><p>Pedido: ${money(total)} · Recebido: ${money(received)} · A receber: ${money(total - received)}</p>${history.length ? history.map((c) => `<div class="notice"><strong>Link ${c.id} · ${c.kind} · ${money(c.amount)}</strong><br>${{ creating: 'Gerando link', waiting: 'Aguardando pagamento — link ainda válido', expired: 'Link vencido — conferência pendente', reviewed: 'Link vencido e conferido — sem pagamento', paid: 'Pagamento confirmado — recebimento preservado' }[c.status]}<br><small>checkout.exemplo.invalid/pedido-42-${c.id}</small></div>`).join('') : '<p class="muted">Nenhuma cobrança emitida. Emitir não significa receber.</p>'}<div class="row"><button data-correct ${!history.length || blocked || ['creating', 'queued', 'sent'].includes(state) ? 'disabled' : ''}>Corrigir cobrança</button><button data-balance ${received <= 0 || received >= total || waiting || blocked ? 'disabled' : ''}>Cobrar saldo de ${money(total - received)}</button></div>${waiting ? '<p class="muted">Existe cobrança em aberto. Confira seu recebimento antes de cobrar o restante.</p>' : ''}${activeCharge?.status === 'waiting' ? '<details><summary>Controles da avaliação</summary><p>Simulação local; não verifica pagamento real.</p><button data-pay>Simular pagamento confirmado deste link</button></details>' : ''}`;
+        box.querySelector('[data-correct]').onclick = (e) => {
+          origin = e.currentTarget;
+          step = 3;
+          correctionView();
+          $('#flow').showModal();
+        };
+        box.querySelector('[data-balance]').onclick = (e) => {
+          origin = e.currentTarget;
+          correctionAmount = null;
+          selected = 'full';
+          link = false;
+          state = '';
+          intent = 'balance';
+          step = 1;
+          render();
+          $('#flow').showModal();
+        };
+        if (box.querySelector('[data-pay]'))
+          box.querySelector('[data-pay]').onclick = () => {
+            generation++;
+            timers.forEach(clearTimeout);
+            timers = [];
+            received += activeCharge.amount;
+            correctionAmount = null;
+            selected = 'full';
+            activeCharge.status = 'paid';
+            state = '';
+            link = false;
+            $('#global-status').textContent =
+              'Recebimento confirmado na simulação. O histórico foi preservado e o saldo atualizado.';
+            sync();
+          };
+      }
+    }
+    function correctionView() {
+      const previous = history.at(-1);
+      $('#step-label').textContent = 'Correção · pedido 42-CRM';
+      $('#dialog-title').textContent =
+        step === 3 ? 'Conferir cobrança anterior' : 'Definir o novo valor';
+      $('#back').textContent = step === 3 ? 'Fechar' : 'Voltar';
+      $('#next').hidden = false;
+      if (step === 3) {
+        $('#body').innerHTML =
+          `<dl><div><dt>Link anterior</dt><dd>Link ${previous.id} · ${money(previous.amount)}</dd></div><div><dt>Recebido no pedido</dt><dd>${money(received)}</dd></div></dl><div class="notice warning">Corrigir não cancela o link anterior e apagar a mensagem não impede o pagamento. A InfinitePay não oferece cancelamento de link pela API.</div>${previous.status === 'paid' ? '<p>Esta cobrança já foi paga. O recebimento não pode ser editado ou apagado. Para cobrar a diferença, use Cobrar saldo. Se recebeu a mais, confira a devolução no provedor.</p>' : previous.status === 'reviewed' ? '<p>O link anterior venceu e foi conferido sem pagamento. Ele continuará no histórico. Um pagamento tardio exige conferência, sem crédito duplicado.</p>' : '<p>Enquanto o link anterior estiver válido ou sem conferência, uma nova cobrança fica bloqueada para evitar pagamento dos dois links.</p><details><summary>Controles da avaliação</summary><p>Representa a passagem do prazo e a conferência no provedor. Não cancela o link.</p><button id="expire-old">Simular vencimento e conferência sem pagamento</button></details>'}`;
+        $('#next').textContent = 'Definir novo valor';
+        $('#next').disabled = previous.status !== 'reviewed';
+        if ($('#expire-old'))
+          $('#expire-old').onclick = () => {
+            previous.status = 'reviewed';
+            link = false;
+            state = '';
+            sync();
+            correctionView();
+            $('#next').focus();
+          };
+      } else {
+        $('#body').innerHTML =
+          `<p>O pedido continua em ${money(total)}. O recebimento de ${money(received)} será preservado.</p><label for="new-amount">Novo valor da cobrança (R$)</label><input id="new-amount" type="number" min="1" max="${(total - received) / 100}" step="0.01" value="${correctionAmount !== null ? correctionAmount / 100 : 240}"><p id="correction-error" role="status"></p><label class="choice"><input id="agreement" type="checkbox"><span>Conferi com o cliente o novo valor e a condição de pagamento.</span></label><p class="muted">O link anterior permanece vencido e conferido no histórico. O novo link terá validade de 24 horas.</p>`;
+        $('#next').textContent = 'Revisar cobrança corrigida';
+        const validate = () => {
+          const n = Number($('#new-amount').value);
+          const valid =
+            Number.isFinite(n) &&
+            n >= 1 &&
+            Math.round(n * 100) <= total - received &&
+            Math.abs(n * 100 - Math.round(n * 100)) < 0.00001;
+          $('#next').disabled = !valid || !$('#agreement').checked;
+          $('#correction-error').textContent = valid
+            ? ''
+            : `Informe entre R$ 1,00 e ${money(total - received)}, com até duas casas decimais.`;
+        };
+        $('#new-amount').oninput = validate;
+        $('#agreement').onchange = validate;
+        validate();
+      }
+    }
+    const phoneLayout = matchMedia('(max-width: 768px)');
+    function orderAccordion() {
+      document
+        .querySelectorAll('.op-main > .op-sheet')
+        .forEach((section, i) => {
+          const head = section.querySelector('.op-sheet-head');
+          const title = head.querySelector('h2');
+          const content = section.querySelector('.prototype-sheet-body');
+          const label = title.dataset.label || title.textContent;
+          title.dataset.label = label;
+          if (!content.id) content.id = `prototype-order-section-${i}`;
+          title.className = phoneLayout.matches ? 'op-sheet-title' : '';
+          if (phoneLayout.matches) head.dataset.accordion = 'true';
+          else delete head.dataset.accordion;
+          if (phoneLayout.matches) {
+            content.hidden = content.id !== 'billing-body';
+            title.innerHTML = `<button type="button" class="op-sheet-toggle" aria-expanded="${!content.hidden}" aria-controls="${content.id}"><span>${label}</span><span aria-hidden="true">⌄</span></button>`;
+            title.querySelector('button').onclick = (e) => {
+              content.hidden = !content.hidden;
+              e.currentTarget.setAttribute(
+                'aria-expanded',
+                String(!content.hidden),
+              );
+            };
+          } else {
+            content.hidden = false;
+            title.textContent = label;
+          }
+        });
+    }
+    phoneLayout.addEventListener('change', orderAccordion);
+    orderAccordion();
+    reset();
+  </script>
+</html>

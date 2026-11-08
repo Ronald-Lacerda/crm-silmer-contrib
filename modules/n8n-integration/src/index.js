@@ -18,6 +18,11 @@ export {
 } from './postgres-command-store.js';
 export { PostgresN8nCommandOutbox } from './postgres-command-outbox.js';
 export {
+  lockBillingSend,
+  billingSendBlockReason,
+  blockBillingSend,
+} from './billing-send-guard.js';
+export {
   ASSISTANT_SENDING_GRACE_MINUTES,
   ASSISTANT_STALL_LOOKBACK_HOURS,
   ASSISTANT_STALL_MINUTES,

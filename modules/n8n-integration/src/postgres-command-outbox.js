@@ -27,7 +27,7 @@ export class PostgresN8nCommandOutbox {
     this.contactEnvelopeKey = Buffer.from(contactEnvelopeKey);
   }
 
-  /** @param {{id: string, idempotencyKey: string, messageId: string, availableAt: string|Date}} input @param {{transaction?: any}} context */
+  /** @param {{id: string, idempotencyKey: string, messageId: string, availableAt: string|Date,billingSend?:boolean}} input @param {{transaction?: any}} context */
   async enqueueChannelMessage(input, context = {}) {
     const client = queryable(context);
     const row = (
@@ -81,6 +81,7 @@ export class PostgresN8nCommandOutbox {
       });
     }
     const payload = {
+      ...(input.billingSend === true ? { billing_send: true } : {}),
       action: 'send_message',
       actor: { id: row.author_id },
       automation_epoch: Number(row.automation_epoch),
