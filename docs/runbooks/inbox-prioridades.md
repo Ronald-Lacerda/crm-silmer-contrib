@@ -173,6 +173,11 @@ Decidida pela [ADR 065](../adr/065-caixa-de-entrada-por-vez-de-responder.md) em
 
 ### Medir o p95 da lista no volume real
 
+> Status (08/11/2026): medição dispensada por decisão do proprietário, porque a
+> produção tem cerca de 50 conversas abertas. Execute os passos abaixo somente
+> se a equipe relatar lentidão na Caixa ou se o volume crescer de forma
+> relevante.
+
 1. Em horário comercial, por dois dias, medir o tempo de resposta de
    `GET /api/v1/inbox/conversations` com `bucket=respond|awaiting|silent|lost`,
    `owner=all` e `owner=mine`, pelo log de acesso do edge ou por cronômetro do

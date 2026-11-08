@@ -90,7 +90,19 @@ decisões D1–D10 do PO. Deploy: API (INBOX-VEZ-01) antes do front; ver
       migration. `InboxView.vue`: 4065 → 3996 linhas. Testes novos em
       `test/inbox-turn-rules.test.js`; nenhum existente foi editado; `npm test`
       1956 aprovados, 0 falhas; Playwright completo 587 aprovados, 7 ignorados.
-- Pendente: medir o p95 em volume real.
+- [x] Deploy em produção (08/11/2026): API, worker e edge publicados pelo
+      Auto Deploy do EasyPanel a partir do `289df19c`, sem migration. Conferido
+      em `crm.silmer.com.br/inbox`: as quatro abas listam conversas diferentes
+      (9/6/35/0 na hora), `GET /api/v1/inbox/buckets` e as listas `bucket=respond`,
+      `silent` e `lost` responderam 200, sem erro de console. Não foram exercidos
+      em produção Lembrar depois, Marcar perdido nem o celular (escrevem em dados
+      reais; cobertos pela validação local e pelo E2E).
+- [x] p95 da lista em volume real: **dispensado por decisão do proprietário
+      (08/11/2026)**. A caixa de produção tem cerca de 50 conversas abertas,
+      muito abaixo das 5.000 do teste sintético. A medição de dois dias do
+      [runbook](../../../docs/runbooks/inbox-prioridades.md) só é aberta se a
+      equipe relatar lentidão; nesse caso, e se o p95 passar de 300 ms, abrir ADR
+      para a migration de desnormalização. INBOX-VEZ-01 a 07 concluídas.
 
 ## OPS-DEPS-01 — correção da auditoria npm (07/11/2026)
 
