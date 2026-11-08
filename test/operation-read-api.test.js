@@ -148,6 +148,138 @@ test('INBOX-UX-02: work queues receive only the authenticated actor', async () =
   }
 });
 
+test('INBOX-VEZ-01: the tabs query forwards its filters and always names the session as reader', async () => {
+  const reads = /** @type {any[]} */ ([]);
+  const { api, headers } = harness({
+    async listInbox(/** @type {any} */ input, /** @type {any} */ access) {
+      reads.push({ input, access });
+      return { items: [], nextCursor: null, totalCount: 0 };
+    },
+  });
+  try {
+    const tab = await api.inject({
+      headers,
+      method: 'GET',
+      url: '/api/v1/inbox/conversations?bucket=respond&owner=mine&orderReady=true&assignedUserId=seller-9&limit=20',
+    });
+    assert.equal(tab.statusCode, 200);
+    assert.equal(tab.headers['cache-control'], 'private, no-cache');
+    assert.deepEqual(reads.at(-1), {
+      input: {
+        assignedUserId: 'seller-9',
+        bucket: 'respond',
+        limit: 20,
+        orderReady: true,
+        owner: 'mine',
+      },
+      access: { actorId: 'operator-1' },
+    });
+    const terminal = await api.inject({
+      headers,
+      method: 'GET',
+      url: '/api/v1/inbox/conversations?terminal=true&owner=unassigned',
+    });
+    assert.equal(terminal.statusCode, 200);
+    assert.deepEqual(reads.at(-1).input, {
+      owner: 'unassigned',
+      terminal: true,
+    });
+    // An older list now names its reader too (the turn fields follow them).
+    await api.inject({
+      headers,
+      method: 'GET',
+      url: '/api/v1/inbox/conversations?archived=true',
+    });
+    assert.deepEqual(reads.at(-1).access, { actorId: 'operator-1' });
+    for (const url of [
+      '/api/v1/inbox/conversations?orderReady=sim&bucket=respond',
+      '/api/v1/inbox/conversations?terminal=1',
+      '/api/v1/inbox/conversations?bucket=respond&actorId=other',
+    ]) {
+      const invalid = await api.inject({ headers, method: 'GET', url });
+      assert.equal(invalid.statusCode, 400, url);
+    }
+    assert.equal(reads.length, 3);
+  } finally {
+    await api.close();
+  }
+});
+
+test('INBOX-VEZ-01: the buckets endpoint needs conversation.read, takes only its filters and is private', async () => {
+  const counted = /** @type {any[]} */ ([]);
+  const { api, calls, headers } = harness({
+    async countInboxBuckets(
+      /** @type {any} */ input,
+      /** @type {any} */ access,
+    ) {
+      counted.push({ input, access });
+      return { respond: 3, awaiting: 2, silent: 1, lost: 0 };
+    },
+  });
+  try {
+    const response = await api.inject({
+      headers,
+      method: 'GET',
+      url: '/api/v1/inbox/buckets?owner=mine&orderReady=true&assignedUserId=seller-9',
+    });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), {
+      respond: 3,
+      awaiting: 2,
+      silent: 1,
+      lost: 0,
+    });
+    assert.equal(calls[0][0], 'authorize');
+    assert.equal(calls[0][1].action, 'conversation.read');
+    assert.equal(response.headers['cache-control'], 'private, no-cache');
+    assert.equal(response.headers.vary, 'Origin, Cookie');
+    assert.deepEqual(counted, [
+      {
+        input: { assignedUserId: 'seller-9', orderReady: true, owner: 'mine' },
+        access: { actorId: 'operator-1' },
+      },
+    ]);
+    for (const url of [
+      '/api/v1/inbox/buckets?bucket=respond',
+      '/api/v1/inbox/buckets?limit=1',
+      '/api/v1/inbox/buckets?orderReady=yes',
+      '/api/v1/inbox/buckets?actorId=other',
+    ]) {
+      const invalid = await api.inject({ headers, method: 'GET', url });
+      assert.equal(invalid.statusCode, 400, url);
+    }
+    assert.equal(counted.length, 1);
+  } finally {
+    await api.close();
+  }
+});
+
+test('INBOX-VEZ-01: the detail is read for the session user', async () => {
+  const seen = /** @type {any[]} */ ([]);
+  const { api, headers } = harness({
+    async getConversation(/** @type {any} */ input, /** @type {any} */ access) {
+      seen.push({ input, access });
+      return { conversation: { id: input.conversationId } };
+    },
+  });
+  try {
+    const response = await api.inject({
+      headers,
+      method: 'GET',
+      url: '/api/v1/inbox/conversations/conversation-1',
+    });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(seen, [
+      {
+        input: { conversationId: 'conversation-1' },
+        access: { actorId: 'operator-1' },
+      },
+    ]);
+  } finally {
+    await api.close();
+  }
+});
+
 test('publishes authorized Contact list and detail read models', async () => {
   const { api, calls, headers } = harness();
   const list = await api.inject({

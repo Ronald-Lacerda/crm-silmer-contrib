@@ -1,5 +1,6 @@
 import { PostgresAuditTrail } from '@crm-silmer/audit-privacy';
 import { authorize } from '@crm-silmer/identity-access';
+import { SILENT_AFTER_HOURS } from '@crm-silmer/inbox-channels';
 import {
   fingerprintCommand,
   PostgresIdempotencyRecordStore,
@@ -13,7 +14,8 @@ import {
 import { activeLeadLossSql } from './lead-outcome-sql.js';
 
 export const DASHBOARD_ACTION_LIMIT = 100;
-export const DASHBOARD_FOLLOWUP_HOURS = 72;
+// ACT-06 / RFC 052: one source for the 72 h threshold (the Inbox "sem retorno").
+export const DASHBOARD_FOLLOWUP_HOURS = SILENT_AFTER_HOURS;
 
 export class DashboardError extends Error {
   /** @param {number} statusCode @param {string} code */
@@ -239,7 +241,7 @@ export async function readDashboardPerformance(database, input) {
   };
 }
 
-const LAST_MESSAGE_JOIN = `LEFT JOIN LATERAL (
+export const LAST_MESSAGE_JOIN = `LEFT JOIN LATERAL (
   SELECT m.id AS message_id, m.direction AS last_direction,
          m.author_kind AS last_author_kind, m.status AS last_status,
          m.delivery_status AS last_delivery_status, m.occurred_at AS last_occurred_at,
@@ -249,7 +251,7 @@ const LAST_MESSAGE_JOIN = `LEFT JOIN LATERAL (
 ) last_message ON true`;
 
 /** @param {any} row */
-function sourceRevision(row) {
+export function sourceRevision(row) {
   return `message:${row.message_id ?? 'none'}:${row.last_status ?? 'none'}:${row.last_delivery_status ?? 'none'}`;
 }
 

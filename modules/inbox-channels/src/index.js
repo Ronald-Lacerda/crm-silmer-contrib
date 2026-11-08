@@ -14,8 +14,16 @@ export {
 } from './adapters/meta-whatsapp.js';
 export { InMemoryInboxRepository } from './adapters/in-memory-inbox-repository.js';
 export { PostgresConversationConversionPort } from './adapters/postgres-conversation-conversion-port.js';
-export { PostgresInboxRepository } from './adapters/postgres-inbox-repository.js';
+export {
+  appendConversationStreamEvent,
+  PostgresInboxRepository,
+} from './adapters/postgres-inbox-repository.js';
 export { PostgresInboxReadRepository } from './adapters/postgres-inbox-read-repository.js';
+export {
+  INBOX_BUCKETS,
+  SILENT_AFTER_HOURS,
+  activeLeadLossSql,
+} from './turn-policy.js';
 export { PostgresHandoffConversationPort } from './adapters/postgres-handoff-conversation-port.js';
 export {
   createChannelEventHandler,

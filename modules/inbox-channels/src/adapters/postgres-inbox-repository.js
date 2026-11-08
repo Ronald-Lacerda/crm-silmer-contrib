@@ -42,7 +42,7 @@ const STREAM_EVENT_TYPES = Object.freeze({
  * @param {Queryable} transaction
  * @param {{conversationId: string, correlationId: string, occurredAt: string, type: string}} event
  */
-async function appendConversationStreamEvent(transaction, event) {
+export async function appendConversationStreamEvent(transaction, event) {
   await transaction.query(
     `INSERT INTO crm.domain_events
        (id, aggregate_type, aggregate_id, aggregate_version, event_type,

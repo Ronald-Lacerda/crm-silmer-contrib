@@ -1,5 +1,10 @@
 import { decryptSiteContactClaim } from '@crm-silmer/contacts';
 import { decryptContactIdentityEnvelope } from '@crm-silmer/contacts/identity-envelope';
+import {
+  INBOX_BUCKETS,
+  SILENT_AFTER_HOURS,
+  activeLeadLossSql,
+} from '../turn-policy.js';
 import { decryptInboxMessageEnvelope } from './postgres-inbox-repository.js';
 
 // PNL-06: sellers with the same count read in alphabetical order, the same
@@ -163,7 +168,7 @@ const REVIEW_ORDER_JOIN = `LEFT JOIN LATERAL (
 
 // INBOX-UX-02: an automatic acknowledgement never resets a person's wait.
 // Only a successfully sent human reply ends the current inbound sequence.
-const WAITING_JOIN = `LEFT JOIN LATERAL (
+const HUMAN_WAIT_JOIN = `LEFT JOIN LATERAL (
              SELECT reply.occurred_at, reply.id
              FROM crm.messages reply
              WHERE reply.conversation_id=conversation.id
@@ -184,8 +189,11 @@ const WAITING_JOIN = `LEFT JOIN LATERAL (
              WHERE event.target_type='conversation' AND event.target_id=conversation.id
                AND event.action='conversation.takeover'
              ORDER BY event.occurred_at DESC,event.id DESC LIMIT 1
-           ) takeover ON true
-           LEFT JOIN LATERAL (
+           ) takeover ON true`;
+// The send outcome of a conversation: its last effective send and a failure
+// or uncertain result after it. Shared with the INBOX-VEZ-01 tabs, where a
+// failure keeps the turn with the Silmer.
+const DELIVERY_JOIN = `LEFT JOIN LATERAL (
              SELECT sent.id,sent.occurred_at
              FROM crm.messages sent
              WHERE sent.conversation_id=conversation.id AND sent.direction='outbound'
@@ -201,6 +209,8 @@ const WAITING_JOIN = `LEFT JOIN LATERAL (
                  OR (failed.occurred_at,failed.id)>(successful_outbound.occurred_at,successful_outbound.id))
              ORDER BY failed.occurred_at DESC,failed.id DESC LIMIT 1
            ) last_outbound ON true`;
+const WAITING_JOIN = `${HUMAN_WAIT_JOIN}
+           ${DELIVERY_JOIN}`;
 const WAITING_SINCE = `CASE WHEN handoff.status='pending' THEN handoff.created_at
   WHEN conversation.automation_state='human' THEN
     CASE WHEN handoff.status='accepted'
@@ -243,6 +253,286 @@ const URGENCY_JOIN = `LEFT JOIN LATERAL (
   SELECT ${URGENCY_RANK} rank, date_trunc('milliseconds', ${QUEUE_POSITION}) position
 ) urgency ON true`;
 
+// The list's joins from the conversation outwards (the page shows all of them).
+const SUMMARY_JOINS = `JOIN crm.contact_identities identity
+             ON identity.id=conversation.contact_identity_id
+           JOIN crm.contacts contact ON contact.id=identity.current_contact_id
+           LEFT JOIN crm.site_contact_claims site_claim
+             ON site_claim.conversation_id=conversation.id
+           LEFT JOIN crm.user_functions assigned_function
+             ON assigned_function.user_id=conversation.assigned_user_id
+           LEFT JOIN crm.users assigned_user ON assigned_user.id=conversation.assigned_user_id
+           ${OPEN_HANDOFF_JOIN}
+           ${CURRENT_ORDER_JOIN}
+           ${REVIEW_ORDER_JOIN}
+           ${WAITING_JOIN}`;
+const LAST_MESSAGE_JOIN = `LEFT JOIN LATERAL (
+             SELECT message.id, message.direction, message.message_type,
+                    message.content_envelope, message.status,
+                    message.delivery_status, message.occurred_at,
+                    ${MEDIA_PROJECTION}
+             FROM crm.messages message
+             ${MEDIA_JOIN}
+             WHERE message.conversation_id=conversation.id
+             ORDER BY message.occurred_at DESC, message.id DESC LIMIT 1
+           ) last_message ON true`;
+
+/** @param {boolean} byUrgency */
+function listProjection(byUrgency) {
+  return `conversation.id, conversation.state,
+                  conversation.automation_state, conversation.automation_epoch,
+                  conversation.assigned_user_id, conversation.version,
+                  conversation.opened_at, conversation.last_message_at,
+                  conversation.terminal_at, conversation.archived_at,
+                  conversation.closure_outcome, conversation.closed_by,
+                  identity.current_contact_id contact_id, identity.channel,
+                  identity.external_identity_lookup_hash,
+                  identity.identity_envelope, contact.display_name,
+                  contact.version contact_version,
+                  site_claim.id site_claim_id, site_claim.version site_claim_version,
+                  site_claim.details_envelope site_claim_envelope,
+                  assigned_function.function_name, assigned_user.name assigned_user_name,
+                  handoff.id handoff_id, handoff.status handoff_status,
+                  handoff.version handoff_version,
+                  handoff.target_role, handoff.due_at handoff_due_at,
+                  handoff.reason_code handoff_reason_code,
+                  handoff.created_at handoff_created_at,
+                  handoff.preferred_first_name handoff_preferred_first_name,
+                  current_order.id order_id, current_order.number order_number,
+                  current_order.status order_status,
+                  current_order.ready_for_confirmation order_ready_for_confirmation,
+                  ${HAS_PENDING_ORDER},
+                  review_order.id review_order_id,review_order.number review_order_number,
+                  review_order.status review_order_status,
+                  ${PRIORITY_PROJECTION},
+                  ${byUrgency ? 'urgency.rank urgency_rank, urgency.position urgency_position,' : ''}
+                  last_message.id last_message_id,
+                  last_message.direction last_message_direction,
+                  last_message.message_type last_message_type,
+                  last_message.content_envelope last_message_content_envelope,
+                  last_message.status last_message_status,
+                  last_message.delivery_status last_message_delivery_status,
+                  last_message.occurred_at last_message_occurred_at,
+                  last_message.media_id, last_message.media_kind,
+                  last_message.media_state, last_message.media_mime_type,
+                  last_message.media_size_bytes, last_message.media_duration_ms,
+                  last_message.media_validation_status,
+                  last_message.reserved_workflow_version`;
+}
+
+// INBOX-VEZ-01 / RFC 052: "whose turn is it". Every open conversation belongs
+// to exactly one tab. The rule is written once, here: the list, its total and
+// `bucketCounts` all join `turnJoins` and read `turn_state.bucket`.
+const OPEN_UNIVERSE = `conversation.archived_at IS NULL AND conversation.terminal_at IS NULL
+  AND conversation.state NOT IN ('convertida_em_lead','sem_lead','encerrada')`;
+
+const TURN_COLUMNS = `turn_state.bucket turn_bucket, turn.rank turn_rank,
+  turn.since turn_since, turn_state.stalled turn_stalled,
+  loss.reason_code lost_reason_code, loss.occurred_at lost_occurred_at,
+  loss.version lost_version,
+  reminder.remind_at reminder_remind_at, reminder.mine reminder_mine`;
+const TURN_NAMES = [
+  'turn_bucket',
+  'turn_rank',
+  'turn_since',
+  'turn_stalled',
+  'lost_reason_code',
+  'lost_occurred_at',
+  'lost_version',
+  'reminder_remind_at',
+  'reminder_mine',
+];
+
+/** @param {string} since @param {{now: string}} p */
+function businessMinutes(since, p) {
+  return `floor(crm.business_minutes_v1(${since}, ${p.now}::timestamptz))::integer turn_business_minutes`;
+}
+
+/**
+ * D2: the reminder is per person. One row per conversation, computed once per
+ * query (the key starts with the user, so no per-row lookup): the reader's own
+ * first, then the nearest. A reminder holds while it is in the future and the
+ * conversation has not changed since it was set.
+ * @param {{now: string, actor: string, ids?: string}} p
+ */
+function reminderCte(p) {
+  return `reminders AS MATERIALIZED (
+           SELECT DISTINCT ON (decision.target_id)
+                  decision.target_id conversation_id, decision.remind_at,
+                  COALESCE(decision.user_id=${p.actor}::text, false) mine
+           FROM crm.dashboard_action_decisions decision
+           JOIN crm.conversations decided ON decided.id=decision.target_id
+           WHERE decision.target_type='conversation'
+             AND decision.decision IN ('schedule','snooze')
+             AND decision.remind_at > ${p.now}::timestamptz
+             AND decision.action_id='conversation:' || decision.target_id
+             AND decision.target_version=decided.version
+             ${p.ids ? `AND decision.target_id = ANY(${p.ids}::text[])` : ''}
+           ORDER BY decision.target_id,
+                    COALESCE(decision.user_id=${p.actor}::text, false) DESC,
+                    decision.remind_at ASC, decision.user_id ASC)`;
+}
+
+/**
+ * Needs `conversation` and `handoff` (OPEN_HANDOFF_JOIN) in scope and the
+ * `reminders` CTE. Aliases it defines: `turn_state` (bucket, stalled),
+ * `turn` (rank, since), `loss` and `reminder`.
+ *
+ * Precedence, first that matches: send failure (respond, rank 0) > active
+ * loss > pending handoff (respond) > the customer wrote last (respond, or
+ * awaiting while the assistant is still inside its window) > the customer's
+ * turn for 72 h (silent, unless the reader set a reminder) > awaiting.
+ * @param {{now: string, stalled: string, silent: string}} p
+ */
+function turnJoins(p) {
+  return `LEFT JOIN LATERAL (
+             SELECT m.id, m.occurred_at FROM crm.messages m
+             WHERE m.conversation_id=conversation.id
+               AND m.direction='inbound' AND m.author_kind='contact'
+             ORDER BY m.occurred_at DESC, m.id DESC LIMIT 1
+           ) last_inbound ON true
+           LEFT JOIN LATERAL (
+             SELECT m.id, m.occurred_at FROM crm.messages m
+             WHERE m.conversation_id=conversation.id AND m.direction='outbound'
+               AND COALESCE(m.delivery_status,m.status) IN ('sent','delivered','read')
+               AND (m.author_kind='human'
+                 OR (m.author_kind='assistant'
+                   AND conversation.automation_state='assistant'))
+             ORDER BY m.occurred_at DESC, m.id DESC LIMIT 1
+           ) effective_reply ON true
+           ${DELIVERY_JOIN}
+           LEFT JOIN LATERAL (
+             SELECT latest.reason_code, latest.occurred_at, latest.version
+             FROM crm.lead_outcome_events latest
+             WHERE latest.conversation_id=conversation.id AND latest.outcome='lost'
+               AND ${activeLeadLossSql('conversation.id')}
+             ORDER BY latest.version DESC LIMIT 1
+           ) loss ON true
+           LEFT JOIN reminders reminder ON reminder.conversation_id=conversation.id
+           LEFT JOIN LATERAL (
+             SELECT f.failed, f.handoff_pending, f.customer_turn,
+               CASE WHEN NOT f.in_universe THEN NULL
+                 WHEN f.failed THEN 'respond'
+                 WHEN f.lost_active THEN 'lost'
+                 WHEN f.handoff_pending THEN 'respond'
+                 WHEN f.customer_turn THEN
+                   CASE WHEN f.agent_alone
+                          AND last_inbound.occurred_at > ${p.stalled}::timestamptz
+                     THEN 'awaiting' ELSE 'respond' END
+                 WHEN effective_reply.id IS NOT NULL
+                   AND effective_reply.occurred_at <= ${p.silent}::timestamptz
+                   AND NOT f.own_reminder THEN 'silent'
+                 ELSE 'awaiting' END bucket,
+               (f.in_universe AND f.agent_alone AND f.customer_turn
+                 AND last_inbound.occurred_at <= ${p.stalled}::timestamptz) stalled
+             FROM (SELECT
+                 (${OPEN_UNIVERSE}) in_universe,
+                 (${DELIVERY_ISSUE}) IS NOT NULL failed,
+                 loss.version IS NOT NULL lost_active,
+                 COALESCE(handoff.status='pending', false) handoff_pending,
+                 (conversation.automation_state='assistant' AND handoff.id IS NULL) agent_alone,
+                 (last_inbound.id IS NOT NULL AND (effective_reply.id IS NULL
+                   OR (last_inbound.occurred_at,last_inbound.id)
+                     > (effective_reply.occurred_at,effective_reply.id))) customer_turn,
+                 COALESCE(reminder.mine, false) own_reminder) f
+           ) turn_state ON true
+           LEFT JOIN LATERAL (
+             SELECT
+               CASE turn_state.bucket
+                 WHEN 'respond' THEN CASE WHEN turn_state.failed THEN 0 ELSE 1 END
+                 ELSE 0 END rank,
+               date_trunc('milliseconds', CASE turn_state.bucket
+                 WHEN 'respond' THEN CASE WHEN turn_state.failed
+                   THEN last_outbound.occurred_at
+                   ELSE COALESCE(LEAST(
+                     (SELECT min(m.occurred_at) FROM crm.messages m
+                      WHERE m.conversation_id=conversation.id
+                        AND m.direction='inbound' AND m.author_kind='contact'
+                        AND (effective_reply.id IS NULL
+                          OR (m.occurred_at,m.id)
+                            > (effective_reply.occurred_at,effective_reply.id))),
+                     CASE WHEN turn_state.handoff_pending THEN handoff.created_at END),
+                     conversation.opened_at) END
+                 WHEN 'awaiting' THEN CASE WHEN turn_state.customer_turn
+                   THEN last_inbound.occurred_at
+                   ELSE COALESCE(effective_reply.occurred_at, conversation.opened_at) END
+                 WHEN 'silent' THEN effective_reply.occurred_at
+                 WHEN 'lost' THEN loss.occurred_at END) since
+           ) turn ON true`;
+}
+
+/**
+ * Per tab: the order (SQL, before LIMIT) and the cursor comparator. Positions
+ * are truncated to milliseconds, as in URGENCY_JOIN, so the cursor round-trips.
+ * @type {Record<string, {orderBy: (columns: string[]) => string, after: (columns: string[], first: number) => string}>}
+ */
+const BUCKET_ORDER = {
+  respond: {
+    orderBy: ([rank, since, id]) => `${rank} ASC, ${since} ASC, ${id} ASC`,
+    after: ([rank, since, id], first) =>
+      `(${rank}, ${since}, ${id}) > ($${first}::integer, $${first + 1}::timestamptz, $${first + 2})`,
+  },
+  awaiting: {
+    orderBy: ([, since, id]) => `${since} DESC, ${id} DESC`,
+    after: ([, since, id], first) =>
+      `(${since}, ${id}) < ($${first}::timestamptz, $${first + 1})`,
+  },
+  silent: {
+    orderBy: ([, since, id]) => `${since} ASC, ${id} ASC`,
+    after: ([, since, id], first) =>
+      `(${since}, ${id}) > ($${first}::timestamptz, $${first + 1})`,
+  },
+  lost: {
+    orderBy: ([, since, id]) => `${since} DESC, ${id} DESC`,
+    after: ([, since, id], first) =>
+      `(${since}, ${id}) < ($${first}::timestamptz, $${first + 1})`,
+  },
+};
+
+/**
+ * The reader and the server instant the turn is worked out on, with the
+ * thresholds as instants. `null` when the caller gave none.
+ * @param {{actorId?: string|null, now?: Date, stallMinutes?: number}} reader
+ * @param {string|undefined} fallbackActor
+ */
+function turnContext(reader, fallbackActor) {
+  const now = reader?.now;
+  const stallMinutes = reader?.stallMinutes;
+  if (
+    !(now instanceof Date) ||
+    Number.isNaN(now.getTime()) ||
+    typeof stallMinutes !== 'number' ||
+    !(stallMinutes > 0)
+  ) {
+    return null;
+  }
+  return Object.freeze({
+    actorId: reader.actorId ?? fallbackActor ?? null,
+    nowIso: now.toISOString(),
+    silentBefore: new Date(
+      now.getTime() - SILENT_AFTER_HOURS * 3_600_000,
+    ).toISOString(),
+    stalledBefore: new Date(
+      now.getTime() - stallMinutes * 60_000,
+    ).toISOString(),
+  });
+}
+
+/**
+ * Appends the four query parameters of the turn and names them.
+ * @param {unknown[]} values @param {NonNullable<ReturnType<typeof turnContext>>} turn
+ */
+function turnParameters(values, turn) {
+  const first = values.length;
+  values.push(turn.nowIso, turn.stalledBefore, turn.silentBefore, turn.actorId);
+  return {
+    now: `$${first + 1}`,
+    stalled: `$${first + 2}`,
+    silent: `$${first + 3}`,
+    actor: `$${first + 4}`,
+  };
+}
+
 export class PostgresInboxReadRepository {
   /** @param {{database: {query: Function, transaction?: Function}, contactEnvelopeKey: Buffer, messageEnvelopeKey: Buffer}} options */
   constructor({ database, contactEnvelopeKey, messageEnvelopeKey }) {
@@ -262,8 +552,13 @@ export class PostgresInboxReadRepository {
     this.messageEnvelopeKey = Buffer.from(messageEnvelopeKey);
   }
 
-  /** @param {Record<string, any>} input */
-  async list(input) {
+  /**
+   * @param {Record<string, any>} input
+   * @param {{actorId?: string|null, now?: Date, stallMinutes?: number}} [reader]
+   *   INBOX-VEZ-01: the reader and the server instant the turn is worked out
+   *   on. Without it the item carries no turn fields.
+   */
+  async list(input, reader = {}) {
     return this.#snapshot(async (database) => {
       const values = [];
       const predicates = [];
@@ -311,6 +606,28 @@ export class PostgresInboxReadRepository {
             OR ${DELIVERY_ISSUE} IS NOT NULL)`);
         }
       }
+      if (input.terminal) {
+        // D7: "Encerradas", a consultation outside the tabs.
+        predicates.push(
+          `(conversation.state IN ('convertida_em_lead','sem_lead','encerrada')
+            OR conversation.terminal_at IS NOT NULL)`,
+        );
+      }
+      if (input.owner === 'mine') {
+        values.push(input.actorId ?? reader.actorId);
+        predicates.push(`conversation.assigned_user_id = $${values.length}`);
+      } else if (input.owner === 'unassigned') {
+        predicates.push('conversation.assigned_user_id IS NULL');
+      }
+      const turn = turnContext(reader, input.actorId);
+      if (input.bucket) {
+        if (!turn || !INBOX_BUCKETS.includes(input.bucket)) {
+          throw new TypeError(
+            'bucket reads need a valid bucket, now and stall',
+          );
+        }
+        return this.#listByBucket(database, input, turn, values, predicates);
+      }
       const countValues = [...values];
       const countWhere = predicates.join(' AND ');
       // "Aguardando vendedor" puts the longest wait first; every other view
@@ -344,69 +661,11 @@ export class PostgresInboxReadRepository {
       values.push(input.limit + 1);
       const [page, count] = await Promise.all([
         database.query(
-          `SELECT conversation.id, conversation.state,
-                  conversation.automation_state, conversation.automation_epoch,
-                  conversation.assigned_user_id, conversation.version,
-                  conversation.opened_at, conversation.last_message_at,
-                  conversation.terminal_at, conversation.archived_at,
-                  conversation.closure_outcome, conversation.closed_by,
-                  identity.current_contact_id contact_id, identity.channel,
-                  identity.external_identity_lookup_hash,
-                  identity.identity_envelope, contact.display_name,
-                  contact.version contact_version,
-                  site_claim.id site_claim_id, site_claim.version site_claim_version,
-                  site_claim.details_envelope site_claim_envelope,
-                  assigned_function.function_name, assigned_user.name assigned_user_name,
-                  handoff.id handoff_id, handoff.status handoff_status,
-                  handoff.version handoff_version,
-                  handoff.target_role, handoff.due_at handoff_due_at,
-                  handoff.reason_code handoff_reason_code,
-                  handoff.created_at handoff_created_at,
-                  handoff.preferred_first_name handoff_preferred_first_name,
-                  current_order.id order_id, current_order.number order_number,
-                  current_order.status order_status,
-                  current_order.ready_for_confirmation order_ready_for_confirmation,
-                  ${HAS_PENDING_ORDER},
-                  review_order.id review_order_id,review_order.number review_order_number,
-                  review_order.status review_order_status,
-                  ${PRIORITY_PROJECTION},
-                  ${byUrgency ? 'urgency.rank urgency_rank, urgency.position urgency_position,' : ''}
-                  last_message.id last_message_id,
-                  last_message.direction last_message_direction,
-                  last_message.message_type last_message_type,
-                  last_message.content_envelope last_message_content_envelope,
-                  last_message.status last_message_status,
-                  last_message.delivery_status last_message_delivery_status,
-                  last_message.occurred_at last_message_occurred_at,
-                  last_message.media_id, last_message.media_kind,
-                  last_message.media_state, last_message.media_mime_type,
-                  last_message.media_size_bytes, last_message.media_duration_ms,
-                  last_message.media_validation_status,
-                  last_message.reserved_workflow_version
+          `SELECT ${listProjection(byUrgency)}
            FROM crm.conversations conversation
-           JOIN crm.contact_identities identity
-             ON identity.id=conversation.contact_identity_id
-           JOIN crm.contacts contact ON contact.id=identity.current_contact_id
-           LEFT JOIN crm.site_contact_claims site_claim
-             ON site_claim.conversation_id=conversation.id
-           LEFT JOIN crm.user_functions assigned_function
-             ON assigned_function.user_id=conversation.assigned_user_id
-           LEFT JOIN crm.users assigned_user ON assigned_user.id=conversation.assigned_user_id
-           ${OPEN_HANDOFF_JOIN}
-           ${CURRENT_ORDER_JOIN}
-           ${REVIEW_ORDER_JOIN}
-           ${WAITING_JOIN}
+           ${SUMMARY_JOINS}
            ${byUrgency ? URGENCY_JOIN : ''}
-           LEFT JOIN LATERAL (
-             SELECT message.id, message.direction, message.message_type,
-                    message.content_envelope, message.status,
-                    message.delivery_status, message.occurred_at,
-                    ${MEDIA_PROJECTION}
-             FROM crm.messages message
-             ${MEDIA_JOIN}
-             WHERE message.conversation_id=conversation.id
-             ORDER BY message.occurred_at DESC, message.id DESC LIMIT 1
-           ) last_message ON true
+           ${LAST_MESSAGE_JOIN}
            WHERE ${where}
            ORDER BY ${orderBy}
            LIMIT $${values.length}`,
@@ -423,12 +682,24 @@ export class PostgresInboxReadRepository {
         ),
       ]);
       const hasMore = page.rows.length > input.limit;
-      const last = page.rows.slice(0, input.limit).at(-1);
+      const rows = page.rows.slice(0, input.limit);
+      const last = rows.at(-1);
+      // INBOX-VEZ-01: the turn fields of the page, worked out by the same
+      // fragment as the tabs, for the rows already chosen.
+      const turnRows = await this.#turnRows(
+        database,
+        rows.map((/** @type {any} */ row) => row.id),
+        turn,
+      );
       return {
         hasMore,
-        items: page.rows
-          .slice(0, input.limit)
-          .map((/** @type {any} */ row) => mapConversationSummary(row, this)),
+        items: rows.map((/** @type {any} */ row) =>
+          mapConversationSummary(
+            { ...row, ...turnRows.get(row.id) },
+            this,
+            turn?.nowIso ?? null,
+          ),
+        ),
         ...(byUrgency && last
           ? {
               nextPosition: {
@@ -442,13 +713,19 @@ export class PostgresInboxReadRepository {
     });
   }
 
-  /** @param {string} conversationId */
-  async get(conversationId) {
+  /**
+   * @param {string} conversationId
+   * @param {{actorId?: string|null, now?: Date, stallMinutes?: number}} [reader]
+   *   INBOX-VEZ-01: without it the turn fields stay empty.
+   */
+  async get(conversationId, reader = {}) {
+    const turn = turnContext(reader, undefined);
     return this.#snapshot(async (database) => {
-      const [conversation, messages, suggestion] = await runSequential([
-        () =>
-          database.query(
-            `SELECT conversation.id, conversation.state,
+      const [conversation, messages, suggestion, turnRows] =
+        await runSequential([
+          () =>
+            database.query(
+              `SELECT conversation.id, conversation.state,
                     conversation.automation_state, conversation.automation_epoch,
                     conversation.assigned_user_id, conversation.version,
                     conversation.opened_at, conversation.last_message_at,
@@ -489,11 +766,11 @@ export class PostgresInboxReadRepository {
              ${REVIEW_ORDER_JOIN}
              ${WAITING_JOIN}
              WHERE conversation.id=$1`,
-            [conversationId],
-          ),
-        () =>
-          database.query(
-            `SELECT message.id, message.conversation_id, message.direction,
+              [conversationId],
+            ),
+          () =>
+            database.query(
+              `SELECT message.id, message.conversation_id, message.direction,
                     message.author_kind, message.author_id, message.message_type,
                     message.content_envelope, message.status, message.delivery_status,
                     CASE WHEN message.delivery_status NOT IN ('failed', 'outcome_unknown')
@@ -510,23 +787,28 @@ export class PostgresInboxReadRepository {
              LEFT JOIN crm.n8n_commands command ON command.message_id=message.id
              WHERE message.conversation_id=$1
              ORDER BY message.occurred_at, message.id`,
-            [conversationId],
-          ),
-        () =>
-          database.query(
-            `SELECT id, conversation_id, source_message_id, automation_epoch,
+              [conversationId],
+            ),
+          () =>
+            database.query(
+              `SELECT id, conversation_id, source_message_id, automation_epoch,
                     proposed_stage, question_envelope, status, created_by,
                     created_at, resolved_at
              FROM crm.ai_suggestions
              WHERE conversation_id=$1 AND status='pending'
              ORDER BY created_at DESC, id DESC LIMIT 1`,
-            [conversationId],
-          ),
-      ]);
+              [conversationId],
+            ),
+          () => this.#turnRows(database, [conversationId], turn),
+        ]);
       const row = conversation.rows[0];
       if (!row) throw notFound('CONVERSATION_NOT_FOUND');
       return {
-        conversation: mapConversationSummary(row, this),
+        conversation: mapConversationSummary(
+          { ...row, ...turnRows.get(row.id) },
+          this,
+          turn?.nowIso ?? null,
+        ),
         messages: messages.rows.map((/** @type {any} */ message) =>
           mapMessage(message, this),
         ),
@@ -975,6 +1257,174 @@ export class PostgresInboxReadRepository {
     });
   }
 
+  /**
+   * INBOX-VEZ-01: one tab, ordered and cut in SQL before LIMIT. The tab is
+   * worked out once (`turnJoins`) and used by the page, the total and
+   * `bucketCounts`; the heavy projection only runs for the rows chosen.
+   * @param {any} database @param {Record<string, any>} input
+   * @param {NonNullable<ReturnType<typeof turnContext>>} turn
+   * @param {unknown[]} values @param {string[]} predicates
+   */
+  async #listByBucket(database, input, turn, values, predicates) {
+    const p = turnParameters(values, turn);
+    values.push(input.bucket);
+    predicates.push(`turn_state.bucket = $${values.length}`);
+    if (input.orderReady) predicates.push('review_order.id IS NOT NULL');
+    const baseValues = [...values];
+    const baseWhere = predicates.join(' AND ');
+    const order = BUCKET_ORDER[input.bucket];
+    let cursor = '';
+    if (input.after) {
+      // Only the respond tab orders by rank; an unused parameter would have
+      // no type.
+      const first = values.length + 1;
+      if (input.bucket === 'respond') values.push(input.after.rank ?? 0);
+      values.push(input.after.updatedAt, input.after.id);
+      cursor = `WHERE ${order.after(['base.turn_rank', 'base.turn_since', 'base.id'], first)}`;
+    }
+    values.push(input.limit + 1);
+    // The tab is evaluated once, into `base`: the page is cut from it and the
+    // total counts it, so the two can never disagree.
+    const withBase = `${reminderCte(p)},
+         base AS MATERIALIZED (
+           SELECT conversation.id, ${TURN_COLUMNS}
+           FROM crm.conversations conversation
+           JOIN crm.contact_identities identity
+             ON identity.id=conversation.contact_identity_id
+           ${OPEN_HANDOFF_JOIN}
+           ${input.orderReady ? REVIEW_ORDER_JOIN : ''}
+           ${turnJoins(p)}
+           WHERE ${baseWhere})`;
+    const page = await database.query(
+      `WITH ${withBase},
+         ranked AS (
+           SELECT base.* FROM base
+           ${cursor}
+           ORDER BY ${order.orderBy(['base.turn_rank', 'base.turn_since', 'base.id'])}
+           LIMIT $${values.length})
+         SELECT ${listProjection(false)},
+                ${TURN_NAMES.map((name) => `ranked.${name}`).join(', ')},
+                ${businessMinutes('ranked.turn_since', p)},
+                (SELECT count(*)::integer FROM base) total_count
+         FROM ranked
+         JOIN crm.conversations conversation ON conversation.id=ranked.id
+         ${SUMMARY_JOINS}
+         ${LAST_MESSAGE_JOIN}
+         ORDER BY ${order.orderBy(['ranked.turn_rank', 'ranked.turn_since', 'ranked.id'])}`,
+      values,
+    );
+    // Past the last page there is no row to carry the total.
+    const count =
+      page.rows.length === 0
+        ? await database.query(
+            `WITH ${withBase}
+             SELECT count(*)::integer count FROM base`,
+            baseValues,
+          )
+        : null;
+    const hasMore = page.rows.length > input.limit;
+    const rows = page.rows.slice(0, input.limit);
+    const last = rows.at(-1);
+    return {
+      hasMore,
+      items: rows.map((/** @type {any} */ row) =>
+        mapConversationSummary(row, this, turn.nowIso),
+      ),
+      ...(last
+        ? {
+            nextPosition: {
+              rank: Number(last.turn_rank),
+              updatedAt: iso(last.turn_since),
+            },
+          }
+        : {}),
+      totalCount: Number(
+        count ? count.rows[0]?.count : (page.rows[0]?.total_count ?? 0),
+      ),
+    };
+  }
+
+  /**
+   * INBOX-VEZ-01: `{respond, awaiting, silent, lost}` in one statement, hence
+   * one snapshot and one evaluation of the tab. `owner`, `orderReady` and
+   * `assignedUserId` narrow it exactly as they narrow the list.
+   *
+   * @param {{owner?: string, orderReady?: boolean, assignedUserId?: string, actorId?: string}} input
+   * @param {{actorId?: string|null, now?: Date, stallMinutes?: number}} reader
+   */
+  async bucketCounts(input, reader) {
+    const turn = turnContext(reader, input.actorId);
+    if (!turn) throw new TypeError('now and stallMinutes are required');
+    return this.#snapshot(async (database) => {
+      const values = /** @type {unknown[]} */ ([]);
+      const predicates = [
+        'conversation.archived_at IS NULL',
+        'conversation.terminal_at IS NULL',
+        "conversation.state NOT IN ('convertida_em_lead','sem_lead','encerrada')",
+      ];
+      if (input.assignedUserId !== undefined) {
+        values.push(input.assignedUserId);
+        predicates.push(`conversation.assigned_user_id = $${values.length}`);
+      }
+      if (input.owner === 'mine') {
+        values.push(turn.actorId);
+        predicates.push(`conversation.assigned_user_id = $${values.length}`);
+      } else if (input.owner === 'unassigned') {
+        predicates.push('conversation.assigned_user_id IS NULL');
+      }
+      if (input.orderReady) predicates.push('review_order.id IS NOT NULL');
+      const p = turnParameters(values, turn);
+      const result = await database.query(
+        `WITH ${reminderCte(p)}
+         SELECT ${INBOX_BUCKETS.map(
+           (bucket) =>
+             `count(*) FILTER (WHERE turn_state.bucket='${bucket}')::integer ${bucket}`,
+         ).join(', ')}
+         FROM crm.conversations conversation
+         JOIN crm.contact_identities identity
+           ON identity.id=conversation.contact_identity_id
+         ${OPEN_HANDOFF_JOIN}
+         ${input.orderReady ? REVIEW_ORDER_JOIN : ''}
+         ${turnJoins(p)}
+         WHERE ${predicates.join(' AND ')}`,
+        values,
+      );
+      const row = result.rows[0] ?? {};
+      return Object.freeze({
+        respond: Number(row.respond ?? 0),
+        awaiting: Number(row.awaiting ?? 0),
+        silent: Number(row.silent ?? 0),
+        lost: Number(row.lost ?? 0),
+      });
+    });
+  }
+
+  /**
+   * The turn fields of the given conversations, keyed by id (the list of an
+   * old filter and the detail). Empty when the reader gave no instant.
+   * @param {any} database @param {string[]} ids
+   * @param {ReturnType<typeof turnContext>} turn
+   */
+  async #turnRows(database, ids, turn) {
+    /** @type {Map<string, Record<string, any>>} */
+    const byId = new Map();
+    if (!turn || ids.length === 0) return byId;
+    const values = /** @type {unknown[]} */ ([]);
+    const p = turnParameters(values, turn);
+    values.push(ids);
+    const result = await database.query(
+      `WITH ${reminderCte({ ...p, ids: `$${values.length}` })}
+       SELECT conversation.id, ${TURN_COLUMNS}, ${businessMinutes('turn.since', p)}
+       FROM crm.conversations conversation
+       ${OPEN_HANDOFF_JOIN}
+       ${turnJoins(p)}
+       WHERE conversation.id = ANY($${values.length}::text[])`,
+      values,
+    );
+    for (const row of result.rows) byId.set(row.id, row);
+    return byId;
+  }
+
   /** @template T @param {(database: any) => Promise<T>} work */
   async #snapshot(work) {
     if (typeof this.database.transaction !== 'function') {
@@ -989,8 +1439,12 @@ export class PostgresInboxReadRepository {
   }
 }
 
-/** @param {any} row @param {PostgresInboxReadRepository} repository */
-function mapConversationSummary(row, repository) {
+/**
+ * @param {any} row @param {PostgresInboxReadRepository} repository
+ * @param {string|null} [turnAsOf] the server instant of the turn fields
+ */
+function mapConversationSummary(row, repository, turnAsOf = null) {
+  const bucket = row.turn_bucket ?? null;
   const identity = decryptContactIdentityEnvelope(
     row.identity_envelope,
     row.external_identity_lookup_hash,
@@ -1029,9 +1483,13 @@ function mapConversationSummary(row, repository) {
           name: row.assigned_user_name ?? null,
         }
       : null,
+    assistantStalled: row.turn_stalled === true,
     automationEpoch: Number(row.automation_epoch),
     automationState: row.automation_state,
     archivedAt: row.archived_at ? iso(row.archived_at) : null,
+    // INBOX-VEZ-01: null outside the open universe. The loss note never
+    // leaves the lead-outcome log.
+    bucket,
     channel: row.channel,
     contact: {
       displayHandle: identity.displayHandle ?? null,
@@ -1064,6 +1522,28 @@ function mapConversationSummary(row, repository) {
     id: row.id,
     hasPendingOrder: row.has_pending_order === true,
     lastMessage,
+    lostOutcome:
+      row.lost_version === null || row.lost_version === undefined
+        ? null
+        : {
+            occurredAt: iso(row.lost_occurred_at),
+            reasonCode: row.lost_reason_code,
+            version: Number(row.lost_version),
+          },
+    reminder: row.reminder_remind_at
+      ? {
+          mine: row.reminder_mine === true,
+          remindAt: iso(row.reminder_remind_at),
+        }
+      : null,
+    turnAsOf: bucket ? turnAsOf : null,
+    turnBusinessMinutes:
+      bucket &&
+      row.turn_business_minutes !== null &&
+      row.turn_business_minutes !== undefined
+        ? Number(row.turn_business_minutes)
+        : null,
+    turnSince: bucket && row.turn_since ? iso(row.turn_since) : null,
     deliveryIssue: row.delivery_issue_status
       ? {
           status: row.delivery_issue_status,

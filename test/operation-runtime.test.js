@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 import {
@@ -166,6 +167,309 @@ test('INBOX-UX-02: work queues bind pagination to the session actor and queue', 
   await assert.rejects(service.listInbox({ workQueue: 'attention' }), {
     statusCode: 400,
   });
+});
+
+/** A service with a fixed clock that records what the repository was asked. */
+function vezService() {
+  /** @type {any[]} */
+  const calls = [];
+  const item = {
+    id: 'conversation-vez',
+    queuePosition: '2026-11-01T09:00:00.000Z',
+    updatedAt: '2026-11-03T12:00:00.000Z',
+  };
+  const service = createOperationReadService({
+    clock: () => new Date('2026-11-08T15:00:00.000Z'),
+    contactRepository: {},
+    cursorKey: Buffer.alloc(32, 1),
+    handoffRepository: {},
+    inboxRepository: {
+      bucketCounts: async (
+        /** @type {any} */ input,
+        /** @type {any} */ reader,
+      ) => {
+        calls.push(['counts', input, reader]);
+        return { respond: 1, awaiting: 2, silent: 3, lost: 4 };
+      },
+      get: async (/** @type {any} */ id, /** @type {any} */ reader) => {
+        calls.push(['get', id, reader]);
+        return { conversation: { id }, messages: [], suggestion: null };
+      },
+      list: async (/** @type {any} */ input, /** @type {any} */ reader) => {
+        calls.push(['list', input, reader]);
+        return {
+          hasMore: true,
+          items: [item],
+          nextPosition: { rank: 1, updatedAt: '2026-11-03T12:00:00.123Z' },
+          totalCount: 9,
+        };
+      },
+    },
+    stallMinutes: 7,
+  });
+  return { calls, item, service };
+}
+const fingerprintOf = (/** @type {unknown} */ value) =>
+  createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const payloadOf = (/** @type {string|null} */ cursor) =>
+  JSON.parse(
+    Buffer.from(String(cursor).split('.')[0], 'base64url').toString('utf8'),
+  );
+
+test('INBOX-VEZ-01: a tab binds its cursor to reader, tab, owner, order-ready and seller', async () => {
+  const { calls, service } = vezService();
+  const first = await service.listInbox(
+    { bucket: 'respond', limit: 1 },
+    { actorId: 'seller-1' },
+  );
+  assert.deepEqual(calls[0][1], {
+    after: null,
+    actorId: 'seller-1',
+    bucket: 'respond',
+    owner: 'all',
+    orderReady: false,
+    limit: 1,
+  });
+  // The reader and the server instant travel apart from the filters.
+  assert.deepEqual(calls[0][2], {
+    actorId: 'seller-1',
+    now: new Date('2026-11-08T15:00:00.000Z'),
+    stallMinutes: 7,
+  });
+  assert.equal(first.totalCount, 9);
+  const payload = payloadOf(first.nextCursor);
+  assert.deepEqual(Object.keys(payload).sort(), [
+    'fingerprint',
+    'id',
+    'rank',
+    'scope',
+    'updatedAt',
+  ]);
+  assert.equal(payload.rank, 1);
+  assert.equal(payload.updatedAt, '2026-11-03T12:00:00.123Z');
+  assert.equal(
+    payload.fingerprint,
+    fingerprintOf({
+      actorId: 'seller-1',
+      bucket: 'respond',
+      owner: 'all',
+      orderReady: false,
+    }),
+  );
+  await service.listInbox(
+    { bucket: 'respond', limit: 1, cursor: first.nextCursor },
+    { actorId: 'seller-1' },
+  );
+  assert.deepEqual(calls.at(-1)[1].after, {
+    id: 'conversation-vez',
+    rank: 1,
+    updatedAt: '2026-11-03T12:00:00.123Z',
+  });
+  for (const [
+    query,
+    actor,
+  ] of /** @type {Array<[Record<string, any>, string]>} */ ([
+    [{ bucket: 'awaiting' }, 'seller-1'],
+    [{ bucket: 'respond' }, 'seller-2'],
+    [{ bucket: 'respond', owner: 'mine' }, 'seller-1'],
+    [{ bucket: 'respond', owner: 'unassigned' }, 'seller-1'],
+    [{ bucket: 'respond', orderReady: 'true' }, 'seller-1'],
+    [{ bucket: 'respond', assignedUserId: 'seller-9' }, 'seller-1'],
+    [{ sort: 'urgency' }, 'seller-1'],
+  ])) {
+    await assert.rejects(
+      service.listInbox(
+        { ...query, cursor: first.nextCursor },
+        { actorId: actor },
+      ),
+      { code: 'INVALID_CURSOR' },
+      JSON.stringify(query),
+    );
+  }
+  // The reader is the session's, never a query value.
+  await assert.rejects(service.listInbox({ bucket: 'respond' }), {
+    statusCode: 400,
+  });
+  await assert.rejects(
+    service.listInbox(
+      { bucket: 'respond', actorId: 'client' },
+      { actorId: 'a' },
+    ),
+    { code: 'INVALID_FILTER' },
+  );
+});
+
+test('INBOX-VEZ-01: tab combinations the contract forbids are INVALID_FILTER', async () => {
+  const { calls, service } = vezService();
+  for (const query of [
+    { bucket: 'respond', workQueue: 'attention' },
+    { bucket: 'respond', sort: 'urgency' },
+    { bucket: 'respond', archived: true },
+    { bucket: 'respond', archived: 'true' },
+    { bucket: 'respond', terminal: 'true' },
+    { bucket: 'respond', state: 'nova' },
+    { bucket: 'respond', pendingHandoff: false },
+    { bucket: 'respond', unassignedHumanHandoff: 'true' },
+    { bucket: 'respond', automationState: 'human' },
+    { bucket: 'respond', channel: 'whatsapp' },
+    { bucket: 'sem-retorno' },
+    { bucket: ['respond'] },
+    { owner: 'todos' },
+    { owner: 'mine', assignedUserId: 'seller-9' },
+    { bucket: 'lost', owner: 'unassigned', assignedUserId: 'seller-9' },
+    { orderReady: true },
+    { orderReady: 'sim', bucket: 'respond' },
+    { terminal: 'sim' },
+    { terminal: true, bucket: 'respond' },
+    { terminal: true, workQueue: 'closing' },
+    { terminal: true, state: 'encerrada' },
+    { terminal: true, archived: true },
+  ]) {
+    await assert.rejects(
+      service.listInbox(query, { actorId: 'seller-1' }),
+      { code: 'INVALID_FILTER', statusCode: 400 },
+      JSON.stringify(query),
+    );
+  }
+  assert.equal(calls.length, 0, 'nothing reaches the repository');
+  // Allowed: archived=false next to a tab; a seller with all.
+  await service.listInbox(
+    {
+      bucket: 'silent',
+      archived: 'false',
+      orderReady: 'true',
+    },
+    { actorId: 'seller-1' },
+  );
+  assert.equal('channel' in calls.at(-1)[1], false);
+  assert.equal(calls.at(-1)[1].orderReady, true);
+  assert.equal('archived' in calls.at(-1)[1], false);
+  await service.listInbox(
+    { bucket: 'lost', owner: 'all', assignedUserId: 'seller-9' },
+    { actorId: 'seller-1' },
+  );
+  assert.equal(calls.at(-1)[1].assignedUserId, 'seller-9');
+});
+
+test('INBOX-VEZ-01: owner and terminal join older filters without moving their fingerprint', async () => {
+  const { calls, service } = vezService();
+  // owner=all is the default and leaves every older cursor valid.
+  const plain = await service.listInbox({ limit: 1 });
+  assert.equal(payloadOf(plain.nextCursor).fingerprint, fingerprintOf({}));
+  const explicitAll = await service.listInbox({ limit: 1, owner: 'all' });
+  assert.equal(explicitAll.nextCursor, plain.nextCursor);
+  const urgency = await service.listInbox(
+    { sort: 'urgency', limit: 1 },
+    { actorId: 'seller-1' },
+  );
+  assert.equal(
+    payloadOf(urgency.nextCursor).fingerprint,
+    fingerprintOf({ sort: 'urgency', actorId: 'seller-1' }),
+  );
+  const queue = await service.listInbox(
+    { workQueue: 'closing', limit: 1 },
+    { actorId: 'seller-1' },
+  );
+  assert.equal(
+    payloadOf(queue.nextCursor).fingerprint,
+    fingerprintOf({ workQueue: 'closing', actorId: 'seller-1' }),
+  );
+  // New narrowings are new scopes.
+  const mine = await service.listInbox(
+    { owner: 'mine', limit: 1 },
+    { actorId: 'seller-1' },
+  );
+  assert.equal(
+    payloadOf(mine.nextCursor).fingerprint,
+    fingerprintOf({ actorId: 'seller-1', owner: 'mine' }),
+  );
+  assert.deepEqual(
+    { ...calls.at(-1)[1], after: undefined },
+    {
+      after: undefined,
+      actorId: 'seller-1',
+      limit: 1,
+      owner: 'mine',
+    },
+  );
+  const terminal = await service.listInbox({ terminal: 'true', limit: 1 });
+  assert.equal(
+    payloadOf(terminal.nextCursor).fingerprint,
+    fingerprintOf({ terminal: true }),
+  );
+  assert.equal(payloadOf(terminal.nextCursor).rank, undefined);
+  assert.equal(calls.at(-1)[1].terminal, true);
+  const unassigned = await service.listInbox({
+    terminal: true,
+    owner: 'unassigned',
+    limit: 1,
+  });
+  assert.equal(
+    payloadOf(unassigned.nextCursor).fingerprint,
+    fingerprintOf({ terminal: true, owner: 'unassigned' }),
+  );
+  await assert.rejects(service.listInbox({ owner: 'mine' }), {
+    statusCode: 400,
+  });
+  // A cursor of one scope never opens another.
+  await assert.rejects(
+    service.listInbox(
+      { cursor: mine.nextCursor, limit: 1 },
+      { actorId: 'seller-1' },
+    ),
+    { code: 'INVALID_CURSOR' },
+  );
+});
+
+test('INBOX-VEZ-01: bucket counts and the detail read for the session on the server clock', async () => {
+  const { calls, service } = vezService();
+  assert.deepEqual(
+    await service.countInboxBuckets(
+      { owner: 'mine', orderReady: 'true', assignedUserId: undefined },
+      { actorId: 'seller-1' },
+    ),
+    { respond: 1, awaiting: 2, silent: 3, lost: 4 },
+  );
+  assert.deepEqual(calls[0][1], {
+    actorId: 'seller-1',
+    owner: 'mine',
+    orderReady: true,
+  });
+  assert.equal(calls[0][2].stallMinutes, 7);
+  await service.countInboxBuckets(
+    { assignedUserId: 'seller-9' },
+    { actorId: 'seller-1' },
+  );
+  assert.equal(calls.at(-1)[1].assignedUserId, 'seller-9');
+  assert.equal(calls.at(-1)[1].owner, 'all');
+  for (const bad of [
+    { owner: 'mine', assignedUserId: 'seller-9' },
+    { owner: 'x' },
+    { orderReady: 'sim' },
+    { bucket: 'respond' },
+    { limit: 1 },
+    { cursor: 'x' },
+  ]) {
+    await assert.rejects(
+      service.countInboxBuckets(bad, { actorId: 'seller-1' }),
+      { code: 'INVALID_FILTER' },
+      JSON.stringify(bad),
+    );
+  }
+  await assert.rejects(service.countInboxBuckets({}), { statusCode: 400 });
+  await service.getConversation(
+    { conversationId: 'conversation-vez' },
+    { actorId: 'seller-1' },
+  );
+  assert.deepEqual(calls.at(-1), [
+    'get',
+    'conversation-vez',
+    {
+      actorId: 'seller-1',
+      now: new Date('2026-11-08T15:00:00.000Z'),
+      stallMinutes: 7,
+    },
+  ]);
 });
 
 test('live events keep contact and conversation changes as they were', async () => {

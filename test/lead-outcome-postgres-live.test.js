@@ -301,6 +301,19 @@ test(
         expectedConversationVersion: await conversationVersion(id),
         expectedOutcomeVersion: await outcomeVersion(id),
       });
+    /** INBOX-VEZ-01: the SSE event the loss command publishes, once per command.
+     * @param {string} id */
+    const lossEvents = async (id) =>
+      Number(
+        (
+          await pool.query(
+            `SELECT count(*) AS n FROM crm.domain_events
+             WHERE aggregate_type='conversation' AND aggregate_id=$1
+               AND event_type='conversation.lead_outcome_recorded'`,
+            [id],
+          )
+        ).rows[0].n,
+      );
     /** @param {any} actor @param {string} id */
     const actionKinds = async (actor, id) =>
       (await dashboard.actions({ actor })).items
@@ -316,7 +329,9 @@ test(
         [owned],
       )
     ).rows[0];
+    assert.equal(await lossEvents(owned), 0);
     const first = await lose(seller, owned, 'preco');
+    assert.equal(await lossEvents(owned), 1);
     assert.deepEqual(first, {
       conversationId: owned,
       outcome: 'lost',
@@ -689,6 +704,16 @@ test(
     });
     assert.equal(reused.statusCode, 409);
     assert.equal(reused.json().code, 'IDEMPOTENCY_KEY_REUSED');
+    assert.equal(await lossEvents(viaHttp), 1);
+    const replayed = await api.inject({
+      method: 'POST',
+      url: `/api/v1/conversations/${viaHttp}/lead-outcome`,
+      headers,
+      payload: httpBody,
+    });
+    assert.equal(replayed.statusCode, 200, replayed.body);
+    assert.deepEqual(replayed.json(), posted.json());
+    assert.equal(await lossEvents(viaHttp), 1);
     const read = await api.inject({
       url: `/api/v1/conversations/${viaHttp}/lead-outcome`,
       headers: { cookie: 'crm_session=synthetic' },

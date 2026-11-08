@@ -257,12 +257,16 @@ export function registerOperationRoutes(api, operations, contextFor) {
         'assignedUserId',
         'archived',
         'automationState',
+        'bucket',
         'channel',
         'cursor',
         'limit',
+        'orderReady',
+        'owner',
         'pendingHandoff',
         'sort',
         'state',
+        'terminal',
         'unassignedHumanHandoff',
         'workQueue',
       ]);
@@ -272,16 +276,33 @@ export function registerOperationRoutes(api, operations, contextFor) {
         'conversation.read',
       );
       privateReadHeaders(reply);
+      // The session, never the query, names the reader: it binds the cursor
+      // and decides whose reminder and ownership the turn fields reflect.
       return reply
         .code(200)
-        .send(
-          await operations.listInbox(
-            input,
-            input.workQueue || input.sort === 'urgency'
-              ? { actorId: access.actor.id }
-              : undefined,
-          ),
-        );
+        .send(await operations.listInbox(input, { actorId: access.actor.id }));
+    }),
+  );
+
+  // INBOX-VEZ-01: the four tab counts, one snapshot.
+  api.get('/api/v1/inbox/buckets', async (request, reply) =>
+    respond(reply, async () => {
+      const input = parseListQuery(request.query, [
+        'assignedUserId',
+        'orderReady',
+        'owner',
+      ]);
+      const access = await authorizeRead(
+        request,
+        operations,
+        'conversation.read',
+      );
+      privateReadHeaders(reply);
+      return reply.code(200).send(
+        await operations.countInboxBuckets(input, {
+          actorId: access.actor.id,
+        }),
+      );
     }),
   );
 
@@ -290,15 +311,22 @@ export function registerOperationRoutes(api, operations, contextFor) {
     async (request, reply) =>
       respond(reply, async () => {
         const params = requireObject(request.params);
-        await authorizeRead(request, operations, 'conversation.read');
+        const access = await authorizeRead(
+          request,
+          operations,
+          'conversation.read',
+        );
         privateReadHeaders(reply);
         return reply.code(200).send(
-          await operations.getConversation({
-            conversationId: requireIdentifier(
-              params.conversationId,
-              'CONVERSATION_ID',
-            ),
-          }),
+          await operations.getConversation(
+            {
+              conversationId: requireIdentifier(
+                params.conversationId,
+                'CONVERSATION_ID',
+              ),
+            },
+            { actorId: access.actor.id },
+          ),
         );
       }),
   );
@@ -556,7 +584,9 @@ function parseListQuery(value, allowed) {
     }
     if (
       key === 'archived' ||
+      key === 'orderReady' ||
       key === 'pendingHandoff' ||
+      key === 'terminal' ||
       key === 'unassignedHumanHandoff'
     ) {
       if (query[key] !== 'true' && query[key] !== 'false') {

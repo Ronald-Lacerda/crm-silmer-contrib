@@ -22,7 +22,10 @@ import {
   normalizeContactRegistration,
 } from '@crm-silmer/contacts';
 import { CAPABILITIES } from '@crm-silmer/identity-access';
-import { PostgresInboxReadRepository } from '@crm-silmer/inbox-channels';
+import {
+  INBOX_BUCKETS,
+  PostgresInboxReadRepository,
+} from '@crm-silmer/inbox-channels';
 import {
   ASSISTANT_STALL_MINUTES as ASSISTANT_STALL_RANGE,
   AUTOMATION_MESSAGE_CAP,
@@ -96,6 +99,13 @@ export function createOperationReadService({
   if (!Buffer.isBuffer(cursorKey) || cursorKey.length < 32) {
     throw new TypeError('cursorKey must contain at least 32 bytes');
   }
+
+  /** @param {{actorId?: string}} access */
+  const readerFor = (access) => ({
+    actorId: access?.actorId ?? null,
+    now: clock(),
+    stallMinutes,
+  });
 
   return Object.freeze({
     /**
@@ -187,11 +197,43 @@ export function createOperationReadService({
     async getContact(input) {
       return contactRepository.get(requireId(input?.contactId, 'CONTACT_ID'));
     },
-    /** @param {any} input */
-    async getConversation(input) {
+    /**
+     * INBOX-VEZ-01: the detail carries the turn fields, worked out for the
+     * session's reader on the server clock.
+     * @param {any} input @param {{actorId?: string}} [access]
+     */
+    async getConversation(input, access = {}) {
       return inboxRepository.get(
         requireId(input?.conversationId, 'CONVERSATION_ID'),
+        readerFor(access),
       );
+    },
+    /**
+     * INBOX-VEZ-01: the four tab counts in one snapshot. Same `owner`,
+     * `orderReady` and `assignedUserId` rules as the list.
+     * @param {any} input @param {{actorId?: string}} [access]
+     */
+    async countInboxBuckets(input = {}, access = {}) {
+      rejectUnknownKeys(input, ['assignedUserId', 'orderReady', 'owner']);
+      const owner = readOwner(input);
+      if (input.assignedUserId !== undefined && owner !== 'all') {
+        throw new OperationReadError(400, 'INVALID_FILTER');
+      }
+      const filters = /** @type {Record<string, any>} */ ({
+        actorId: requireId(access.actorId, 'ACTOR_ID'),
+        owner,
+        orderReady:
+          input.orderReady === undefined
+            ? false
+            : readBooleanFilter(input.orderReady),
+      });
+      if (input.assignedUserId !== undefined) {
+        filters.assignedUserId = requireId(
+          input.assignedUserId,
+          'ASSIGNED_USER_ID',
+        );
+      }
+      return inboxRepository.bucketCounts(filters, readerFor(access));
     },
     /**
      * INBOX-HANDOFF-01 / AGT-03: the open handoff's summary, read apart from
@@ -248,17 +290,67 @@ export function createOperationReadService({
         'assignedUserId',
         'archived',
         'automationState',
+        'bucket',
         'channel',
         'cursor',
         'limit',
+        'orderReady',
+        'owner',
         'pendingHandoff',
         'sort',
         'state',
+        'terminal',
         'unassignedHumanHandoff',
         'workQueue',
       ]);
-      const filters = {};
-      if (input.workQueue !== undefined) {
+      const filters = /** @type {Record<string, any>} */ ({});
+      const owner = readOwner(input);
+      const orderReady =
+        input.orderReady === undefined
+          ? false
+          : readBooleanFilter(input.orderReady);
+      const terminal =
+        input.terminal === undefined
+          ? false
+          : readBooleanFilter(input.terminal);
+      if (orderReady && input.bucket === undefined) {
+        throw new OperationReadError(400, 'INVALID_FILTER');
+      }
+      if (input.bucket !== undefined) {
+        // RFC 052: a tab is a query of its own; the old shortcuts and the
+        // consultations (archived, terminal) never combine with it.
+        for (const key of [
+          'automationState',
+          'channel',
+          'pendingHandoff',
+          'sort',
+          'state',
+          'unassignedHumanHandoff',
+          'workQueue',
+        ]) {
+          if (input[key] !== undefined) {
+            throw new OperationReadError(400, 'INVALID_FILTER');
+          }
+        }
+        if (
+          terminal ||
+          (input.archived !== undefined && readBooleanFilter(input.archived))
+        ) {
+          throw new OperationReadError(400, 'INVALID_FILTER');
+        }
+        // The cursor binds, in this order, reader, tab, owner, order-ready
+        // chip and seller. The channel never combines with a tab.
+        filters.actorId = requireId(access.actorId, 'ACTOR_ID');
+        filters.bucket = requireChoice(input.bucket, new Set(INBOX_BUCKETS));
+        filters.owner = owner;
+        filters.orderReady = orderReady;
+        if (input.assignedUserId !== undefined) {
+          filters.assignedUserId = requireId(
+            input.assignedUserId,
+            'ASSIGNED_USER_ID',
+          );
+        }
+      } else if (input.workQueue !== undefined) {
         filters.workQueue = requireChoice(
           input.workQueue,
           new Set(['attention', 'closing']),
@@ -281,7 +373,7 @@ export function createOperationReadService({
           'ASSIGNED_USER_ID',
         );
       }
-      if (input.archived !== undefined) {
+      if (input.archived !== undefined && input.bucket === undefined) {
         if (
           input.archived !== true &&
           input.archived !== false &&
@@ -321,20 +413,44 @@ export function createOperationReadService({
           input.unassignedHumanHandoff === true ||
           input.unassignedHumanHandoff === 'true';
       }
+      if (input.assignedUserId !== undefined && owner !== 'all') {
+        // A seller picked by id already says whose conversations to show.
+        throw new OperationReadError(400, 'INVALID_FILTER');
+      }
+      if (input.bucket === undefined) {
+        // Added last and only when set, so the fingerprint of every older
+        // request (and the cursor it issued) stays what it was.
+        if (terminal) {
+          if (filters.workQueue || filters.state || filters.archived === true) {
+            throw new OperationReadError(400, 'INVALID_FILTER');
+          }
+          filters.terminal = true;
+        }
+        if (owner !== 'all') {
+          if (owner === 'mine') {
+            filters.actorId ??= requireId(access.actorId, 'ACTOR_ID');
+          }
+          filters.owner = owner;
+        }
+      }
+      const ranked = filters.sort === 'urgency' || input.bucket !== undefined;
       const fingerprint = filterFingerprint(filters);
       const limit = readLimit(input.limit);
       const after = readCursor(input.cursor, {
         cursorKey,
         fingerprint,
         scope: 'inbox',
-        ranked: filters.sort === 'urgency',
+        ranked,
       });
-      const result = await inboxRepository.list({ after, ...filters, limit });
+      const result = await inboxRepository.list(
+        { after, ...filters, limit },
+        readerFor(access),
+      );
       return pageResponse(result, {
         cursorKey,
         fingerprint,
         scope: 'inbox',
-        ranked: filters.sort === 'urgency',
+        ranked,
         // The waiting list is ordered by how long the handoff has waited,
         // so its cursor continues from that instant instead of the last message.
         ...(filters.workQueue
@@ -1199,6 +1315,15 @@ function liveEventFor(row) {
     payload: { conversationId: row.aggregate_id },
     type: 'inbox.conversation.changed',
   };
+}
+
+const OWNERS = new Set(['all', 'mine', 'unassigned']);
+
+/** @param {Record<string, any>} input */
+function readOwner(input) {
+  return input.owner === undefined
+    ? 'all'
+    : String(requireChoice(input.owner, OWNERS));
 }
 
 /** @param {unknown} value */

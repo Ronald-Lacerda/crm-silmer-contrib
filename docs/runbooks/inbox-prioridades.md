@@ -120,6 +120,76 @@ está instalado nesta máquina (Docker/WSL também indisponíveis); a suíte
 operation-read-postgres-live integra o gate serial do CI e deve passar antes
 da integração. As evidências locais não substituem esse gate.
 
+## Caixa por vez de responder (RFC 052)
+
+Decidida pela [ADR 065](../adr/065-caixa-de-entrada-por-vez-de-responder.md) em
+08/11/2026. Requisitos PCX-19a–j; tarefa INBOX-VEZ-01 (somente API). Sem migration.
+
+### Regra das abas
+
+- Cada conversa aberta (não arquivada, sem `terminal_at`, fora de
+  `convertida_em_lead`, `sem_lead` e `encerrada`) está em exatamente uma aba:
+  Responder (`bucket=respond`), Aguardando cliente (`awaiting`), Sem retorno
+  (`silent`) ou Perdidos (`lost`). Encerradas e arquivadas ficam fora, em
+  `terminal=true` ou `archived=true`.
+- Precedência: falha de envio vai para Responder, mesmo com perda; perda ativa
+  vai para Perdidos; handoff pendente vai para Responder; com a vez do cliente,
+  agente dentro da janela vai para Aguardando e os demais para Responder;
+  silêncio da Silmer de 72 h corridas ou mais vai para Sem retorno, salvo
+  lembrete próprio ativo (Aguardando); o restante fica em Aguardando.
+- Mensagem efetiva é saída `sent|delivered|read` de autoria humana ou, em
+  atendimento pelo agente, do agente. `system` nunca conta; em atendimento
+  humano, aviso automático não muda a vez.
+- Responsável: `owner=all` (padrão), `mine` ou `unassigned`. `bucket` não combina
+  com `workQueue`, `sort`, `archived=true`, `state`, `terminal`,
+  `pendingHandoff`, `unassignedHumanHandoff` nem `automationState`: 400
+  `INVALID_FILTER`.
+
+### Ordem de deploy e rollback
+
+- Publicar a API antes do frontend. A API nova mantém `workQueue`,
+  `sort=urgency` e os cursores atuais, então o frontend anterior continua
+  funcionando. Antes do frontend, conferir health/readiness e uma chamada
+  autenticada de `GET /inbox/buckets` no alvo.
+- `POST lead-outcome` agora publica o evento SSE `conversation` na mesma
+  transação. O corpo da resposta não mudou; quem já assina o tópico recebe a
+  invalidação da lista.
+- Rollback volta o frontend primeiro, porque o frontend novo depende de
+  `bucket` e `owner`. Depois, se preciso, volta a API. A API nova aceita o
+  contrato anterior, e não há migration a desfazer.
+
+### Parâmetros
+
+- 72 h: `SILENT_AFTER_HOURS` em `modules/inbox-channels/src/turn-policy.js`.
+  `dashboard-runtime.js` importa essa constante e continua exportando
+  `DASHBOARD_FOLLOWUP_HOURS`.
+- `stallMinutes`: valor vivo que `operation-runtime.js` passa a `summary()`,
+  limitado como antes. Usado só para `assistantStalled` na lista, sem corte de
+  24 h. O contador do painel continua vindo do sweeper.
+- Alerta de expediente: 15 min de expediente, no front.
+- Lembrete: `POST /conversations/{id}/reminder` com `Idempotency-Key`, CSRF e
+  `Origin`; `remindAt` ISO com offset, futuro e até 90 dias (422
+  `INVALID_REMINDER_DATE`); 30 comandos por minuto por ator.
+
+### Medir o p95 da lista no volume real
+
+1. Em horário comercial, por dois dias, medir o tempo de resposta de
+   `GET /api/v1/inbox/conversations` com `bucket=respond|awaiting|silent|lost`,
+   `owner=all` e `owner=mine`, pelo log de acesso do edge ou por cronômetro do
+   cliente. Mínimo de 50 requisições por aba e por owner.
+2. Registrar só o percentil 95 de cada combinação. Não copiar payloads, IDs,
+   nomes, textos de mensagem nem cabeçalhos de sessão para o registro.
+3. Para diagnóstico, `EXPLAIN ANALYZE` somente leitura em réplica ou janela
+   autorizada, sem PII.
+4. Se o p95 real passar de 300 ms na aba padrão (Todos) ou em `owner=mine`, abrir
+   uma ADR nova para a migration expand que desnormaliza `last_inbound_at` e
+   `last_effective_outbound_at` com índice parcial. Antes disso, não criar migration.
+
+Referência sintética (5.000 conversas abertas e 100.000 mensagens, ADR 065):
+p95 de 793 ms a 887 ms em aba sem filtro de responsável; 160 ms com
+`owner=mine`; 749 ms nas contagens; listas anteriores de 1,0 s a 1,4 s no mesmo
+volume. A medição sintética não substitui a real.
+
 ## Publicação e rollback
 
 ### Filtros no topo e ambiente de desenvolvimento — INBOX-UX-06

@@ -1,5 +1,6 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { PostgresAuditTrail } from '@crm-silmer/audit-privacy';
+import { appendConversationStreamEvent } from '@crm-silmer/inbox-channels';
 import {
   fingerprintCommand,
   PostgresIdempotencyRecordStore,
@@ -345,6 +346,13 @@ export function createLeadOutcomeRuntime(database, options) {
               version: outcomeVersion,
               reason,
               correlationId: input.correlationId,
+            });
+            // INBOX-VEZ-01: open panels re-read the bucket; ids only.
+            await appendConversationStreamEvent(client, {
+              conversationId,
+              type: 'conversation.lead_outcome_recorded',
+              correlationId: input.correlationId,
+              occurredAt: now.toISOString(),
             });
             return {
               conversationId,

@@ -22,6 +22,7 @@ import { registerFinanceRoutes } from './finance-routes.js';
 import { registerDashboardRoutes } from './dashboard-routes.js';
 import { registerDashboardCheckpointRoutes } from './dashboard-checkpoint-routes.js';
 import { registerDashboardMetricsRoutes } from './dashboard-metrics-routes.js';
+import { registerConversationReminderRoutes } from './conversation-reminder-routes.js';
 import { registerLeadOutcomeRoutes } from './lead-outcome-routes.js';
 import { registerOrderBillingRoutes } from './order-billing-routes.js';
 import { registerShippingRoutes } from './shipping-routes.js';
@@ -67,6 +68,7 @@ export const WEBHOOK_REQUESTS_PER_SECOND = 20;
  *   dashboardCheckpoint?: any,
  *   dashboardMetrics?: any,
  *   leadOutcomes?: any,
+ *   conversationReminders?: any,
  *   billing?: any,
  *   shipping?: any,
  *   orderPdfRenderer?: (html: string) => Promise<Buffer>,
@@ -366,6 +368,20 @@ export function createApi(options = {}, runtime = {}) {
         correlationId:
           requests.get(request)?.correlationId ?? 'lead-outcome-request',
       }));
+    });
+  }
+  if (runtime.conversationReminders) {
+    api.register(async (reminderScope) => {
+      await reminderScope.register(rateLimit, { global: false });
+      registerConversationReminderRoutes(
+        reminderScope,
+        runtime.conversationReminders,
+        (request) => ({
+          correlationId:
+            requests.get(request)?.correlationId ??
+            'conversation-reminder-request',
+        }),
+      );
     });
   }
   if (runtime.finance) {

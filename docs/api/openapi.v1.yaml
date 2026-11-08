@@ -618,6 +618,47 @@ paths:
             Exclui outros responsáveis e conversas terminais/arquivadas.
             Filtro, total e ordem por maior espera são aplicados antes de LIMIT;
             o cursor assinado também é vinculado ao ator.
+        - name: bucket
+          in: query
+          schema: { $ref: '#/components/schemas/InboxBucket' }
+          description: >-
+            INBOX-VEZ-01 / RFC 052. Aba por "de quem é a vez": cada conversa
+            aberta (não arquivada, sem terminal_at e fora de convertida_em_lead,
+            sem_lead e encerrada) pertence a exatamente uma. Precedência:
+            falha ou resultado incerto de envio depois da última saída
+            efetiva (respond, na frente), perda ativa (lost), handoff pendente
+            (respond), cliente escreveu por último (respond; awaiting se o
+            agente está sozinho e a mensagem tem menos de ASSISTANT_STALL_MINUTES),
+            vez do cliente há 72 h ou mais (silent, salvo lembrete próprio ativo),
+            demais (awaiting). Só resposta humana, ou do agente em conversa com
+            o agente, muda a vez; aviso automático e mensagem de sistema não.
+            Ordem calculada no SQL antes de LIMIT: respond por falha primeiro e
+            maior espera; awaiting e lost, mais recente primeiro; silent, silêncio
+            mais antigo primeiro. O cursor é vinculado a ator, aba, owner,
+            orderReady e assignedUserId. Não combina com workQueue, sort,
+            archived=true, state, terminal, channel, pendingHandoff,
+            unassignedHumanHandoff e automationState (400 INVALID_FILTER).
+        - name: owner
+          in: query
+          schema: { type: string, enum: [all, mine, unassigned], default: all }
+          description: >-
+            Responsável. mine = assigned_user_id do ator da sessão; unassigned =
+            sem responsável. Vale para abas, archived=true e terminal=true.
+            Com assignedUserId exige owner=all (senão 400 INVALID_FILTER).
+        - name: orderReady
+          in: query
+          schema: { type: boolean }
+          description: >-
+            Só com bucket: restringe a conversas com pedido pronto para revisão
+            (reviewOrder presente). Sem bucket, true é 400 INVALID_FILTER.
+        - name: terminal
+          in: query
+          schema: { type: boolean }
+          description: >-
+            D7. Quando true, "Encerradas": conversas não arquivadas em estado
+            terminal (convertida_em_lead, sem_lead, encerrada) ou com
+            terminal_at, na ordem padrão. Não combina com bucket, workQueue,
+            state nem archived=true.
         - {
             name: archived,
             in: query,
@@ -646,6 +687,11 @@ paths:
     get:
       operationId: getInboxConversation
       summary: Retorna uma conversa e seu histórico persistido
+      description: >-
+        INBOX-VEZ-01. A conversa traz os mesmos campos da vez da lista (bucket,
+        turnSince, turnBusinessMinutes, turnAsOf, assistantStalled, lostOutcome
+        e reminder), calculados para o usuário da sessão, que decide o lembrete
+        próprio e a aba.
       security: [{ sessionCookie: [] }]
       parameters:
         - $ref: '#/components/parameters/ConversationId'
@@ -800,6 +846,42 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /inbox/buckets:
+    get:
+      operationId: getInboxBuckets
+      summary: Conta as conversas abertas de cada aba da Caixa de Entrada
+      description: >-
+        INBOX-VEZ-01. Ação conversation.read. As quatro contagens saem de um
+        único SELECT (uma avaliação da aba, um snapshot), com a mesma regra da
+        lista, e batem com o totalCount de cada aba para os mesmos filtros.
+        owner, orderReady e assignedUserId valem como na lista (owner só
+        combina com assignedUserId quando for all). Resposta privada.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: '#/components/parameters/HumanReadOrigin'
+        - name: owner
+          in: query
+          schema: { type: string, enum: [all, mine, unassigned], default: all }
+        - name: orderReady
+          in: query
+          schema: { type: boolean }
+        - {
+            name: assignedUserId,
+            in: query,
+            schema: { type: string, minLength: 1, maxLength: 128 },
+          }
+      responses:
+        '200':
+          description: Contagens por aba
+          headers:
+            Cache-Control:
+              { schema: { type: string, const: 'private, no-cache' } }
+            Vary: { schema: { type: string, const: 'Origin, Cookie' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InboxBuckets' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /inbox/summary:
     get:
       operationId: getInboxSummary
@@ -1732,6 +1814,66 @@ paths:
             Mais de 30 comandos por minuto do mesmo cliente; corpo JSON do
             limitador, sem efeito no domínio
         '503': { $ref: '#/components/responses/LeadOutcomeProblem' }
+  /conversations/{conversationId}/reminder:
+    post:
+      operationId: setConversationReminder
+      summary: Adia a conversa para o próprio ator (lembrete pessoal)
+      description: >-
+        Qualquer Vendedor ativo, com ou sem dono na conversa e com o agente
+        ativo. Ação conversation.transition. Grava só a decisão (user_id,
+        action_id) do ator, compatível com a Central de ações (ACT-05). Publica
+        o evento SSE conversation.reminder_set. Não há texto livre. Sem sessão
+        válida é 401 INVALID_CREDENTIALS; Origin/CSRF inválidos são 403. Conversa
+        fora do universo aberto é 409 ACTION_NOT_AVAILABLE. Mesma chave com o
+        mesmo comando devolve a mesma resposta; com outro comando é 409
+        IDEMPOTENCY_KEY_REUSED. Limite de 30 comandos/minuto.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [remindAt, expectedVersion]
+              properties:
+                remindAt:
+                  type: string
+                  format: date-time
+                  description: ISO 8601 com offset, futuro, até 90 dias
+                expectedVersion: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Lembrete gravado (ou replay idempotente)
+          headers:
+            Cache-Control:
+              { schema: { type: string, const: 'private, no-store' } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conversationId, remindAt, decisionVersion]
+                properties:
+                  conversationId: { type: string }
+                  remindAt: { type: string, format: date-time }
+                  decisionVersion: { type: integer, minimum: 1 }
+        '400':
+          description: INVALID_REQUEST ou INVALID_IDEMPOTENCY_KEY
+        '401':
+          description: INVALID_CREDENTIALS
+        '403':
+          description: FORBIDDEN ou CSRF_INVALID
+        '404':
+          description: CONVERSATION_NOT_FOUND
+        '409':
+          description: VERSION_CONFLICT, ACTION_NOT_AVAILABLE ou IDEMPOTENCY_KEY_REUSED
+        '422':
+          description: INVALID_REMINDER_DATE
+        '429':
+          description: Mais de 30 comandos por minuto do mesmo cliente; corpo JSON do limitador, sem efeito no domínio
   /conversations/{conversationId}/archive:
     post:
       operationId: archiveConversation
@@ -3672,6 +3814,13 @@ components:
           requiresAttention,
           openedAt,
           updatedAt,
+          bucket,
+          turnSince,
+          turnBusinessMinutes,
+          turnAsOf,
+          assistantStalled,
+          lostOutcome,
+          reminder,
         ]
       properties:
         id: { type: string }
@@ -3776,6 +3925,68 @@ components:
         closureOutcome:
           { type: [string, 'null'], enum: [concluido, sem_pedido, null] }
         closedBy: { type: [string, 'null'] }
+        bucket:
+          description: >-
+            INBOX-VEZ-01. Aba da conversa; null fora do universo aberto
+            (arquivada, terminal, convertida_em_lead, sem_lead ou encerrada).
+          oneOf:
+            - { $ref: '#/components/schemas/InboxBucket' }
+            - { type: 'null' }
+        turnSince:
+          type: [string, 'null']
+          format: date-time
+          description: >-
+            Início da vez atual, truncado a milissegundos. respond: saída
+            com falha, ou a menor entre a primeira mensagem do cliente sem
+            resposta e o handoff pendente; awaiting e silent: última saída
+            efetiva (ou openedAt); awaiting com o agente na janela: a mensagem
+            do cliente; lost: instante da perda. Nulo fora do universo.
+        turnBusinessMinutes:
+          type: [integer, 'null']
+          minimum: 0
+          description: floor(crm.business_minutes_v1(turnSince, turnAsOf)); nulo fora do universo.
+        turnAsOf:
+          type: [string, 'null']
+          format: date-time
+          description: Relógio do servidor usado no cálculo; o mesmo em toda a resposta.
+        assistantStalled:
+          type: boolean
+          description: >-
+            Agente sozinho (sem handoff aberto), cliente sem resposta efetiva
+            e última mensagem do cliente com ASSISTANT_STALL_MINUTES ou mais.
+            Regra por linha, mais simples que o contador do painel.
+        lostOutcome:
+          type: [object, 'null']
+          additionalProperties: false
+          required: [reasonCode, occurredAt, version]
+          description: Só com perda ativa (MET-07). A nota nunca é exposta.
+          properties:
+            reasonCode: { type: string }
+            occurredAt: { type: string, format: date-time }
+            version: { type: integer, minimum: 1 }
+        reminder:
+          type: [object, 'null']
+          additionalProperties: false
+          required: [remindAt, mine]
+          description: >-
+            Lembrete ativo (D2): futuro e da versão atual da conversa; o do
+            leitor tem prioridade, depois o mais próximo. Só o próprio muda a
+            aba (mine=true).
+          properties:
+            remindAt: { type: string, format: date-time }
+            mine: { type: boolean }
+    InboxBucket:
+      type: string
+      enum: [respond, awaiting, silent, lost]
+    InboxBuckets:
+      type: object
+      additionalProperties: false
+      required: [respond, awaiting, silent, lost]
+      properties:
+        respond: { type: integer, minimum: 0 }
+        awaiting: { type: integer, minimum: 0 }
+        silent: { type: integer, minimum: 0 }
+        lost: { type: integer, minimum: 0 }
     InboxPage:
       type: object
       additionalProperties: false

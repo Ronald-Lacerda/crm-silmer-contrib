@@ -1,5 +1,38 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## INBOX-VEZ-01 — Caixa por vez de responder: API (08/11/2026)
+
+Fatia de API da [RFC 052](../../../docs/rfc/052-caixa-de-entrada-por-vez-de-responder.md)
+e [ADR 065](../../../docs/adr/065-caixa-de-entrada-por-vez-de-responder.md),
+requisitos PCX-19a–j. Sem migration e sem dependência nova. Branch de trabalho
+`claude/inbox-vez-01`, a partir de `origin/master`.
+
+- [x] Abas derivadas em SQL com a precedência da ADR 065 (PCX-19a/b/i).
+- [x] `GET /inbox/conversations` com `bucket`, `owner`, `orderReady` e `terminal`;
+      400 `INVALID_FILTER` nas combinações proibidas (PCX-19c/j).
+- [x] Ordem e cursor por aba e ator, sem alterar `workQueue`, `sort=urgency`
+      nem fingerprints atuais (PCX-19e).
+- [x] `GET /inbox/buckets` num único snapshot (PCX-19d).
+- [x] Campos novos no item e no detalhe, com `reminder.mine` (PCX-19f).
+- [x] Tempo de expediente e `turnAsOf` do servidor; 72 h em `turn-policy.js` (PCX-19g).
+- [x] `POST /conversations/:id/reminder` com idempotência, versão, auditoria sem
+      texto livre e evento `conversation` (PCX-19h).
+- [x] `POST lead-outcome` publica o evento SSE `conversation` (PCX-19j).
+- [x] Contrato OpenAPI do lembrete em `docs/api/openapi.v1.yaml`.
+- Evidência local em 08/11/2026, PostgreSQL 17.10: `npm run validate` aprovado
+  e gate live completo do CI com 212 testes aprovados, sem skips, incluindo
+  `test/inbox-buckets-postgres-live.test.js`,
+  `test/conversation-reminder-postgres-live.test.js` e
+  `test/lead-outcome-postgres-live.test.js`. Sem migration, nada a aplicar.
+  Medição do p95 em volume real pendente (ADR 065).
+
+Pendentes, sem checkbox marcado:
+
+- [ ] INBOX-VEZ-02 — UI: abas, seletor de responsável, card, chip Pedido pronto,
+      mapeamento das URLs antigas, E2E e axe.
+- [ ] INBOX-VEZ-03 — Sem retorno e Perdidos: Retomar, Adiar e Marcar perdido
+      dentro da inbox, reaproveitando ACT-05 e MET-07.
+
 ## OPS-DEPS-01 — correção da auditoria npm (07/11/2026)
 
 Manutenção interna do gate INT-3 / T00.2. Atualização autorizada pelo mantenedor,

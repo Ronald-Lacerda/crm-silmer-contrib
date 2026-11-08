@@ -1,5 +1,11 @@
 # Request for Comments
 
+## Decisão de 08/11/2026
+
+- [052 — Caixa de entrada organizada por "de quem é a vez"](052-caixa-de-entrada-por-vez-de-responder.md),
+  decidida na ADR 065 / INBOX-VEZ-01: quatro abas pela vez de quem, seletor de
+  responsável e lembrete por pessoa, com migration condicionada ao p95 real.
+
 ## Decisão de 06/11/2026
 
 - [051 — Triagem prioritária sem inferir regras comerciais](051-triagem-prioritaria-sem-inferir-regras-comerciais.md),

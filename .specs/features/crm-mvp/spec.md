@@ -1,5 +1,51 @@
 # CRM Silmer MVP — Requisitos Rastreáveis
 
+## Caixa por vez de responder — PCX-19 (08/11/2026)
+
+[ADR 065](../../../docs/adr/065-caixa-de-entrada-por-vez-de-responder.md) e
+[RFC 052](../../../docs/rfc/052-caixa-de-entrada-por-vez-de-responder.md),
+decididas pelo PO em 08/11/2026. Emenda a lista e o card da Caixa, sem alterar
+ACL, posse (ADR 009), regra de agente (ADR 015), ACT-05/06 ou MET-07/08.
+Tarefa INBOX-VEZ-01 (API); UI e Sem retorno/Perdidos ficam em INBOX-VEZ-02/03.
+
+- **PCX-19a:** A Caixa SHALL colocar cada conversa aberta em exatamente uma
+  aba, Responder, Aguardando cliente, Sem retorno ou Perdidos, pela última
+  mensagem efetiva e pelo estado de atendimento, na precedência da ADR 065.
+  Encerradas e arquivadas SHALL NOT aparecer nas abas; ficam em consulta.
+- **PCX-19b:** Mensagem efetiva SHALL ser saída `sent|delivered|read` de autoria
+  humana ou, em atendimento pelo agente, do agente. `system` SHALL NOT contar.
+  Em atendimento humano, aviso automático SHALL NOT mudar a vez. Falha ou
+  resultado incerto de envio SHALL manter a conversa em Responder.
+- **PCX-19c:** O seletor de responsável SHALL oferecer Todos, Minhas e Sem dono,
+  com Todos como padrão, aplicado às abas e às contagens. Pedido pronto SHALL
+  ser filtro combinável com qualquer aba, não aba própria.
+- **PCX-19d:** As quatro contagens SHALL vir de um único snapshot, com os
+  mesmos predicados e responsável das listas, sem dados de outro ator.
+- **PCX-19e:** Cada aba SHALL ter ordem e cursor próprios: Responder pela
+  maior espera, com falhas primeiro; Aguardando pela atividade mais recente;
+  Sem retorno pelo silêncio mais antigo; Perdidos pela declaração mais recente.
+  O cursor SHALL ficar vinculado a ator, aba, responsável e ordem. `workQueue`,
+  `sort=urgency` e os fingerprints atuais SHALL permanecer inalterados.
+- **PCX-19f:** O item da lista e o detalhe SHALL trazer `bucket`,
+  `turnSince`, `turnBusinessMinutes`, `turnAsOf`, `assistantStalled`,
+  `lostOutcome` e `reminder`, nulos fora do universo aberto. `reminder.mine`
+  SHALL distinguir lembrete próprio de alheio. A nota da perda SHALL NOT aparecer.
+- **PCX-19g:** O tempo da vez SHALL ser medido em minutos de expediente por
+  `crm.business_minutes_v1`, com o instante do servidor. Silêncio de 72 h
+  corridas, inclusive, SHALL levar a conversa de Aguardando para Sem retorno.
+- **PCX-19h:** Adiar SHALL gravar só a decisão do próprio ator
+  (`conversation:<id>`, schedule). Ela SHALL sair de Sem retorno só para o
+  ator que adiou, que a vê em Aguardando até o prazo; para os demais, SHALL
+  continuar em Sem retorno com o selo "Lembrete". Lembrete vencido SHALL
+  devolver a conversa. Adiar SHALL NOT esconder conversa em Responder e SHALL
+  NOT exigir dono nem aba.
+- **PCX-19i:** Agente sem resposta além de `stallMinutes` SHALL aparecer em
+  Responder com `assistantStalled=true`. O contador do painel SHALL continuar
+  vindo do sweeper.
+- **PCX-19j:** Compatibilidade: `POST lead-outcome` SHALL publicar o evento SSE
+  `conversation` na mesma transação, sem mudar sua resposta. Combinações
+  proibidas de filtros SHALL responder 400 `INVALID_FILTER`.
+
 ## Emenda Olist — centavos exatos (05/11/2026)
 
 [ADR 062](../../../docs/adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) e
