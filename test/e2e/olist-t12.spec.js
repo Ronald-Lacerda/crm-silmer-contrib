@@ -154,9 +154,6 @@ async function setup(page, options = {}) {
         ...(projection.paymentDuePolicy === 'per_order'
           ? { paymentDueOn: '2026-12-10' }
           : {}),
-        ...(projection.productFiscalRequired
-          ? { productFiscal: { ncm: '61091000', origin: 0, unit: 'UN' } }
-          : {}),
       });
       expect(req.headers()['x-csrf-token']).toBe('t12-csrf');
       if (options.delayPreview) await previewGate;
@@ -227,7 +224,7 @@ function expectNoEffectsOrGeneralRead(state) {
 async function openAndPreview(page) {
   await page.goto(`/olist?pedido=${orderId}`);
   await page
-    .getByRole('button', { name: 'Conferir prévia Olist', exact: true })
+    .getByRole('button', { name: 'Revisar envio', exact: true })
     .click();
 }
 
@@ -247,7 +244,7 @@ test('T12 Financeiro searches another owner and opens a restricted deep link by 
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(`/olist?pedido=${orderId}`);
   await expect(
-    page.getByRole('button', { name: 'Conferir prévia Olist', exact: true }),
+    page.getByRole('button', { name: 'Revisar envio', exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole('link', { name: 'Caixa de Entrada', exact: true }),
@@ -267,14 +264,14 @@ test('T12 eligible exact-cent preview remains read only with generation disabled
     page.getByText(/Comprador sintético · documento final/iu),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Validar prévia', exact: true }),
+    page.getByRole('heading', {
+      name: 'Prévia pronta para conferência',
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(
     page.getByRole('textbox', { name: /Subtotal|Valor final|Preço unitário/u }),
   ).toHaveCount(0);
-  await page
-    .getByRole('button', { name: 'Validar prévia', exact: true })
-    .click();
   await expect
     .poll(
       () =>
@@ -300,15 +297,15 @@ test('T17 per-order due date is required, reviewed, and changing it discards the
   await page.goto(`/olist?pedido=${orderId}`);
   const date = page.getByLabel('Vencimento deste pedido', { exact: true });
   await expect(
-    page.getByText('Confira os dados e a prévia antes de gerar a venda.', {
+    page.getByText('Revise a ficha antes de enviar para Olist.', {
       exact: false,
     }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Gerar venda no Olist', exact: true }),
+    page.getByRole('button', { name: 'Enviar para Olist', exact: true }),
   ).toHaveCount(0);
   const confer = page.getByRole('button', {
-    name: 'Conferir prévia Olist',
+    name: 'Revisar envio',
     exact: true,
   });
   await confer.click();
@@ -321,15 +318,18 @@ test('T17 per-order due date is required, reviewed, and changing it discards the
   await confer.click();
   await expect(page.getByText('10/12/2026', { exact: true })).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Validar prévia', exact: true }),
+    page.getByRole('heading', {
+      name: 'Prévia pronta para conferência',
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Gerar venda no Olist', exact: true }),
-  ).toHaveAttribute('aria-disabled', 'true');
+    page.getByRole('button', { name: 'Enviar para Olist', exact: true }),
+  ).toHaveCount(0);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await date.fill('2026-12-11');
   await expect(
-    page.getByRole('button', { name: 'Validar prévia', exact: true }),
+    page.getByRole('button', { name: 'Enviar para Olist', exact: true }),
   ).toHaveCount(0);
   await expect(page.getByText('10/12/2026', { exact: true })).toHaveCount(0);
   expect(
@@ -338,47 +338,28 @@ test('T17 per-order due date is required, reviewed, and changing it discards the
   expectNoEffectsOrGeneralRead(state);
 });
 
-test('T17 fiscal data is entered explicitly, frozen for review and changing it discards the preview', async ({
+test('T17 fiscal classification stays in Olist and is never requested by the sending routine', async ({
   page,
 }) => {
-  const productFiscal = { ncm: '61091000', origin: 0, unit: 'UN' };
   const state = await setup(page, {
-    projection: { productFiscalRequired: true },
-    preview: previewFixture({ productFiscal }),
+    projection: { productFiscalDeferred: true },
+    preview: previewFixture({
+      productFiscal: null,
+      productFiscalDeferred: true,
+    }),
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`/olist?pedido=${orderId}`);
-  const confer = page.getByRole('button', {
-    name: 'Conferir prévia Olist',
-    exact: true,
-  });
-  const ncm = page.getByLabel('NCM (8 dígitos)', { exact: true });
-  const origin = page.getByLabel('Origem fiscal (código de 0 a 8)', {
-    exact: true,
-  });
-  const unit = page.getByLabel('Unidade dos produtos', { exact: true });
-  await expect(ncm).toHaveValue('');
-  await expect(origin).toHaveValue('');
-  await expect(unit).toHaveValue('');
-  await confer.click();
-  await expect(ncm).toBeFocused();
-  await ncm.fill(productFiscal.ncm);
-  await confer.click();
-  await expect(origin).toBeFocused();
-  expect(
-    state.calls.filter(({ path }) => path === `${operation}/preview`),
-  ).toHaveLength(0);
-  await origin.fill('0');
-  await unit.fill(productFiscal.unit);
-  await confer.click();
+  await openAndPreview(page);
   await expect(
-    page.getByText('NCM 61091000 · Origem 0 · UN', { exact: true }),
+    page.getByRole('heading', { name: 'Prévia pronta para conferência' }),
   ).toBeVisible();
-  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
-  await unit.fill('PC');
   await expect(
-    page.getByRole('button', { name: 'Validar prévia', exact: true }),
+    page.getByLabel(/NCM|Origem fiscal|Unidade dos produtos/u),
   ).toHaveCount(0);
+  expect(
+    state.calls.find((call) => call.path === operation + '/preview')?.body,
+  ).toEqual({});
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   expectNoEffectsOrGeneralRead(state);
 });
 
@@ -416,7 +397,7 @@ for (const [label, status, issue] of [
     });
     await openAndPreview(page);
     await expect(
-      page.getByRole('button', { name: 'Validar prévia', exact: true }),
+      page.getByRole('button', { name: 'Enviar para Olist', exact: true }),
     ).toHaveCount(0);
     await expect(
       page.getByRole('button', { name: /Editar|Reabrir|Cancelar pedido/u }),
@@ -451,7 +432,7 @@ test('T12 fractional cents block the entire preview and never offer an export re
     page.getByText(/fração|fracion|centavo/iu).first(),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Validar prévia', exact: true }),
+    page.getByRole('button', { name: 'Enviar para Olist', exact: true }),
   ).toHaveCount(0);
   expectNoEffectsOrGeneralRead(state);
 });
@@ -460,14 +441,15 @@ for (const code of ['OLIST_PREVIEW_STALE', 'OLIST_PREVIEW_EXPIRED']) {
   test(`T12 ${code} invalidates the receipt and requires a new review`, async ({
     page,
   }) => {
-    const state = await setup(page, { checkFailure: { code, status: 409 } });
+    const state = await setup(page, {
+      projection: { creationEnabled: true },
+      preview: previewFixture({ creationEnabled: true }),
+      checkFailure: { code, status: 409 },
+    });
     await openAndPreview(page);
-    await page
-      .getByRole('button', { name: 'Validar prévia', exact: true })
-      .click();
     await expect(page.getByRole('alert').last()).toBeVisible();
     await expect(
-      page.getByRole('button', { name: 'Validar prévia', exact: true }),
+      page.getByRole('button', { name: 'Enviar para Olist', exact: true }),
     ).toHaveCount(0);
     await expect(page.getByText(privateCanary)).toHaveCount(0);
     expectNoEffectsOrGeneralRead(state);
@@ -487,7 +469,7 @@ for (const failure of [
     await expect(page.getByRole('alert').last()).toBeVisible();
     await expect(page.getByText(privateCanary)).toHaveCount(0);
     await expect(
-      page.getByRole('button', { name: 'Validar prévia', exact: true }),
+      page.getByRole('button', { name: 'Enviar para Olist', exact: true }),
     ).toHaveCount(0);
     expectNoEffectsOrGeneralRead(state);
   });
@@ -499,14 +481,17 @@ test('T12 reload restores projection without persisting the session-bound previe
   const state = await setup(page);
   await openAndPreview(page);
   await expect(
-    page.getByRole('button', { name: 'Validar prévia', exact: true }),
+    page.getByRole('heading', {
+      name: 'Prévia pronta para conferência',
+      exact: true,
+    }),
   ).toBeVisible();
   await page.reload();
   await expect(
-    page.getByRole('button', { name: 'Conferir prévia Olist', exact: true }),
+    page.getByRole('button', { name: 'Revisar envio', exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole('button', { name: 'Validar prévia', exact: true }),
+    page.getByRole('button', { name: 'Enviar para Olist', exact: true }),
   ).toHaveCount(0);
   expect(
     state.calls.filter(({ path }) => path === `${operation}/preview`),
@@ -523,7 +508,7 @@ test('T12 repeated activation during preview creates only one read-only request'
   const state = await setup(page, { delayPreview: true });
   await page.goto(`/olist?pedido=${orderId}`);
   const button = page.getByRole('button', {
-    name: 'Conferir prévia Olist',
+    name: 'Revisar envio',
     exact: true,
   });
   await button.click();
@@ -537,7 +522,10 @@ test('T12 repeated activation during preview creates only one read-only request'
   await button.dispatchEvent('click');
   state.releasePreview();
   await expect(
-    page.getByRole('button', { name: 'Validar prévia', exact: true }),
+    page.getByRole('heading', {
+      name: 'Prévia pronta para conferência',
+      exact: true,
+    }),
   ).toBeVisible();
   expect(
     state.calls.filter(({ path }) => path === `${operation}/preview`),
@@ -551,7 +539,7 @@ test('T12 leaving the restricted order ignores a late preview response', async (
   const state = await setup(page, { delayPreview: true });
   await page.goto(`/olist?pedido=${orderId}`);
   await page
-    .getByRole('button', { name: 'Conferir prévia Olist', exact: true })
+    .getByRole('button', { name: 'Revisar envio', exact: true })
     .click();
   await expect
     .poll(
@@ -577,13 +565,16 @@ test('T12 mobile preview is keyboard operable, accessible and does not overflow'
   const state = await setup(page);
   await page.goto(`/olist?pedido=${orderId}`);
   const button = page.getByRole('button', {
-    name: 'Conferir prévia Olist',
+    name: 'Revisar envio',
     exact: true,
   });
   await button.focus();
   await page.keyboard.press('Enter');
   await expect(
-    page.getByRole('button', { name: 'Validar prévia', exact: true }),
+    page.getByRole('heading', {
+      name: 'Prévia pronta para conferência',
+      exact: true,
+    }),
   ).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   expect(
@@ -1545,9 +1536,7 @@ test('T12 an SSE event for another order preserves the open monetary draft and i
   });
   await input.fill('6,00');
   releaseEvent();
-  await expect(
-    page.getByText(/Atualize a preparação e confira uma nova prévia/iu),
-  ).toBeVisible();
+  await expect(page.getByText(/Revise o envio novamente/iu)).toBeVisible();
   await expect(input).toHaveValue('6,00');
   await expect(
     page.getByRole('form', { name: 'Revisar subtotal', exact: true }),
@@ -1720,14 +1709,14 @@ async function setupHumanExport(page, options = {}) {
 /** @param {import('@playwright/test').Page} page */
 function humanGenerate(page) {
   return page.getByRole('button', {
-    name: 'Gerar venda no Olist',
+    name: 'Revisar envio',
     exact: true,
   });
 }
 /** @param {import('@playwright/test').Page} page */
 function humanDialog(page) {
   return page.getByRole('dialog', {
-    name: 'Gerar venda no Olist?',
+    name: 'Enviar para Olist?',
     exact: true,
   });
 }
@@ -1745,13 +1734,12 @@ for (const gates of [
       previewEnabled: gates.preview,
     });
     await openAndPreview(page);
-    await expect(humanGenerate(page)).toHaveAttribute('aria-disabled', 'true');
-    await humanGenerate(page).dispatchEvent('click');
+    await expect(humanGenerate(page)).toBeVisible();
     await expect(humanDialog(page)).toHaveCount(0);
     expectNoEffectsOrGeneralRead(state);
     expect(
       state.calls.filter(({ path }) => path === `${operation}/preview/check`),
-    ).toHaveLength(0);
+    ).toHaveLength(1);
   });
 }
 
@@ -1764,7 +1752,6 @@ for (const check of [
   }) => {
     const state = await setupHumanExport(page, check);
     await openAndPreview(page);
-    await humanGenerate(page).click();
     await expect
       .poll(
         () =>
@@ -1790,7 +1777,6 @@ for (const code of [
       checkFailure: { code, status: code === 'FORBIDDEN' ? 403 : 409 },
     });
     await openAndPreview(page);
-    await humanGenerate(page).click();
     await expect(page.getByRole('alert').last()).toBeVisible();
     await expect(humanDialog(page)).toHaveCount(0);
     await expect(page.getByText(privateCanary)).toHaveCount(0);
@@ -1803,7 +1789,6 @@ test('T12 human export requires explicit confirmation after a fresh check and se
 }) => {
   const state = await setupHumanExport(page, { delayExport: true });
   await openAndPreview(page);
-  await humanGenerate(page).click();
   const dialog = humanDialog(page);
   await expect(dialog).toBeVisible();
   expect(
@@ -1814,7 +1799,7 @@ test('T12 human export requires explicit confirmation after a fresh check and se
   ).toHaveLength(0);
   await expect(dialog.getByRole('textbox')).toHaveCount(0);
   const confirm = dialog.getByRole('button', {
-    name: 'Gerar venda conferida',
+    name: 'Enviar para Olist',
     exact: true,
   });
   await confirm.focus();
@@ -1853,7 +1838,6 @@ test('T12 cancelling the human export dialog restores focus and sends no export'
 }) => {
   const state = await setupHumanExport(page);
   await openAndPreview(page);
-  await humanGenerate(page).click();
   await expect(humanDialog(page)).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(humanDialog(page)).toHaveCount(0);
@@ -1866,7 +1850,6 @@ test('T12 a second generate activation during the fresh check cannot open duplic
 }) => {
   const state = await setupHumanExport(page, { delayCheck: true });
   await openAndPreview(page);
-  await humanGenerate(page).click();
   await expect
     .poll(
       () =>
@@ -1889,7 +1872,6 @@ test('T12 a locally expired preview closes the human confirmation before any exp
   await page.clock.install();
   const state = await setupHumanExport(page);
   await openAndPreview(page);
-  await humanGenerate(page).click();
   await expect(humanDialog(page)).toBeVisible();
   await page.clock.fastForward(601_000);
   await expect(humanDialog(page)).toHaveCount(0);
@@ -1902,7 +1884,6 @@ test('T12 revoking the checkbox closes the human confirmation and clears its rec
 }) => {
   const state = await setupHumanExport(page);
   await openAndPreview(page);
-  await humanGenerate(page).click();
   await expect(humanDialog(page)).toBeVisible();
   state.revoke();
   await expect(humanDialog(page)).toHaveCount(0);
@@ -1915,7 +1896,6 @@ test('T12 changing the selected order while a check is pending ignores its late 
 }) => {
   const state = await setupHumanExport(page, { delayCheck: true });
   await openAndPreview(page);
-  await humanGenerate(page).click();
   await expect
     .poll(
       () =>
@@ -1941,16 +1921,15 @@ for (const outcome of [
   }) => {
     const state = await setupHumanExport(page, outcome);
     await openAndPreview(page);
-    await humanGenerate(page).click();
     await humanDialog(page)
-      .getByRole('button', { name: 'Gerar venda conferida', exact: true })
+      .getByRole('button', { name: 'Enviar para Olist', exact: true })
       .click();
     await expect(
       page.getByText(/incerto|não repita|conferência administrativa/iu).last(),
     ).toBeVisible();
     await expect(humanDialog(page)).toHaveCount(0);
     await expect(
-      page.getByRole('button', { name: 'Gerar venda conferida', exact: true }),
+      page.getByRole('button', { name: 'Enviar para Olist', exact: true }),
     ).toHaveCount(0);
     await expect(
       page.getByRole('button', { name: /Tentar novamente|Repetir geração/u }),
@@ -1960,7 +1939,7 @@ for (const outcome of [
       state.calls.filter(({ path }) => path === `${operation}/export`),
     ).toHaveLength(1);
     await page
-      .getByRole('button', { name: 'Atualizar preparação', exact: true })
+      .getByRole('button', { name: 'Atualizar progresso', exact: true })
       .click();
     expect(
       state.calls.filter(({ path }) => path === `${operation}/export`),
@@ -1973,9 +1952,8 @@ test('T12 an SSE invalidation during the export POST preserves uncertainty and i
 }) => {
   const state = await setupHumanExport(page, { delayExport: true });
   await openAndPreview(page);
-  await humanGenerate(page).click();
   await humanDialog(page)
-    .getByRole('button', { name: 'Gerar venda conferida', exact: true })
+    .getByRole('button', { name: 'Enviar para Olist', exact: true })
     .click();
   await expect
     .poll(
@@ -1993,10 +1971,10 @@ test('T12 an SSE invalidation during the export POST preserves uncertainty and i
   state.releaseExport();
   await expect(humanGenerate(page)).toHaveCount(0);
   await expect(
-    page.getByRole('button', { name: 'Conferir prévia Olist', exact: true }),
+    page.getByRole('button', { name: 'Revisar envio', exact: true }),
   ).toHaveCount(0);
   await page
-    .getByRole('button', { name: 'Atualizar preparação', exact: true })
+    .getByRole('button', { name: 'Atualizar progresso', exact: true })
     .click();
   await expect(humanGenerate(page)).toHaveCount(0);
   expect(
@@ -2019,9 +1997,8 @@ test('T12 a malformed accepted response cannot be reported as an ERP sale or per
     },
   });
   await openAndPreview(page);
-  await humanGenerate(page).click();
   await humanDialog(page)
-    .getByRole('button', { name: 'Gerar venda conferida', exact: true })
+    .getByRole('button', { name: 'Enviar para Olist', exact: true })
     .click();
   await expect(
     page.getByText(
@@ -2031,7 +2008,7 @@ test('T12 a malformed accepted response cannot be reported as an ERP sale or per
   await expect(page.getByText('ERP-UNTRUSTED-900')).toHaveCount(0);
   await expect(humanGenerate(page)).toHaveCount(0);
   await expect(
-    page.getByRole('button', { name: 'Conferir prévia Olist', exact: true }),
+    page.getByRole('button', { name: 'Revisar envio', exact: true }),
   ).toHaveCount(0);
   expect(
     state.calls.filter(({ path }) => path === `${operation}/export`),
@@ -2052,12 +2029,10 @@ for (const viewport of [
     const state = await setupHumanExport(page);
     await openAndPreview(page);
     const generate = humanGenerate(page);
-    await generate.focus();
-    await page.keyboard.press('Enter');
     const dialog = humanDialog(page);
     await expect(dialog).toBeVisible();
     await expect(
-      dialog.getByRole('button', { name: 'Voltar à prévia', exact: true }),
+      dialog.getByRole('button', { name: 'Voltar', exact: true }),
     ).toBeFocused();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     const box = await dialog.boundingBox();

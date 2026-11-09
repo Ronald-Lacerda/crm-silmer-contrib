@@ -7,6 +7,7 @@ import {
 } from '../modules/olist/src/index.js';
 import { createOlistClient } from '../modules/olist/src/client.js';
 import { OLIST_API } from '../modules/olist/src/configuration.js';
+import { captureOlistExistingBuyer } from '../modules/olist/src/existing-buyer.js';
 import {
   createOlistQuota,
   olistReadWait,
@@ -514,6 +515,67 @@ function fixture(settings = {}) {
     },
   };
 }
+
+test('existing ERP buyer bypasses all customer resources and POSTs while resolving products', async () => {
+  const f = fixture(),
+    contact = { id: 901, ...structuredClone(customer) };
+  f.contacts.set(901, contact);
+  const value = {
+    ...snapshot(['M']),
+    ...captureOlistExistingBuyer({
+      config,
+      buyer: { name: customer.nome, phone: customer.celular },
+      contact,
+    }),
+  };
+  const result = await f.resolver.resolve(f.operation(value));
+  assert.equal(result.customerId, '901');
+  assert.deepEqual(
+    f.writes.map((row) => row.kind),
+    ['product'],
+  );
+  assert.ok([...f.resources.values()].every((row) => row.kind !== 'customer'));
+  assert.ok([...f.attempts.values()].every((row) => row.kind !== 'customer'));
+  assert.equal(f.reads.filter((row) => row.kind === 'contact').length, 2);
+  assert.equal(f.reads.filter((row) => row.kind === 'findCustomer').length, 0);
+});
+test('existing ERP buyer is freshly checked before every product effect reservation', async () => {
+  const f = fixture({
+    afterPost: async (/** @type {string} */ kind) => {
+      if (kind === 'product') f.contacts.get(901).situacao = 'I';
+    },
+  });
+  const contact = { id: 901, ...structuredClone(customer) };
+  f.contacts.set(901, contact);
+  const value = {
+    ...snapshot(['M']),
+    ...captureOlistExistingBuyer({
+      config,
+      buyer: { name: customer.nome, phone: customer.celular },
+      contact,
+    }),
+  };
+  const second = structuredClone(value.commercial.groups[0]),
+    id = randomUUID();
+  second.groupId = id;
+  second.attributes.color = 'Vermelho';
+  for (const line of second.lines) {
+    line.groupId = id;
+    line.lineId = randomUUID();
+  }
+  value.commercial.groups.push(second);
+  value.commercial.totalCents *= 2;
+  await assert.rejects(f.resolver.resolve(f.operation(value)), {
+    code: 'OLIST_CUSTOMER_DIVERGENT',
+  });
+  assert.equal(f.writes.length, 1);
+  assert.equal(
+    [...f.attempts.values()].filter(
+      (row) => f.resources.get(row.resource_id).kind === 'product',
+    ).length,
+    1,
+  );
+});
 
 test('T22 resolves and persists the customer, V parent and every initial variation before dependencies', async () => {
   const f = fixture(),

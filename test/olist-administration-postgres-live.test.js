@@ -638,19 +638,25 @@ else
             );
             assert.equal(
               (await f.runtime.administration(f.input)).productFiscalRequired,
+              false,
+            );
+            assert.equal(
+              (await f.runtime.administration(f.input)).productFiscalDeferred,
               true,
             );
-            await assert.rejects(
-              f.runtime.existingPreview({ ...f.input, saleId: '401' }),
-              { code: 'OLIST_PRODUCT_FISCAL_REQUIRED' },
-            );
+            const deferred = await f.runtime.existingPreview({
+              ...f.input,
+              saleId: '401',
+            });
+            assert.equal(deferred.productFiscal, null);
+            assert.equal(deferred.productFiscalDeferred, true);
             const preview = await f.runtime.existingPreview({
               ...f.input,
               saleId: '401',
               productFiscal,
             });
             assert.deepEqual(preview.productFiscal, productFiscal);
-            assert.equal(preview.productFiscalRequired, true);
+            assert.equal(preview.productFiscalRequired, false);
             const command = {
               ...f.input,
               previewToken: preview.previewToken,
@@ -728,6 +734,213 @@ else
             }
             noWrites(f);
           }
+        },
+      );
+      await t.test(
+        'existing ERP buyer supports canonical and T16 links without copying CRM registration or binding customer resources',
+        async () => {
+          for (const legacy of [false, true]) {
+            const f = legacy ? await explicitLegacyFixture() : await fixture();
+            await pool.query(
+              'UPDATE crm.contacts SET registration_envelope=NULL,version=version+1 WHERE id=$1',
+              [f.contactId],
+            );
+            f.responses.set('/contatos', {
+              itens: [{ id: 101 }],
+              paginacao: { offset: 0, total: 1, limit: 50 },
+            });
+            const registrationBefore = (
+              await pool.query(
+                'SELECT registration_envelope FROM crm.contacts WHERE id=$1',
+                [f.contactId],
+              )
+            ).rows[0];
+            const before = await legacyCounts();
+            const checked = legacy
+              ? await f.runtime.legacyExistingPreview({
+                  ...f.input,
+                  saleId: '401',
+                  mapping: /** @type {any} */ (f).mapping,
+                })
+              : await f.runtime.existingPreview({ ...f.input, saleId: '401' });
+            assert.equal(checked.buyerSourceHint, 'erp-existing-v1');
+            const command = {
+              ...f.input,
+              previewToken: checked.previewToken,
+              confirmed: true,
+              reason: 'Synthetic reviewed existing ERP buyer',
+              idempotencyKey: 'existing-buyer-' + legacy,
+            };
+            const linked = legacy
+              ? await f.runtime.linkLegacyExisting(command)
+              : await f.runtime.linkExisting(command);
+            const replay = legacy
+              ? await f.runtime.linkLegacyExisting(command)
+              : await f.runtime.linkExisting(command);
+            assert.deepEqual(replay, linked);
+            const row = (
+              await pool.query('SELECT * FROM crm.olist_exports WHERE id=$1', [
+                linked.operationId,
+              ])
+            ).rows[0];
+            const frozen = open(
+              row.snapshot_envelope,
+              config.envelopeKey,
+              'export-snapshot',
+              config.accountKey,
+              row.id,
+            );
+            assert.equal(frozen.buyerSource.mode, 'erp-existing-v1');
+            assert.equal(frozen.buyerSource.remoteId, '101');
+            assert.deepEqual(frozen.customer, {
+              nome: 'comprador sintético',
+              celular: '5511999990000',
+            });
+            assert.ok(
+              !JSON.stringify(frozen.customer).includes(registration.document),
+            );
+            assert.deepEqual(
+              (
+                await pool.query(
+                  'SELECT registration_envelope FROM crm.contacts WHERE id=$1',
+                  [f.contactId],
+                )
+              ).rows[0],
+              registrationBefore,
+            );
+            assert.equal(
+              (
+                await pool.query(
+                  "SELECT count(*)::int n FROM crm.olist_export_resources e JOIN crm.olist_resources r ON r.id=e.resource_id WHERE e.export_id=$1 AND r.kind='customer'",
+                  [row.id],
+                )
+              ).rows[0].n,
+              0,
+            );
+            if (legacy)
+              assert.deepEqual(await legacyCounts(), {
+                ...before,
+                exports: before.exports + 1,
+                links: before.links + 1,
+              });
+            noWrites(f);
+          }
+        },
+      );
+      await t.test(
+        'T16 phone mismatch is human-reviewed only for the selected historical sale and re-read on commit, replay and reconciliation',
+        async () => {
+          const f = await explicitLegacyFixture();
+          await pool.query(
+            'UPDATE crm.contacts SET registration_envelope=NULL,version=version+1 WHERE id=$1',
+            [f.contactId],
+          );
+          f.responses.get('/contatos/101').celular = '5511999990001';
+          const before = await legacyCounts(),
+            crmBefore = (
+              await pool.query(
+                'SELECT version,contact_details_envelope,registration_envelope FROM crm.contacts WHERE id=$1',
+                [f.contactId],
+              )
+            ).rows[0];
+          const preview = await f.runtime.legacyExistingPreview({
+            ...f.input,
+            saleId: '401',
+            mapping: f.mapping,
+          });
+          assert.deepEqual(preview.buyerReview, {
+            mode: 'legacy-sale-buyer-review-v1',
+            phoneMismatch: true,
+            reusable: false,
+            code: 'OLIST_LEGACY_BUYER_PHONE_MISMATCH',
+          });
+          assert.ok(!JSON.stringify(preview).includes('5511999990001'));
+          const command = {
+            ...f.input,
+            previewToken: preview.previewToken,
+            confirmed: true,
+            reason:
+              'Synthetic explicit historical-only phone divergence reviewed',
+            idempotencyKey: 'phone-review',
+          };
+          await assert.rejects(
+            f.runtime.linkLegacyExisting({ ...command, confirmed: false }),
+            { code: 'INVALID_REQUEST' },
+          );
+          assert.deepEqual(await legacyCounts(), before);
+          const linked = await f.runtime.linkLegacyExisting(command),
+            after = await legacyCounts();
+          assert.deepEqual(after, {
+            ...before,
+            exports: before.exports + 1,
+            links: before.links + 1,
+          });
+          const row = (
+            await pool.query('SELECT * FROM crm.olist_exports WHERE id=$1', [
+              linked.operationId,
+            ])
+          ).rows[0];
+          const frozen = open(
+            row.snapshot_envelope,
+            config.envelopeKey,
+            'export-snapshot',
+            config.accountKey,
+            row.id,
+          );
+          assert.equal(frozen.buyerSource, undefined);
+          assert.equal(frozen.legacyBuyerProof.customerId, '101');
+          assert.equal(frozen.legacyBuyerProof.saleId, '401');
+          assert.ok(
+            !JSON.stringify(frozen.legacyBuyerProof).includes('5511999990001'),
+          );
+          const reads = f.calls.length;
+          assert.deepEqual(await f.runtime.linkLegacyExisting(command), linked);
+          assert.ok(
+            f.calls.length > reads,
+            'Historical divergence replay obtains current ERP evidence',
+          );
+          f.responses.get('/contatos/101').celular = '5511999990002';
+          await assert.rejects(f.runtime.linkLegacyExisting(command), {
+            code: 'OLIST_CUSTOMER_DIVERGENT',
+          });
+          assert.deepEqual(await legacyCounts(), after);
+          f.responses.get('/contatos/101').celular = '5511999990001';
+          const request = await f.runtime.reconcile({
+            ...f.input,
+            stage: 'sale',
+            resourceId: null,
+            expectedVersion: Number(row.version),
+            reason: 'Synthetic read-only historical buyer review',
+            idempotencyKey: 'phone-review-read',
+          });
+          const dispatcher = createOlistReconciliationRuntime({
+            database,
+            environment,
+            fetch: f.fetcher,
+            clock: () => NOW,
+          });
+          const checked = await createOlistReconciliationHandler({
+            dispatcher,
+          })(
+            {
+              jobType: 'olist.reconcile',
+              queue: 'olist_reconcile',
+              idempotencyKey: request.id,
+              olistExportId: row.id,
+            },
+            { heartbeat: async () => true },
+          );
+          assert.equal(checked.outcome, 'sent', JSON.stringify(checked));
+          assert.deepEqual(
+            (
+              await pool.query(
+                'SELECT version,contact_details_envelope,registration_envelope FROM crm.contacts WHERE id=$1',
+                [f.contactId],
+              )
+            ).rows[0],
+            crmBefore,
+          );
+          noWrites(f);
         },
       );
       await t.test(

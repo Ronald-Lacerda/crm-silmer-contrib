@@ -16,6 +16,66 @@ const key = Buffer.alloc(32, 0x31);
 const identityKey = Buffer.alloc(32, 0x62);
 const syntheticDocument = '00000000000100';
 
+test('existing buyer search completes all states and matches detailed trade name plus normalized phone', async () => {
+  const h = harness((url) =>
+    url.pathname.endsWith('/901')
+      ? json({
+          id: 901,
+          nome: 'Outra razão',
+          fantasia: 'Loja Sintética',
+          celular: '(11) 99999-0000',
+          situacao: 'A',
+        })
+      : page([{ id: 901 }], 1),
+  );
+  const result = await h.client.findCustomerByIdentity({
+    name: 'loja sintética',
+    phone: '5511999990000',
+  });
+  assert.equal(result.id, 901);
+  assert.equal(h.urls.length, 5);
+  assert.deepEqual(
+    h.urls
+      .filter((url) => url.searchParams.has('situacao'))
+      .map((url) => url.searchParams.get('situacao')),
+    ['A', 'B', 'I', 'E'],
+  );
+  assert.ok(h.urls.every((url) => !url.searchParams.has('codigo')));
+});
+test('existing buyer search refuses distinct exact IDs and incomplete bounded candidate sets', async () => {
+  const ambiguous = harness((url) =>
+    /\/contatos\/90[12]$/u.test(url.pathname)
+      ? json({
+          id: Number(url.pathname.split('/').at(-1)),
+          nome: 'Loja Sintética',
+          celular: '5511999990000',
+          situacao: 'B',
+        })
+      : page([{ id: 901 }, { id: 902 }], 2),
+  );
+  await assert.rejects(
+    ambiguous.client.findCustomerByIdentity({
+      name: 'loja sintética',
+      phone: '5511999990000',
+    }),
+    { code: 'OLIST_AMBIGUOUS_MATCH' },
+  );
+  const capped = harness(() =>
+    page(
+      Array.from({ length: 45 }, (_, i) => ({ id: i + 1 })),
+      45,
+    ),
+  );
+  await assert.rejects(
+    capped.client.findCustomerByIdentity({
+      name: 'loja sintética',
+      phone: '5511999990000',
+    }),
+    { code: 'OLIST_INCOMPLETE_LOOKUP' },
+  );
+  assert.equal(capped.urls.length, 4);
+});
+
 /** @param {unknown} body @param {ResponseInit} [init] */
 function json(body, init = {}) {
   return new globalThis.Response(JSON.stringify(body), {

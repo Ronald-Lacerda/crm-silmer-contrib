@@ -12,6 +12,7 @@ import {
   normalizeContactPhone,
   normalizeContactRegistration,
 } from '@crm-silmer/contacts';
+import { olistBuyerRegistrationEmpty } from '@crm-silmer/olist';
 
 const REQUIRED_REGISTRATION = [
   'personType',
@@ -62,8 +63,8 @@ function calendarDay(value) {
  *
  * @param {{source:{order:any,sourceRevision:number,issues:{code:string,field:string}[]},
  * buyer:{name:string,phone:string|null,email?:string|null,registration:any}|null,
- * settings:any,now:Date,paymentDueOn?:unknown}} input
- * @returns {{eligible:boolean,issues:{code:string,field:string}[],commercial:any,customer:any,productFiscal?:any}}
+ * settings:any,now:Date,paymentDueOn?:unknown,buyerSource?:any}} input
+ * @returns {{eligible:boolean,issues:{code:string,field:string}[],commercial:any,customer:any,productFiscal?:any,productFiscalDeferred?:boolean,buyerSource?:any}}
  */
 export function buildOlistPreviewPlan(input) {
   /** @type {{code:string,field:string}[]} */
@@ -76,14 +77,20 @@ export function buildOlistPreviewPlan(input) {
   for (const entry of input.source.issues) issue(entry.code, entry.field);
 
   const settings = input.settings;
+  const erpDue = settings?.paymentDuePolicy === 'erp';
   for (const key of REQUIRED_SETTINGS)
-    if (!Number.isSafeInteger(settings?.[key]) || settings[key] <= 0)
+    if (
+      !(erpDue && key === 'paymentMethodId') &&
+      (!Number.isSafeInteger(settings?.[key]) || settings[key] <= 0)
+    )
       issue('OLIST_SETTINGS_REQUIRED', 'settings.' + key);
   const perOrderDue = settings?.paymentDuePolicy === 'per_order';
-  const paymentDueOn = perOrderDue
-    ? input.paymentDueOn
-    : settings?.paymentDueOn;
-  if (!calendarDay(paymentDueOn))
+  const paymentDueOn = erpDue
+    ? null
+    : perOrderDue
+      ? input.paymentDueOn
+      : settings?.paymentDueOn;
+  if (!erpDue && !calendarDay(paymentDueOn))
     issue(
       perOrderDue ? 'OLIST_PAYMENT_DUE_REQUIRED' : 'OLIST_SETTINGS_REQUIRED',
       perOrderDue ? 'commercial.paymentDueOn' : 'settings.paymentDueOn',
@@ -95,13 +102,14 @@ export function buildOlistPreviewPlan(input) {
   )
     issue('OLIST_SETTINGS_INVALID', 'commercial.paymentDueOn');
   if (
+    !erpDue &&
     settings?.receivingMethodId !== undefined &&
     settings.receivingMethodId !== null &&
     (!Number.isSafeInteger(settings.receivingMethodId) ||
       settings.receivingMethodId <= 0)
   )
     issue('OLIST_SETTINGS_INVALID', 'settings.receivingMethodId');
-  if (!validText(settings?.paymentTerms, 120))
+  if (!erpDue && !validText(settings?.paymentTerms, 120))
     issue('OLIST_SETTINGS_REQUIRED', 'settings.paymentTerms');
   for (const key of ['priceListId'])
     if (
@@ -118,6 +126,18 @@ export function buildOlistPreviewPlan(input) {
     issue('OLIST_SETTINGS_INVALID', 'settings.purchaseOrder');
 
   const buyer = input.buyer;
+  const source = input.buyerSource;
+  const existingBuyer =
+    source?.mode === 'erp-existing-v1' &&
+    olistBuyerRegistrationEmpty(buyer?.registration) &&
+    typeof source.remoteId === 'string' &&
+    /^[1-9][0-9]{0,15}$/u.test(source.remoteId) &&
+    Number.isSafeInteger(Number(source.remoteId)) &&
+    typeof buyer?.name === 'string' &&
+    source.identity?.name ===
+      buyer.name.normalize('NFC').trim().toLocaleLowerCase('pt-BR') &&
+    source.identity?.phone === normalizeContactPhone(buyer?.phone);
+  if (source && !existingBuyer) issue('OLIST_BUYER_INVALID', 'buyer.source');
   const normalized = normalizeContactRegistration(
     Object.fromEntries(
       CONTACT_REGISTRATION_FIELDS.map((key) => [
@@ -126,24 +146,39 @@ export function buildOlistPreviewPlan(input) {
       ]),
     ),
   );
-  if (!normalized.ok)
+  if (!existingBuyer && !normalized.ok)
     for (const key of Object.keys(normalized.errors))
       issue('OLIST_BUYER_INVALID', 'buyer.registration.' + key);
   const registration = normalized.ok ? normalized.value : null;
   for (const key of REQUIRED_REGISTRATION)
-    if (!registration?.[/** @type {keyof typeof registration} */ (key)])
+    if (
+      !existingBuyer &&
+      !registration?.[/** @type {keyof typeof registration} */ (key)]
+    )
       issue('OLIST_BUYER_REQUIRED', 'buyer.registration.' + key);
-  if (registration?.personType === 'company' && !registration.stateRegistration)
+  if (
+    !existingBuyer &&
+    registration?.personType === 'company' &&
+    !registration.stateRegistration
+  )
     issue('OLIST_BUYER_REQUIRED', 'buyer.registration.stateRegistration');
   const phone = normalizeContactPhone(buyer?.phone);
   if (!phone) issue('OLIST_BUYER_REQUIRED', 'buyer.phone');
   if (!validText(buyer?.name, 150)) issue('OLIST_BUYER_REQUIRED', 'buyer.name');
   const email = normalizeContactEmail(buyer?.email);
-  if (email === undefined) issue('OLIST_BUYER_INVALID', 'buyer.email');
+  if (!existingBuyer && email === undefined)
+    issue('OLIST_BUYER_INVALID', 'buyer.email');
 
   /** @type {any} */
   let customer = null;
   if (
+    existingBuyer &&
+    phone &&
+    !issues.some((entry) => entry.field.startsWith('buyer.'))
+  )
+    customer = { nome: source.identity.name, celular: phone };
+  if (
+    !existingBuyer &&
     registration &&
     phone &&
     !issues.some((entry) => entry.field.startsWith('buyer.'))
@@ -279,5 +314,6 @@ export function buildOlistPreviewPlan(input) {
     issues,
     commercial,
     customer,
+    ...(existingBuyer ? { buyerSource: structuredClone(source) } : {}),
   };
 }

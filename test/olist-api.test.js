@@ -601,6 +601,27 @@ test('OAuth callback inputs reach the runtime without leaking into errors, logs 
   );
 });
 
+test('missing ERP buyer is an actionable bounded refusal without leaking provider details', async (t) => {
+  const { api, runtime, logs } = fixture({ olistEnabled: true });
+  t.after(() => api.close());
+  runtime.preview = async () => {
+    throw Object.assign(new Error('PRIVATE_BUYER_LOOKUP'), {
+      code: 'OLIST_CUSTOMER_NOT_FOUND',
+      statusCode: 422,
+      details: 'PRIVATE_BUYER_LOOKUP',
+    });
+  };
+  const response = await api.inject({
+    method: 'POST',
+    url: '/api/v1/orders/synthetic-order/olist/preview',
+    headers,
+    payload: {},
+  });
+  assert.equal(response.statusCode, 422);
+  assert.equal(response.json().code, 'OLIST_CUSTOMER_NOT_FOUND');
+  assert.doesNotMatch(response.body + logs.join(''), /PRIVATE_BUYER_LOOKUP/u);
+});
+
 test('unexpected Olist runtime exceptions become bounded service errors', async (t) => {
   const { api, runtime, logs } = fixture();
   t.after(() => api.close());

@@ -106,7 +106,7 @@ else
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
       await migrate(pool, { migrations: await loadMigrations() });
-      /** @param {{status?:string,subtotal?:number,legacy?:boolean,missingSeller?:boolean,expiredAccess?:boolean,perOrderDue?:boolean,manualFiscal?:boolean,changeDuringFetch?:()=>Promise<void>}} [patch] */
+      /** @param {{status?:string,subtotal?:number,legacy?:boolean,missingSeller?:boolean,expiredAccess?:boolean,perOrderDue?:boolean,manualFiscal?:boolean,minimalBuyer?:boolean,changeDuringFetch?:()=>Promise<void>}} [patch] */
       async function fixture(patch = {}) {
         await pool.query('TRUNCATE crm.olist_accounts CASCADE');
         let accountSettings = patch.perOrderDue
@@ -117,6 +117,16 @@ else
             ...accountSettings,
             productFiscal: /** @type {any} */ (null),
           };
+        if (patch.minimalBuyer)
+          accountSettings = /** @type {any} */ ({
+            ...settings,
+            paymentDuePolicy: 'erp',
+            paymentDueOn: null,
+            paymentMethodId: null,
+            receivingMethodId: null,
+            paymentTerms: null,
+            productFiscal: null,
+          });
         let current = new Date(NOW);
         /** @type {Record<string,any>} */
         const actors = {};
@@ -216,9 +226,11 @@ else
                 CONTACT_KEY,
               ),
             ),
-            JSON.stringify(
-              encryptContactRegistration(registration, CONTACT_KEY),
-            ),
+            patch.minimalBuyer
+              ? null
+              : JSON.stringify(
+                  encryptContactRegistration(registration, CONTACT_KEY),
+                ),
             NOW,
           ],
         );
@@ -317,6 +329,18 @@ else
             },
           ],
         ]);
+        if (patch.minimalBuyer) {
+          responses.set('/contatos', {
+            itens: [{ id: 101 }],
+            paginacao: { offset: 0, total: 1, limit: 100 },
+          });
+          responses.set('/contatos/101', {
+            id: 101,
+            nome: 'Comprador Sintético',
+            celular: '5511999990000',
+            situacao: 'A',
+          });
+        }
         await pool.query(
           "INSERT INTO crm.olist_resources(id,account_key,kind,identity_hash,reference,state,remote_id) VALUES($1,$2,'customer',$3,$4,'confirmed','101')",
           [
@@ -482,7 +506,10 @@ else
         const runtime = createOlistApiRuntime(database, {
           environment: {
             ...environment,
-            ...(patch.expiredAccess || patch.perOrderDue || patch.manualFiscal
+            ...(patch.expiredAccess ||
+            patch.perOrderDue ||
+            patch.manualFiscal ||
+            patch.minimalBuyer
               ? { OLIST_PILOT_USER_IDS: actors.finance.actor.id }
               : {}),
           },
@@ -528,7 +555,7 @@ else
         return result;
       }
       await t.test(
-        'T17 missing central fiscal requires an explicit review and freezes it without changing settings',
+        'T17 absent central fiscal permits an explicit deferred marker while older manual receipts remain frozen',
         async () => {
           const f = await fixture({ manualFiscal: true });
           await pool.query(
@@ -537,7 +564,7 @@ else
           );
           assert.equal(
             (await f.runtime.project(f.input)).productFiscalRequired,
-            true,
+            false,
           );
           assert.equal(
             (
@@ -547,17 +574,12 @@ else
                 action: 'order.read',
               })
             ).productFiscalRequired,
-            true,
+            false,
           );
           const missing = await f.runtime.preview(f.input);
-          assert.equal(missing.eligible, false);
-          assert.ok(
-            missing.issues.some(
-              (/** @type {any} */ issue) =>
-                issue.code === 'OLIST_PRODUCT_FISCAL_REQUIRED',
-            ),
-          );
-          assert.equal(f.calls.length, 0);
+          assert.equal(missing.eligible, true, JSON.stringify(missing.issues));
+          assert.equal(missing.productFiscalDeferred, true);
+          assert.equal(missing.productFiscal, null);
           for (const productFiscal of [
             null,
             undefined,
@@ -579,7 +601,7 @@ else
             productFiscal: settings.productFiscal,
           });
           assert.equal(preview.eligible, true, JSON.stringify(preview.issues));
-          assert.equal(preview.productFiscalRequired, true);
+          assert.equal(preview.productFiscalRequired, false);
           assert.deepEqual(preview.productFiscal, settings.productFiscal);
           const command = {
             ...f.input,
@@ -622,6 +644,195 @@ else
             (await f.runtime.status(f.actors.admin)).settings.productFiscal,
             null,
           );
+        },
+      );
+      await t.test(
+        'T17 two-step preview freezes an existing ERP buyer, deferred fiscal and ERP-owned payment without importing registration',
+        async () => {
+          const f = await fixture({ minimalBuyer: true });
+          await pool.query(
+            "DELETE FROM crm.olist_resources WHERE account_key=$1 AND kind='customer'",
+            [config.accountKey],
+          );
+          await pool.query(
+            'UPDATE crm.olist_accounts SET creation_enabled=true,recovery_required=false WHERE account_key=$1',
+            [config.accountKey],
+          );
+          const before = await counts();
+          const projected = await f.runtime.project(f.input);
+          assert.equal(projected.paymentDuePolicy, 'erp');
+          assert.equal(projected.productFiscalRequired, false);
+          const preview = await f.runtime.preview(f.input);
+          assert.equal(preview.eligible, true, JSON.stringify(preview.issues));
+          assert.equal(preview.paymentDuePolicy, 'erp');
+          assert.equal(preview.commercial.paymentDueOn, null);
+          assert.equal(preview.productFiscal, null);
+          assert.equal(preview.productFiscalDeferred, true);
+          assert.deepEqual(preview.buyerSource, {
+            mode: 'erp-existing-v1',
+            remoteId: '101',
+          });
+          assert.equal(preview.registrations?.customer.action, 'reuse');
+          assert.equal(preview.customer?.documentSuffix, null);
+          assert.deepEqual(await counts(), before);
+          assert.ok(f.calls.every((entry) => entry.method === 'GET'));
+          assert.equal(
+            f.calls.some((entry) =>
+              new URL(entry.url).pathname.endsWith('/formas-pagamento'),
+            ),
+            false,
+          );
+          const command = {
+            ...f.input,
+            previewToken: preview.previewToken,
+            idempotencyKey: 'erp-owned-export',
+          };
+          assert.equal((await f.runtime.checkPreview(command)).valid, true);
+          const accepted = await f.runtime.exportOrder(command);
+          const row = (
+            await pool.query(
+              'SELECT snapshot_envelope FROM crm.olist_exports WHERE id=$1',
+              [accepted.operationId],
+            )
+          ).rows[0];
+          const frozen = open(
+            row.snapshot_envelope,
+            config.envelopeKey,
+            'export-snapshot',
+            config.accountKey,
+            accepted.operationId,
+          );
+          assert.deepEqual(Object.keys(frozen.customer).sort(), [
+            'celular',
+            'nome',
+          ]);
+          assert.equal(frozen.buyerSource.mode, 'erp-existing-v1');
+          assert.equal(frozen.buyerSource.documentHash, null);
+          assert.equal(frozen.productFiscal, null);
+          assert.equal(frozen.productFiscalDeferred, true);
+          assert.equal(frozen.settings.paymentDuePolicy, 'erp');
+          assert.equal(frozen.settings.paymentMethodId, null);
+          assert.equal(frozen.commercial.paymentDueOn, null);
+          assert.deepEqual(await f.runtime.exportOrder(command), accepted);
+          for (const extra of [
+            { buyerSource: frozen.buyerSource },
+            { productFiscalDeferred: false },
+            { paymentDueOn: '2026-12-01' },
+            { productFiscal: settings.productFiscal },
+          ]) {
+            await assert.rejects(
+              f.runtime.exportOrder({ ...command, ...extra }),
+              { code: 'INVALID_REQUEST' },
+            );
+            await assert.rejects(
+              f.runtime.checkPreview({ ...command, ...extra }),
+              { code: 'INVALID_REQUEST' },
+            );
+          }
+          assert.equal(
+            (
+              await pool.query(
+                'SELECT registration_envelope FROM crm.contacts WHERE id=$1',
+                [f.contactId],
+              )
+            ).rows[0].registration_envelope,
+            null,
+          );
+          assert.equal(
+            (
+              await pool.query(
+                "SELECT count(*)::int n FROM crm.olist_resources WHERE account_key=$1 AND kind='customer'",
+                [config.accountKey],
+              )
+            ).rows[0].n,
+            0,
+          );
+          assert.equal(
+            (await f.runtime.status(f.actors.admin)).settings.productFiscal,
+            null,
+          );
+        },
+      );
+      await t.test(
+        'T17 minimal ERP buyer, fiscal and payment policies remain fenced before the first export',
+        async () => {
+          for (const change of [
+            'identity',
+            'registration',
+            'fiscal',
+            'payment',
+          ]) {
+            const f = await fixture({ minimalBuyer: true });
+            await pool.query(
+              'UPDATE crm.olist_accounts SET creation_enabled=true,recovery_required=false WHERE account_key=$1',
+              [config.accountKey],
+            );
+            const preview = await f.runtime.preview(f.input);
+            assert.equal(
+              preview.eligible,
+              true,
+              JSON.stringify(preview.issues),
+            );
+            if (change === 'identity')
+              await pool.query(
+                "UPDATE crm.contacts SET display_name='Outro comprador sintético',version=version+1 WHERE id=$1",
+                [f.contactId],
+              );
+            else if (change === 'registration')
+              await pool.query(
+                'UPDATE crm.contacts SET registration_envelope=$2::jsonb,version=version+1 WHERE id=$1',
+                [
+                  f.contactId,
+                  JSON.stringify(
+                    encryptContactRegistration(registration, CONTACT_KEY),
+                  ),
+                ],
+              );
+            else {
+              const central = {
+                ...settings,
+                paymentDuePolicy: 'erp',
+                paymentDueOn: null,
+                productFiscal: null,
+              };
+              const changed =
+                change === 'fiscal'
+                  ? { ...central, productFiscal: settings.productFiscal }
+                  : {
+                      ...central,
+                      paymentDuePolicy: 'fixed_date',
+                      paymentDueOn: '2026-12-01',
+                    };
+              await pool.query(
+                'UPDATE crm.olist_settings SET settings_envelope=$2::jsonb,version=version+1 WHERE account_key=$1',
+                [
+                  config.accountKey,
+                  JSON.stringify(
+                    seal(
+                      changed,
+                      config.envelopeKey,
+                      'settings',
+                      config.accountKey,
+                      'central',
+                    ),
+                  ),
+                ],
+              );
+            }
+            const command = {
+              ...f.input,
+              previewToken: preview.previewToken,
+              idempotencyKey: 'stale-simple-' + change,
+            };
+            const before = await counts();
+            await assert.rejects(f.runtime.checkPreview(command), {
+              code: 'OLIST_PREVIEW_STALE',
+            });
+            await assert.rejects(f.runtime.exportOrder(command), {
+              code: 'OLIST_PREVIEW_STALE',
+            });
+            assert.deepEqual(await counts(), before);
+          }
         },
       );
       await t.test(

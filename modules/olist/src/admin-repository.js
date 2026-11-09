@@ -4,6 +4,8 @@ import { OlistError, integer, text } from './errors.js';
 import { open, seal, identityHash } from './crypto.js';
 import { olistResourceIdentityHash } from './repository.js';
 import { buildCustomerPayload } from './resource-payloads.js';
+import { assertOlistExistingBuyerSource } from './existing-buyer.js';
+import { assertOlistLegacyBuyerProof } from './legacy-buyer-proof.js';
 import { buildOlistSalePayload } from './sale-payload.js';
 import { prepareExactCentExport } from '@crm-silmer/orders';
 
@@ -439,12 +441,21 @@ export function createOlistAdminRepository(database, options) {
       );
       return row;
     }
-    await bind(
-      'customer',
-      snapshot.customer.cpfCnpj,
-      buildCustomerPayload(snapshot.customer, 'CRM-customer'),
-      mapping.customerId,
-    );
+    if (snapshot.buyerSource?.mode === 'erp-existing-v1') {
+      const checked = assertOlistExistingBuyerSource({
+        config: { accountKey: input.accountKey, hmacKey: options.hmacKey },
+        customer: snapshot.customer,
+        buyerSource: snapshot.buyerSource,
+      });
+      if (checked.remoteId !== String(mapping.customerId))
+        throw new OlistError('OLIST_CUSTOMER_DIVERGENT');
+    } else
+      await bind(
+        'customer',
+        snapshot.customer.cpfCnpj,
+        buildCustomerPayload(snapshot.customer, 'CRM-customer'),
+        mapping.customerId,
+      );
     const seen = new Set();
     for (const group of snapshot.commercial.groups) {
       const found = mapping.groups.filter(
@@ -596,6 +607,26 @@ export function createOlistAdminRepository(database, options) {
         Buffer.byteLength(JSON.stringify(input.snapshot)) > 131072
       )
         throw new OlistError('INVALID_REQUEST', 400);
+      if (input.snapshot.buyerSource) {
+        const checked = assertOlistExistingBuyerSource({
+          config: { accountKey: input.accountKey, hmacKey: options.hmacKey },
+          customer: input.snapshot.customer,
+          buyerSource: input.snapshot.buyerSource,
+        });
+        if (checked.remoteId !== String(input.resources.customerId))
+          throw new OlistError('OLIST_CUSTOMER_DIVERGENT');
+      }
+      if (input.snapshot.legacyBuyerProof) {
+        if (input.snapshot.buyerSource)
+          throw new OlistError('OLIST_CUSTOMER_DIVERGENT');
+        assertOlistLegacyBuyerProof({
+          config: { accountKey: input.accountKey, hmacKey: options.hmacKey },
+          customer: input.snapshot.customer,
+          proof: input.snapshot.legacyBuyerProof,
+          saleId: input.remoteId,
+          customerId: input.resources.customerId,
+        });
+      }
       return transaction(input, async (/** @type {any} */ tx) => {
         const { actor, connection, order } = await legacyLinkGuard(
           tx,
@@ -1450,7 +1481,8 @@ export function createOlistAdminRepository(database, options) {
           : null;
         const paymentDuePolicy =
           accountSettings?.paymentDuePolicy ?? 'fixed_date';
-        const productFiscalRequired =
+        const productFiscalRequired = false;
+        const productFiscalDeferred =
           accountSettings?.productFiscal === null ||
           accountSettings?.productFiscal === undefined;
         const { row } = await operation(tx, input);
@@ -1458,6 +1490,7 @@ export function createOlistAdminRepository(database, options) {
           return {
             paymentDuePolicy,
             productFiscalRequired,
+            productFiscalDeferred,
             operation: null,
             resources: [],
             requests: [],
@@ -1487,6 +1520,7 @@ export function createOlistAdminRepository(database, options) {
         return {
           paymentDuePolicy,
           productFiscalRequired,
+          productFiscalDeferred,
           operation: {
             id: row.id,
             actorId: row.actor_id,

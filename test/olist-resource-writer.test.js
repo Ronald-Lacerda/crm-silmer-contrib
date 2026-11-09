@@ -194,10 +194,29 @@ test('T22 product and variation builders use explicit fiscal data and a nonempty
       }),
     { code: 'OLIST_PRODUCT_FISCAL_REQUIRED' },
   );
-  assert.throws(
-    () => buildProductPayload({ ...input, fiscal: /** @type {any} */ (null) }),
-    { code: 'INVALID_REQUEST' },
-  );
+  const deferred = buildProductPayload({ ...input, fiscal: null });
+  for (const field of [
+    'ncm',
+    'origem',
+    'unidade',
+    'estoque',
+    'tributacao',
+    'situacao',
+  ])
+    assert.equal(Object.hasOwn(deferred, field), false);
+  assert.deepEqual(validateResourcePayload('product', deferred), deferred);
+  assert.throws(() => buildProductPayload({ ...input, fiscal: undefined }), {
+    code: 'INVALID_REQUEST',
+  });
+  for (const partial of [
+    { ncm: '61091000' },
+    { origem: 0 },
+    { unidade: 'UN' },
+    { ncm: null, origem: null, unidade: null },
+  ])
+    assert.throws(() =>
+      validateResourcePayload('product', { ...deferred, ...partial }),
+    );
   assert.throws(
     () => buildProductPayload(/** @type {any} */ ({ ...input, stock: 0 })),
     {
@@ -251,6 +270,15 @@ test('T22 emitted fields match the captured official create schemas including in
     [
       'VariacaoProdutoRequestModel',
       buildVariationPayload({ size: 'M', sku: 'CRM-V-M' }),
+    ],
+    [
+      'CriarProdutoRequestModel',
+      buildProductPayload({
+        attributes: ATTRIBUTES,
+        sku: REFERENCE,
+        fiscal: null,
+        variations: [{ size: 'M', sku: 'CRM-V-M' }],
+      }),
     ],
   ])) {
     const model = resolve(

@@ -231,6 +231,15 @@ async function setup(page, options = {}) {
         expiresAt: new Date(Date.now() + 600_000).toISOString(),
         previewToken: 'synthetic-new-preview-token',
       });
+    if (path === `${operationUrl}/preview/check` && method === 'POST') {
+      expect(body).toEqual({ previewToken: 'synthetic-new-preview-token' });
+      expect(req.headers()['x-csrf-token']).toBe('l1-csrf');
+      return json({
+        valid: true,
+        creationEnabled: false,
+        expiresAt: new Date(Date.now() + 600_000).toISOString(),
+      });
+    }
     if (path === `${operationUrl}/invalidate` && method === 'POST') {
       if (options.gate) await gate;
       const failure = state.failures.shift();
@@ -397,7 +406,7 @@ test('L1 an admin invalidates a generation by keyboard, with focus, one command 
   await expect(live).toContainText(SUCCESS_TEXT);
   await expect(page.getByText(SUCCESS_TEXT)).toHaveCount(1);
   await expect(
-    page.getByRole('button', { name: 'Conferir prévia Olist' }),
+    page.getByRole('button', { name: 'Revisar envio' }),
   ).toBeFocused();
   await expect(trigger(page)).toHaveCount(0);
   await expect(page.locator('.olist-progress-headline')).toHaveText(
@@ -424,12 +433,12 @@ test('L1 after the invalidation the panel offers a new preview and keeps offerin
   await trigger(page).click();
   await reasonOf(dialogOf(page)).fill(REASON);
   await submitOf(dialogOf(page)).click();
-  const confer = page.getByRole('button', { name: 'Conferir prévia Olist' });
+  const confer = page.getByRole('button', { name: 'Revisar envio' });
   await expect(confer).toBeVisible();
   // O progresso arquivado segue visível, mas já não é uma operação ativa.
   await expect(
     page.getByRole('button', { name: 'Atualizar preparação' }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(preparation(page)).not.toContainText(
     'Não repita a geração. A conferência e a recuperação',
   );
@@ -450,6 +459,7 @@ test('L1 after the invalidation the panel offers a new preview and keeps offerin
     page.getByRole('heading', { name: 'Prévia pronta para conferência' }),
   ).toBeVisible();
   expect(countCalls(state, '/preview')).toBe(1);
+  expect(countCalls(state, '/preview/check')).toBe(1);
   expect(invalidations(state)).toHaveLength(1);
   // Nada de exportação: gerar continua sendo um gesto humano posterior.
   expectNoCreation(state);
@@ -517,7 +527,7 @@ test('L1 a replay is told as such and the operation stays archived', async ({
     'Esta geração já estava invalidada. Nada mudou; gere uma nova prévia.',
   );
   await expect(
-    page.getByRole('button', { name: 'Conferir prévia Olist' }),
+    page.getByRole('button', { name: 'Revisar envio' }),
   ).toBeFocused();
   expect(invalidations(state)).toHaveLength(1);
   expectNoCreation(state);
@@ -760,7 +770,7 @@ test('L1 a lost answer after the server recorded it closes the dialog saying so'
     'A invalidação foi registrada, apesar da falha na resposta. Gere uma nova prévia.',
   );
   await expect(
-    page.getByRole('button', { name: 'Conferir prévia Olist' }),
+    page.getByRole('button', { name: 'Revisar envio' }),
   ).toBeFocused();
   await expect(trigger(page)).toHaveCount(0);
   expect(invalidations(state)).toHaveLength(1);
@@ -876,7 +886,7 @@ test('L1 a live reset with the dialog open keeps the dialog, the text and the fo
     'Operação Olist invalidada',
   );
   await expect(
-    page.getByRole('button', { name: 'Conferir prévia Olist' }),
+    page.getByRole('button', { name: 'Revisar envio' }),
   ).toBeVisible();
   expect(invalidations(state)).toHaveLength(1);
   expectNoCreation(state);
@@ -940,7 +950,7 @@ for (const viewport of [
     await page.keyboard.press('Enter');
     await expect(dialog).toHaveCount(0);
     await expect(
-      page.getByRole('button', { name: 'Conferir prévia Olist' }),
+      page.getByRole('button', { name: 'Revisar envio' }),
     ).toBeFocused();
     expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
     expect(await noOverflow()).toBe(true);

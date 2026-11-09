@@ -7,6 +7,17 @@ import { identityHash } from './crypto.js';
 import { olistProductFiscal, normalizeDocument } from './configuration.js';
 import { buildCustomerPayload } from './resource-payloads.js';
 import {
+  captureOlistLegacyBuyerProof,
+  assertOlistLegacyBuyerProof,
+} from './legacy-buyer-proof.js';
+import {
+  captureOlistExistingBuyer,
+  verifyOlistExistingBuyer,
+  resolveOlistExistingBuyer,
+  olistExistingBuyerDocumentHash,
+  olistBuyerRegistrationEmpty,
+} from './existing-buyer.js';
+import {
   normalizeContactPhone,
   normalizeContactEmail,
 } from '@crm-silmer/contacts';
@@ -103,7 +114,10 @@ function preflight(snapshot, reference) {
     reference,
     resolved: {
       resolved: true,
-      customerId: '1',
+      customerId:
+        snapshot?.buyerSource?.mode === 'erp-existing-v1'
+          ? snapshot.buyerSource.remoteId
+          : '1',
       groups: (snapshot?.commercial?.groups ?? []).map(
         (/** @type {any} */ group) => ({
           groupId: group.groupId,
@@ -119,7 +133,7 @@ function preflight(snapshot, reference) {
 }
 /** A closed read-only inspector. It receives only the fixed GET client; no
  * writer, dispatcher, reservation callback or commercial mutation is present.
- * @param {{client:any,config:{hmacKey:Buffer}}} options */
+ * @param {{client:any,config:{hmacKey:Buffer,accountKey?:string}}} options */
 export function createOlistReadonlyInspector({ client, config }) {
   /** A fresh bounded read scope prevents cross-command caches or evidence.
    * @returns {{read:(method:string,...args:any[])=>Promise<any>, digest:()=>string}} */
@@ -158,6 +172,7 @@ export function createOlistReadonlyInspector({ client, config }) {
     remoteId: selectedId,
     mapping,
     paymentDueOn,
+    buyer,
   }) {
     if (
       snapshot?.policy !== 'legacy-sale-only-v1' ||
@@ -222,13 +237,79 @@ export function createOlistReadonlyInspector({ client, config }) {
     const customer = await reads.read('contact', customerId);
     if (remoteId(customer?.id) !== customerId)
       refuse('OLIST_CUSTOMER_DIVERGENT');
-    customerMatches(
-      customer,
-      buildCustomerPayload(snapshot.customer, 'CRM-legacy-sale-buyer'),
-    );
+    /** @type {any} */ let capturedBuyer = null;
+    if (snapshot.legacyBuyerProof) {
+      if (snapshot.buyerSource) refuse('OLIST_CUSTOMER_DIVERGENT');
+      assertOlistLegacyBuyerProof({
+        config,
+        customer: snapshot.customer,
+        proof: snapshot.legacyBuyerProof,
+        saleId: wantedId,
+        customerId,
+      });
+      const current = captureOlistLegacyBuyerProof({
+        config,
+        buyer: {
+          name: snapshot.customer.nome,
+          phone: snapshot.customer.celular,
+          registration: null,
+        },
+        contact: customer,
+        saleId: wantedId,
+      });
+      if (current.legacyBuyerProof.digest !== snapshot.legacyBuyerProof.digest)
+        refuse('OLIST_CUSTOMER_DIVERGENT');
+      capturedBuyer = {
+        customer: snapshot.customer,
+        legacyBuyerProof: snapshot.legacyBuyerProof,
+      };
+    } else if (snapshot.buyerSource?.mode === 'erp-existing-v1') {
+      await verifyOlistExistingBuyer({
+        client: { contact: async () => customer },
+        config,
+        customer: snapshot.customer,
+        buyerSource: snapshot.buyerSource,
+      });
+      capturedBuyer = {
+        customer: snapshot.customer,
+        buyerSource: snapshot.buyerSource,
+      };
+    } else if (buyer) {
+      if (!olistBuyerRegistrationEmpty(buyer.registration))
+        refuse('OLIST_CUSTOMER_DIVERGENT');
+      const phone = normalizeContactPhone(buyer.phone);
+      const samePhone =
+        phone &&
+        [customer.celular, customer.telefone].some(
+          (entry) => normalizeContactPhone(entry) === phone,
+        );
+      capturedBuyer = samePhone
+        ? captureOlistExistingBuyer({ config, buyer, contact: customer })
+        : captureOlistLegacyBuyerProof({
+            config,
+            buyer,
+            contact: customer,
+            saleId: wantedId,
+          });
+    } else {
+      customerMatches(
+        customer,
+        buildCustomerPayload(snapshot.customer, 'CRM-legacy-sale-buyer'),
+      );
+      if (
+        normalizeDocument(body.cliente?.cpfCnpj) !==
+        normalizeDocument(snapshot.customer.cpfCnpj)
+      )
+        refuse('OLIST_CUSTOMER_DIVERGENT');
+    }
     if (
-      normalizeDocument(body.cliente?.cpfCnpj) !==
-      normalizeDocument(snapshot.customer.cpfCnpj)
+      (capturedBuyer?.buyerSource?.documentHash ??
+        capturedBuyer?.legacyBuyerProof?.documentHash ??
+        null) !== null &&
+      capturedBuyer &&
+      olistExistingBuyerDocumentHash(config, body.cliente?.cpfCnpj) !==
+        (capturedBuyer.buyerSource?.documentHash ??
+          capturedBuyer.legacyBuyerProof?.documentHash)
     )
       refuse('OLIST_CUSTOMER_DIVERGENT');
     /** @type {Map<number,any>} */ const products = new Map();
@@ -515,6 +596,7 @@ export function createOlistReadonlyInspector({ client, config }) {
       proof,
       commercial: { ...snapshot.commercial, orderDate, paymentDueOn: due },
       historicalMetadata,
+      ...(capturedBuyer ?? {}),
       remoteDigest: reads.digest(),
     };
   }
@@ -526,9 +608,13 @@ export function createOlistReadonlyInspector({ client, config }) {
     allowLegacyReference = true,
   }) {
     preflight(snapshot, reference);
-    if (!snapshot.productFiscal) refuse('OLIST_PRODUCT_FISCAL_REQUIRED');
-    const fiscal = olistProductFiscal(snapshot.productFiscal);
-    if (!fiscal) refuse('OLIST_PRODUCT_FISCAL_REQUIRED');
+    if (!snapshot.productFiscal && snapshot.productFiscalDeferred !== true)
+      refuse('OLIST_PRODUCT_FISCAL_REQUIRED');
+    const fiscal = snapshot.productFiscal
+      ? olistProductFiscal(snapshot.productFiscal)
+      : null;
+    if (!fiscal && snapshot.productFiscalDeferred !== true)
+      refuse('OLIST_PRODUCT_FISCAL_REQUIRED');
     const reads = scope();
     const wantedId = remoteId(selectedId);
     const raw = await reads.read('orderRaw', wantedId);
@@ -554,15 +640,22 @@ export function createOlistReadonlyInspector({ client, config }) {
       !allowLegacyReference
     )
       refuse('OLIST_SALE_REFERENCE_CONFLICT');
-    const expectedCustomer = buildCustomerPayload(
-      snapshot.customer,
-      'CRM-readonly-customer',
-    );
     const customerId = olistIntegerFromJson(body.cliente?.id);
     const customer = await reads.read('contact', customerId);
     if (remoteId(customer?.id) !== customerId)
       refuse('OLIST_CUSTOMER_DIVERGENT');
-    customerMatches(customer, expectedCustomer);
+    if (snapshot.buyerSource?.mode === 'erp-existing-v1')
+      await verifyOlistExistingBuyer({
+        client: { contact: async () => customer },
+        config,
+        customer: snapshot.customer,
+        buyerSource: snapshot.buyerSource,
+      });
+    else
+      customerMatches(
+        customer,
+        buildCustomerPayload(snapshot.customer, 'CRM-readonly-customer'),
+      );
     /** @type {Map<number,any>} */ const children = new Map();
     /** @type {Map<number,any>} */ const parents = new Map();
     for (const item of body.itens) {
@@ -687,7 +780,12 @@ export function createOlistReadonlyInspector({ client, config }) {
       if (!body.ecommerce) refuse();
       body.ecommerce.numeroPedidoEcommerce = reference;
     }
-    const proof = reconcileOlistSale(plan, encodeLossless(body), wantedId);
+    const proof = reconcileOlistSale(
+      plan,
+      encodeLossless(body),
+      wantedId,
+      config,
+    );
     if (!proof.number) refuse();
     return {
       remoteId: String(wantedId),
@@ -698,6 +796,9 @@ export function createOlistReadonlyInspector({ client, config }) {
     };
   }
   return Object.freeze({
+    /** @param {any} buyer */
+    resolveExistingBuyer: (buyer) =>
+      resolveOlistExistingBuyer({ client, config, buyer }),
     existingSale,
     legacyExistingSale,
     /** Historical sale effects retain their original strict request and marker
@@ -819,7 +920,17 @@ export function createOlistReadonlyInspector({ client, config }) {
       if (!found) refuse('OLIST_SALE_RECONCILIATION_REQUIRED');
       const id = remoteId(found.id);
       const raw = await reads.read('orderRaw', id);
-      const proof = reconcileOlistSale(plan, raw, id);
+      if (operation.snapshot.buyerSource?.mode === 'erp-existing-v1')
+        await verifyOlistExistingBuyer({
+          client: {
+            contact: (/** @type {number} */ customerId) =>
+              reads.read('contact', customerId),
+          },
+          config,
+          customer: operation.snapshot.customer,
+          buyerSource: operation.snapshot.buyerSource,
+        });
+      const proof = reconcileOlistSale(plan, raw, id, config);
       const observedNumber =
         attempt.observedNumber ??
         attempt.observed_remote_number ??

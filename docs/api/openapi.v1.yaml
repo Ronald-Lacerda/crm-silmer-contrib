@@ -4017,6 +4017,15 @@ components:
                         maximum: 249,
                         description: Índice zero-based exclusivo no array itens original da venda ERP.,
                       }
+    OlistLegacyBuyerReview:
+      type: object
+      additionalProperties: false
+      required: [mode, phoneMismatch, reusable, code]
+      properties:
+        mode: { const: legacy-sale-buyer-review-v1 }
+        phoneMismatch: { const: true }
+        reusable: { const: false }
+        code: { const: OLIST_LEGACY_BUYER_PHONE_MISMATCH }
     OlistLegacyPreview:
       type: object
       additionalProperties: false
@@ -4035,6 +4044,8 @@ components:
         ]
       properties:
         orderId: { type: string }
+        buyerReview: { $ref: '#/components/schemas/OlistLegacyBuyerReview' }
+        buyerSourceHint: { enum: [erp-existing-v1, crm-registration] }
         mode: { const: legacy-sale-only-v1 }
         eligible: { const: true }
         creationEnabled: { const: false }
@@ -4128,6 +4139,8 @@ components:
         ]
       properties:
         orderId: { type: string }
+        buyerSourceHint: { enum: [erp-existing-v1, crm-registration] }
+        productFiscalDeferred: { type: boolean }
         productFiscalRequired: { type: boolean }
         productFiscal:
           oneOf:
@@ -4211,7 +4224,8 @@ components:
       required:
         [operation, resources, requests, attempts, attemptHistoryTruncated]
       properties:
-        paymentDuePolicy: { enum: [fixed_date, per_order] }
+        productFiscalDeferred: { type: boolean }
+        paymentDuePolicy: { enum: [fixed_date, per_order, erp] }
         productFiscalRequired: { type: boolean }
         legacyLinkContext:
           oneOf:
@@ -4220,7 +4234,7 @@ components:
               additionalProperties: false
               required: [groups, paymentDuePolicy]
               properties:
-                paymentDuePolicy: { enum: [fixed_date, per_order] }
+                paymentDuePolicy: { enum: [fixed_date, per_order, erp] }
                 historicalDueReadOnly: { type: boolean }
                 groups:
                   type: array
@@ -4345,6 +4359,14 @@ components:
           }
         stage: { enum: [customer, product, variation, sale, complete] }
         creationEnabled: { type: boolean }
+    OlistExistingBuyerReference:
+      type: object
+      additionalProperties: false
+      required: [mode, remoteId]
+      properties:
+        mode: { const: erp-existing-v1 }
+        remoteId: { type: string, pattern: '^[1-9][0-9]{0,15}$' }
+      description: Referência mínima ao comprador existente; identidade e hashes permanecem somente nos envelopes do servidor. Nenhum cadastro fiscal é importado.
     OlistPreviewResolution:
       type: object
       additionalProperties: false
@@ -4372,12 +4394,18 @@ components:
         ]
       properties:
         orderId: { type: string }
+        buyerSource:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/OlistExistingBuyerReference'
+        buyerSourceHint: { enum: [erp-existing-v1, crm-registration] }
+        productFiscalDeferred: { type: boolean }
         productFiscalRequired: { type: boolean }
         productFiscal:
           oneOf:
             - type: 'null'
             - $ref: '#/components/schemas/OlistProductFiscalSelection'
-        paymentDuePolicy: { enum: [fixed_date, per_order] }
+        paymentDuePolicy: { enum: [fixed_date, per_order, erp] }
         number: { type: string }
         status: { enum: [pendente, confirmado] }
         eligible: { type: boolean }
@@ -4396,7 +4424,7 @@ components:
             - { type: 'null' }
             - type: object
               additionalProperties: false
-              required: [name, documentSuffix]
+              required: [name]
               properties:
                 name: { type: string }
                 documentSuffix: { type: string, minLength: 4, maxLength: 4 }
@@ -4557,8 +4585,8 @@ components:
                 origin: { type: integer, minimum: 0, maximum: 8 }
                 unit: { type: string, pattern: '^[A-Z0-9]{1,6}$' }
         paymentDuePolicy:
-          enum: [fixed_date, per_order]
-          description: Ausência preserva fixed_date legado. per_order exige escolha humana na prévia de cada Pedido, congelada no snapshot.
+          enum: [fixed_date, per_order, erp]
+          description: Ausência preserva fixed_date legado. per_order congela escolha humana na prévia. erp envia em aberto sem objeto de pagamento/parcelas; vencimento é ajustado no Olist.
         paymentDueOn:
           description: Vencimento único explícito do total no ERP; não é data de recebimento nem deriva da legenda paymentTerms.
           type: [string, 'null']
@@ -4609,7 +4637,7 @@ components:
       properties:
         orderId: { type: string }
         productFiscalRequired: { type: boolean }
-        paymentDuePolicy: { enum: [fixed_date, per_order] }
+        paymentDuePolicy: { enum: [fixed_date, per_order, erp] }
         number: { type: string }
         status: { enum: [pendente, confirmado] }
         creationEnabled: { type: boolean }

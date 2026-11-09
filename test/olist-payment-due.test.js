@@ -21,6 +21,15 @@ test('T17 per-order due policy is explicit, rejects ambiguity and preserves fixe
     paymentDueOn: null,
   };
   assert.deepEqual(olistSettings(perOrder), perOrder);
+  const erp = {
+    ...EMPTY_OLIST_SETTINGS,
+    paymentDuePolicy: 'erp',
+    paymentDueOn: null,
+  };
+  assert.deepEqual(olistSettings(erp), erp);
+  assert.throws(() => olistSettings({ ...fixed, paymentDuePolicy: 'erp' }), {
+    code: 'INVALID_REQUEST',
+  });
   for (const paymentDuePolicy of [
     null,
     '',

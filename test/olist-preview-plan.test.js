@@ -8,6 +8,7 @@ import {
   reviewSizePricingSubtotal,
 } from '@crm-silmer/orders';
 import { buildOlistPreviewPlan } from '../apps/api/src/olist-preview-plan.js';
+import { captureOlistExistingBuyer } from '../modules/olist/src/existing-buyer.js';
 
 function fixture() {
   let id = 1;
@@ -430,6 +431,60 @@ test('T17 per-order due day is explicit, calendar-valid and independent of payme
   );
   hasIssue(
     buildOlistPreviewPlan({ ...input, paymentDueOn: '2026-12-01' }),
+    'OLIST_SETTINGS_INVALID',
+  );
+});
+
+test('T17 ERP-owned payment needs no due or payment IDs; a minimal buyer needs exact server-captured ERP identity', () => {
+  const input = fixture();
+  const settings = {
+    ...input.settings,
+    paymentDuePolicy: 'erp',
+    paymentDueOn: null,
+    paymentMethodId: null,
+    paymentTerms: null,
+  };
+  const buyer = {
+    ...input.buyer,
+    registration: null,
+    email: 'irrelevant-invalid-email',
+  };
+  const captured = captureOlistExistingBuyer({
+    config: { accountKey: 'a'.repeat(64), hmacKey: Buffer.alloc(32, 7) },
+    buyer,
+    contact: { id: 101, nome: buyer.name, celular: buyer.phone, situacao: 'A' },
+  });
+  const plan = buildOlistPreviewPlan({
+    ...input,
+    settings,
+    buyer,
+    buyerSource: captured.buyerSource,
+  });
+  assert.equal(plan.eligible, true, JSON.stringify(plan.issues));
+  assert.deepEqual(plan.customer, captured.customer);
+  assert.equal(plan.commercial.paymentDueOn, null);
+  assert.equal('endereco' in plan.customer, false);
+  assert.equal('cpfCnpj' in plan.customer, false);
+  hasIssue(
+    buildOlistPreviewPlan({
+      ...input,
+      settings,
+      buyer: { ...buyer, registration: { personType: 'individual' } },
+      buyerSource: captured.buyerSource,
+    }),
+    'OLIST_BUYER_INVALID',
+  );
+  hasIssue(
+    buildOlistPreviewPlan({
+      ...input,
+      settings,
+      buyer,
+      buyerSource: { ...captured.buyerSource, remoteId: '0' },
+    }),
+    'OLIST_BUYER_INVALID',
+  );
+  hasIssue(
+    buildOlistPreviewPlan({ ...input, settings, paymentDueOn: '2026-11-30' }),
     'OLIST_SETTINGS_INVALID',
   );
 });

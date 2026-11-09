@@ -4,6 +4,7 @@ import test from 'node:test';
 import { createOlistDispatcher } from '../modules/olist/src/dispatcher.js';
 import { OlistError } from '../modules/olist/src/errors.js';
 import { createOlistSaleWriter } from '../modules/olist/src/sale-writer.js';
+import { captureOlistExistingBuyer } from '../modules/olist/src/existing-buyer.js';
 
 const config = {
   configured: true,
@@ -465,6 +466,45 @@ test('T08 persists observed sale id before GET and confirms every correlated lin
   const repeat = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
   assert.equal(repeat.outcome, 'sent');
   assert.equal(f.posts.length, 1);
+});
+
+test('T17 an ERP-existing buyer is freshly rechecked before the sale ticket and a changed identity prevents the POST', async () => {
+  for (const changed of [false, true]) {
+    const contact = {
+      id: 101,
+      nome: 'Comprador Sintético',
+      celular: '5511999990000',
+      situacao: 'A',
+    };
+    const f = fixture({
+      afterResources: () => {
+        if (changed) contact.celular = '5511999990001';
+      },
+    });
+    const captured = captureOlistExistingBuyer({
+      config,
+      buyer: { name: contact.nome, phone: contact.celular },
+      contact,
+    });
+    Object.assign(f.snapshot, captured);
+    const client = /** @type {any} */ (f.client);
+    client.contact = async (/** @type {number} */ id) => {
+      assert.equal(id, 101);
+      f.events.push('buyer-get');
+      return contact;
+    };
+    const result = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+    if (changed) {
+      assert.equal(result.outcome, 'outcome_unknown');
+      assert.equal(result.errorCode, 'OLIST_CUSTOMER_DIVERGENT');
+      assert.equal(f.operation.saleAttempt, null);
+      assert.equal(f.posts.length, 0);
+    } else {
+      assert.equal(result.outcome, 'sent');
+      assert.ok(f.events.indexOf('buyer-get') < f.events.indexOf('reserve'));
+      assert.equal(f.posts.length, 1);
+    }
+  }
 });
 
 test('T08 same global total cannot hide a divergent negotiated line or a lost/duplicated marker', async () => {

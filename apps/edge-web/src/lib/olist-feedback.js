@@ -3,6 +3,8 @@
 export function olistFailure(cause) {
   const status = Number(cause?.status);
   const code = String(cause?.code ?? '');
+  if (code === 'OLIST_CUSTOMER_NOT_FOUND')
+    return 'Comprador não localizado no Olist. Confira o nome e o telefone antes de revisar novamente.';
   if (code === 'OLIST_PAYMENT_DUE_REQUIRED')
     return 'Informe um vencimento válido para este pedido e confira uma nova prévia.';
   if (code === 'OLIST_PRODUCT_FISCAL_REQUIRED')
@@ -62,6 +64,8 @@ export function olistIssueLabel(issue, groups = []) {
       ? `Grupo ${ids[1]}, linha ${ids[2]}: `
       : '';
   const code = issue.code;
+  if (code === 'OLIST_CUSTOMER_NOT_FOUND')
+    return 'Comprador não localizado no Olist. Confira o nome e o telefone antes de revisar novamente.';
   if (code === 'OLIST_PAYMENT_DUE_REQUIRED')
     return 'Informe o vencimento deste pedido antes de conferir uma nova prévia.';
   if (code === 'OLIST_PRODUCT_FISCAL_REQUIRED')

@@ -23,7 +23,7 @@ const groups = [
   },
 ];
 
-/** @param {import('@playwright/test').Page} page @param {{noContext?:boolean,previewFailure?:string,expired?:boolean,linkFailure?:string,noHistoricalMetadata?:boolean,productFiscalRequired?:boolean}} [options] */
+/** @param {import('@playwright/test').Page} page @param {{noContext?:boolean,previewFailure?:string,expired?:boolean,linkFailure?:string,noHistoricalMetadata?:boolean,productFiscalRequired?:boolean,buyerReview?:Record<string,unknown>}} [options] */
 async function setup(page, options = {}) {
   /** @type {Array<{path:string,body:any,method:string,headers:Record<string,string>}>} */
   const calls = [];
@@ -125,6 +125,7 @@ async function setup(page, options = {}) {
         previewToken: 'legacy-synthetic-receipt',
         commercial: { paymentDueOn: body.paymentDueOn ?? '2026-11-04' },
         productFiscal: body.productFiscal ?? null,
+        buyerReview: options.buyerReview,
         historicalMetadata: options.noHistoricalMetadata
           ? undefined
           : {
@@ -525,4 +526,99 @@ test('T16 historical link never asks for creation fiscal defaults', async ({
     calls.find((call) => call.path.endsWith('/legacy/previews'))?.body
       .productFiscal,
   ).toBeUndefined();
+});
+
+test('T16 a historical buyer phone mismatch is reviewed within the existing confirmation and never copied', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const privatePhone = 'SYNTHETIC_PRIVATE_PHONE';
+  const calls = await setup(page, {
+    buyerReview: {
+      mode: 'legacy-sale-buyer-review-v1',
+      phoneMismatch: true,
+      reusable: false,
+      code: 'OLIST_LEGACY_BUYER_PHONE_MISMATCH',
+      crmPhone: privatePhone,
+      erpPhone: privatePhone,
+    },
+  });
+  const dialog = await fillMapping(page);
+  await dialog
+    .getByRole('button', { name: 'Conferir venda', exact: true })
+    .click();
+  await expect(
+    dialog.getByRole('heading', { name: 'Venda conferida' }),
+  ).toBeFocused();
+  await expect(dialog.getByRole('alert')).toContainText(
+    'os telefones no CRM e no Olist são diferentes',
+  );
+  await expect(dialog.getByRole('alert')).toContainText(
+    'não corrige o cadastro nem libera novos envios',
+  );
+  await dialog.getByRole('alert').scrollIntoViewIfNeeded();
+  await expect(dialog.getByRole('alert')).toBeInViewport();
+  expect(
+    (await new AxeBuilder({ page }).include('dialog').analyze()).violations,
+  ).toEqual([]);
+  await page.screenshot({
+    path: 'var/qa-olist-phase6/legacy-buyer-phone-mobile.png',
+  });
+  await expect(dialog.getByText(privatePhone)).toHaveCount(0);
+  await expect(
+    dialog.getByText(/O Olist confirmou comprador, itens/u),
+  ).toHaveCount(0);
+  const confirmation = dialog.getByRole('checkbox', {
+    name: /telefone diferente.*vínculo exclusivo desta venda histórica/u,
+  });
+  await expect(confirmation).toHaveCount(1);
+  expect(
+    calls.filter((call) => call.path.endsWith('/legacy/links')),
+  ).toHaveLength(0);
+  await confirmation.check();
+  await dialog
+    .getByLabel('Motivo do vínculo (obrigatório)')
+    .fill('Conferência sintética exclusiva da venda selecionada');
+  await dialog
+    .getByRole('button', { name: 'Vincular venda ao pedido' })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  expect(
+    calls.find((call) => call.path.endsWith('/legacy/links'))?.body,
+  ).toEqual({
+    previewToken: 'legacy-synthetic-receipt',
+    confirmed: true,
+    reason: 'Conferência sintética exclusiva da venda selecionada',
+  });
+  expect(
+    calls.filter((call) => call.method === 'POST').map((call) => call.path),
+  ).toEqual([
+    `${base}/existing/legacy/previews`,
+    `${base}/existing/legacy/links`,
+  ]);
+});
+
+test('T16 an unknown historical buyer review policy cannot reach the confirmation', async ({
+  page,
+}) => {
+  const calls = await setup(page, {
+    buyerReview: {
+      mode: 'unknown-policy',
+      phoneMismatch: true,
+      reusable: false,
+      code: 'OLIST_LEGACY_BUYER_PHONE_MISMATCH',
+    },
+  });
+  const dialog = await fillMapping(page);
+  await dialog
+    .getByRole('button', { name: 'Conferir venda', exact: true })
+    .click();
+  await expect(dialog.getByRole('alert')).toBeFocused();
+  await expect(
+    dialog.getByRole('heading', { name: 'Venda conferida' }),
+  ).toHaveCount(0);
+  await expect(dialog.getByRole('checkbox')).toHaveCount(0);
+  expect(
+    calls.filter((call) => call.path.endsWith('/legacy/links')),
+  ).toHaveLength(0);
 });

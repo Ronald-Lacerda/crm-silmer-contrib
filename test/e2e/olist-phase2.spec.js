@@ -717,6 +717,54 @@ test('T17 admin selects per-order due dates without retaining a hidden central d
   ).toBeFocused();
 });
 
+test('T17 ERP-owned payment omits hidden due and payment defaults from CRM settings', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    initialStatus: {
+      settings: {
+        ...settings,
+        paymentDueOn: '2026-11-30',
+        paymentMethodId: 9,
+        receivingMethodId: 10,
+        paymentTerms: 'Prazo antigo',
+      },
+    },
+  });
+  await page.goto('/olist');
+  await page.getByText('Parâmetros comerciais', { exact: true }).click();
+  await page.getByRole('button', { name: 'Editar parâmetros' }).click();
+  await page
+    .getByLabel('Vencimento nos pedidos', { exact: true })
+    .selectOption('erp');
+  await expect(
+    page.getByLabel('Vencimento do pagamento', { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByLabel('Forma de pagamento (ID)', { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByLabel('Forma de recebimento (ID)', { exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole('button', { name: 'Salvar parâmetros' }).click();
+  await expect(
+    page.getByText('Definido no Olist', { exact: true }),
+  ).toBeVisible();
+  const saved = calls.find((call) => call.path === `${base}/settings`)?.body
+    .settings;
+  expect(saved.paymentDuePolicy).toBe('erp');
+  for (const key of [
+    'paymentDueOn',
+    'paymentMethodId',
+    'receivingMethodId',
+    'paymentTerms',
+    'productFiscal',
+  ])
+    expect(saved[key]).toBeNull();
+});
+
 test('T11 rejects partial fiscal policy before any command and cancels with predictable focus', async ({
   page,
 }) => {

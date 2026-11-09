@@ -179,7 +179,8 @@ export function createOlistApiRuntime(database, options) {
         status: order.status,
         creationEnabled,
         paymentDuePolicy: settings?.paymentDuePolicy ?? 'fixed_date',
-        productFiscalRequired:
+        productFiscalRequired: false,
+        productFiscalDeferred:
           settings?.productFiscal === null ||
           settings?.productFiscal === undefined,
         pendingFields: creationEnabled

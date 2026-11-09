@@ -686,6 +686,13 @@ async function previewLink() {
     if (disposed || props.orderId !== id) return;
     const result = response.data;
     const historical = result?.historicalMetadata;
+    const buyerReview = result?.buyerReview;
+    const validBuyerReview =
+      buyerReview == null ||
+      (buyerReview.mode === 'legacy-sale-buyer-review-v1' &&
+        buyerReview.phoneMismatch === true &&
+        buyerReview.reusable === false &&
+        buyerReview.code === 'OLIST_LEGACY_BUYER_PHONE_MISMATCH');
     const validHistorical =
       historical &&
       historical.reusable === false &&
@@ -707,7 +714,9 @@ async function previewLink() {
       typeof result.sale?.number !== 'string' ||
       !Number.isFinite(Date.parse(result.expiresAt ?? '')) ||
       (lkMode.value === 'legacy' &&
-        (result.mode !== 'legacy-sale-only-v1' || !validHistorical)) ||
+        (result.mode !== 'legacy-sale-only-v1' ||
+          !validHistorical ||
+          !validBuyerReview)) ||
       (fiscalRequired.value &&
         (!result.productFiscal ||
           result.productFiscal.ncm !== productFiscal?.ncm ||
@@ -725,6 +734,8 @@ async function previewLink() {
       number: result.sale.number.slice(0, 40),
       expiresAt: result.expiresAt,
       paymentDueOn: result.commercial?.paymentDueOn ?? lkDueOn.value,
+      buyerPhoneMismatch:
+        lkMode.value === 'legacy' && buyerReview?.phoneMismatch === true,
       productFiscal:
         lkMode.value !== 'legacy' && result.productFiscal
           ? {
@@ -1650,9 +1661,20 @@ onBeforeUnmount(() => {
             serão reutilizados em novas vendas.
           </p>
         </section>
-        <p class="field-help">
+        <p v-if="!lkPreview?.buyerPhoneMismatch" class="field-help">
           O Olist confirmou comprador, itens, quantidades e total desta venda
           com o pedido. Vincular não altera a venda nem o pedido.
+        </p>
+        <p
+          v-else
+          :id="`olist-lk-buyer-warning-${orderId}`"
+          class="field-help"
+          role="alert"
+        >
+          <strong>Atenção ao comprador:</strong> o nome coincide, mas os
+          telefones no CRM e no Olist são diferentes. Confirme somente a
+          correspondência desta venda histórica. O vínculo não corrige o
+          cadastro nem libera novos envios.
         </p>
         <section
           v-if="lkMode === 'legacy'"
@@ -1689,9 +1711,20 @@ onBeforeUnmount(() => {
               v-model="lkConfirmed"
               type="checkbox"
               required
+              :aria-describedby="
+                lkPreview?.buyerPhoneMismatch
+                  ? `olist-lk-buyer-warning-${orderId}`
+                  : undefined
+              "
             />
-            Conferi no Olist os atributos de todos os produtos e tamanhos e
-            confirmo a correspondência de cada linha deste pedido.
+            <template v-if="lkPreview?.buyerPhoneMismatch">
+              Conferi o comprador apesar do telefone diferente, os produtos e
+              tamanhos, e confirmo o vínculo exclusivo desta venda histórica.
+            </template>
+            <template v-else>
+              Conferi no Olist os atributos de todos os produtos e tamanhos e
+              confirmo a correspondência de cada linha deste pedido.
+            </template>
           </label>
           <p class="field-help">
             Somente o histórico da venda será vinculado. Nenhum cadastro será

@@ -343,6 +343,124 @@ test('OLIST-T16 explicit legacy correspondence accepts blank SKUs and parent P w
     });
 });
 
+test('T16 direct sale buyer proves empty CRM registration by exact commercial name and phone without copying registration', async () => {
+  const f = explicitLegacyFixture(),
+    buyer = {
+      name: CUSTOMER.nome,
+      phone: CUSTOMER.celular,
+      registration: null,
+    };
+  /** @type {any} */ const snapshot = {
+    ...f.snapshot,
+    customer: { nome: buyer.name, celular: buyer.phone },
+  };
+  const input = {
+    snapshot,
+    reference: REFERENCE,
+    remoteId: '401',
+    mapping: f.mapping,
+    buyer,
+  };
+  const checked = await f.inspector.legacyExistingSale(input);
+  assert.deepEqual(checked.customer, {
+    nome: 'comprador sintético',
+    celular: CUSTOMER.celular,
+  });
+  assert.equal(checked.buyerSource.mode, 'erp-existing-v1');
+  assert.equal(checked.buyerSource.remoteId, '101');
+  assert.ok(!JSON.stringify(checked.buyerSource).includes(CUSTOMER.cpfCnpj));
+  Object.assign(snapshot, {
+    customer: checked.customer,
+    buyerSource: checked.buyerSource,
+  });
+  await f.inspector.legacyExistingSale({ ...input, buyer: undefined });
+  f.customer.celular = '5511999990001';
+  await assert.rejects(
+    f.inspector.legacyExistingSale({ ...input, buyer: undefined }),
+    { code: 'OLIST_CUSTOMER_DIVERGENT' },
+  );
+  f.customer.celular = CUSTOMER.celular;
+  await assert.rejects(
+    f.inspector.legacyExistingSale({
+      ...input,
+      snapshot: { ...snapshot, buyerSource: undefined },
+      buyer: { ...buyer, registration: { legalName: CUSTOMER.nome } },
+    }),
+    { code: 'OLIST_CUSTOMER_DIVERGENT' },
+  );
+  assert.equal(f.posts(), 0);
+});
+
+test('T16 phone mismatch freezes a sale-only proof that cannot become an automatic buyer binding', async () => {
+  const f = explicitLegacyFixture(),
+    buyer = {
+      name: CUSTOMER.nome,
+      phone: CUSTOMER.celular,
+      registration: null,
+    };
+  f.customer.celular = '5511999990001';
+  /** @type {any} */ const snapshot = {
+    ...f.snapshot,
+    customer: { nome: buyer.name, celular: buyer.phone },
+  };
+  const input = {
+    snapshot,
+    reference: REFERENCE,
+    remoteId: '401',
+    mapping: f.mapping,
+    buyer,
+  };
+  const checked = await f.inspector.legacyExistingSale(input);
+  assert.equal(checked.buyerSource, undefined);
+  assert.equal(checked.legacyBuyerProof.mode, 'legacy-sale-buyer-review-v1');
+  assert.equal(checked.legacyBuyerProof.saleId, '401');
+  assert.equal(checked.legacyBuyerProof.customerId, '101');
+  assert.equal(checked.legacyBuyerProof.phoneMismatch, true);
+  assert.equal(checked.legacyBuyerProof.reusable, false);
+  assert.ok(
+    !JSON.stringify(checked.legacyBuyerProof).includes(f.customer.celular),
+  );
+  Object.assign(snapshot, {
+    customer: checked.customer,
+    legacyBuyerProof: checked.legacyBuyerProof,
+  });
+  await f.inspector.legacyExistingSale({ ...input, buyer: undefined });
+  for (const mutation of [
+    () => {
+      f.customer.celular = '5511999990002';
+    },
+    () => {
+      f.customer.situacao = 'I';
+    },
+    () => {
+      f.customer.nome = 'Outro comprador';
+    },
+    () => {
+      f.body.cliente.id = 102;
+      f.customer.id = 102;
+    },
+    () => {
+      snapshot.legacyBuyerProof = {
+        ...checked.legacyBuyerProof,
+        saleId: '402',
+      };
+    },
+  ]) {
+    f.customer.celular = '5511999990001';
+    f.customer.situacao = 'B';
+    f.customer.nome = CUSTOMER.nome;
+    f.customer.id = 101;
+    f.body.cliente.id = 101;
+    snapshot.legacyBuyerProof = checked.legacyBuyerProof;
+    mutation();
+    await assert.rejects(
+      f.inspector.legacyExistingSale({ ...input, buyer: undefined }),
+      { code: 'OLIST_CUSTOMER_DIVERGENT' },
+    );
+  }
+  assert.equal(f.posts(), 0);
+});
+
 test('OLIST-T16 legacy correspondence refuses ambiguous/partial mappings, divergent identities, grade, fiscal and exact money', async () => {
   /** @type {Array<(f:ReturnType<typeof explicitLegacyFixture>)=>void>} */
   const changes = [

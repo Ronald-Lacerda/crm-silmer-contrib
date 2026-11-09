@@ -3,6 +3,7 @@ import { OlistError, integer, text, object } from './errors.js';
 import { seal, open, identityHash } from './crypto.js';
 import { normalizeDocument } from './configuration.js';
 import { lockOlistActor, assertOlistPilotActor } from './access.js';
+import { assertOlistExistingBuyerSource } from './existing-buyer.js';
 /** Shared canonical identity for read-only plans and durable reservations.
  * Existing valid identities keep exactly the same normalization and hashes.
  * Public audience is optional; a combination of fabrics is not truncated.
@@ -626,15 +627,26 @@ export function createOlistRepository(database, options) {
         throw new OlistError('OLIST_RESOURCES_UNRESOLVED');
       return found[0];
     }
-    resource(
-      'customer',
-      olistResourceIdentityHash(options.hmacKey, {
-        accountKey: input.accountKey,
-        kind: 'customer',
-        identity: snapshot.customer?.cpfCnpj,
-      }),
-      raw.customerId,
-    );
+    if (snapshot.buyerSource) {
+      if (snapshot.policy !== 'exact-cent-v1')
+        throw new OlistError('OLIST_RESOURCES_UNRESOLVED');
+      const buyer = assertOlistExistingBuyerSource({
+        config: { accountKey: input.accountKey, hmacKey: options.hmacKey },
+        customer: snapshot.customer,
+        buyerSource: snapshot.buyerSource,
+      });
+      if (raw.customerId !== buyer.remoteId)
+        throw new OlistError('OLIST_RESOURCES_UNRESOLVED');
+    } else
+      resource(
+        'customer',
+        olistResourceIdentityHash(options.hmacKey, {
+          accountKey: input.accountKey,
+          kind: 'customer',
+          identity: snapshot.customer?.cpfCnpj,
+        }),
+        raw.customerId,
+      );
     const seenGroups = new Set();
     const groups = snapshot.commercial.groups.map(
       (/** @type {any} */ group) => {

@@ -3,6 +3,10 @@ import { normalizeDocument, OLIST_API } from './configuration.js';
 import { OlistError, integer, text } from './errors.js';
 import { olistJson } from './transport.js';
 import { OLIST_QUOTA_LIMIT, OLIST_READ_WAIT } from './quota.js';
+import {
+  olistExistingBuyerName,
+  olistExistingBuyerMatches,
+} from './existing-buyer.js';
 const CATALOGS = Object.freeze({
   sellers: '/vendedores',
   warehouses: '/depositos',
@@ -191,6 +195,24 @@ export function createOlistClient(options) {
           }
         },
       );
+    },
+    /** Complete all-state name lookup plus bounded detail verification. No code
+     * is invented from a phone and absence never authorizes a customer POST.
+     * @param {{name:string,phone:string}} identity */
+    async findCustomerByIdentity(identity) {
+      const name = olistExistingBuyerName(identity.name);
+      const candidates = new Map();
+      // Four fully enumerated state queries cost at most twenty page reads.
+      for (const situacao of ['A', 'B', 'I', 'E'])
+        for (const row of await pages('/contatos', { nome: name, situacao }))
+          candidates.set(row.id, row);
+      if (candidates.size > 44) throw new OlistError('OLIST_INCOMPLETE_LOOKUP');
+      const matches = [];
+      for (const id of candidates.keys()) {
+        const contact = await detail('/contatos', id);
+        if (olistExistingBuyerMatches(contact, identity)) matches.push(contact);
+      }
+      return exact(matches, () => true);
     },
     /** @param {string} sku @param {OlistReadOptions} [opts] */
     async findProduct(sku, opts) {

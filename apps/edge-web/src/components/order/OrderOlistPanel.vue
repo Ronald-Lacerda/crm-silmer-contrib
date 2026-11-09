@@ -7,11 +7,7 @@ import {
   dayLabel,
   paymentConditionLabel,
 } from '../../lib/order-format.js';
-import {
-  olistIssueLabel,
-  olistFailure,
-  registrationAction,
-} from '../../lib/olist-feedback.js';
+import { olistIssueLabel, olistFailure } from '../../lib/olist-feedback.js';
 import {
   OLIST_FOLLOW_DELAYS_MS,
   isAdminInvalidated,
@@ -44,10 +40,6 @@ const projection = ref(null);
 const preview = ref(null);
 const paymentDueOn = ref('');
 const paymentDueField = ref(null);
-const productFiscal = ref({ ncm: '', origin: '', unit: '' });
-const fiscalNcmField = ref(null);
-const fiscalOriginField = ref(null);
-const fiscalUnitField = ref(null);
 const busy = ref(false);
 const message = ref('');
 const error = ref('');
@@ -102,6 +94,30 @@ const expiryLabel = computed(() => {
       }).format(stamp)
     : '';
 });
+/** Commercial attributes only; the encoded fabric list is a display detail.
+ * @param {Record<string,any>} [attributes] */
+function groupDescription(attributes = {}) {
+  let fabric = attributes.fabric;
+  try {
+    const values = JSON.parse(fabric);
+    if (
+      Array.isArray(values) &&
+      values.every((value) => typeof value === 'string')
+    )
+      fabric = values.join(', ');
+  } catch {
+    /* Earlier projections may already contain a display label. */
+  }
+  return [
+    ['Tecido', fabric],
+    ['Aplicação', attributes.application],
+    ['Gola', attributes.collar],
+    ['Público', attributes.audience],
+  ]
+    .filter(([, value]) => Boolean(value))
+    .map(([label, value]) => `${label}: ${value}`)
+    .join(' · ');
+}
 
 function clearPreview() {
   if (expiration) globalThis.clearTimeout(expiration);
@@ -176,6 +192,7 @@ async function load(interactive = false) {
         ? { unavailable: true }
         : null),
   );
+  return data;
 }
 /** Releitura limitada do CRM (nunca do ERP) enquanto a operação anda. Uma
  * operação nunca some por causa de uma releitura: só uma leitura explícita
@@ -265,24 +282,30 @@ async function recoveryChanged(change) {
     )?.focus();
   }
 }
-async function confer() {
+async function confer(event) {
   if (
     !canOperate.value ||
     props.cancelled ||
     busy.value ||
     props.disabled ||
+    reviewOpen.value ||
     hasOperation.value ||
     exportState.value !== 'idle'
   )
     return;
+  const trigger = event.currentTarget;
   clearPreview();
   checkDisabled.value = false;
+  // One gesture refreshes the CRM and reviews the current receipt. These are
+  // reads only; the export command still requires the dialog confirmation.
+  const current = await load();
+  if (!current || !canOperate.value || props.cancelled || hasOperation.value)
+    return;
   if (
     projection.value?.paymentDuePolicy === 'per_order' &&
     !/^\d{4}-\d{2}-\d{2}$/u.test(paymentDueOn.value)
   ) {
-    error.value =
-      'Informe o vencimento deste pedido antes de conferir a prévia.';
+    error.value = 'Informe o vencimento deste pedido antes de revisar o envio.';
     await nextTick();
     paymentDueField.value?.focus();
     return;
@@ -291,28 +314,6 @@ async function confer() {
   const body = {};
   if (projection.value?.paymentDuePolicy === 'per_order')
     body.paymentDueOn = paymentDueOn.value;
-  if (projection.value?.productFiscalRequired) {
-    const fiscal = productFiscal.value;
-    const invalidField = !/^[0-9]{8}$/u.test(fiscal.ncm)
-      ? fiscalNcmField.value
-      : !/^[0-8]$/u.test(fiscal.origin)
-        ? fiscalOriginField.value
-        : !/^[A-Z0-9]{1,6}$/u.test(fiscal.unit.trim())
-          ? fiscalUnitField.value
-          : null;
-    if (invalidField) {
-      error.value =
-        'Informe NCM com 8 dígitos, origem fiscal de 0 a 8 e unidade dos produtos deste pedido.';
-      await nextTick();
-      invalidField.focus();
-      return;
-    }
-    body.productFiscal = {
-      ncm: fiscal.ncm,
-      origin: Number(fiscal.origin),
-      unit: fiscal.unit.trim(),
-    };
-  }
   const data = await run('/preview', body);
   if (!data || !canOperate.value) return;
   preview.value = data;
@@ -333,32 +334,9 @@ async function confer() {
       );
     }
   }
-  await focusNotice();
-}
-async function validate() {
-  if (
-    !canOperate.value ||
-    props.cancelled ||
-    !preview.value?.previewToken ||
-    busy.value ||
-    props.disabled ||
-    hasOperation.value ||
-    exportState.value !== 'idle'
-  )
-    return;
-  const data = await run('/preview/check', {
-    previewToken: preview.value.previewToken,
-  });
-  if (!data || !canOperate.value) return;
-  if (data.valid !== true) {
-    clearPreview();
-    error.value = 'A prévia mudou. Confira novamente os dados do pedido.';
-  } else {
-    checkDisabled.value = data.creationEnabled !== true;
-    message.value =
-      data.creationEnabled === true && generationAllowed.value
-        ? 'Prévia validada. Confira a geração e confirme somente se estiver de acordo.'
-        : 'Prévia validada. A geração de vendas continua desativada.';
+  if (preview.value?.eligible && preview.value?.previewToken) {
+    await requestExport(trigger);
+    if (reviewOpen.value) return;
   }
   await focusNotice();
 }
@@ -392,8 +370,20 @@ async function cancelReview() {
   if (exportState.value === 'submitting') return;
   await closeReview();
 }
-async function requestExport(event) {
-  if (busy.value || !generationAllowed.value || reviewOpen.value) return;
+async function requestExport(trigger) {
+  if (
+    busy.value ||
+    reviewOpen.value ||
+    !canOperate.value ||
+    denied.value ||
+    props.cancelled ||
+    props.disabled ||
+    hasOperation.value ||
+    exportState.value !== 'idle' ||
+    !preview.value?.eligible ||
+    !preview.value?.previewToken
+  )
+    return;
   const token = preview.value.previewToken;
   if (!receiptCurrent(token)) {
     clearPreview();
@@ -402,8 +392,6 @@ async function requestExport(event) {
     await focusNotice();
     return;
   }
-  // Capture before awaiting: event.currentTarget is cleared after dispatch.
-  const trigger = event.currentTarget;
   const data = await run('/preview/check', { previewToken: token });
   if (!data || !canOperate.value) return;
   if (data.valid !== true || !receiptCurrent(token)) {
@@ -529,7 +517,6 @@ watch(
     // are not torn down underneath the person.
     if (!previous || next[0] !== previous[0]) {
       paymentDueOn.value = '';
-      productFiscal.value = { ncm: '', origin: '', unit: '' };
       exportState.value = 'idle';
       administration.value = null;
       projection.value = null;
@@ -596,7 +583,7 @@ watch(liveEvent, (event) => {
     invalidate();
     // Explicit refresh avoids ERP polling and never reuses a receipt after a live change.
     error.value =
-      'Os dados ou o acesso podem ter mudado. Atualize a preparação e confira uma nova prévia.';
+      'Os dados ou o acesso podem ter mudado. Revise o envio novamente.';
   }
 });
 watch(
@@ -624,7 +611,7 @@ onBeforeUnmount(() => {
     :aria-busy="busy"
   >
     <div class="op-sheet-head">
-      <h2 :id="`olist-preparation-${orderId}`">Preparação para o Olist</h2>
+      <h2 :id="`olist-preparation-${orderId}`">Envio para Olist</h2>
       <p v-if="projection">
         Pedido {{ projection.number }} ·
         {{ projection.status === 'confirmado' ? 'Confirmado' : 'Pendente' }}
@@ -636,21 +623,23 @@ onBeforeUnmount(() => {
           cancelled
             ? 'Pedido cancelado. A geração está bloqueada.'
             : generationAllowed
-              ? 'A geração exige sua conferência e confirmação humana.'
+              ? 'Confira a ficha e confirme o envio.'
               : projection?.creationEnabled
-                ? 'Confira os dados e a prévia antes de gerar a venda.'
-                : 'A geração de vendas está desativada.'
+                ? 'Revise a ficha antes de enviar para Olist.'
+                : 'O envio para Olist está desativado.'
         }}
-        Conferir a prévia consulta os cadastros e não cria cliente, produto ou
-        venda no Olist.
+        Revisar não cria cliente, produto ou venda no Olist.
+      </p>
+      <p v-if="projection?.paymentDuePolicy === 'erp'" class="field-help">
+        Cadastro fiscal e vencimento são ajustados no Olist.
       </p>
       <p v-if="exportState === 'uncertain'" class="field-help">
         O resultado da solicitação precisa de conferência administrativa.
-        Atualizar a preparação só consulta a operação; não autoriza repetir a
-        geração.
+        Atualizar o progresso só consulta a operação; não autoriza repetir o
+        envio.
       </p>
       <p v-if="!canOperate" class="field-help">
-        Seu usuário não está habilitado para conferir a prévia Olist.
+        Seu usuário não está habilitado para enviar pedidos ao Olist.
       </p>
       <p v-if="cancelled && canOperate" class="field-help">
         A conferência da prévia e o vínculo de uma venda existente ficam
@@ -682,69 +671,15 @@ onBeforeUnmount(() => {
         />
         <p :id="`olist-due-help-${orderId}`" class="field-help">
           Informe a data combinada com o cliente. Alterar o vencimento exige
-          conferir uma nova prévia.
+          revisar o envio novamente.
         </p>
       </div>
-      <fieldset
-        v-if="
-          projection?.productFiscalRequired &&
-          canOperate &&
-          !hasOperation &&
-          !cancelled
-        "
-        class="olist-product-fiscal"
-        :disabled="busy || disabled || exportState !== 'idle'"
-        :aria-describedby="`olist-fiscal-help-${orderId}`"
-      >
-        <legend>Cadastro fiscal dos produtos deste pedido</legend>
-        <p :id="`olist-fiscal-help-${orderId}`" class="field-help">
-          Informe a classificação aprovada pela empresa para todos os itens
-          desta prévia. Sem esses dados, a geração fica pendente e o pedido
-          continua salvo no CRM.
-        </p>
-        <label :for="`olist-fiscal-ncm-${orderId}`">NCM (8 dígitos)</label>
-        <input
-          :id="`olist-fiscal-ncm-${orderId}`"
-          ref="fiscalNcmField"
-          v-model="productFiscal.ncm"
-          type="text"
-          inputmode="numeric"
-          maxlength="8"
-          required
-          @input="clearPreview"
-        />
-        <label :for="`olist-fiscal-origin-${orderId}`"
-          >Origem fiscal (código de 0 a 8)</label
-        >
-        <input
-          :id="`olist-fiscal-origin-${orderId}`"
-          ref="fiscalOriginField"
-          v-model="productFiscal.origin"
-          type="text"
-          inputmode="numeric"
-          maxlength="1"
-          required
-          @input="clearPreview"
-        />
-        <label :for="`olist-fiscal-unit-${orderId}`"
-          >Unidade dos produtos</label
-        >
-        <input
-          :id="`olist-fiscal-unit-${orderId}`"
-          ref="fiscalUnitField"
-          v-model="productFiscal.unit"
-          type="text"
-          autocapitalize="characters"
-          maxlength="6"
-          required
-          @input="clearPreview"
-        />
-      </fieldset>
-      <p v-if="busy" role="status">Conferindo a preparação…</p>
+
+      <p v-if="busy" role="status">Revisando o envio…</p>
       <div v-if="error || message || preview" ref="notice" tabindex="-1">
         <p v-if="error" role="alert" class="inline-error">{{ error }}</p>
         <p v-if="message" role="status">{{ message }}</p>
-        <template v-if="preview && !denied">
+        <template v-if="preview && !denied && !reviewOpen">
           <h3>
             {{
               preview.eligible
@@ -765,14 +700,6 @@ onBeforeUnmount(() => {
             origem ou os parâmetros. A habilitação Olist não concede edição.
           </p>
           <dl class="olist-preview-summary">
-            <div v-if="preview.productFiscal">
-              <dt>Cadastro fiscal conferido</dt>
-              <dd>
-                NCM {{ preview.productFiscal.ncm }} · Origem
-                {{ preview.productFiscal.origin }} ·
-                {{ preview.productFiscal.unit }}
-              </dd>
-            </div>
             <div v-if="preview.customer">
               <dt>Comprador</dt>
               <dd>
@@ -806,7 +733,10 @@ onBeforeUnmount(() => {
               <dt>Vencimento do pagamento</dt>
               <dd>
                 {{
-                  dayLabel(preview.commercial?.paymentDueOn) || 'Não informado'
+                  projection?.paymentDuePolicy === 'erp'
+                    ? 'Definido no Olist'
+                    : dayLabel(preview.commercial?.paymentDueOn) ||
+                      'Não informado'
                 }}
               </dd>
             </div>
@@ -852,32 +782,7 @@ onBeforeUnmount(() => {
               </tbody>
             </table>
           </section>
-          <section v-if="preview.registrations" aria-label="Plano de cadastros">
-            <h3>Plano de cadastros</h3>
-            <p>
-              Comprador:
-              {{ registrationAction(preview.registrations.customer?.action) }}
-            </p>
-            <ul>
-              <li
-                v-for="(group, index) in preview.registrations.groups ?? []"
-                :key="group.groupId"
-              >
-                Item {{ index + 1 }}: {{ registrationAction(group.action) }}
-                <ul>
-                  <li v-for="line in group.lines ?? []" :key="line.lineId">
-                    Tamanho
-                    {{
-                      preview.commercial?.groups
-                        ?.find((item) => item.groupId === group.groupId)
-                        ?.lines?.find((item) => item.lineId === line.lineId)
-                        ?.size || 'não conferido'
-                    }}: {{ registrationAction(line.action) }}
-                  </li>
-                </ul>
-              </li>
-            </ul>
-          </section>
+
           <p v-if="expiryLabel" class="field-help">
             Prévia válida até {{ expiryLabel }} (São Paulo). Mudanças no pedido,
             cadastro, configuração ou acesso exigem nova conferência.
@@ -908,12 +813,12 @@ onBeforeUnmount(() => {
       />
       <div class="form-actions">
         <button
-          v-if="!preview?.eligible || exportState !== 'idle' || hasOperation"
+          v-if="exportState !== 'idle' || hasOperation"
           type="button"
           :disabled="busy || disabled || denied"
           @click="load(true)"
         >
-          {{ hasOperation ? 'Atualizar progresso' : 'Atualizar preparação' }}
+          Atualizar progresso
         </button>
         <button
           v-if="
@@ -928,87 +833,123 @@ onBeforeUnmount(() => {
           :disabled="busy || disabled"
           @click="confer"
         >
-          Conferir prévia Olist
-        </button>
-        <button
-          v-if="
-            canOperate &&
-            !cancelled &&
-            preview?.eligible &&
-            preview?.previewToken &&
-            !hasOperation &&
-            exportState === 'idle'
-          "
-          type="button"
-          :disabled="busy || disabled"
-          @click="validate"
-        >
-          Validar prévia
-        </button>
-        <button
-          v-if="
-            canOperate &&
-            !cancelled &&
-            preview?.eligible &&
-            !hasOperation &&
-            exportState === 'idle'
-          "
-          type="button"
-          :class="{ primary: generationAllowed }"
-          :aria-disabled="!generationAllowed || busy || undefined"
-          :aria-describedby="`olist-generation-${orderId}`"
-          @click="requestExport"
-        >
-          Gerar venda no Olist
+          Revisar envio
         </button>
       </div>
     </div>
     <dialog
       v-if="reviewOpen"
       ref="reviewDialog"
-      class="op-dialog"
+      class="op-dialog olist-review"
       aria-modal="true"
       aria-labelledby="olist-export-title"
       aria-describedby="olist-export-description"
       @cancel.prevent="cancelReview"
     >
-      <h2 id="olist-export-title">Gerar venda no Olist?</h2>
-      <p id="olist-export-description">
-        A sequência poderá criar ou reutilizar o comprador, os produtos e os
-        tamanhos conferidos e gerar uma venda no Olist. Esta ação não confirma o
-        pedido no CRM.
-      </p>
-      <dl>
-        <div>
-          <dt>Pedido CRM</dt>
-          <dd>{{ projection?.number }}</dd>
-        </div>
-        <div>
-          <dt>Total conferido</dt>
-          <dd>{{ amountLabel(preview?.commercial?.totalCents) }}</dd>
-        </div>
-        <div>
-          <dt>Vencimento conferido</dt>
-          <dd>
-            {{ dayLabel(preview?.commercial?.paymentDueOn) || 'Não informado' }}
-          </dd>
-        </div>
-        <div v-if="preview?.productFiscal">
-          <dt>Cadastro fiscal conferido</dt>
-          <dd>
-            NCM {{ preview.productFiscal.ncm }} · Origem
-            {{ preview.productFiscal.origin }} ·
-            {{ preview.productFiscal.unit }}
-          </dd>
-        </div>
-      </dl>
-      <p>
-        Confira a composição e o plano de cadastros antes de continuar. Se o
-        resultado ficar incerto, não repita a solicitação.
-      </p>
-      <div class="op-dialog-actions">
+      <div
+        class="olist-review-content"
+        role="region"
+        aria-label="Ficha comercial para revisão"
+        tabindex="0"
+      >
+        <h2 id="olist-export-title">Enviar para Olist?</h2>
+        <p id="olist-export-description">
+          Confira a ficha antes de enviar. O envio não confirma o pedido no CRM.
+        </p>
+        <dl class="olist-preview-summary">
+          <div>
+            <dt>Pedido CRM</dt>
+            <dd>{{ projection?.number }}</dd>
+          </div>
+          <div v-if="preview?.customer">
+            <dt>Comprador</dt>
+            <dd>
+              {{ preview.customer.name
+              }}<template v-if="preview.customer.documentSuffix">
+                · documento final
+                {{ preview.customer.documentSuffix }}</template
+              >
+            </dd>
+          </div>
+          <div>
+            <dt>Data da venda</dt>
+            <dd>
+              {{ dayLabel(preview?.commercial?.orderDate) || 'Não informada' }}
+            </dd>
+          </div>
+          <div>
+            <dt>Previsão de entrega</dt>
+            <dd>
+              {{ dayLabel(preview?.commercial?.deliveryOn) || 'Não informada' }}
+            </dd>
+          </div>
+          <div>
+            <dt>Forma de pagamento</dt>
+            <dd>
+              {{
+                paymentConditionLabel(preview?.commercial?.paymentCondition) ||
+                'Não informada'
+              }}
+            </dd>
+          </div>
+          <div>
+            <dt>Total conferido</dt>
+            <dd>{{ amountLabel(preview?.commercial?.totalCents) }}</dd>
+          </div>
+          <div>
+            <dt>Vencimento conferido</dt>
+            <dd>
+              {{
+                projection?.paymentDuePolicy === 'erp'
+                  ? 'Definido no Olist'
+                  : dayLabel(preview?.commercial?.paymentDueOn) ||
+                    'Não informado'
+              }}
+            </dd>
+          </div>
+        </dl>
+        <section
+          v-for="(group, index) in preview?.commercial?.groups ?? []"
+          :key="group.groupId"
+          class="olist-preview-group"
+          :aria-labelledby="`olist-review-group-${group.groupId}`"
+        >
+          <h3 :id="`olist-review-group-${group.groupId}`">
+            Item {{ index + 1 }} · {{ group.attributes?.garment }} ·
+            {{ group.attributes?.color }}
+          </h3>
+          <p>{{ groupDescription(group.attributes) }}</p>
+          <table>
+            <caption class="sr-only">
+              Tamanhos e subtotais do item
+              {{
+                index + 1
+              }}
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Tamanho</th>
+                <th scope="col">Quantidade</th>
+                <th scope="col">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="line in group.lines" :key="line.lineId">
+                <th scope="row">{{ line.size }}</th>
+                <td>{{ line.quantity }}</td>
+                <td>{{ amountLabel(line.subtotalCents) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+        <p>
+          Se o resultado ficar incerto, não repita o envio; peça a conferência
+          administrativa.
+        </p>
+      </div>
+      <div class="op-dialog-actions olist-review-actions">
         <button type="button" :disabled="busy" @click="cancelReview">
-          Voltar à prévia
+          Voltar
         </button>
         <button
           type="button"
@@ -1017,7 +958,7 @@ onBeforeUnmount(() => {
           :aria-busy="busy || undefined"
           @click="submitExport"
         >
-          {{ busy ? 'Solicitando…' : 'Gerar venda conferida' }}
+          {{ busy ? 'Enviando…' : 'Enviar para Olist' }}
         </button>
       </div>
     </dialog>
@@ -1030,10 +971,31 @@ onBeforeUnmount(() => {
   gap: var(--space-2);
   margin-block: var(--space-4);
 }
-.olist-product-fiscal {
-  display: grid;
-  gap: var(--space-2);
-  margin-block: var(--space-4);
+.olist-review {
+  max-block-size: calc(100dvh - 2rem);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.olist-review[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.olist-review-content {
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.olist-review-content > p {
+  color: var(--color-text-muted);
+  line-height: 1.55;
+}
+.olist-review-content:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+.olist-review-actions {
+  flex: none;
 }
 .olist-preparation {
   margin-block: var(--space-6);
@@ -1084,6 +1046,17 @@ onBeforeUnmount(() => {
   min-block-size: var(--target-min);
 }
 @media (width <= 30rem) {
+  .olist-review .olist-preview-summary > div {
+    display: grid;
+    gap: var(--space-1);
+  }
+  .olist-review .olist-preview-summary dd {
+    text-align: start;
+  }
+  .olist-review-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
   .olist-preview-group table {
     table-layout: auto;
     font-size: var(--text-xs);

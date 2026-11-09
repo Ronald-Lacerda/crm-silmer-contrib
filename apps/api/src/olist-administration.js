@@ -13,7 +13,9 @@ import {
   open,
   lockOlistActor,
   OlistError,
+  olistBuyerRegistrationEmpty,
 } from '@crm-silmer/olist';
+import { normalizeContactPhone } from '@crm-silmer/contacts';
 import { buildOlistPreviewPlan } from './olist-preview-plan.js';
 import { prepareExactCentExport } from '@crm-silmer/orders';
 
@@ -109,6 +111,9 @@ export function createOlistAdministration(database, options) {
    * No settings, fiscal identity or date is synthesized to pass a creator gate.
    * @param {any} current @param {any} input */
   function legacySourcePlan(current, input) {
+    const existingBuyer = olistBuyerRegistrationEmpty(
+      current.buyer?.registration,
+    );
     const plan = buildOlistPreviewPlan({
       source: current.source,
       buyer: current.buyer,
@@ -131,6 +136,12 @@ export function createOlistAdministration(database, options) {
     const blocked = plan.issues.filter(
       (issue) =>
         !(
+          (existingBuyer &&
+            issue.field.startsWith('buyer.registration.') &&
+            issue.code === 'OLIST_BUYER_REQUIRED') ||
+          (existingBuyer &&
+            issue.field === 'buyer.email' &&
+            issue.code === 'OLIST_BUYER_INVALID') ||
           (['OLIST_SETTINGS_REQUIRED', 'OLIST_SETTINGS_INVALID'].includes(
             issue.code,
           ) &&
@@ -141,7 +152,7 @@ export function createOlistAdministration(database, options) {
             issue.field === 'commercial.paymentDueOn')
         ),
     );
-    if (blocked.length || !plan.customer)
+    if (blocked.length || (!plan.customer && !existingBuyer))
       throw new OlistError('OLIST_ORDER_INCOMPLETE', 422);
     const order = current.source.order,
       prepared = prepareExactCentExport(order.ficha.sizePricing);
@@ -172,7 +183,13 @@ export function createOlistAdministration(database, options) {
       },
     );
     return {
-      customer: plan.customer,
+      customer: existingBuyer
+        ? {
+            nome: current.buyer.name,
+            celular: normalizeContactPhone(current.buyer.phone),
+          }
+        : plan.customer,
+      buyer: existingBuyer ? current.buyer : null,
       commercial: {
         ...plan.commercial,
         groups,
@@ -345,7 +362,18 @@ export function createOlistAdministration(database, options) {
         remoteId: input.saleId,
         mapping: input.mapping,
         paymentDueOn: input.paymentDueOn,
+        buyer: plan.buyer,
       });
+      if (checked.buyerSource)
+        Object.assign(snapshot, {
+          buyerSource: checked.buyerSource,
+          customer: checked.customer,
+        });
+      if (checked.legacyBuyerProof)
+        Object.assign(snapshot, {
+          legacyBuyerProof: checked.legacyBuyerProof,
+          customer: checked.customer,
+        });
       snapshot.commercial = checked.commercial;
       /** @type {any} */ (snapshot).historicalMetadata =
         checked.historicalMetadata;
@@ -410,6 +438,19 @@ export function createOlistAdministration(database, options) {
         expiresAt,
         previewToken: token,
         creationEnabled: false,
+        ...(!checked.legacyBuyerProof
+          ? { buyerSourceHint: checked.buyerSource?.mode ?? 'crm-registration' }
+          : {}),
+        ...(checked.legacyBuyerProof
+          ? {
+              buyerReview: {
+                mode: 'legacy-sale-buyer-review-v1',
+                phoneMismatch: true,
+                reusable: false,
+                code: 'OLIST_LEGACY_BUYER_PHONE_MISMATCH',
+              },
+            }
+          : {}),
       };
     },
     /** @param {any} raw */
@@ -424,11 +465,35 @@ export function createOlistAdministration(database, options) {
         input.confirmed,
         reason,
       ]);
-      if (await store.get(identity))
+      const receipt = readReceipt(input, true);
+      if (await store.get(identity)) {
+        if (receipt.snapshot?.legacyBuyerProof) {
+          const before = await currentSource(input);
+          if (sourceFence(before) !== receipt.sourceFence)
+            throw new OlistError('OLIST_PREVIEW_STALE');
+          const observed = await inspector(
+            input,
+            'olist.link',
+          ).legacyExistingSale({
+            snapshot: receipt.snapshot,
+            reference: receipt.reference,
+            remoteId: receipt.remoteId,
+            mapping: receipt.mapping,
+            paymentDueOn: receipt.snapshot.commercial.paymentDueOn,
+          });
+          const after = await currentSource(input);
+          if (
+            sourceFence(before) !== sourceFence(after) ||
+            observed.remoteDigest !== receipt.remoteDigest ||
+            observed.remoteId !== receipt.remoteId ||
+            observed.number !== receipt.number
+          )
+            throw new OlistError('OLIST_PREVIEW_STALE');
+        }
         return store.execute(identity, async () => {
           throw new OlistError('IDEMPOTENCY_RECORD_PENDING');
         });
-      const receipt = readReceipt(input, true);
+      }
       await assertFresh(input, receipt);
       await repository.legacyLinkAvailable(input);
       const checked = await inspector(input, 'olist.link').legacyExistingSale({
@@ -499,17 +564,26 @@ export function createOlistAdministration(database, options) {
         ].includes(operation?.state)
       )
         throw new OlistError('OLIST_RECONCILIATION_REQUIRED');
+      if (olistBuyerRegistrationEmpty(before.buyer?.registration)) {
+        const resolved = await inspector(
+          input,
+          'olist.link',
+        ).resolveExistingBuyer(before.buyer);
+        before.buyerSource = resolved.buyerSource;
+      }
       const plan = buildOlistPreviewPlan({
         source: before.source,
         buyer: before.buyer,
         settings: before.settings,
         now: clock(),
         paymentDueOn: input.paymentDueOn,
+        buyerSource: before.buyerSource,
       });
       if (!plan.eligible) throw new OlistError('OLIST_ORDER_INCOMPLETE', 422);
       const snapshot = {
         policy: 'exact-cent-v1',
         customer: plan.customer,
+        ...(before.buyerSource ? { buyerSource: before.buyerSource } : {}),
         commercial: {
           ...plan.commercial,
           orderDate:
@@ -519,6 +593,7 @@ export function createOlistAdministration(database, options) {
         sourceVersions: before.sourceVersions,
         productFiscal:
           before.productFiscal ?? before.settings?.productFiscal ?? null,
+        productFiscalDeferred: before.productFiscalDeferred === true,
         settings: before.settings,
         acceptedAt: clock().toISOString(),
       };
@@ -530,6 +605,8 @@ export function createOlistAdministration(database, options) {
             commercial: value.commercial,
             sourceVersions: value.sourceVersions,
             productFiscal: value.productFiscal ?? null,
+            productFiscalDeferred: value.productFiscalDeferred === true,
+            buyerSource: value.buyerSource ?? null,
             settings: value.settings,
           });
         if (comparable(operation.snapshot) !== comparable(snapshot))
@@ -584,7 +661,9 @@ export function createOlistAdministration(database, options) {
       return {
         orderId: input.orderId,
         eligible: true,
+        buyerSourceHint: before.buyerSource?.mode ?? 'crm-registration',
         productFiscal: snapshot.productFiscal,
+        productFiscalDeferred: snapshot.productFiscalDeferred === true,
         productFiscalRequired:
           before.productFiscalRequired ??
           (before.settings?.productFiscal === null ||

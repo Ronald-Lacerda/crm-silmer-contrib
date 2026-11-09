@@ -55,7 +55,9 @@ export function createOlistExportCommand(
         settings,
         policy: receipt.policy,
         customer: receipt.customer,
+        buyerSource: receipt.buyerSource ?? null,
         productFiscal: receipt.productFiscal ?? null,
+        productFiscalDeferred: receipt.productFiscalDeferred === true,
         commercial: {
           ...receipt.commercial,
           orderDate: receipt.binding.proposedDay
@@ -81,7 +83,9 @@ export function createOlistExportCommand(
     async exportOrder(input) {
       if (
         Object.hasOwn(input, 'paymentDueOn') ||
-        Object.hasOwn(input, 'productFiscal')
+        Object.hasOwn(input, 'productFiscal') ||
+        Object.hasOwn(input, 'buyerSource') ||
+        Object.hasOwn(input, 'productFiscalDeferred')
       )
         throw new OlistError('INVALID_REQUEST', 400);
       assertOlistPilotActor(config.pilotUserIds, input);
@@ -195,6 +199,7 @@ export function createOlistExportCommand(
           const snapshot = {
             policy: receipt.policy,
             customer: structuredClone(receipt.customer),
+            buyerSource: structuredClone(receipt.buyerSource ?? null),
             commercial: {
               ...structuredClone(receipt.commercial),
               orderDate:
@@ -202,6 +207,7 @@ export function createOlistExportCommand(
             },
             sourceVersions: structuredClone(current.sourceVersions),
             productFiscal: structuredClone(receipt.productFiscal ?? null),
+            productFiscalDeferred: receipt.productFiscalDeferred === true,
             settings: olistSettings(current.settings),
             registrations: structuredClone(receipt.registrations),
             acceptedAt: acceptedAt.toISOString(),

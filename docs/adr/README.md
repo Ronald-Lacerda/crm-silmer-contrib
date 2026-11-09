@@ -2,6 +2,11 @@
 
 ## Decisão de 09/11/2026
 
+- [073 — Comprador no vínculo histórico com telefone divergente](073-comprador-no-vinculo-historico-com-telefone-divergente.md), RFC 057; exceção exclusiva de T16, sem referência reutilizável.
+
+- [072 — Envio em aberto sem duplicar cadastros do ERP](072-envio-em-aberto-sem-duplicar-cadastros-do-erp.md),
+  RFC 056; simplifica a rotina da ADR 071 por decisão do proprietário.
+
 - [071 — Vencimento explícito e vínculo histórico isolado no Olist](071-vencimento-explicito-e-vinculo-historico-isolado-no-olist.md),
   proposta na RFC 055, OLIST-T15–T17.
 

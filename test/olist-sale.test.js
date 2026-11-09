@@ -8,6 +8,7 @@ import {
 } from '../modules/olist/src/sale-payload.js';
 import { createOlistSaleWriter } from '../modules/olist/src/sale-writer.js';
 import { createOlistClient } from '../modules/olist/src/client.js';
+import { captureOlistExistingBuyer } from '../modules/olist/src/existing-buyer.js';
 import {
   parseOlistLosslessJson,
   olistNumberLexeme,
@@ -173,6 +174,137 @@ test('T17 sale freezes and reconciles the explicitly chosen per-order due day', 
       { code: 'OLIST_PAYMENT_DUE_REQUIRED' },
     );
   }
+});
+
+test('T17 draft ERP-owned payment omits the whole payment object and copies only the closed ficha enum', () => {
+  for (const [condition, label] of [
+    ['pix', 'Pix'],
+    ['cartao_credito', 'Cartão de crédito'],
+    ['cartao_debito', 'Cartão de débito'],
+  ]) {
+    const f = fixture(),
+      snapshot = /** @type {any} */ (f.snapshot);
+    snapshot.settings = {
+      ...snapshot.settings,
+      paymentDuePolicy: 'erp',
+      paymentDueOn: null,
+      paymentMethodId: null,
+      receivingMethodId: null,
+      paymentTerms: null,
+    };
+    snapshot.productFiscal = null;
+    snapshot.productFiscalDeferred = true;
+    snapshot.commercial.paymentCondition = condition;
+    const plan = buildOlistSalePayload({
+        ...f,
+        snapshot,
+        reference: REFERENCE,
+      }),
+      payload = JSON.parse(plan.encoded);
+    assert.equal(payload.situacao, 0);
+    assert.equal(Object.hasOwn(payload, 'pagamento'), false);
+    assert.equal(payload.observacoes, `Forma de pagamento da ficha: ${label}.`);
+    assert.doesNotMatch(
+      plan.encoded,
+      /PRIVATE_INTERNAL_NOTE|PRIVATE_ART|tributacao|idNotaFiscal|estoque/u,
+    );
+    assert.equal(reconcileOlistSale(plan, rawOrder(plan), 401).matched, true);
+    for (const productFiscalDeferred of [undefined, false, 'true'])
+      assert.throws(
+        () =>
+          buildOlistSalePayload({
+            ...f,
+            snapshot: { ...snapshot, productFiscalDeferred },
+            reference: REFERENCE,
+          }),
+        { code: 'OLIST_SALE_PLAN_INVALID' },
+      );
+    assert.throws(
+      () =>
+        buildOlistSalePayload({
+          ...f,
+          snapshot: {
+            ...snapshot,
+            settings: {
+              ...snapshot.settings,
+              productFiscal: { ncm: '61091000', origin: 0, unit: 'UN' },
+            },
+          },
+          reference: REFERENCE,
+        }),
+      { code: 'OLIST_SALE_PLAN_INVALID' },
+    );
+    for (const payment of [
+      { transacao: { id: 1 } },
+      { parcelas: [{ transacao: { id: 1 } }] },
+    ])
+      assert.throws(
+        () =>
+          reconcileOlistSale(
+            plan,
+            rawOrder(plan).slice(0, -1) +
+              ',"pagamento":' +
+              JSON.stringify(payment) +
+              '}',
+            401,
+          ),
+        { code: 'OLIST_SALE_READBACK_MISMATCH' },
+      );
+    snapshot.commercial.paymentCondition = 'private custom payment text';
+    assert.throws(
+      () => buildOlistSalePayload({ ...f, snapshot, reference: REFERENCE }),
+      { code: 'OLIST_SALE_PLAN_INVALID' },
+    );
+  }
+});
+
+test('T17 an ERP-existing buyer uses one frozen ID and an optional account-bound document hash without copying a fiscal registration', () => {
+  const f = fixture(),
+    snapshot = /** @type {any} */ (f.snapshot),
+    config = { accountKey: 'a'.repeat(64), hmacKey: Buffer.alloc(32, 77) };
+  const captured = captureOlistExistingBuyer({
+    config,
+    buyer: { name: snapshot.customer.nome, phone: snapshot.customer.celular },
+    contact: {
+      id: 101,
+      nome: snapshot.customer.nome,
+      celular: snapshot.customer.celular,
+      cpfCnpj: snapshot.customer.cpfCnpj,
+      situacao: 'A',
+    },
+  });
+  snapshot.customer = captured.customer;
+  snapshot.buyerSource = captured.buyerSource;
+  const plan = buildOlistSalePayload({ ...f, snapshot, reference: REFERENCE });
+  const raw = rawOrder(plan).replace(
+    '"cpfCnpj":null',
+    '"cpfCnpj":"52998224725"',
+  );
+  assert.equal(reconcileOlistSale(plan, raw, 401, config).matched, true);
+  assert.doesNotMatch(JSON.stringify(snapshot.buyerSource), /52998224725|Rua/u);
+  assert.equal(Object.hasOwn(snapshot.customer, 'endereco'), false);
+  assert.throws(
+    () =>
+      reconcileOlistSale(
+        plan,
+        raw.replace('52998224725', '04252011000110'),
+        401,
+        config,
+      ),
+    { code: 'OLIST_SALE_READBACK_MISMATCH' },
+  );
+  assert.throws(() => reconcileOlistSale(plan, raw, 401), {
+    code: 'OLIST_SALE_READBACK_MISMATCH',
+  });
+  assert.throws(
+    () =>
+      buildOlistSalePayload({
+        snapshot,
+        resolved: { ...f.resolved, customerId: '102' },
+        reference: REFERENCE,
+      }),
+    { code: 'OLIST_SALE_PLAN_INVALID' },
+  );
 });
 /** @param {any} plan */
 function rawOrder(plan) {

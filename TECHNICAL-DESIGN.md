@@ -1,5 +1,28 @@
 # TDD — CRM Silmer MVP
 
+## OLIST-T17 — envio simples em aberto (09/11/2026)
+
+[ADR 072](docs/adr/072-envio-em-aberto-sem-duplicar-cadastros-do-erp.md) e
+[RFC 056](docs/rfc/056-envio-simples-da-ficha-com-cadastros-no-olist.md).
+A revisão faz prévia/check automaticamente e a confirmação autoriza o envio.
+`buyerSource.mode=erp-existing-v1` congela ID, nome/telefone normalizados,
+documentHash opcional e digest HMAC da conta, em envelope cifrado. Não escreve
+cadastro CRM, não inclui cliente e não cria seu recurso compartilhado. Resolver
+e dispatcher relêem a identidade antes de reservar cada efeito, sem HTTP sob
+lock ou entre reserva de quota de escrita e POST. Mapeamentos exigem ID do
+comprador igual à referência congelada; demais recursos mantêm seus locks.
+
+`productFiscalDeferred=true` só vem do servidor e omite integralmente os campos
+fiscais opcionais. `paymentDuePolicy=erp` omite pagamento/parcelas e transmite
+apenas a condição enum da ficha por frase fixa em observações, sem chat/PII.
+Venda continua em situação 0. Check/export não aceitam substituir essas
+decisões e os modos anteriores seguem compatíveis. Endereço e cadastro fiscal
+do comprador continuam sob responsabilidade do Olist.
+
+## OLIST-T16 — comprador histórico com telefone divergente
+
+[ADR 073](docs/adr/073-comprador-no-vinculo-historico-com-telefone-divergente.md) / [RFC 057](docs/rfc/057-comprador-no-vinculo-historico-com-telefone-divergente.md): prova privada própria por conta e venda, nome exato e comprador ativo derivado da venda selecionada. A projeção pública informa a divergência sem expor telefones; confirmação e motivo existentes se aplicam somente ao vínculo histórico. Releitura no commit, replay e reconferência preserva a identidade congelada, sem referência reutilizável, recurso compartilhado, job ou POST ERP. O fluxo automático de novos envios continua exigindo nome e telefone.
+
 ## OLIST-T16/T17 — vencimento e vínculo histórico (09/11/2026)
 
 [ADR 071](docs/adr/071-vencimento-explicito-e-vinculo-historico-isolado-no-olist.md),

@@ -148,8 +148,8 @@ export function olistSettings(raw) {
     throw new OlistError('INVALID_REQUEST', 400);
   if (
     (Object.hasOwn(value, 'paymentDuePolicy') &&
-      !['fixed_date', 'per_order'].includes(value.paymentDuePolicy)) ||
-    (value.paymentDuePolicy === 'per_order' &&
+      !['fixed_date', 'per_order', 'erp'].includes(value.paymentDuePolicy)) ||
+    (['per_order', 'erp'].includes(value.paymentDuePolicy) &&
       value.paymentDueOn !== null &&
       value.paymentDueOn !== undefined)
   )

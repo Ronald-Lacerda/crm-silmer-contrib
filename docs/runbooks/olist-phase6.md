@@ -95,22 +95,34 @@ procedural continua necessária; não existe interlock externo ao banco restaura
 
 ## Critérios para liberar o teste da operadora
 
-### Vencimento e cadastro fiscal na conferência
+### Revisar e enviar; cadastros e vencimento no Olist
 
-Decisões do proprietário em 09/11/2026: preservar as configurações do ERP;
-a operadora informa o vencimento de cada pedido e pode informar o cadastro
-fiscal na hora. [RFC 055](../rfc/055-vencimento-por-pedido-e-vinculo-historico-no-olist.md)
-e [ADR 071](../adr/071-vencimento-explicito-e-vinculo-historico-isolado-no-olist.md).
-O CRM aponta para os identificadores já existentes; não alterar gatilhos ou
-parâmetros globais do ERP para fazer o teste passar. Ordem de compra histórica
-não se torna padrão de novas vendas.
+A diretriz final do proprietário em 09/11/2026 é manter o Olist independente
+e reduzir ações no CRM. [RFC 056](../rfc/056-envio-simples-da-ficha-com-cadastros-no-olist.md)
+e [ADR 072](../adr/072-envio-em-aberto-sem-duplicar-cadastros-do-erp.md)
+supersedem a rotina de campos adicionais da RFC 055/ADR 071.
 
-Com `paymentDuePolicy=per_order`, preencher o dia combinado antes da prévia.
-Quando não há `productFiscal` central, preencher NCM, origem e unidade aprovados
-para todos os itens da prévia. Nenhum desses campos recebe default inferido.
-Sem os dados, a geração fica pendente e o pedido permanece salvo no CRM.
-Alterá-los exige nova prévia; check e export recebem apenas o token congelado.
-A venda é incluída com situação 0, sem comando de nota, estoque ou baixa.
+1. Na ficha, escolher **Revisar envio**. O CRM consulta e valida a prévia.
+2. Conferir comprador, itens, tamanhos, quantidades, subtotais e total; escolher
+   **Enviar para Olist**. Só a confirmação autoriza a inclusão.
+
+Não preencher NCM, copiar cadastro fiscal ou escolher ID de comprador na rotina
+do CRM. Com cadastro CRM vazio, o comprador existente no ERP só é usado quando
+há uma correspondência única e ativa de nome/telefone. Uma pendência não cria
+comprador nem faz associação aproximada. A operação preserva referência e
+hashes, sem importar CNPJ/IE/endereço para Contact.
+
+Usar `paymentDuePolicy=erp`, com pagamento/parcelas omitidos. Rose define o
+vencimento no ERP. A condição enum da ficha vai apenas por frase fixa, sem
+copiar notas ou conversa. Fiscal central ausente adia a tripla opcional do
+produto; não inventar valores ou status de produto. O pedido vai em situação
+0, sem comando de nota, estoque, recebimento ou baixa. Os modos anteriores de
+vencimento permanecem compatíveis, sem serem exigidos nesta rotina.
+
+Não alterar gatilhos ou parâmetros globais do ERP para fazer o teste passar.
+Ordem de compra histórica não se torna padrão de novas vendas. A aceitação
+real da omissão fiscal deve ser observada no primeiro teste; erro não autoriza
+preencher defaults ou repetir um POST de resultado incerto.
 
 ### Venda histórica sem identidade canônica
 
@@ -121,7 +133,7 @@ Origem, vencimento, OC e fiscal observados pertencem ao passado; não são os
 defaults atuais nem dados para novos cadastros. Fiscal ausente aparece como
 não verificado. A confirmação com motivo gera um vínculo cifrado e auditado
 `legacy-sale-only-v1`, sem recursos compartilhados, jobs criadores ou POST ERP.
-Qualquer mudança remota ou local exige nova conferência. A reconferência desse
+Nome exato com telefone divergente pode ser conferido explicitamente nessa tela, com aviso e declaração no aceite existente (ADR 073/RFC 057). A prova é exclusiva da venda, cifrada e relida no commit, replay e reconferência; não autoriza reutilização em novos envios e não altera Contato. Qualquer mudança remota ou local exige nova conferência. A reconferência desse
 vínculo continua apenas por leitura; tentativas incertas usam a trilha estrita.
 
 ### Checklist do piloto restrito
@@ -134,7 +146,7 @@ mesma allowlist; vazia ou inválida mantém a criação desligada para todos.
 Antes do aviso à operadora, registrar evidência real de:
 
 - release/digests, health e migrações da API/worker/edge no EasyPanel;
-- conexão da empresa correta, parâmetros comerciais/fiscais explícitos e gatilhos ERP;
+- conexão da empresa correta, parâmetros do envio em aberto e gatilhos ERP;
 - vínculo T16 do caso privado existente, com zero POSTs criadores;
 - teste controlado T17, com uma entidade por identidade, uma venda e valores por linha;
 - replay/recarga sem nova venda e ausência de incerteza sem responsável;
@@ -158,8 +170,7 @@ gate de aprovação de amostra; não trocar `PRINT_TEMPLATE` para concluir o pil
 Em 09/11/2026, a correção de formatos reais dos catálogos foi integrada no
 [PR 327](https://github.com/romulosutil/crm-silmer/pull/327), commit
 `b01d39b681c774049b54c1bcc25503a64d174446`. API, worker e edge implantados
-automaticamente em `master`, todos saudáveis; live, ready e healthz retornaram
-200. Consultas limitadas comprovaram vendedores e depósitos sem mutação ERP.
+automaticamente em `master`, todos saudáveis; live, ready e healthz retornaram 200. Consultas limitadas comprovaram vendedores e depósitos sem mutação ERP.
 Os identificadores das opções e as correspondências reais permanecem privados.
 
 Validação da fatia seguinte (vencimento/fiscal por prévia e vínculo histórico):
@@ -215,3 +226,12 @@ ficam em evidência privada. Vínculo T16, criação controlada T17, parâmetros
 backup atual com chaves recuperáveis ainda precisam de conferência final no
 alvo antes da liberação. A cópia externa permanece pendência de recuperação
 geral, separada da prontidão para o teste individual supervisionado.
+
+Gate da simplificação em dois gestos: `npm run validate` com 2.397 testes, 2.349 aprovados, 48 skips condicionais e zero falhas; SQL oficial `test:olist:live` com 356/356 e zero skips. UI cobre 217 cenários distintos, incluindo revisão/envio sem formulário fiscal ou vencimento, teclado e largura de 320 px. Ajuste de mensagem de comprador ausente: API 19/19; configuração em modo ERP: UI 1/1. A exceção histórica posterior recebe checks próprios antes da integração. Nenhum desses resultados é prova de inclusão real no ERP.
+
+Gate integrado final da simplificação e exceção histórica: `npm run validate`
+aprovado com 2.404 testes (2.356 aprovados, 48 skips condicionais, zero falhas).
+Exceção T16: SQL administrativo 24/24, unitários focados 57/57, QA independente
+3/3 e UI 23/23 (13 históricos e 10 da rotina normal). Revisão independente sem
+finding alto/crítico. O gate SQL completo da simplificação continua registrado
+como 356/356; o CI do head final repete os gates integrados antes do merge.

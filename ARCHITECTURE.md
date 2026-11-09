@@ -1,5 +1,16 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Envio simples da ficha para o Olist (09/11/2026)
+
+[ADR 072](docs/adr/072-envio-em-aberto-sem-duplicar-cadastros-do-erp.md) e
+[RFC 056](docs/rfc/056-envio-simples-da-ficha-com-cadastros-no-olist.md): dois
+gestos, revisar e enviar. O modo de comprador existente usa referência ERP
+com identidade mínima e releitura, sem importar cadastro fiscal. Pagamento e
+fiscal adiados ficam no ERP; a venda é incluída em aberto. As guardas de
+autorização, precisão, reserva e recuperação permanecem no servidor.
+
+A [ADR 073](docs/adr/073-comprador-no-vinculo-historico-com-telefone-divergente.md) / [RFC 057](docs/rfc/057-comprador-no-vinculo-historico-com-telefone-divergente.md) permite conferência explícita de telefone divergente somente na venda histórica selecionada. Sua prova própria não vira referência de comprador para novos envios.
+
 ## Preparação do piloto Olist (09/11/2026)
 
 OLIST-T17/OLIST-48 implementa a restrição individual da ADR 057/RFC 050 por

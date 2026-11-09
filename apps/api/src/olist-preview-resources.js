@@ -2,6 +2,7 @@ import {
   olistResourceIdentityHash,
   normalizeDocument,
   olistProductFiscal,
+  verifyOlistExistingBuyer,
 } from '@crm-silmer/olist';
 
 const PRODUCT_FIELDS = [
@@ -13,6 +14,7 @@ const PRODUCT_FIELDS = [
   'audience',
 ];
 const SAFE_CODES = new Set([
+  'OLIST_CUSTOMER_DIVERGENT',
   'OLIST_AMBIGUOUS_MATCH',
   'OLIST_INCOMPLETE_LOOKUP',
   'OLIST_RATE_LIMITED',
@@ -176,7 +178,19 @@ export async function planOlistResources({ client, config, plan, resources }) {
   /** @returns {{action:string,remoteId:string|null}} */
   const blocked = () => ({ action: 'blocked', remoteId: null });
   let customer = blocked();
-  if (plan.customer) {
+  if (plan.buyerSource?.mode === 'erp-existing-v1') {
+    try {
+      const found = await verifyOlistExistingBuyer({
+        client,
+        config,
+        customer: plan.customer,
+        buyerSource: plan.buyerSource,
+      });
+      customer = { action: 'reuse', remoteId: found.remoteId };
+    } catch (error) {
+      failure('customer', error);
+    }
+  } else if (plan.customer) {
     const field = 'customer';
     const link = linked(
       'customer',
@@ -237,7 +251,8 @@ export async function planOlistResources({ client, config, plan, resources }) {
         if (!parent) {
           projected.action = 'create';
           // Fiscal defaults are account-specific and have not been approved.
-          if (!fiscal) issue(field, 'OLIST_PRODUCT_FISCAL_REQUIRED');
+          if (!fiscal && plan.productFiscalDeferred !== true)
+            issue(field, 'OLIST_PRODUCT_FISCAL_REQUIRED');
         } else if (
           parent.tipo !== 'V' ||
           parent.situacao !== 'A' ||

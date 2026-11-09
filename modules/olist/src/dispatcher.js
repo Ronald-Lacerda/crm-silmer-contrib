@@ -1,5 +1,6 @@
 import { OlistError } from './errors.js';
 import { buildOlistSalePayload, reconcileOlistSale } from './sale-payload.js';
+import { verifyOlistExistingBuyer } from './existing-buyer.js';
 
 const STOP = new Set([
   'ORDER_CANCELLED',
@@ -67,7 +68,7 @@ function result(outcome, errorCode, providerExternalId, retry = false) {
  * an expired job lease or an empty lookup can never authorize a second sale.
  * `prepare` renews the access token before the first local guard, which needs
  * a token that is still valid.
- * @param {{repository:any,client:any,resourceResolver:any,saleWriter:any,config:{accountKey:string,contextKey:string},prepare?:(base:any)=>Promise<unknown>}} options */
+ * @param {{repository:any,client:any,resourceResolver:any,saleWriter:any,config:{accountKey:string,contextKey:string,hmacKey?:Buffer},prepare?:(base:any)=>Promise<unknown>}} options */
 export function createOlistDispatcher({
   repository,
   client,
@@ -102,7 +103,10 @@ export function createOlistDispatcher({
     let next = 10;
     return {
       resolved: true,
-      customerId: '1',
+      customerId:
+        snapshot.buyerSource?.mode === 'erp-existing-v1'
+          ? snapshot.buyerSource.remoteId
+          : '1',
       groups: (snapshot.commercial?.groups ?? []).map(
         (/** @type {any} */ group) => ({
           groupId: group.groupId,
@@ -188,7 +192,7 @@ export function createOlistDispatcher({
             });
           }
           const raw = await client.orderRaw(Number(id), { patient: true });
-          const proof = reconcileOlistSale(plan, raw, String(id));
+          const proof = reconcileOlistSale(plan, raw, String(id), config);
           await repository.finishSale({
             ...base,
             ...ticket,
@@ -229,6 +233,15 @@ export function createOlistDispatcher({
         // before reserving the sale, then revalidate again inside reservation.
         if (await client.findOrder(operation.reference))
           throw new OlistError('OLIST_SALE_ALREADY_EXISTS');
+        // Spend any patient GET quota/token refresh before the writer reserves
+        // its non-waiting POST slot and reads the current credentials.
+        if (operation.snapshot.buyerSource?.mode === 'erp-existing-v1')
+          await verifyOlistExistingBuyer({
+            client,
+            config,
+            customer: operation.snapshot.customer,
+            buyerSource: operation.snapshot.buyerSource,
+          });
         const response = await saleWriter.dispatch({
           plan,
           reserve: async (
@@ -257,7 +270,7 @@ export function createOlistDispatcher({
         const raw = await client.orderRaw(Number(response.remoteId), {
           patient: true,
         });
-        const proof = reconcileOlistSale(plan, raw, response.remoteId);
+        const proof = reconcileOlistSale(plan, raw, response.remoteId, config);
         await repository.finishSale({
           ...base,
           ...ticket,

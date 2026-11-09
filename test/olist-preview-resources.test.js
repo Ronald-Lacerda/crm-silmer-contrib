@@ -6,6 +6,7 @@ import {
   createOlistClient,
 } from '../modules/olist/src/index.js';
 import { planOlistResources } from '../apps/api/src/olist-preview-resources.js';
+import { captureOlistExistingBuyer } from '../modules/olist/src/existing-buyer.js';
 
 const config = { accountKey: 'a'.repeat(64), hmacKey: Buffer.alloc(32, 13) };
 const attrs = {
@@ -544,4 +545,54 @@ test('T09 a legacy parent uses only its frozen verified SKU and exact confirmed 
   const after = await planOlistResources({ config, plan, client, resources });
   assert.equal(after.groups[0].action, 'blocked');
   assert.equal(after.groups[0].lines[0].action, 'blocked');
+});
+
+test('T17 an ERP-existing buyer is rechecked by frozen ID without any customer discovery or creation plan', async () => {
+  const f = fixture();
+  const contact = {
+    id: 101,
+    nome: 'Cliente sintético',
+    celular: '5511999990000',
+    situacao: 'A',
+  };
+  const captured = captureOlistExistingBuyer({
+    config,
+    buyer: { name: contact.nome, phone: contact.celular },
+    contact,
+  });
+  Object.assign(f.plan, {
+    customer: captured.customer,
+    buyerSource: captured.buyerSource,
+    productFiscal: null,
+    productFiscalDeferred: true,
+  });
+  f.client.findCustomer = async () => {
+    throw new Error('customer document lookup is forbidden');
+  };
+  f.client.contact = async (/** @type {number} */ id) => {
+    assert.equal(id, 101);
+    return contact;
+  };
+  const result = await planOlistResources({
+    config,
+    plan: f.plan,
+    client: f.client,
+    resources: [],
+  });
+  assert.deepEqual(result.customer, { action: 'reuse', remoteId: '101' });
+  assert.equal(
+    result.issues.some((entry) => entry.field === 'customer'),
+    false,
+  );
+  contact.celular = '5511999990001';
+  const changed = await planOlistResources({
+    config,
+    plan: f.plan,
+    client: f.client,
+    resources: [],
+  });
+  assert.equal(changed.customer.action, 'blocked');
+  assert.ok(
+    changed.issues.some((entry) => entry.code === 'OLIST_CUSTOMER_DIVERGENT'),
+  );
 });

@@ -19,6 +19,14 @@ export {
 } from './quota.js';
 export { createOlistClient } from './client.js';
 export {
+  resolveOlistExistingBuyer,
+  verifyOlistExistingBuyer,
+  captureOlistExistingBuyer,
+  assertOlistExistingBuyerSource,
+  olistExistingBuyerDocumentHash,
+  olistBuyerRegistrationEmpty,
+} from './existing-buyer.js';
+export {
   createOlistRepository,
   olistResourceIdentityHash,
 } from './repository.js';

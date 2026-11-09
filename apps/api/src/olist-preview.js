@@ -19,12 +19,16 @@ import {
   olistReadWait,
   olistSettings,
   olistProductFiscal,
+  resolveOlistExistingBuyer,
+  assertOlistExistingBuyerSource,
+  olistBuyerRegistrationEmpty,
 } from '@crm-silmer/olist';
 import { buildOlistPreviewPlan } from './olist-preview-plan.js';
 import { planOlistResources } from './olist-preview-resources.js';
 
 const TTL = 15 * 60_000;
 const REVIEWED_FISCAL = Symbol('reviewed-product-fiscal');
+const REVIEWED_BUYER = Symbol('reviewed-existing-buyer');
 const SAFE_LOOKUP_ERRORS = new Set([
   'OLIST_AMBIGUOUS_MATCH',
   'OLIST_INCOMPLETE_LOOKUP',
@@ -190,6 +194,20 @@ export function createOlistPreview(database, options) {
           [config.accountKey],
         )
       ).rows[0];
+      const buyerSource = input[REVIEWED_BUYER] ?? null;
+      if (buyerSource) {
+        if (!olistBuyerRegistrationEmpty(buyer?.registration))
+          throw new OlistError('OLIST_PREVIEW_STALE');
+        try {
+          assertOlistExistingBuyerSource({
+            config,
+            customer: { nome: buyer?.name, celular: buyer?.phone },
+            buyerSource,
+          });
+        } catch {
+          throw new OlistError('OLIST_PREVIEW_STALE');
+        }
+      }
       const creationEnabled = Boolean(
         config.configured &&
         config.pilotUserIds?.includes(actor.id) &&
@@ -215,15 +233,18 @@ export function createOlistPreview(database, options) {
           input[REVIEWED_FISCAL] ? 409 : 400,
         );
       const productFiscal = centralFiscal ?? suppliedFiscal;
+      const productFiscalDeferred = productFiscal === null;
       const productFiscalHash = productFiscal
         ? identityHash(config.hmacKey, 'fiscal-policy', productFiscal)
         : null;
       const paymentDueOn =
-        paymentDuePolicy === 'per_order'
-          ? typeof input.paymentDueOn === 'string'
-            ? input.paymentDueOn
-            : null
-          : (settings?.paymentDueOn ?? null);
+        paymentDuePolicy === 'erp'
+          ? null
+          : paymentDuePolicy === 'per_order'
+            ? typeof input.paymentDueOn === 'string'
+              ? input.paymentDueOn
+              : null
+            : (settings?.paymentDueOn ?? null);
       const binding = {
         actorId: actor.id,
         authorizationVersion: actor.olistAuthorizationVersion,
@@ -240,6 +261,8 @@ export function createOlistPreview(database, options) {
         buyerVersion,
         paymentDueOn,
         productFiscalHash,
+        productFiscalDeferred,
+        buyerSourceDigest: buyerSource?.digest ?? null,
         // Hash contents as well as versions: a malformed/stale writer cannot reuse a receipt.
         contents: identityHash(config.hmacKey, 'preview-source', [
           source,
@@ -249,6 +272,8 @@ export function createOlistPreview(database, options) {
           resources,
           operation,
           productFiscal,
+          productFiscalDeferred,
+          buyerSource,
         ]),
       };
       return {
@@ -264,7 +289,9 @@ export function createOlistPreview(database, options) {
         paymentDuePolicy,
         paymentDueOn,
         productFiscal,
-        productFiscalRequired: centralFiscal === null,
+        productFiscalDeferred,
+        productFiscalRequired: false,
+        buyerSource,
         sourceVersions: {
           contactId: buyerContactId,
           contactVersion: buyerVersion,
@@ -292,19 +319,52 @@ export function createOlistPreview(database, options) {
     /** @param {any} input */
     async preview(input) {
       const startedAt = clock();
+      let reviewedInput = input;
       let before = await snapshot(input);
-      let plan = buildOlistPreviewPlan({
-        source: before.source,
-        buyer: before.buyer,
-        settings: before.settings,
-        now: startedAt,
-        paymentDueOn: input.paymentDueOn,
-      });
+      const buildPlan = (/** @type {any} */ current) =>
+        buildOlistPreviewPlan({
+          source: current.source,
+          buyer: current.buyer,
+          settings: current.settings,
+          now: startedAt,
+          paymentDueOn: input.paymentDueOn,
+          buyerSource: current.buyerSource,
+        });
+      let plan = buildPlan(before);
+      const canResolveBuyer = (
+        /** @type {any} */ current,
+        /** @type {any} */ candidate,
+      ) =>
+        olistBuyerRegistrationEmpty(current.buyer?.registration) &&
+        typeof current.buyer?.name === 'string' &&
+        current.buyer.name.trim().length >= 2 &&
+        normalizeContactPhone(current.buyer?.phone) &&
+        candidate.issues.every(
+          (/** @type {any} */ entry) =>
+            entry.field.startsWith('buyer.registration.') ||
+            entry.field === 'buyer.email',
+        );
       const preparationIssues = [];
+      let httpReads = 0;
+      const client = createOlistClient({
+        credentials: () => connection.credentials(input, 'olist.export'),
+        quota: connection.quota,
+        readWait: olistReadWait('api'),
+        fetch: async (url, init) => {
+          if ((init?.method ?? 'GET') !== 'GET' || ++httpReads > 64)
+            throw new OlistError('OLIST_INCOMPLETE_LOOKUP', 409);
+          return (options.fetch ?? globalThis.fetch)(url, init);
+        },
+        timeoutMs: options.timeoutMs,
+        onAuthFailure: (version) => connection.authFailure(input, version),
+      });
       // A normal token refresh changes the connection version. Prepare it
       // before capturing the receipt's source, rather than making this preview
       // stale through its own first GET. No entity/sale effect happens here.
-      if (plan.issues.length === 0 && before.connected) {
+      if (
+        (plan.issues.length === 0 || canResolveBuyer(before, plan)) &&
+        before.connected
+      ) {
         try {
           await connection.credentials(input, 'olist.export');
         } catch (error) {
@@ -313,13 +373,33 @@ export function createOlistPreview(database, options) {
           preparationIssues.push({ code: candidate.code, field: 'connection' });
         }
         before = await snapshot(input);
-        plan = buildOlistPreviewPlan({
-          source: before.source,
-          buyer: before.buyer,
-          settings: before.settings,
-          now: startedAt,
-          paymentDueOn: input.paymentDueOn,
-        });
+        plan = buildPlan(before);
+        if (preparationIssues.length === 0 && canResolveBuyer(before, plan)) {
+          try {
+            const captured = await resolveOlistExistingBuyer({
+              client,
+              config,
+              buyer: before.buyer,
+            });
+            reviewedInput = {
+              ...input,
+              [REVIEWED_BUYER]: captured.buyerSource,
+            };
+            before = await snapshot(reviewedInput);
+            plan = buildPlan(before);
+          } catch (error) {
+            const code = /** @type {any} */ (error).code;
+            if (
+              !SAFE_LOOKUP_ERRORS.has(code) &&
+              ![
+                'OLIST_CUSTOMER_NOT_FOUND',
+                'OLIST_CUSTOMER_DIVERGENT',
+              ].includes(code)
+            )
+              throw error;
+            preparationIssues.push({ code, field: 'buyer.source' });
+          }
+        }
       }
       if (
         before.binding.proposedDay &&
@@ -329,11 +409,7 @@ export function createOlistPreview(database, options) {
         throw new OlistError('OLIST_PREVIEW_STALE', 409);
       const issues = [...plan.issues, ...preparationIssues];
       plan.productFiscal = before.productFiscal;
-      if (!plan.productFiscal)
-        issues.push({
-          code: 'OLIST_PRODUCT_FISCAL_REQUIRED',
-          field: 'productFiscal',
-        });
+      plan.productFiscalDeferred = before.productFiscalDeferred;
       if (!before.connected && preparationIssues.length === 0)
         issues.push({ code: 'OLIST_RECONNECT_REQUIRED', field: 'connection' });
       if (before.operation)
@@ -341,20 +417,7 @@ export function createOlistPreview(database, options) {
       if (before.resources.length > 1000)
         issues.push({ code: 'OLIST_INCOMPLETE_LOOKUP', field: 'resources' });
       let registrations = null;
-      let httpReads = 0;
       if (issues.length === 0) {
-        const client = createOlistClient({
-          credentials: () => connection.credentials(input, 'olist.export'),
-          quota: connection.quota,
-          readWait: olistReadWait('api'),
-          fetch: async (url, init) => {
-            if ((init?.method ?? 'GET') !== 'GET' || ++httpReads > 64)
-              throw new OlistError('OLIST_INCOMPLETE_LOOKUP', 409);
-            return (options.fetch ?? globalThis.fetch)(url, init);
-          },
-          timeoutMs: options.timeoutMs,
-          onAuthFailure: (version) => connection.authFailure(input, version),
-        });
         try {
           for (const [field, kind] of [
             ['sellerId', 'sellers'],
@@ -363,6 +426,11 @@ export function createOlistPreview(database, options) {
             ['priceListId', 'priceLists'],
             ['receivingMethodId', 'receivingMethods'],
           ]) {
+            if (
+              before.settings.paymentDuePolicy === 'erp' &&
+              ['paymentMethodId', 'receivingMethodId'].includes(field)
+            )
+              continue;
             if (
               before.settings[field] !== null &&
               before.settings[field] !== undefined
@@ -392,7 +460,7 @@ export function createOlistPreview(database, options) {
           issues.push({ code: candidate.code, field: 'resources' });
         }
       }
-      const after = await snapshot(input);
+      const after = await snapshot(reviewedInput);
       if (fingerprint(before.binding) !== fingerprint(after.binding))
         throw new OlistError('OLIST_PREVIEW_STALE', 409);
       const expiresAt = new Date(startedAt.getTime() + TTL).toISOString();
@@ -407,8 +475,10 @@ export function createOlistPreview(database, options) {
               expiresAt,
               commercial: plan.commercial,
               customer: plan.customer,
+              buyerSource: plan.buyerSource ?? null,
               settings: before.settings,
               productFiscal: plan.productFiscal,
+              productFiscalDeferred: before.productFiscalDeferred,
               policy: 'exact-cent-v1',
               sourceVersions: before.sourceVersions,
               registrations,
@@ -436,12 +506,19 @@ export function createOlistPreview(database, options) {
         paymentDuePolicy: before.paymentDuePolicy,
         productFiscal: before.productFiscal,
         productFiscalRequired: before.productFiscalRequired,
+        productFiscalDeferred: before.productFiscalDeferred,
+        buyerSource: plan.buyerSource
+          ? { mode: plan.buyerSource.mode, remoteId: plan.buyerSource.remoteId }
+          : null,
         issues,
         commercial: plan.commercial,
         customer: plan.customer
           ? {
               name: plan.customer.nome,
-              documentSuffix: plan.customer.cpfCnpj.slice(-4),
+              documentSuffix:
+                typeof plan.customer.cpfCnpj === 'string'
+                  ? plan.customer.cpfCnpj.slice(-4)
+                  : null,
             }
           : null,
         registrations,
@@ -519,10 +596,22 @@ export function createOlistPreview(database, options) {
   function receiptSource(input, receipt) {
     if (
       Object.hasOwn(input, 'paymentDueOn') ||
-      Object.hasOwn(input, 'productFiscal')
+      Object.hasOwn(input, 'productFiscal') ||
+      Object.hasOwn(input, 'buyerSource') ||
+      Object.hasOwn(input, 'productFiscalDeferred')
     )
       throw new OlistError('INVALID_REQUEST', 400);
     let source = input;
+    if (receipt.buyerSource) {
+      assertOlistExistingBuyerSource({
+        config,
+        customer: receipt.customer,
+        buyerSource: receipt.buyerSource,
+      });
+      if (receipt.binding.buyerSourceDigest !== receipt.buyerSource.digest)
+        throw new OlistError('OLIST_PREVIEW_INVALID');
+      source = { ...source, [REVIEWED_BUYER]: receipt.buyerSource };
+    }
     if (
       (receipt.settings?.productFiscal === null ||
         receipt.settings?.productFiscal === undefined) &&

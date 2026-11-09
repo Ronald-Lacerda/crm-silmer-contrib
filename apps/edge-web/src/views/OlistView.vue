@@ -343,6 +343,13 @@ function saveSettings() {
   /** @type {Record<string, any>} */
   const values = {};
   for (const field of idFields) {
+    if (
+      settings.paymentDuePolicy === 'erp' &&
+      ['paymentMethodId', 'receivingMethodId'].includes(field.key)
+    ) {
+      values[field.key] = null;
+      continue;
+    }
     const value = String(settings[field.key]).trim();
     if (
       value &&
@@ -359,10 +366,13 @@ function saveSettings() {
   }
   values.paymentDuePolicy = settings.paymentDuePolicy;
   values.paymentDueOn =
-    settings.paymentDuePolicy === 'per_order'
+    settings.paymentDuePolicy !== 'fixed_date'
       ? null
       : settings.paymentDueOn || null;
-  values.paymentTerms = settings.paymentTerms.trim() || null;
+  values.paymentTerms =
+    settings.paymentDuePolicy === 'erp'
+      ? null
+      : settings.paymentTerms.trim() || null;
   const fiscalValues = Object.values(fiscal).map((value) => value.trim());
   if (
     fiscalValues.some(Boolean) &&
@@ -735,7 +745,13 @@ onBeforeUnmount(() => {
           >
             <div class="olist-settings-grid">
               <div
-                v-for="field in idFields"
+                v-for="field in idFields.filter(
+                  (field) =>
+                    settings.paymentDuePolicy !== 'erp' ||
+                    !['paymentMethodId', 'receivingMethodId'].includes(
+                      field.key,
+                    ),
+                )"
                 :key="field.key"
                 class="olist-field"
               >
@@ -756,15 +772,17 @@ onBeforeUnmount(() => {
                   v-model="settings.paymentDuePolicy"
                   :disabled="accountBusy"
                 >
+                  <option value="erp">Definido no Olist</option>
                   <option value="fixed_date">Data central fixa</option>
                   <option value="per_order">Informado em cada pedido</option>
                 </select>
                 <p class="field-help">
-                  A vendedora confere a data antes de gerar a venda.
+                  No modo Olist, a ficha é enviada em aberto e o vencimento é
+                  ajustado no ERP.
                 </p>
               </div>
               <div
-                v-if="settings.paymentDuePolicy !== 'per_order'"
+                v-if="settings.paymentDuePolicy === 'fixed_date'"
                 class="olist-field"
               >
                 <label for="olist-payment-due">Vencimento do pagamento</label>
@@ -779,7 +797,10 @@ onBeforeUnmount(() => {
                   Data explícita; não é calculada pelo prazo de pagamento.
                 </p>
               </div>
-              <div class="olist-field">
+              <div
+                v-if="settings.paymentDuePolicy !== 'erp'"
+                class="olist-field"
+              >
                 <label for="olist-payment-terms">Prazo de pagamento</label
                 ><input
                   id="olist-payment-terms"
@@ -803,9 +824,8 @@ onBeforeUnmount(() => {
             <fieldset class="olist-fiscal" :disabled="accountBusy">
               <legend>Cadastro fiscal de novos produtos</legend>
               <p class="field-help">
-                Preencha com orientação fiscal. Deixe os três campos vazios para
-                exigir que a operadora informe o cadastro fiscal na prévia de
-                cada pedido.
+                Opcional. Deixe os três campos vazios para ajustar o cadastro
+                fiscal no Olist.
               </p>
               <div class="olist-settings-grid">
                 <div class="olist-field">
@@ -868,15 +888,19 @@ onBeforeUnmount(() => {
               <dt>Vencimento do pagamento</dt>
               <dd>
                 {{
-                  status.settings?.paymentDuePolicy === 'per_order'
-                    ? 'Informado em cada pedido'
-                    : status.settings?.paymentDueOn
-                      ? new Intl.DateTimeFormat('pt-BR', {
-                          timeZone: 'UTC',
-                        }).format(
-                          new Date(status.settings.paymentDueOn + 'T00:00:00Z'),
-                        )
-                      : 'Não informado'
+                  status.settings?.paymentDuePolicy === 'erp'
+                    ? 'Definido no Olist'
+                    : status.settings?.paymentDuePolicy === 'per_order'
+                      ? 'Informado em cada pedido'
+                      : status.settings?.paymentDueOn
+                        ? new Intl.DateTimeFormat('pt-BR', {
+                            timeZone: 'UTC',
+                          }).format(
+                            new Date(
+                              status.settings.paymentDueOn + 'T00:00:00Z',
+                            ),
+                          )
+                        : 'Não informado'
                 }}
               </dd>
               <dt>Cadastro fiscal de novos produtos</dt>
@@ -884,7 +908,7 @@ onBeforeUnmount(() => {
                 {{
                   status.settings?.productFiscal
                     ? `NCM ${status.settings.productFiscal.ncm} · Origem ${status.settings.productFiscal.origin} · ${status.settings.productFiscal.unit}`
-                    : 'Informado na prévia de cada pedido'
+                    : 'Ajustado no Olist'
                 }}
               </dd>
               <dt>Prazo de pagamento</dt>

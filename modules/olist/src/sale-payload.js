@@ -5,12 +5,19 @@ import {
 import { OlistError, integer, text } from './errors.js';
 import { normalizeDocument } from './configuration.js';
 import { buildCustomerPayload } from './resource-payloads.js';
+import { normalizeContactPhone } from '@crm-silmer/contacts';
+import { olistExistingBuyerDocumentHash } from './existing-buyer.js';
 import {
   parseOlistLosslessJson,
   olistNumberLexeme,
   olistIntegerFromJson,
 } from './lossless-json.js';
 const plans = new WeakSet();
+const PAYMENT_NOTE = Object.freeze({
+  pix: 'Forma de pagamento da ficha: Pix.',
+  cartao_credito: 'Forma de pagamento da ficha: Cartão de crédito.',
+  cartao_debito: 'Forma de pagamento da ficha: Cartão de débito.',
+});
 /** @param {any} value */
 function freeze(value) {
   if (value && typeof value === 'object') {
@@ -76,22 +83,61 @@ export function buildOlistSalePayload({ snapshot, resolved, reference }) {
     !/^CRM-[A-Za-z0-9-]{1,100}$/u.test(reference)
   )
     refuse();
-  buildCustomerPayload(snapshot.customer, 'CRM-sale-buyer');
+  const buyerSource = snapshot.buyerSource ?? null;
+  if (buyerSource) {
+    if (
+      buyerSource.mode !== 'erp-existing-v1' ||
+      String(id(buyerSource.remoteId)) !== buyerSource.remoteId ||
+      typeof snapshot.customer?.nome !== 'string' ||
+      buyerSource.identity?.name !==
+        snapshot.customer.nome
+          .normalize('NFC')
+          .trim()
+          .toLocaleLowerCase('pt-BR') ||
+      !buyerSource.identity?.phone ||
+      buyerSource.identity.phone !==
+        normalizeContactPhone(snapshot.customer?.celular) ||
+      (buyerSource.documentHash !== null &&
+        !/^[a-f0-9]{64}$/u.test(buyerSource.documentHash)) ||
+      !/^[a-f0-9]{64}$/u.test(buyerSource.digest)
+    )
+      refuse();
+  } else buildCustomerPayload(snapshot.customer, 'CRM-sale-buyer');
+  if (
+    Object.hasOwn(snapshot, 'productFiscalDeferred') &&
+    typeof snapshot.productFiscalDeferred !== 'boolean'
+  )
+    refuse();
+  if (
+    snapshot.productFiscalDeferred === true &&
+    (snapshot.productFiscal !== null || snapshot.settings?.productFiscal)
+  )
+    refuse();
+  if (
+    snapshot.productFiscal === null &&
+    snapshot.productFiscalDeferred !== true
+  )
+    refuse();
   const settings = snapshot.settings;
   if (
     (settings &&
       Object.hasOwn(settings, 'paymentDuePolicy') &&
-      !['fixed_date', 'per_order'].includes(settings.paymentDuePolicy)) ||
-    (settings?.paymentDuePolicy === 'per_order' &&
+      !['fixed_date', 'per_order', 'erp'].includes(
+        settings.paymentDuePolicy,
+      )) ||
+    (['per_order', 'erp'].includes(settings?.paymentDuePolicy) &&
       settings.paymentDueOn !== null &&
       settings.paymentDueOn !== undefined)
   )
     refuse('OLIST_PAYMENT_DUE_REQUIRED');
   const paymentDueOn =
-    settings?.paymentDuePolicy === 'per_order'
-      ? snapshot.commercial?.paymentDueOn
-      : settings?.paymentDueOn;
-  if (!settings || !day(paymentDueOn)) refuse('OLIST_PAYMENT_DUE_REQUIRED');
+    settings?.paymentDuePolicy === 'erp'
+      ? null
+      : settings?.paymentDuePolicy === 'per_order'
+        ? snapshot.commercial?.paymentDueOn
+        : settings?.paymentDueOn;
+  if (!settings || (settings.paymentDuePolicy !== 'erp' && !day(paymentDueOn)))
+    refuse('OLIST_PAYMENT_DUE_REQUIRED');
   if (
     settings.paymentDuePolicy !== 'per_order' &&
     snapshot.commercial?.paymentDueOn !== undefined &&
@@ -103,7 +149,16 @@ export function buildOlistSalePayload({ snapshot, resolved, reference }) {
     !day(snapshot.commercial?.deliveryOn)
   )
     refuse();
-  text(settings.paymentTerms, 120);
+  if (settings.paymentDuePolicy !== 'erp') text(settings.paymentTerms, 120);
+  const paymentNote =
+    settings.paymentDuePolicy === 'erp'
+      ? PAYMENT_NOTE[
+          /** @type {keyof typeof PAYMENT_NOTE} */ (
+            snapshot.commercial.paymentCondition
+          )
+        ]
+      : null;
+  if (settings.paymentDuePolicy === 'erp' && !paymentNote) refuse();
   const groups = dense(snapshot.commercial.groups);
   const prepared = prepareExactCentExport(
     groups.map((group) => ({
@@ -167,6 +222,7 @@ export function buildOlistSalePayload({ snapshot, resolved, reference }) {
   });
   const customerId = String(id(resolved.customerId)),
     originId = String(integer(settings.originId));
+  if (buyerSource && customerId !== buyerSource.remoteId) refuse();
   const payload = {
     idContato: id(customerId),
     data: snapshot.commercial.orderDate,
@@ -182,19 +238,25 @@ export function buildOlistSalePayload({ snapshot, resolved, reference }) {
     ...(settings.purchaseOrder !== null && settings.purchaseOrder !== undefined
       ? { numeroOrdemCompra: text(settings.purchaseOrder, 120) }
       : {}),
-    pagamento: {
-      meioPagamento: { id: integer(settings.paymentMethodId) },
-      ...(settings.receivingMethodId !== null &&
-      settings.receivingMethodId !== undefined
-        ? { formaRecebimento: { id: integer(settings.receivingMethodId) } }
-        : {}),
-      parcelas: [
-        {
-          data: paymentDueOn,
-          valor: cents(/** @type {number} */ (prepared.totalCents)),
-        },
-      ],
-    },
+    ...(settings.paymentDuePolicy === 'erp'
+      ? { observacoes: paymentNote }
+      : {
+          pagamento: {
+            meioPagamento: { id: integer(settings.paymentMethodId) },
+            ...(settings.receivingMethodId !== null &&
+            settings.receivingMethodId !== undefined
+              ? {
+                  formaRecebimento: { id: integer(settings.receivingMethodId) },
+                }
+              : {}),
+            parcelas: [
+              {
+                data: paymentDueOn,
+                valor: cents(/** @type {number} */ (prepared.totalCents)),
+              },
+            ],
+          },
+        }),
     itens: prepared.lines.map((line) => ({
       produto: { id: id(mapped.get(line.lineId).productId) },
       quantidade: line.quantity,
@@ -213,7 +275,10 @@ export function buildOlistSalePayload({ snapshot, resolved, reference }) {
     reference,
     customerId,
     originId,
-    buyerDocument: normalizeDocument(snapshot.customer.cpfCnpj),
+    buyerDocument: buyerSource
+      ? null
+      : normalizeDocument(snapshot.customer.cpfCnpj),
+    buyerSource: buyerSource ? structuredClone(buyerSource) : null,
     orderDate: payload.data,
     deliveryOn: payload.dataPrevista,
     lines,
@@ -223,8 +288,12 @@ export function buildOlistSalePayload({ snapshot, resolved, reference }) {
       warehouseId: settings.warehouseId,
       priceListId: settings.priceListId ?? null,
       purchaseOrder: settings.purchaseOrder ?? null,
-      paymentMethodId: settings.paymentMethodId,
-      receivingMethodId: settings.receivingMethodId ?? null,
+      paymentMethodId:
+        settings.paymentDuePolicy === 'erp' ? null : settings.paymentMethodId,
+      receivingMethodId:
+        settings.paymentDuePolicy === 'erp'
+          ? null
+          : (settings.receivingMethodId ?? null),
       paymentDueOn,
       paymentDuePolicy: settings.paymentDuePolicy ?? 'fixed_date',
     },
@@ -281,8 +350,8 @@ function optionalId(actual, expected) {
 /** Exact per-line reconciliation. The returned marker correlates identity only;
  * independently returned quantity/unit lexemes prove subtotal, and both totals
  * must match. No upstream body or PII is returned in a problem or observation.
- * @param {any} plan @param {string} raw @param {string|number} remoteId */
-export function reconcileOlistSale(plan, raw, remoteId) {
+ * @param {any} plan @param {string} raw @param {string|number} remoteId @param {any} [identityContext] */
+export function reconcileOlistSale(plan, raw, remoteId, identityContext) {
   assertOlistSalePlan(plan);
   try {
     const body = parseOlistLosslessJson(raw);
@@ -293,7 +362,13 @@ export function reconcileOlistSale(plan, raw, remoteId) {
       olistIntegerFromJson(body.situacao, true) !== 0 ||
       body.data !== plan.orderDate ||
       olistIntegerFromJson(body.cliente?.id) !== id(plan.customerId) ||
-      normalizeDocument(body.cliente?.cpfCnpj) !== plan.buyerDocument ||
+      (plan.buyerSource
+        ? plan.buyerSource.documentHash !== null &&
+          olistExistingBuyerDocumentHash(
+            identityContext,
+            body.cliente?.cpfCnpj,
+          ) !== plan.buyerSource.documentHash
+        : normalizeDocument(body.cliente?.cpfCnpj) !== plan.buyerDocument) ||
       olistIntegerFromJson(body.ecommerce?.id) !== id(plan.originId) ||
       body.ecommerce?.numeroPedidoEcommerce !== plan.reference
     )
@@ -338,51 +413,61 @@ export function reconcileOlistSale(plan, raw, remoteId) {
     )
       refuse('OLIST_SALE_READBACK_MISMATCH');
     if (body.pagamento) {
-      optionalId(body.pagamento.meioPagamento, plan.settings.paymentMethodId);
-      optionalId(
-        body.pagamento.formaRecebimento,
-        plan.settings.receivingMethodId,
-      );
+      if (!emptyObject(body.pagamento.transacao))
+        refuse('OLIST_SALE_READBACK_MISMATCH');
+      if (plan.settings.paymentDuePolicy !== 'erp') {
+        optionalId(body.pagamento.meioPagamento, plan.settings.paymentMethodId);
+        optionalId(
+          body.pagamento.formaRecebimento,
+          plan.settings.receivingMethodId,
+        );
+      }
       if (
         body.pagamento.parcelas !== undefined &&
         body.pagamento.parcelas !== null
       ) {
         const installments = dense(body.pagamento.parcelas);
-        if (
-          installments.length !== 1 ||
-          returnedDueDay(installments[0].data) !== plan.settings.paymentDueOn ||
-          !emptyObject(installments[0].transacao)
-        )
-          refuse('OLIST_SALE_READBACK_MISMATCH');
-        const checked = reconcileExactCentExport(
-          {
-            policy: 'exact-cent-v1',
-            eligible: true,
-            totalCents: plan.prepared.totalCents,
-            issues: [],
-            lines: [
-              {
-                ...plan.prepared.lines[0],
-                quantity: 1,
-                subtotalCents: plan.prepared.totalCents,
-                unitCents: plan.prepared.totalCents,
-                unitLexeme: plan.totalLexeme,
-              },
-            ],
-          },
-          {
-            lines: [
-              {
-                lineId: plan.prepared.lines[0].lineId,
-                quantity: 1,
-                unitLexeme: olistNumberLexeme(installments[0].valor),
-              },
-            ],
-            totalProductsLexeme: plan.totalLexeme,
-            totalOrderLexeme: plan.totalLexeme,
-          },
-        );
-        if (!checked.matched) refuse('OLIST_SALE_READBACK_MISMATCH');
+        if (plan.settings.paymentDuePolicy === 'erp') {
+          if (installments.some((entry) => !emptyObject(entry.transacao)))
+            refuse('OLIST_SALE_READBACK_MISMATCH');
+        } else {
+          if (
+            installments.length !== 1 ||
+            returnedDueDay(installments[0].data) !==
+              plan.settings.paymentDueOn ||
+            !emptyObject(installments[0].transacao)
+          )
+            refuse('OLIST_SALE_READBACK_MISMATCH');
+          const checked = reconcileExactCentExport(
+            {
+              policy: 'exact-cent-v1',
+              eligible: true,
+              totalCents: plan.prepared.totalCents,
+              issues: [],
+              lines: [
+                {
+                  ...plan.prepared.lines[0],
+                  quantity: 1,
+                  subtotalCents: plan.prepared.totalCents,
+                  unitCents: plan.prepared.totalCents,
+                  unitLexeme: plan.totalLexeme,
+                },
+              ],
+            },
+            {
+              lines: [
+                {
+                  lineId: plan.prepared.lines[0].lineId,
+                  quantity: 1,
+                  unitLexeme: olistNumberLexeme(installments[0].valor),
+                },
+              ],
+              totalProductsLexeme: plan.totalLexeme,
+              totalOrderLexeme: plan.totalLexeme,
+            },
+          );
+          if (!checked.matched) refuse('OLIST_SALE_READBACK_MISMATCH');
+        }
       }
     }
     const lines = dense(body.itens).map((line) => {

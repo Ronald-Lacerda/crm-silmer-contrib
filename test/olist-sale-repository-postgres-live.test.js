@@ -13,6 +13,7 @@ import { createOlistDispatcher } from '../modules/olist/src/dispatcher.js';
 import { createOlistResourceResolver } from '../modules/olist/src/resource-resolver.js';
 import { createOlistResourceWriter } from '../modules/olist/src/resource-writer.js';
 import { createOlistSaleWriter } from '../modules/olist/src/sale-writer.js';
+import { captureOlistExistingBuyer } from '../modules/olist/src/existing-buyer.js';
 
 const connectionString = process.env.TEST_DATABASE_URL;
 const NOW = new Date('2026-11-06T12:00:00Z');
@@ -116,7 +117,7 @@ else
           randomUUID(),
         ],
       );
-      const snapshot = {
+      /** @type {any} */ const snapshot = {
         policy: 'exact-cent-v1',
         customer: {
           nome: 'Comprador Privado Sintético',
@@ -188,6 +189,26 @@ else
           ),
         ],
       );
+      let erpBuyer = null;
+      if (behavior.existingBuyer) {
+        erpBuyer = { id: 101, ...snapshot.customer };
+        Object.assign(
+          snapshot,
+          captureOlistExistingBuyer({
+            config: {
+              accountKey: behavior.sourceAccountKey ?? accountKey,
+              hmacKey: HMAC,
+            },
+            buyer: { name: erpBuyer.nome, phone: erpBuyer.celular },
+            contact: erpBuyer,
+          }),
+        );
+        if (behavior.forgedProof) snapshot.buyerSource.digest = '0'.repeat(64);
+        if (behavior.deferredFiscal) {
+          snapshot.productFiscal = null;
+          snapshot.productFiscalDeferred = true;
+        }
+      }
       const repo = repoFor();
       const operation = await repo.prepareExport({
         ...base,
@@ -205,19 +226,22 @@ else
           actorId,
           orderId,
           contactId,
+          erpBuyer,
         };
-      const customer = await repo.bindResource({
-        ...input,
-        kind: 'customer',
-        identity: snapshot.customer.cpfCnpj,
-        payload: snapshot.customer,
-      });
-      await repo.confirmResourceLookup({
-        ...input,
-        resourceId: customer.id,
-        expectedVersion: 0,
-        remoteId: '101',
-      });
+      if (!behavior.existingBuyer) {
+        const customer = await repo.bindResource({
+          ...input,
+          kind: 'customer',
+          identity: snapshot.customer.cpfCnpj,
+          payload: snapshot.customer,
+        });
+        await repo.confirmResourceLookup({
+          ...input,
+          resourceId: customer.id,
+          expectedVersion: 0,
+          remoteId: '101',
+        });
+      }
       const parent = await repo.bindResource({
         ...input,
         kind: 'product',
@@ -256,7 +280,16 @@ else
         customerId: '101',
         groups: [{ groupId, productId: '201', lines }],
       };
-      return { repo, input, resources, snapshot, actorId, orderId, contactId };
+      return {
+        repo,
+        input,
+        resources,
+        snapshot,
+        actorId,
+        orderId,
+        contactId,
+        erpBuyer,
+      };
     }
     async function reserved() {
       const f = await fixture();
@@ -287,6 +320,11 @@ else
       let sequence = 100,
         timeoutSale = Boolean(behavior.timeoutSale),
         failObservation = Boolean(behavior.failObservation);
+      if (behavior.existingBuyer)
+        contacts.set(
+          behavior.existingBuyer.id,
+          structuredClone(behavior.existingBuyer),
+        );
       const scoped = behavior.failObservation
         ? {
             query: database.query,
@@ -389,6 +427,7 @@ else
             });
             parent.variacoes.push({ ...variation, id: childId });
           }
+          if (behavior.afterProduct) await behavior.afterProduct(contacts);
         } else if (kind === 'variation') {
           const parentId = Number(path.split('/').at(-2));
           products.set(id, {
@@ -408,7 +447,9 @@ else
             numeroPedido: id + 1000,
             cliente: {
               id: payload.idContato,
-              cpfCnpj: f.snapshot.customer.cpfCnpj,
+              cpfCnpj:
+                contacts.get(payload.idContato)?.cpfCnpj ??
+                f.snapshot.customer.cpfCnpj,
             },
             ...payload,
             valorTotalProdutos: 6,
@@ -447,6 +488,98 @@ else
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
       await migrate(pool, { migrations: await loadMigrations() });
+      await t.test(
+        'ERP-existing mapping requires account-bound frozen proof and exact ID without any customer resource',
+        async () => {
+          for (const mode of ['valid', 'forged', 'other-account', 'wrong-id']) {
+            const f = await fixture({
+              existingBuyer: true,
+              sourceAccountKey: mode === 'other-account' ? 'other' : accountKey,
+              forgedProof: mode === 'forged',
+            });
+            if (mode === 'wrong-id') f.resources.customerId = '902';
+            if (mode === 'valid') {
+              await f.repo.markReady({ ...f.input, resources: f.resources });
+              await f.repo.reserveSaleEffect({
+                ...f.input,
+                requestPayload: { encoded: '{"synthetic":true}' },
+              });
+              assert.equal(await attemptCount(f.input.exportId), 1);
+            } else {
+              await assert.rejects(
+                f.repo.markReady({ ...f.input, resources: f.resources }),
+                {
+                  code:
+                    mode === 'wrong-id'
+                      ? 'OLIST_RESOURCES_UNRESOLVED'
+                      : 'OLIST_CUSTOMER_DIVERGENT',
+                },
+              );
+              assert.equal(await attemptCount(f.input.exportId), 0);
+            }
+            assert.equal(
+              (
+                await pool.query(
+                  "SELECT count(*)::int n FROM crm.olist_resources WHERE account_key=$1 AND kind='customer'",
+                  [accountKey],
+                )
+              ).rows[0].n,
+              0,
+            );
+          }
+        },
+      );
+      await t.test(
+        'real dispatcher reuses ERP buyer and defers product fiscal without POSTcustomer; changed buyer blocks sale reservation',
+        async () => {
+          for (const changed of [false, true]) {
+            const f = await fixture({
+                fresh: true,
+                existingBuyer: true,
+                deferredFiscal: true,
+              }),
+              contact = f.erpBuyer;
+            const remote = remoteFor(f, {
+              existingBuyer: contact,
+              ...(changed
+                ? {
+                    afterProduct: (/** @type {Map<number,any>} */ contacts) => {
+                      contacts.get(101).situacao = 'I';
+                    },
+                  }
+                : {}),
+            });
+            const result = await remote.dispatcher.dispatch(f.input);
+            assert.deepEqual(
+              remote.writes.map((row) => row.kind),
+              changed ? ['product'] : ['product', 'sale'],
+            );
+            assert.equal(await attemptCount(f.input.exportId), changed ? 0 : 1);
+            assert.ok(
+              remote.writes
+                .filter((row) => row.kind === 'product')
+                .every(
+                  (row) =>
+                    !Object.hasOwn(row.payload, 'ncm') &&
+                    !Object.hasOwn(row.payload, 'origem') &&
+                    !Object.hasOwn(row.payload, 'unidade'),
+                ),
+            );
+            assert.equal(
+              (
+                await pool.query(
+                  "SELECT count(*)::int n FROM crm.olist_resources WHERE account_key=$1 AND kind='customer'",
+                  [accountKey],
+                )
+              ).rows[0].n,
+              0,
+            );
+            assert.equal(result.outcome, changed ? 'outcome_unknown' : 'sent');
+            if (changed)
+              assert.equal(result.errorCode, 'OLIST_CUSTOMER_DIVERGENT');
+          }
+        },
+      );
       await t.test(
         'ready validates every customer, parent and size mapping by identity and freezes it once',
         async () => {

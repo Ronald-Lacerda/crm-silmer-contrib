@@ -161,7 +161,8 @@ export function buildCustomerPayload(customer, stableReference) {
 /** @param {{size:string,sku:string,fiscal?:unknown}} input */
 export function buildVariationPayload(input) {
   const value = record(input, ['size', 'sku', 'fiscal'], ['size', 'sku']);
-  if (value.fiscal !== undefined) fiscalFields(value.fiscal); // Validate explicit policy; official variation inherits parent fiscal fields.
+  if (value.fiscal !== undefined && value.fiscal !== null)
+    fiscalFields(value.fiscal); // Validate explicit policy; official variation inherits parent fiscal fields.
   return {
     sku: sku(value.sku),
     grade: [{ chave: 'Tamanho', valor: size(value.size) }],
@@ -195,7 +196,7 @@ export function buildProductPayload(input) {
     sku: sku(value.sku),
     tipo: 'V',
     descricao: productDescription(value.attributes),
-    ...fiscalFields(value.fiscal),
+    ...(value.fiscal === null ? {} : fiscalFields(value.fiscal)),
     grade: ['Tamanho'],
     variacoes: variations,
   };
@@ -224,7 +225,7 @@ export function validateResourcePayload(kind, raw) {
     return buildVariationPayload({ sku: value.sku, size: grade.valor });
   }
   if (kind === 'product') {
-    const value = record(raw, [
+    const productFields = [
       'sku',
       'tipo',
       'descricao',
@@ -233,7 +234,19 @@ export function validateResourcePayload(kind, raw) {
       'unidade',
       'grade',
       'variacoes',
-    ]);
+    ];
+    const fiscalKeys = ['ncm', 'origem', 'unidade'];
+    const value = record(
+      raw,
+      productFields,
+      productFields.filter((key) => !fiscalKeys.includes(key)),
+    );
+    const fiscalPresent = fiscalKeys.filter((key) => Object.hasOwn(value, key));
+    if (
+      fiscalPresent.length !== 0 &&
+      fiscalPresent.length !== fiscalKeys.length
+    )
+      throw new OlistError('INVALID_REQUEST', 400);
     if (
       value.tipo !== 'V' ||
       !Array.isArray(value.grade) ||
@@ -265,11 +278,13 @@ export function validateResourcePayload(kind, raw) {
       sku: sku(value.sku),
       tipo: 'V',
       descricao: text(value.descricao, 14000).normalize('NFC'),
-      ...fiscalFields({
-        ncm: value.ncm,
-        origin: value.origem,
-        unit: value.unidade,
-      }),
+      ...(fiscalPresent.length
+        ? fiscalFields({
+            ncm: value.ncm,
+            origin: value.origem,
+            unit: value.unidade,
+          })
+        : {}),
       grade: ['Tamanho'],
       variacoes: variations,
     };

@@ -2,6 +2,11 @@
 
 ## Emenda de 09/11/2026
 
+- [057 — Comprador no vínculo histórico com telefone divergente](057-comprador-no-vinculo-historico-com-telefone-divergente.md), adotada na ADR 073, exclusiva do vínculo histórico T16.
+
+- [056 — Envio simples da ficha com cadastros no Olist](056-envio-simples-da-ficha-com-cadastros-no-olist.md),
+  adotada na ADR 072 após a revisão de escopo pelo proprietário.
+
 - [055 — Vencimento por pedido e vínculo histórico no Olist](055-vencimento-por-pedido-e-vinculo-historico-no-olist.md),
   adotada na ADR 071 para OLIST-T15–T17.
 

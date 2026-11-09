@@ -461,7 +461,7 @@ for (const [stateName, stage, expected, headline] of STATES) {
       preparation(page).getByRole('button', { name: noRetry }),
     ).toHaveCount(0);
     await expect(
-      page.getByRole('button', { name: /Gerar venda|Conferir prévia/u }),
+      page.getByRole('button', { name: /Enviar para Olist|Revisar envio/u }),
     ).toHaveCount(0);
     // Quem só está habilitado lê o estado: nada administrativo é pedido ou mostrado.
     await expect(page.locator('.olist-recovery')).toHaveCount(0);
@@ -507,7 +507,7 @@ test('T13 uncertainty blocks the stage, explains it safely and never offers a re
     preparation(page).getByRole('button', { name: noRetry }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole('button', { name: /Gerar venda|Conferir prévia/u }),
+    page.getByRole('button', { name: /Enviar para Olist|Revisar envio/u }),
   ).toHaveCount(0);
   expectNoCreation(state);
 });
@@ -650,7 +650,7 @@ test('T13 an admin with an operation in the queue loads the diagnosis exactly on
   });
   await open(page);
   await expect(page.locator('.olist-recovery')).toBeVisible();
-  expect(countCalls(admin, '/administration', 'GET')).toBe(1);
+  await expect.poll(() => countCalls(admin, '/administration', 'GET')).toBe(1);
 });
 
 test('T13 reconcile asks for a reason, keeps focus, sends the target version and follows the persisted result', async ({
@@ -1579,7 +1579,7 @@ test('T13 an administrator without the Olist checkbox keeps the progress and the
   });
   await openOrder(page);
   const generation = page.getByRole('button', {
-    name: /Conferir prévia Olist|Validar prévia|Gerar venda/u,
+    name: /Revisar envio|Enviar para Olist|Enviar para Olist/u,
   });
   const expectAdministration = async () => {
     await expect(page.locator('.olist-progress')).toBeVisible();
@@ -1591,7 +1591,9 @@ test('T13 an administrator without the Olist checkbox keeps the progress and the
     ).toBeVisible();
     await expect(generation).toHaveCount(0);
     await expect(
-      page.getByText('Seu usuário não está habilitado para conferir a prévia'),
+      page.getByText(
+        'Seu usuário não está habilitado para enviar pedidos ao Olist.',
+      ),
     ).toBeVisible();
   };
   await expectAdministration();
@@ -1887,7 +1889,7 @@ test('T13 cancelling the order on its page removes the preview, the conference a
   });
   await openOrder(page);
   const controls = page.getByRole('button', {
-    name: /Conferir prévia Olist|Vincular venda existente/u,
+    name: /Revisar envio|Vincular venda existente/u,
   });
   await expect(controls).toHaveCount(2);
   await page
@@ -1905,7 +1907,7 @@ test('T13 cancelling the order on its page removes the preview, the conference a
     'Pedido cancelado. A geração está bloqueada.',
   );
   await expect(
-    panel.getByRole('button', { name: /Gerar venda|Validar prévia/u }),
+    panel.getByRole('button', { name: /Enviar para Olist|Enviar para Olist/u }),
   ).toHaveCount(0);
   await expect(panel.locator('.olist-recovery')).toContainText(
     'A conferência e o vínculo estão bloqueados',
@@ -1940,7 +1942,7 @@ test('T13 an order already cancelled opens with no preview, conference or link c
   );
   await expect(
     panel.getByRole('button', {
-      name: /Conferir prévia|Vincular venda|Conferir no Olist|Gerar venda/u,
+      name: /Revisar envio|Vincular venda|Conferir no Olist|Enviar para Olist/u,
     }),
   ).toHaveCount(0);
   // The read-only history is still there.
@@ -1972,7 +1974,7 @@ test('T13 the Olist page blocks the controls for an order its lookup reported as
   );
   await expect(
     panel.getByRole('button', {
-      name: /Conferir prévia|Vincular venda|Gerar venda/u,
+      name: /Revisar envio|Vincular venda|Enviar para Olist/u,
     }),
   ).toHaveCount(0);
 });
