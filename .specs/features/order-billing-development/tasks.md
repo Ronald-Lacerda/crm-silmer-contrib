@@ -53,7 +53,17 @@ Where: scripts/billing-development-smoke.mjs
 Tests: n8n real/HTTP/rotas e banco, sinal3000/saldo7000, Pix/cartão3x, duplicidade, pagamento forjado/menor e falha de callback com reentrega; cleanup isolado.
 Gate: Runtime
 Done when: BDEV-03–06 comprovados com execução reproduzível local e fronteiras não exercitadas declaradas.
-Status: Pending
+Status: Complete
+
+Ensaio real n8n 2.38.7/rotas/runtime/worker/PostgreSQL dedicado: 9 cenários
+aprovados em `var/billing-development-HlZNQJ/report.json`, com
+`resourcesRemoved:true`. Sinal3000/saldo7000, Pix/cartão3x e quitação corretos;
+replay sem duplicar link/pagamento, aviso não confirmado, pagamento menor,
+callback com falha/reentrega e criação com resposta perdida preservada incerta.
+Logs sem credenciais/URLs sintéticas; rede interna sem portas publicadas.
+Cancelamento SIGINT durante startup também removeu recursos próprios
+(`var/billing-development-Nhhi3j/report.json`). Unit do simulador4/4,
+typecheck/lint/formatação aprovados. O transporte WhatsApp não é executado.
 
 ### T3: Preparar integração frontend e registrar operação de desenvolvimento
 
