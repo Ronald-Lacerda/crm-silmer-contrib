@@ -724,6 +724,8 @@ else
           const before = await repository.summary({
             from: '2026-11-06',
             to: '2026-11-06',
+            dailyFrom: '2026-11-06',
+            dailyTo: '2026-11-06',
           });
           await runtime.cancel(command(ids[1], { actor: OTHER }));
           const first = await repository.list(query);
@@ -751,6 +753,8 @@ else
           const after = await repository.summary({
             from: '2026-11-06',
             to: '2026-11-06',
+            dailyFrom: '2026-11-06',
+            dailyTo: '2026-11-06',
           });
           assert.equal(before.confirmedCount - after.confirmedCount, 1);
           assert.equal(before.soldAmountCents - after.soldAmountCents, 50000);

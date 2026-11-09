@@ -18,8 +18,10 @@ if (connectionString) {
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
       const migrations = await loadMigrations();
+      // The state before the first Olist migration is exactly the master's
+      // production schema (upgrade path: master -> Olist, RFC 050 integration).
       const foundation = migrations.find(
-        (entry) => entry.name === 'olist_foundation',
+        (entry) => entry.name === 'olist_user_authorization',
       );
       assert.ok(foundation);
       await migrate(pool, {

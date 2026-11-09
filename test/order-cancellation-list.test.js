@@ -105,6 +105,8 @@ test('OLIST-T23 cancelled sales leave summaries and deliveries, preserving payme
   const before = await repository.summary({
     from: '2026-11-06',
     to: '2026-11-06',
+    dailyFrom: '2026-11-06',
+    dailyTo: '2026-11-06',
   });
   const cancelled = await cancel(repository, order);
   assert.equal(cancelled.status, 'confirmado');
@@ -114,6 +116,8 @@ test('OLIST-T23 cancelled sales leave summaries and deliveries, preserving payme
   const after = await repository.summary({
     from: '2026-11-06',
     to: '2026-11-06',
+    dailyFrom: '2026-11-06',
+    dailyTo: '2026-11-06',
   });
   assert.equal(before.confirmedCount, 2);
   assert.equal(after.confirmedCount, 1);
