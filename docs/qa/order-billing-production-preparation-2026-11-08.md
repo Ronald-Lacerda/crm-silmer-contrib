@@ -85,3 +85,36 @@ Referências: [runbook](../runbooks/order-billing.md),
 [spec](../../.specs/features/order-billing-production-preparation/spec.md),
 [default GET oficial do n8n](https://github.com/n8n-io/n8n/blob/master/packages/nodes-base/nodes/HttpRequest/V3/Description.ts),
 [contrato InfinitePay](https://www.infinitepay.io/checkout-documentacao).
+
+## Atualização de credenciais em09/11/2026 — COB-OPS-PREP-03
+
+Após autorização explícita do proprietário para reutilizar as Basic, os dois
+rascunhos foram atualizados pela interface do n8n. O estado anterior descrito
+acima permanece como histórico da preparação de08/11.
+
+- Cada workflow conserva um gatilho Basic com `Silmer CRM para n8n Basic DEV`.
+- As quatro chamadas CRM de cada workflow usam agora `Silmer n8n para CRM Basic DEV`, a mesma identidade já referenciada na loja e no atendimento.
+- O campo User da primeira corresponde a N8N_COMMAND_CLIENT_ID do worker; o da segunda corresponde a CRM_AUTOMATION_CLIENT_ID da API. Somente identificadores foram comparados; senhas não foram reveladas, alteradas ou comparadas.
+- Novas exportações comprovaram activefalse, quatro bindings de saída e um de entrada por workflow, parâmetros/conexões/settings iguais aos anteriores. Retenção de execuções permanece desligada.
+
+O sufixo DEV é o nome existente, não uma classificação verificada de ambiente.
+O vínculo foi conferido; autenticação ponta a ponta dos novos endpoints
+financeiros permanece pendente da implantação compatível. Não houve Publish,
+Execute, nova cobrança, mensagem, pagamento, troca de segredo ou mudança de flags.
+
+Provas privadas: `basic-reuse-review.json`, `order-billing-basic-reused.json`,
+`payment-check-basic-reused.json` e `basic-reuse.jpg` no mesmo diretório ignorado.
+O comparador assertou ambos workflows e todas as dez referências Basic,
+preservando os exports anteriores. Esta atualização não altera código runtime.
+
+A API Key InfinitePay continua pendente. Conforme a documentação oficial
+consultada em09/11, é criada na Conta Web ou App, em Configurações do Checkout,
+após ativar Checkout Integrado. Começa com inchk_ e aparece uma vez. Deve ser
+cadastrada diretamente em uma credencial Header Auth no n8n, com Name
+X-Api-Key e nome descritivo InfinitePay Checkout API Key, na mesma conta da
+InfiniteTag. Não colocar chave no chat, código ou JSON do workflow.
+
+Handle continua suficiente para criar link básico. Nesta feature as options
+single_payment e valid_until exigem API Key; sem ela não há evidência das
+garantias de uso único e vencimento do provedor. Slug de fatura é outro
+identificador, usado na conferência de pagamento, não uma credencial.
