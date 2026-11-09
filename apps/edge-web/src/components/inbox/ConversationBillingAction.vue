@@ -10,6 +10,7 @@ const props = defineProps({
   conversationVersion: { type: Number, required: true },
   destinationLabel: { type: String, default: '' },
   subjects: { type: Array, default: () => [] },
+  linkedOrder: { type: Object, default: null },
   disabled: { type: Boolean, default: false },
   revision: { type: Number, default: 0 },
 });
@@ -21,9 +22,18 @@ const error = ref('');
 let controller;
 const targets = computed(() => [
   ...new Map(
-    props.subjects
-      .filter((subject) => subject.orderId)
-      .map((subject) => [subject.orderId, subject]),
+    [
+      ...(props.linkedOrder?.id
+        ? [
+            {
+              orderId: props.linkedOrder.id,
+              orderNumber: props.linkedOrder.number,
+              label: 'Pedido vinculado à conversa',
+            },
+          ]
+        : []),
+      ...props.subjects.filter((subject) => subject.orderId),
+    ].map((target) => [target.orderId, target]),
   ).values(),
 ]);
 async function open(event) {
