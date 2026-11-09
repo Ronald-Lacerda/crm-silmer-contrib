@@ -1,5 +1,16 @@
 # Regras do CRM Silmer
 
+## Pagamentos mistos e conciliação, 08/11/2026
+
+A [ADR067](docs/adr/067-recebimentos-externos-e-conciliacao-de-cobrancas.md)
+autoriza recebimentos externos de pedidos geridos, registrados pelo
+responsável/Admin com valor, data efetiva, método e autoria. Fonte externa
+não inventa NSU/cobrança InfinitePay. Crédito de ambas as fontes determina
+saldo e quitação; reversão corrige o registro sem devolver dinheiro. Acordo
+alterado/excesso exige revisão e histórico preservado. Conferência verifica
+o provedor pelo n8n, sem confiar em declaração de pagamento ou criar link.
+Frontend está autorizado no redesign atual; produção continua desativada.
+
 ## Backend de envio integrado, 06/11/2026
 
 A [ADR 066](docs/adr/066-intencoes-de-cobranca-e-envio-transacional.md)
