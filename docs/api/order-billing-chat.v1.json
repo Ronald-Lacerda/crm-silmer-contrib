@@ -560,6 +560,14 @@
             "type": "integer",
             "minimum": 100,
             "maximum": 9007199254740991
+          },
+          "supersedesChargeId": {
+            "type": ["string", "null"],
+            "maxLength": 255
+          },
+          "retryOfIntentId": {
+            "type": ["string", "null"],
+            "maxLength": 255
           }
         }
       },
@@ -641,6 +649,14 @@
                   "pattern": "^[!-~]+$"
                 },
                 "intentId": {
+                  "type": ["string", "null"],
+                  "maxLength": 255
+                },
+                "supersedesChargeId": {
+                  "type": ["string", "null"],
+                  "maxLength": 255
+                },
+                "retryOfIntentId": {
                   "type": ["string", "null"],
                   "maxLength": 255
                 },

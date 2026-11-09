@@ -487,3 +487,33 @@ test('BAPI-01: published schemas match the executable HTTP contract', async () =
     'Intenção persistida; não comprova envio ou pagamento',
   );
 });
+
+test('BAPI-11: authorized reads preserve correction and retry relationships through HTTP serialization', async (t) => {
+  const { api, service } = fixture();
+  t.after(() => api.close());
+  const relationships = {
+    supersedesChargeId: 'charge-predecessor',
+    retryOfIntentId: 'intent-predecessor',
+  };
+  service.getIntent = async () => ({ ...INTENT, ...relationships });
+  service.getHistory = async () => ({
+    ...HISTORY,
+    items: [{ ...HISTORY.items[0], ...relationships }],
+  });
+  for (const [path, expected] of [
+    ['send-intents/intent-example', { ...INTENT, ...relationships }],
+    [
+      'history',
+      { ...HISTORY, items: [{ ...HISTORY.items[0], ...relationships }] },
+    ],
+  ]) {
+    const response = await api.inject({
+      method: 'GET',
+      url: `${PREFIX}/${path}`,
+      headers: HEADERS,
+    });
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), expected);
+    assert.match(String(response.headers['cache-control']), /no-store/);
+  }
+});

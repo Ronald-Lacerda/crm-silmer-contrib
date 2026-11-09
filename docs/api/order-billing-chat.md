@@ -1,27 +1,33 @@
 # Intenções de envio de cobrança, contrato v1
 
-COB-CHAT-B01 / BAPI-01–10, [RFC 047](../rfc/047-enviar-cobranca-pela-conversa.md),
+COB-CHAT-B01–B05 e COB-API-READY / BAPI-01–11, [RFC 047](../rfc/047-enviar-cobranca-pela-conversa.md),
 [ADR 066](../adr/066-intencoes-de-cobranca-e-envio-transacional.md),
 [OpenAPI](order-billing-chat.v1.json). Backend autorizado em 06/11/2026.
 Frontend adiado para o redesign. O contrato independe de tela e compositor.
 
 ## Disponibilidade desta entrega
 
-B01 implementa a fronteira HTTP injetável. B02 acrescenta serviço PostgreSQL
-injetável e migração expand 0063, com intenção, reserva financeira, histórico
-e auditoria transacionais. Ainda não há registro em `server.js` ou envio de mensagem.
-`registerOrderBillingChatRoutes` exige injeção explícita e escrita habilitada
-explicitamente; o default é escrita desligada. Não habilitar em produção com
-um serviço simulado. B03/B04 compõem a Inbox e integram runtime/recuperação.
-Os testes HTTP com serviço sintético não comprovam transações. As provas de
-B02 usam PostgreSQL local dedicado. Callback, reserva final de transporte e
-ativação de BAPI-07/09/10 continuam pendentes.
+B01–B05 estão integrados no backend. `server.js` instancia os serviços
+PostgreSQL de cobranças e intenções, compõe a Inbox pela outbox existente e
+registra as rotas. As migrações expand 0063 e 0064 acrescentam intenção,
+histórico e acompanhamento do transporte. Callback, mensagem, outbox,
+auditoria e invalidação da Inbox compartilham a transação; reserva e preflight
+revalidam as condições de envio. Os gates locais incluem PostgreSQL sintético;
+isso não comprova publicação ou funcionamento financeiro remoto.
 
-Em B02, `send_existing` e `retry` também ficam em `waiting_link`: a URL pode
-estar salva, mas a composição da mensagem ainda não existe. `queued` somente
-será usado em B03 após persistir mensagem/outbox da Inbox. A outbox financeira
-é criada junto à nova cobrança; não é criada outra para link existente ou
-retry. Não conectar o serviço ao runtime/worker antes das guardas de B03/B04.
+`waiting_link` aguarda a URL. Quando uma URL existente está elegível,
+`send_existing` e `retry` podem compor a mensagem imediatamente e retornar
+`queued`. A outbox financeira nasce somente com uma nova cobrança; reutilizar
+link ou tentar novamente um envio seguro não emite outro checkout. O retorno
+202 confirma a intenção persistida, nunca envio, entrega ou pagamento.
+
+A escrita continua desligada por padrão. A implementação real da nova
+interface depende do redesign; o protótipo usa fixtures isoladas e não conecta
+essas rotas. A inspeção do workflow da loja publicado em 08/11/2026 não
+homologa as cobranças de pedidos existentes nem habilita flags nesta entrega.
+Preparação, teste do workflow dedicado e ativação seguem o
+[runbook](../runbooks/order-billing.md). O handoff para a interface está em
+[integração frontend](order-billing-frontend-integration.md).
 
 As cinco ações do serviço exigem `ORDER_BILLING_ENABLED=true` e
 `ORDER_BILLING_CHAT_SEND_ENABLED=true` explicitamente; testes injetam esses
@@ -74,6 +80,9 @@ Exemplo para cobrar saldo:
 
 Intenção contém `id`, `version`, `action`, `chargeId`, `conversationId`,
 `amountCents`, `state`, `blockedReason`, `messageId` e `commandId`.
+Os campos opcionais nullable `supersedesChargeId` e `retryOfIntentId` identificam
+a cobrança anterior corrigida e a intenção anterior de uma tentativa segura,
+respectivamente. Usam os vínculos persistidos; não são inferidos por data ou valor.
 IDs de mensagem/comando são nulos antes de serem reservados. Valor e IDs
 financeiros da intenção não mudam para reinterpretar uma cobrança já emitida.
 Replay do POST retorna a mesma identidade e o mesmo resultado persistido;
@@ -103,6 +112,9 @@ centavos, `items` e `nextCursor`. Eventos possuem `id`, `kind`
 (`charge`, `receipt`, `intent`, `correction`, `refund`), `chargeId`, `intentId`
 opcional nulo, `amountCents`, `status`, `occurredAt` UTC ISO 8601. Ordenação
 decrescente por data e ID, cursor opaco vinculado ao pedido e à posição.
+Os campos opcionais nullable `supersedesChargeId` e `retryOfIntentId` mantêm a
+origem dos eventos de intenção; eventos de cobrança, recebimento e devolução
+devolvem null. Clientes toleram campos ausentes em respostas de versões anteriores.
 Paginação não promete snapshot congelado; itens podem mudar de estado entre
 leituras. Não reconstruir saldo somando os valores da página: os totais
 representam o livro financeiro atual sob leitura consistente.
