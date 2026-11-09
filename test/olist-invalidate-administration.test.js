@@ -395,6 +395,12 @@ function projectionHarness(exportRows) {
   const base = w.database.query;
   /** @param {string} sql @param {any[]} args */
   const query = async (sql, args = []) => {
+    if (sql.includes('SELECT settings_envelope FROM crm.olist_settings')) {
+      assert.deepEqual(args, [config.accountKey]);
+      // No configured due policy is a legacy fixed-date account, independent
+      // of whether an active or archived export is selected below.
+      return { rows: [] };
+    }
     if (
       sql.includes('FROM crm.olist_accounts a JOIN crm.olist_connections c')
     ) {
@@ -525,4 +531,5 @@ test('L1 project reads exactly one row and keeps the other order/account untouch
   assert.match(exportSql[0], /LIMIT 1\b/u);
   const empty = await projectionHarness([]).runtime.project(projectInput);
   assert.equal(empty.operation, null);
+  assert.equal(empty.paymentDuePolicy, 'fixed_date');
 });

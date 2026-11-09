@@ -141,9 +141,18 @@ export function olistSettings(raw) {
     ...fields,
     'productFiscal',
     'paymentDueOn',
+    'paymentDuePolicy',
     'receivingMethodId',
   ]);
   if (fields.some((field) => !Object.hasOwn(value, field)))
+    throw new OlistError('INVALID_REQUEST', 400);
+  if (
+    (Object.hasOwn(value, 'paymentDuePolicy') &&
+      !['fixed_date', 'per_order'].includes(value.paymentDuePolicy)) ||
+    (value.paymentDuePolicy === 'per_order' &&
+      value.paymentDueOn !== null &&
+      value.paymentDueOn !== undefined)
+  )
     throw new OlistError('INVALID_REQUEST', 400);
   return Object.fromEntries(
     Object.entries(value).map(([key, entry]) => [

@@ -5,6 +5,7 @@ import { open, seal, identityHash } from './crypto.js';
 import { olistResourceIdentityHash } from './repository.js';
 import { buildCustomerPayload } from './resource-payloads.js';
 import { buildOlistSalePayload } from './sale-payload.js';
+import { prepareExactCentExport } from '@crm-silmer/orders';
 
 /** @param {any} value @returns {any} */
 function canonical(value) {
@@ -182,6 +183,22 @@ export function createOlistAdminRepository(database, options) {
     )
       row = null;
     return { order, row };
+  }
+  /** The isolated legacy path may never replace an active export or resolve
+   * a journaled effect, including a resource attempt on an archived generation.
+   * @param {any} tx @param {any} input @param {boolean} [exclusive] */
+  async function legacyLinkGuard(tx, input, exclusive = false) {
+    const authority = await guard(tx, input, 'olist.link');
+    const { order } = await operation(tx, input, exclusive);
+    if (order.cancelled_at) throw new OlistError('ORDER_CANCELLED');
+    const prior = await tx.query(
+      `SELECT 1 FROM crm.olist_exports e WHERE e.account_key=$1 AND e.order_id=$2 AND
+      (e.state<>'invalidated' OR EXISTS(SELECT 1 FROM crm.olist_attempts a WHERE a.account_key=e.account_key AND
+        (a.export_id=e.id OR a.resource_id IN (SELECT x.resource_id FROM crm.olist_export_resources x WHERE x.export_id=e.id AND x.account_key=e.account_key)))) LIMIT 1`,
+      [input.accountKey, order.id],
+    );
+    if (prior.rows[0]) throw new OlistError('OLIST_RECONCILIATION_REQUIRED');
+    return { ...authority, order };
   }
   /** @param {any} tx @param {any} row */
   async function decodeOperation(tx, row) {
@@ -547,6 +564,127 @@ export function createOlistAdminRepository(database, options) {
           result.parent = await decodeResource(tx, parent);
         }
         return result;
+      });
+    },
+    /** @param {any} input */
+    legacyLinkAvailable(input) {
+      return transaction(input, async (/** @type {any} */ tx) => {
+        await legacyLinkGuard(tx, input);
+        return true;
+      });
+    },
+    /** A sale-local historical link deliberately bypasses bindMapping: no
+     * canonical identity, reusable customer/product/variation or job is born.
+     * @param {any} input */
+    commitLegacyLink(input) {
+      text(input.reason, 1000);
+      remote(input.remoteId);
+      remote(input.number);
+      integer(input.expectedOrderVersion);
+      integer(input.expectedSettingsVersion, true);
+      if (
+        input.confirmed !== true ||
+        input.mode !== 'legacy-sale-only-v1' ||
+        input.snapshot?.linkMode !== 'legacy-sale-only-v1' ||
+        input.snapshot?.policy !== 'legacy-sale-only-v1' ||
+        input.resources?.mode !== 'legacy-sale-only-v1' ||
+        input.resources?.resolved !== true ||
+        input.proof?.mode !== 'legacy-sale-only-v1' ||
+        input.proof?.matched !== true ||
+        input.expectedOperationVersion !== 0 ||
+        !/^[a-f0-9]{64}$/u.test(input.remoteDigest) ||
+        Buffer.byteLength(JSON.stringify(input.snapshot)) > 131072
+      )
+        throw new OlistError('INVALID_REQUEST', 400);
+      return transaction(input, async (/** @type {any} */ tx) => {
+        const { actor, connection, order } = await legacyLinkGuard(
+          tx,
+          input,
+          true,
+        );
+        if (Number(order.version) !== input.expectedOrderVersion)
+          throw new OlistError('VERSION_CONFLICT');
+        const settings = (
+          await tx.query(
+            'SELECT version FROM crm.olist_settings WHERE account_key=$1 FOR SHARE',
+            [input.accountKey],
+          )
+        ).rows[0];
+        if (Number(settings?.version ?? 0) !== input.expectedSettingsVersion)
+          throw new OlistError('VERSION_CONFLICT');
+        const prepared = prepareExactCentExport(
+          input.snapshot.commercial.groups.map((/** @type {any} */ group) => ({
+            id: group.groupId,
+            lines: group.lines.map((/** @type {any} */ line) => ({
+              id: line.lineId,
+              size: line.size,
+              quantity: line.quantity,
+              subtotalCents: line.subtotalCents,
+              subtotalReviewed: true,
+            })),
+          })),
+        );
+        if (
+          !prepared.eligible ||
+          input.proof.totalCents !== prepared.totalCents ||
+          input.proof.lineCount !== prepared.lines.length ||
+          input.snapshot.commercial.totalCents !== prepared.totalCents ||
+          input.proof.fiscalVerified !== false
+        )
+          throw new OlistError('OLIST_SALE_DIVERGENT');
+        const id = input.exportId ?? randomUUID();
+        if (input.reference !== 'CRM-' + id)
+          throw new OlistError('INVALID_REQUEST', 400);
+        const mappingHash = identityHash(options.hmacKey, 'sale-resources', [
+          input.accountKey,
+          id,
+          input.resources,
+        ]);
+        const evidence = {
+          ...input.proof,
+          mode: 'legacy-sale-only-v1',
+          humanConfirmed: true,
+          reason: input.reason,
+          remoteId: String(input.remoteId),
+          number: String(input.number),
+          remoteDigest: input.remoteDigest,
+          correspondence: input.resources.legacyCorrespondence,
+        };
+        const row = (
+          await tx.query(
+            "INSERT INTO crm.olist_exports(id,account_key,context_key,connection_generation,order_id,order_version,settings_version,actor_id,authorization_version,reference,state,stage,snapshot_envelope,remote_id,remote_number,observed_sale_id,observed_sale_number,resource_mapping_hash,resource_mapping_envelope,readback_envelope) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'linked','complete',$11::jsonb,$12,$13,$12,$13,$14,$15::jsonb,$16::jsonb) RETURNING *",
+            [
+              id,
+              input.accountKey,
+              input.contextKey,
+              Number(connection.generation),
+              order.id,
+              Number(order.version),
+              input.expectedSettingsVersion,
+              actor.id,
+              actor.olistAuthorizationVersion,
+              input.reference,
+              encrypted(
+                input.snapshot,
+                'export-snapshot',
+                input.accountKey,
+                id,
+              ),
+              String(input.remoteId),
+              String(input.number),
+              mappingHash,
+              encrypted(
+                input.resources,
+                'sale-resources',
+                input.accountKey,
+                id,
+              ),
+              encrypted(evidence, 'sale-readback', input.accountKey, id),
+            ],
+          )
+        ).rows[0];
+        await audit(tx, input, 'OLIST_LEGACY_SALE_LINKED', row);
+        return row;
       });
     },
     /** @param {any} input */
@@ -933,58 +1071,81 @@ export function createOlistAdminRepository(database, options) {
                 )
             )
               throw new OlistError('OLIST_SALE_DIVERGENT');
-            const plan = buildOlistSalePayload({
-              snapshot: decoded.snapshot,
-              resolved: mapping,
-              reference: row.reference,
-            });
-            const attempt = decoded.saleAttempt;
-            if (attempt && attempt.requestPayload?.encoded !== plan.encoded)
-              throw new OlistError('OLIST_SALE_REQUEST_CHANGED');
-            const observed = attempt?.observedRemoteId ?? row.observed_sale_id;
-            if (observed && observed !== id)
-              throw new OlistError('OLIST_SALE_DIVERGENT');
-            const number = remote(input.number);
-            const observedNumber =
-              attempt?.observedNumber ?? row.observed_sale_number;
-            if (observedNumber && observedNumber !== number)
-              throw new OlistError('OLIST_SALE_DIVERGENT');
-            if (
-              ['confirmed', 'linked'].includes(row.state) &&
-              (row.remote_id !== id || row.remote_number !== number)
-            )
-              throw new OlistError('OLIST_SALE_DIVERGENT');
-            if (!['confirmed', 'linked'].includes(row.state)) {
-              if (attempt?.outcome === 'reserved')
-                await tx.query(
-                  "UPDATE crm.olist_attempts SET outcome='confirmed',finished_at=$2,safe_code='OLIST_SALE_RECONCILED',response_envelope=$3::jsonb WHERE id=$1",
-                  [
-                    attempt.id,
-                    clock(),
-                    encrypted(
-                      { remoteId: id, number, proof: input.proof },
-                      'effect-response',
-                      input.accountKey,
+            if (mapping.mode === 'legacy-sale-only-v1') {
+              if (
+                row.state !== 'linked' ||
+                decoded.saleAttempt ||
+                decoded.snapshot.policy !== 'legacy-sale-only-v1' ||
+                decoded.snapshot.linkMode !== 'legacy-sale-only-v1' ||
+                input.proof.mode !== 'legacy-sale-only-v1' ||
+                input.proof.fiscalVerified !== false ||
+                row.remote_id !== id ||
+                row.remote_number !== remote(input.number) ||
+                identityHash(options.hmacKey, 'legacy-mapping', mapping) !==
+                  identityHash(
+                    options.hmacKey,
+                    'legacy-mapping',
+                    input.resources,
+                  )
+              )
+                throw new OlistError('OLIST_SALE_DIVERGENT');
+              // Record this read's ledger only. A historical link cannot gain
+              // canonical resources, mutate its evidence or clear an attempt.
+            } else {
+              const plan = buildOlistSalePayload({
+                snapshot: decoded.snapshot,
+                resolved: mapping,
+                reference: row.reference,
+              });
+              const attempt = decoded.saleAttempt;
+              if (attempt && attempt.requestPayload?.encoded !== plan.encoded)
+                throw new OlistError('OLIST_SALE_REQUEST_CHANGED');
+              const observed =
+                attempt?.observedRemoteId ?? row.observed_sale_id;
+              if (observed && observed !== id)
+                throw new OlistError('OLIST_SALE_DIVERGENT');
+              const number = remote(input.number);
+              const observedNumber =
+                attempt?.observedNumber ?? row.observed_sale_number;
+              if (observedNumber && observedNumber !== number)
+                throw new OlistError('OLIST_SALE_DIVERGENT');
+              if (
+                ['confirmed', 'linked'].includes(row.state) &&
+                (row.remote_id !== id || row.remote_number !== number)
+              )
+                throw new OlistError('OLIST_SALE_DIVERGENT');
+              if (!['confirmed', 'linked'].includes(row.state)) {
+                if (attempt?.outcome === 'reserved')
+                  await tx.query(
+                    "UPDATE crm.olist_attempts SET outcome='confirmed',finished_at=$2,safe_code='OLIST_SALE_RECONCILED',response_envelope=$3::jsonb WHERE id=$1",
+                    [
                       attempt.id,
+                      clock(),
+                      encrypted(
+                        { remoteId: id, number, proof: input.proof },
+                        'effect-response',
+                        input.accountKey,
+                        attempt.id,
+                      ),
+                    ],
+                  );
+                await tx.query(
+                  "UPDATE crm.olist_exports SET state=$2,stage='complete',remote_id=$3,remote_number=$4,observed_sale_id=COALESCE(observed_sale_id,$3),observed_sale_number=COALESCE(observed_sale_number,$4),readback_envelope=$5::jsonb,last_error_code=NULL,version=version+1,updated_at=$6 WHERE id=$1",
+                  [
+                    row.id,
+                    attempt ? 'confirmed' : 'linked',
+                    id,
+                    number,
+                    encrypted(
+                      { remoteId: id, number, ...input.proof },
+                      'sale-readback',
+                      input.accountKey,
+                      row.id,
                     ),
+                    clock(),
                   ],
                 );
-              await tx.query(
-                "UPDATE crm.olist_exports SET state=$2,stage='complete',remote_id=$3,remote_number=$4,observed_sale_id=COALESCE(observed_sale_id,$3),observed_sale_number=COALESCE(observed_sale_number,$4),readback_envelope=$5::jsonb,last_error_code=NULL,version=version+1,updated_at=$6 WHERE id=$1",
-                [
-                  row.id,
-                  attempt ? 'confirmed' : 'linked',
-                  id,
-                  number,
-                  encrypted(
-                    { remoteId: id, number, ...input.proof },
-                    'sale-readback',
-                    input.accountKey,
-                    row.id,
-                  ),
-                  clock(),
-                ],
-              );
+              }
             }
           }
         }
@@ -1272,9 +1433,31 @@ export function createOlistAdminRepository(database, options) {
       return transaction(input, async (/** @type {any} */ tx) => {
         // Reads only the database (zero HTTP): works with a broken connection.
         await guardLocal(tx, input, 'olist.reconcile');
+        const settingsRow = (
+          await tx.query(
+            'SELECT settings_envelope FROM crm.olist_settings WHERE account_key=$1',
+            [input.accountKey],
+          )
+        ).rows[0];
+        const accountSettings = settingsRow?.settings_envelope
+          ? open(
+              settingsRow.settings_envelope,
+              options.envelopeKey,
+              'settings',
+              input.accountKey,
+              'central',
+            )
+          : null;
+        const paymentDuePolicy =
+          accountSettings?.paymentDuePolicy ?? 'fixed_date';
+        const productFiscalRequired =
+          accountSettings?.productFiscal === null ||
+          accountSettings?.productFiscal === undefined;
         const { row } = await operation(tx, input);
         if (!row)
           return {
+            paymentDuePolicy,
+            productFiscalRequired,
             operation: null,
             resources: [],
             requests: [],
@@ -1302,6 +1485,8 @@ export function createOlistAdminRepository(database, options) {
           )
         ).rows;
         return {
+          paymentDuePolicy,
+          productFiscalRequired,
           operation: {
             id: row.id,
             actorId: row.actor_id,

@@ -256,6 +256,197 @@ function fixture(options = {}) {
   };
 }
 
+function explicitLegacyFixture() {
+  const f = fixture({ legacy: true });
+  f.parent.tipoVariacao = 'P';
+  delete f.parent.tipo;
+  f.parent.sku = '';
+  f.parent.descricao = 'Uniforme legado conferido por pessoa';
+  f.parent.ncm = '';
+  f.parent.unidade = '';
+  f.parent.origem = '0';
+  f.body.ecommerce.id = 0;
+  f.body.listaPreco = { id: 0 };
+  f.body.numeroOrdemCompra = 'SYNTHETIC-PO-41';
+  f.body.pagamento = {
+    parcelas: [{ data: '2026-11-04 00:00:00', valor: 3, transacao: {} }],
+  };
+  for (const variation of f.parent.variacoes) variation.sku = '';
+  for (const [id, product] of f.products) if (id !== 201) product.sku = '';
+  const mapping = {
+    groups: f.snapshot.commercial.groups.map((group) => ({
+      groupId: group.groupId,
+      parentProductId: '201',
+      lines: group.lines.map((line, i) => ({
+        lineId: line.lineId,
+        childProductId: String(301 + i),
+        itemIndex: f.body.itens.findIndex(
+          (/** @type {any} */ item) => item.produto.id === 301 + i,
+        ),
+      })),
+    })),
+  };
+  const snapshot = {
+    ...f.snapshot,
+    policy: 'legacy-sale-only-v1',
+    linkMode: 'legacy-sale-only-v1',
+  };
+  return {
+    ...f,
+    mapping,
+    snapshot,
+    legacy: () =>
+      f.inspector.legacyExistingSale({
+        snapshot,
+        reference: REFERENCE,
+        remoteId: '401',
+        mapping,
+      }),
+  };
+}
+
+test('OLIST-T16 explicit legacy correspondence accepts blank SKUs and parent P without canonical reuse', async () => {
+  const f = explicitLegacyFixture(),
+    checked = await f.legacy();
+  assert.equal(checked.remoteId, '401');
+  assert.equal(checked.number, '99');
+  assert.equal(checked.resources.mode, 'legacy-sale-only-v1');
+  assert.deepEqual(checked.resources.legacyCorrespondence, f.mapping);
+  assert.equal(checked.proof.totalCents, 300);
+  assert.equal(checked.historicalMetadata.productFiscalMissing, true);
+  assert.equal(checked.historicalMetadata.originId, 0);
+  assert.equal(checked.historicalMetadata.purchaseOrder, 'SYNTHETIC-PO-41');
+  assert.equal(checked.historicalMetadata.paymentDueOn, '2026-11-04');
+  assert.equal(f.posts(), 0);
+  await assert.rejects(f.inspect(), { code: 'OLIST_PRODUCT_DIVERGENT' });
+  const operation = {
+    ...f.operation,
+    state: 'linked',
+    remote_id: '401',
+    remote_number: '99',
+    snapshot: {
+      ...f.snapshot,
+      commercial: checked.commercial,
+      historicalMetadata: checked.historicalMetadata,
+    },
+    resources: checked.resources,
+    resourceMapping: checked.resources,
+    saleAttempt: null,
+  };
+  assert.equal((await f.inspector.reconcileSale({ operation })).number, '99');
+  for (const bad of [
+    { ...operation, state: 'uncertain' },
+    { ...operation, saleAttempt: f.operation.saleAttempt },
+  ])
+    await assert.rejects(f.inspector.reconcileSale({ operation: bad }), {
+      code: 'OLIST_RECONCILIATION_REQUIRED',
+    });
+});
+
+test('OLIST-T16 legacy correspondence refuses ambiguous/partial mappings, divergent identities, grade, fiscal and exact money', async () => {
+  /** @type {Array<(f:ReturnType<typeof explicitLegacyFixture>)=>void>} */
+  const changes = [
+    (f) => {
+      f.mapping.groups[0].lines[1].itemIndex =
+        f.mapping.groups[0].lines[0].itemIndex;
+    },
+    (f) => {
+      f.mapping.groups[0].lines.pop();
+    },
+    (f) => {
+      f.mapping.groups[0].groupId = randomUUID();
+    },
+    (f) => {
+      f.mapping.groups[0].parentProductId = '302';
+    },
+    (f) => {
+      f.mapping.groups[0].lines[0].childProductId = '302';
+    },
+    (f) => {
+      f.products.get(301).produtoPai.id = 999;
+    },
+    (f) => {
+      f.products.get(301).situacao = 'I';
+    },
+    (f) => {
+      f.parent.situacao = 'I';
+    },
+    (f) => {
+      f.body.idNotaFiscal = 1;
+    },
+    (f) => {
+      f.body.pagamentosIntegrados = [{ id: 1 }];
+    },
+    (f) => {
+      f.body.pagamento.parcelas[0].data = '2026-11-04 12:00:00';
+    },
+    (f) => {
+      f.body.pagamento.parcelas[0].valor = 3.01;
+    },
+    (f) => {
+      f.body.cliente.cpfCnpj = '11144477735';
+    },
+    (f) => {
+      f.parent.variacoes[0].grade[0].valor = 'P';
+    },
+    (f) => {
+      f.parent.variacoes[0].grade[0].chave = 'Outra';
+    },
+    (f) => {
+      f.parent.variacoes.push({
+        ...structuredClone(f.parent.variacoes[0]),
+        id: 399,
+        grade: [{ chave: 'Tamanhos', valor: 'M' }],
+      });
+    },
+    (f) => {
+      f.parent.variacoes.push({ ...f.parent.variacoes[0], id: 399 });
+    },
+    (f) => {
+      f.parent.variacoes[1].id = f.parent.variacoes[0].id;
+      f.mapping.groups[0].lines[1].childProductId = '301';
+      f.body.itens[0].produto.id = 301;
+    },
+    (f) => {
+      f.customer.cpfCnpj = '11144477735';
+    },
+    (f) => {
+      f.body.itens[0].quantidade = 2;
+    },
+    (f) => {
+      f.body.itens[0].valorUnitario = 2.01;
+    },
+    (f) => {
+      f.body.valorTotalPedido = 3.01;
+    },
+    (f) => {
+      f.body.itens.push({ ...f.body.itens[0] });
+    },
+    (f) => {
+      f.body.ecommerce.numeroPedidoEcommerce = 'CRM-another-order';
+    },
+    (f) => {
+      f.body.itens[0].infoAdicional = 'another-line';
+    },
+  ];
+  for (const change of changes) {
+    const f = explicitLegacyFixture();
+    change(f);
+    await assert.rejects(f.legacy());
+    assert.equal(f.posts(), 0);
+  }
+});
+
+test('OLIST-T16 legacy-only grade accepts the known plural alias without changing canonical identity checks', async () => {
+  const f = explicitLegacyFixture();
+  for (const variation of f.parent.variacoes)
+    variation.grade[0].chave = ' Tamanhos ';
+  const checked = await f.legacy();
+  assert.equal(checked.proof.matched, true);
+  assert.equal(checked.proof.lineCount, 2);
+  assert.equal(f.posts(), 0);
+});
+
 test('T09 existing legacy sale is verified by full buyer, fiscal parent/grade and exact independent lines with zero creations', async () => {
   const f = fixture({ legacy: true });
   const result = await f.inspect();

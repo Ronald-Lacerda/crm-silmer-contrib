@@ -73,6 +73,96 @@ paths:
     $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1lookup'
   /integrations/n8n/billing/charges/{chargeId}/payment:
     $ref: './order-billing.v1.json#/paths/~1integrations~1n8n~1billing~1charges~1{chargeId}~1payment'
+  /orders/{orderId}/olist/existing/legacy/previews:
+    post:
+      operationId: previewExplicitLegacyOlistSale
+      summary: Conferir correspondência explícita de uma venda legada sem identidade canônica
+      description: >-
+        OLIST-T16, somente administrador ativo com sessão/CSRF/Origin. Caminho
+        explícito, nunca fallback de criação ou resultado incerto. Confere por
+        GET comprador, pai/filho ativos, grade, itemIndex bijetivo,
+        quantidades e subtotais/totais exatos. SKU vazio e descrição não canônica
+        são históricos desta venda; não autorizam reuso automático de produto.
+        Fiscal legado ausente/não verificado, origem, OC e vencimento são
+        observados e congelados para revisão, sem usar defaults de criação.
+        Vencimento informado opcionalmente só confere a data observada no ERP.
+        Recibo cifrado de quinze minutos vincula mapping, fontes, conta e sessão.
+        Nenhum cadastro, export, tentativa ou job é criado nesta prévia.
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [saleId, mapping]
+              properties:
+                saleId: { type: string, pattern: '^[1-9][0-9]{0,15}$' }
+                mapping: { $ref: '#/components/schemas/OlistLegacyMapping' }
+                paymentDueOn: { type: string, format: date }
+      responses:
+        '200':
+          description: Correspondência exata pronta para declaração humana
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistLegacyPreview' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '422': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /orders/{orderId}/olist/existing/legacy/links:
+    post:
+      operationId: linkExplicitLegacyOlistSale
+      summary: Registrar vínculo exclusivamente histórico da venda conferida
+      description: >-
+        Requer confirmed true e motivo humano; reconsulta o ERP antes do commit
+        e recusa qualquer mudança da evidência ou das fontes. Mesmas guardas
+        administrativas e de idempotência. Grava somente export linked, snapshot,
+        mapping e prova cifrados com modo legacy-sale-only-v1 e auditoria.
+        Não grava recursos compartilhados ou referências de reuso, não cria jobs
+        nem tentativas, não envia POST ao ERP nem resolve efeitos incertos.
+        Referência remota divergente continua bloqueada.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [previewToken, confirmed, reason]
+              properties:
+                previewToken:
+                  {
+                    type: string,
+                    maxLength: 262144,
+                    pattern: '^[A-Za-z0-9_-]+$',
+                  }
+                confirmed: { const: true }
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        '200':
+          description: Vínculo histórico auditado; geração e status comercial preservados
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistLegacyLinkReceipt' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '422': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
   /orders/{orderId}/olist/existing/previews:
     post:
       operationId: previewExistingOlistSale
@@ -92,6 +182,14 @@ paths:
               additionalProperties: false
               required: [saleId]
               properties:
+                productFiscal:
+                  $ref: '#/components/schemas/OlistProductFiscalSelection'
+                paymentDueOn:
+                  {
+                    type: string,
+                    format: date,
+                    description: Obrigatório quando a política central é per_order.,
+                  }
                 saleId:
                   {
                     type: string,
@@ -365,7 +463,18 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/OlistEmptyCommand' }
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                paymentDueOn:
+                  {
+                    type: string,
+                    format: date,
+                    description: Escolha humana por Pedido; congelada no recibo sob política per_order.,
+                  }
+                productFiscal:
+                  $ref: '#/components/schemas/OlistProductFiscalSelection'
       responses:
         '200':
           description: Prévia completa ou pendências explícitas, sem plano executável parcial
@@ -3864,6 +3973,146 @@ components:
       required: true
       schema: { type: string, minLength: 1, maxLength: 128 }
   schemas:
+    OlistProductFiscalSelection:
+      type: object
+      additionalProperties: false
+      required: [ncm, origin, unit]
+      description: Escolha fiscal humana explícita quando os parâmetros centrais não a definem; congelada no recibo/snapshot. Não altera configuração/cadastro no ERP ou default central. Divergência contra política central existente é recusada.
+      properties:
+        ncm: { type: string, pattern: '^[0-9]{8}$' }
+        origin: { type: integer, minimum: 0, maximum: 8 }
+        unit: { type: string, pattern: '^[A-Z0-9]{1,6}$' }
+    OlistLegacyMapping:
+      type: object
+      additionalProperties: false
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            additionalProperties: false
+            required: [groupId, parentProductId, lines]
+            properties:
+              groupId: { type: string, format: uuid }
+              parentProductId: { type: string, pattern: '^[1-9][0-9]{0,15}$' }
+              lines:
+                type: array
+                minItems: 1
+                maxItems: 250
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [lineId, childProductId, itemIndex]
+                  properties:
+                    lineId: { type: string, format: uuid }
+                    childProductId:
+                      { type: string, pattern: '^[1-9][0-9]{0,15}$' }
+                    itemIndex:
+                      {
+                        type: integer,
+                        minimum: 0,
+                        maximum: 249,
+                        description: Índice zero-based exclusivo no array itens original da venda ERP.,
+                      }
+    OlistLegacyPreview:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          orderId,
+          mode,
+          eligible,
+          sale,
+          mapping,
+          commercial,
+          versions,
+          expiresAt,
+          previewToken,
+          creationEnabled,
+        ]
+      properties:
+        orderId: { type: string }
+        mode: { const: legacy-sale-only-v1 }
+        eligible: { const: true }
+        creationEnabled: { const: false }
+        sale:
+          { $ref: '#/components/schemas/OlistExistingPreview/properties/sale' }
+        mapping: { $ref: '#/components/schemas/OlistLegacyMapping' }
+        historicalMetadata:
+          type: object
+          additionalProperties: false
+          required:
+            [
+              originId,
+              priceListId,
+              purchaseOrder,
+              orderDate,
+              deliveryOn,
+              paymentDueOn,
+              productFiscalMissing,
+              fiscalVerified,
+              reusable,
+              products,
+            ]
+          properties:
+            originId: { type: [integer, 'null'], minimum: 0 }
+            priceListId: { type: [integer, 'null'], minimum: 0 }
+            purchaseOrder: { type: [string, 'null'], maxLength: 120 }
+            orderDate: { type: string, format: date }
+            deliveryOn: { type: [string, 'null'], format: date }
+            paymentDueOn: { type: string, format: date }
+            productFiscalMissing: { type: boolean }
+            fiscalVerified: { const: false }
+            reusable: { const: false }
+            products:
+              type: array
+              maxItems: 50
+              items:
+                type: object
+                additionalProperties: false
+                required:
+                  [
+                    parentProductId,
+                    description,
+                    sku,
+                    ncm,
+                    unit,
+                    origin,
+                    fiscalMissing,
+                  ]
+                properties:
+                  parentProductId: { type: string }
+                  description: { type: [string, 'null'], maxLength: 12000 }
+                  sku: { type: [string, 'null'], maxLength: 1000 }
+                  ncm: { type: [string, 'null'], maxLength: 20 }
+                  unit: { type: [string, 'null'], maxLength: 20 }
+                  origin: { type: [string, 'null'], maxLength: 20 }
+                  fiscalMissing: { type: boolean }
+        commercial:
+          { $ref: '#/components/schemas/OlistPreview/properties/commercial' }
+        versions:
+          {
+            $ref: '#/components/schemas/OlistExistingPreview/properties/versions',
+          }
+        expiresAt: { type: string, format: date-time }
+        previewToken:
+          { type: string, maxLength: 262144, pattern: '^[A-Za-z0-9_-]+$' }
+    OlistLegacyLinkReceipt:
+      type: object
+      additionalProperties: false
+      required:
+        [operationId, orderId, mode, state, stage, number, creationEnabled]
+      properties:
+        operationId: { type: string, format: uuid }
+        orderId: { type: string }
+        mode: { const: legacy-sale-only-v1 }
+        state: { const: linked }
+        stage: { const: complete }
+        number: { type: string }
+        creationEnabled: { const: false }
     OlistExistingPreview:
       type: object
       additionalProperties: false
@@ -3879,6 +4128,11 @@ components:
         ]
       properties:
         orderId: { type: string }
+        productFiscalRequired: { type: boolean }
+        productFiscal:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/OlistProductFiscalSelection'
         eligible: { const: true }
         creationEnabled: { type: boolean }
         sale:
@@ -3957,6 +4211,41 @@ components:
       required:
         [operation, resources, requests, attempts, attemptHistoryTruncated]
       properties:
+        paymentDuePolicy: { enum: [fixed_date, per_order] }
+        productFiscalRequired: { type: boolean }
+        legacyLinkContext:
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [groups, paymentDuePolicy]
+              properties:
+                paymentDuePolicy: { enum: [fixed_date, per_order] }
+                historicalDueReadOnly: { type: boolean }
+                groups:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [groupId, attributes, lines]
+                    properties:
+                      groupId: { type: string, format: uuid }
+                      attributes:
+                        {
+                          $ref: '#/components/schemas/OlistPreview/properties/commercial/properties/groups/items/properties/attributes',
+                        }
+                      lines:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: false
+                          required: [lineId, size, quantity, subtotalCents]
+                          properties:
+                            lineId: { type: string, format: uuid }
+                            size: { type: string }
+                            quantity: { type: integer, minimum: 1 }
+                            subtotalCents: { type: integer, minimum: 1 }
         operation:
           oneOf:
             - type: 'null'
@@ -4083,6 +4372,12 @@ components:
         ]
       properties:
         orderId: { type: string }
+        productFiscalRequired: { type: boolean }
+        productFiscal:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/OlistProductFiscalSelection'
+        paymentDuePolicy: { enum: [fixed_date, per_order] }
         number: { type: string }
         status: { enum: [pendente, confirmado] }
         eligible: { type: boolean }
@@ -4114,6 +4409,7 @@ components:
             totalCents: { type: [integer, 'null'], minimum: 1 }
             orderDate: { type: [string, 'null'], format: date }
             deliveryOn: { type: [string, 'null'], format: date }
+            paymentDueOn: { type: [string, 'null'], format: date }
             paymentCondition: { type: [string, 'null'] }
             groups:
               type: array
@@ -4260,6 +4556,9 @@ components:
                 ncm: { type: string, pattern: '^[0-9]{8}$' }
                 origin: { type: integer, minimum: 0, maximum: 8 }
                 unit: { type: string, pattern: '^[A-Z0-9]{1,6}$' }
+        paymentDuePolicy:
+          enum: [fixed_date, per_order]
+          description: Ausência preserva fixed_date legado. per_order exige escolha humana na prévia de cada Pedido, congelada no snapshot.
         paymentDueOn:
           description: Vencimento único explícito do total no ERP; não é data de recebimento nem deriva da legenda paymentTerms.
           type: [string, 'null']
@@ -4309,6 +4608,8 @@ components:
         [orderId, number, status, creationEnabled, pendingFields, operation]
       properties:
         orderId: { type: string }
+        productFiscalRequired: { type: boolean }
+        paymentDuePolicy: { enum: [fixed_date, per_order] }
         number: { type: string }
         status: { enum: [pendente, confirmado] }
         creationEnabled: { type: boolean }

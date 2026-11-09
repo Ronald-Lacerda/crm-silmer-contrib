@@ -3,6 +3,10 @@
 export function olistFailure(cause) {
   const status = Number(cause?.status);
   const code = String(cause?.code ?? '');
+  if (code === 'OLIST_PAYMENT_DUE_REQUIRED')
+    return 'Informe um vencimento válido para este pedido e confira uma nova prévia.';
+  if (code === 'OLIST_PRODUCT_FISCAL_REQUIRED')
+    return 'Confira NCM, origem e unidade dos produtos e solicite uma nova prévia.';
   if ([401, 403].includes(status))
     return 'Seu acesso mudou ou sua sessão expirou. Entre novamente para continuar.';
   if (code === 'OLIST_PREVIEW_EXPIRED')
@@ -58,6 +62,10 @@ export function olistIssueLabel(issue, groups = []) {
       ? `Grupo ${ids[1]}, linha ${ids[2]}: `
       : '';
   const code = issue.code;
+  if (code === 'OLIST_PAYMENT_DUE_REQUIRED')
+    return 'Informe o vencimento deste pedido antes de conferir uma nova prévia.';
+  if (code === 'OLIST_PRODUCT_FISCAL_REQUIRED')
+    return 'Informe NCM, origem e unidade dos produtos antes de conferir uma nova prévia.';
   if (/FRACTION/u.test(code) || code === 'OLIST_EXACT_CENT_REQUIRED')
     return (
       context +

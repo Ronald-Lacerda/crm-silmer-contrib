@@ -641,3 +641,11 @@ heartbeat/progresso por fila e snapshot operacional público200/503 atualizado
 a cada minuto, sem I/O por request. Diagnósticos da central têm14dias de
 retenção e limpeza diária limitada, fora da leitura. Coleta segue manual.
 Sem nova infraestrutura ou alteração do healthcheck de restart.
+
+## Olist: vencimento e vínculo histórico (09/11/2026)
+
+A [ADR 071](docs/adr/071-vencimento-explicito-e-vinculo-historico-isolado-no-olist.md)
+e a [RFC 055](docs/rfc/055-vencimento-por-pedido-e-vinculo-historico-no-olist.md)
+separam a data explícita de cada prévia do parâmetro central e o vínculo de uma
+venda antiga da identidade compartilhada de produtos. O modo histórico não
+autoriza criação ou reutilização de cadastros, nem reconciliação de incertos.

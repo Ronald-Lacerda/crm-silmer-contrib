@@ -97,6 +97,83 @@ function fixture() {
     plan: buildOlistSalePayload({ snapshot, resolved, reference: REFERENCE }),
   };
 }
+
+test('T17 sale freezes and reconciles the explicitly chosen per-order due day', () => {
+  const f = fixture();
+  const snapshot = /** @type {any} */ (f.snapshot);
+  snapshot.settings.paymentDuePolicy = 'per_order';
+  snapshot.settings.paymentDueOn = null;
+  snapshot.commercial.paymentDueOn = '2028-02-29';
+  const plan = buildOlistSalePayload({
+    snapshot,
+    resolved: f.resolved,
+    reference: REFERENCE,
+  });
+  assert.equal(
+    JSON.parse(plan.encoded).pagamento.parcelas[0].data,
+    '2028-02-29',
+  );
+  assert.equal(plan.settings.paymentDueOn, '2028-02-29');
+  const returned = rawOrder(plan).replace(
+    '"situacao":0',
+    '"situacao":0,"pagamento":{"parcelas":[{"data":"2028-02-29","valor":9.00}]}',
+  );
+  assert.equal(reconcileOlistSale(plan, returned, 401).matched, true);
+  assert.equal(
+    reconcileOlistSale(
+      plan,
+      returned.replace('2028-02-29', '2028-02-29 00:00:00'),
+      401,
+    ).matched,
+    true,
+  );
+  for (const remoteDay of [
+    '2028-02-29 00:00:01',
+    '2028-02-29 01:00:00',
+    '2028-02-29T00:00:00Z',
+    '2028-02-29T00:00:00',
+    '2028-02-29 00:00:00-03:00',
+    '2028-02-29 00:00:00+00:00',
+    '2028-02-29 00:00:00 ',
+    '2028-02-30 00:00:00',
+    '2027-02-29 00:00:00',
+  ])
+    assert.throws(
+      () =>
+        reconcileOlistSale(
+          plan,
+          returned.replace('2028-02-29', remoteDay),
+          401,
+        ),
+      { code: 'OLIST_SALE_READBACK_MISMATCH' },
+    );
+  assert.throws(() => reconcileOlistSale(plan, rawOrder(plan), 401), {
+    code: 'OLIST_SALE_READBACK_MISMATCH',
+  });
+  assert.throws(
+    () =>
+      reconcileOlistSale(
+        plan,
+        returned.replace('2028-02-29', '2028-03-01'),
+        401,
+      ),
+    { code: 'OLIST_SALE_READBACK_MISMATCH' },
+  );
+  snapshot.commercial.paymentDueOn = '2029-01-01';
+  assert.equal(plan.settings.paymentDueOn, '2028-02-29');
+  for (const due of [undefined, null, '2027-02-29', 'amanhã']) {
+    snapshot.commercial.paymentDueOn = due;
+    assert.throws(
+      () =>
+        buildOlistSalePayload({
+          snapshot,
+          resolved: f.resolved,
+          reference: REFERENCE,
+        }),
+      { code: 'OLIST_PAYMENT_DUE_REQUIRED' },
+    );
+  }
+});
 /** @param {any} plan */
 function rawOrder(plan) {
   return (

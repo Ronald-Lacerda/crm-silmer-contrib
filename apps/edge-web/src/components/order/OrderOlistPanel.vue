@@ -42,6 +42,12 @@ const progressRef = ref(null);
 const conferButton = ref(null);
 const projection = ref(null);
 const preview = ref(null);
+const paymentDueOn = ref('');
+const paymentDueField = ref(null);
+const productFiscal = ref({ ncm: '', origin: '', unit: '' });
+const fiscalNcmField = ref(null);
+const fiscalOriginField = ref(null);
+const fiscalUnitField = ref(null);
 const busy = ref(false);
 const message = ref('');
 const error = ref('');
@@ -271,7 +277,43 @@ async function confer() {
     return;
   clearPreview();
   checkDisabled.value = false;
-  const data = await run('/preview', {});
+  if (
+    projection.value?.paymentDuePolicy === 'per_order' &&
+    !/^\d{4}-\d{2}-\d{2}$/u.test(paymentDueOn.value)
+  ) {
+    error.value =
+      'Informe o vencimento deste pedido antes de conferir a prévia.';
+    await nextTick();
+    paymentDueField.value?.focus();
+    return;
+  }
+  /** @type {Record<string, any>} */
+  const body = {};
+  if (projection.value?.paymentDuePolicy === 'per_order')
+    body.paymentDueOn = paymentDueOn.value;
+  if (projection.value?.productFiscalRequired) {
+    const fiscal = productFiscal.value;
+    const invalidField = !/^[0-9]{8}$/u.test(fiscal.ncm)
+      ? fiscalNcmField.value
+      : !/^[0-8]$/u.test(fiscal.origin)
+        ? fiscalOriginField.value
+        : !/^[A-Z0-9]{1,6}$/u.test(fiscal.unit.trim())
+          ? fiscalUnitField.value
+          : null;
+    if (invalidField) {
+      error.value =
+        'Informe NCM com 8 dígitos, origem fiscal de 0 a 8 e unidade dos produtos deste pedido.';
+      await nextTick();
+      invalidField.focus();
+      return;
+    }
+    body.productFiscal = {
+      ncm: fiscal.ncm,
+      origin: Number(fiscal.origin),
+      unit: fiscal.unit.trim(),
+    };
+  }
+  const data = await run('/preview', body);
   if (!data || !canOperate.value) return;
   preview.value = data;
   if (data.previewToken && data.expiresAt) {
@@ -486,6 +528,8 @@ watch(
     // until the re-read arrives, so an open dialog and a command in flight
     // are not torn down underneath the person.
     if (!previous || next[0] !== previous[0]) {
+      paymentDueOn.value = '';
+      productFiscal.value = { ncm: '', origin: '', unit: '' };
       exportState.value = 'idle';
       administration.value = null;
       projection.value = null;
@@ -593,7 +637,9 @@ onBeforeUnmount(() => {
             ? 'Pedido cancelado. A geração está bloqueada.'
             : generationAllowed
               ? 'A geração exige sua conferência e confirmação humana.'
-              : 'A geração de vendas está desativada.'
+              : projection?.creationEnabled
+                ? 'Confira os dados e a prévia antes de gerar a venda.'
+                : 'A geração de vendas está desativada.'
         }}
         Conferir a prévia consulta os cadastros e não cria cliente, produto ou
         venda no Olist.
@@ -614,6 +660,86 @@ onBeforeUnmount(() => {
       <p v-if="disabled" class="field-help">
         Salve ou cancele a edição aberta antes de conferir.
       </p>
+      <div
+        v-if="
+          projection?.paymentDuePolicy === 'per_order' &&
+          canOperate &&
+          !hasOperation &&
+          !cancelled
+        "
+        class="olist-payment-due"
+      >
+        <label :for="`olist-due-${orderId}`">Vencimento deste pedido</label>
+        <input
+          :id="`olist-due-${orderId}`"
+          ref="paymentDueField"
+          v-model="paymentDueOn"
+          type="date"
+          required
+          :disabled="busy || disabled || exportState !== 'idle'"
+          :aria-describedby="`olist-due-help-${orderId}`"
+          @input="clearPreview"
+        />
+        <p :id="`olist-due-help-${orderId}`" class="field-help">
+          Informe a data combinada com o cliente. Alterar o vencimento exige
+          conferir uma nova prévia.
+        </p>
+      </div>
+      <fieldset
+        v-if="
+          projection?.productFiscalRequired &&
+          canOperate &&
+          !hasOperation &&
+          !cancelled
+        "
+        class="olist-product-fiscal"
+        :disabled="busy || disabled || exportState !== 'idle'"
+        :aria-describedby="`olist-fiscal-help-${orderId}`"
+      >
+        <legend>Cadastro fiscal dos produtos deste pedido</legend>
+        <p :id="`olist-fiscal-help-${orderId}`" class="field-help">
+          Informe a classificação aprovada pela empresa para todos os itens
+          desta prévia. Sem esses dados, a geração fica pendente e o pedido
+          continua salvo no CRM.
+        </p>
+        <label :for="`olist-fiscal-ncm-${orderId}`">NCM (8 dígitos)</label>
+        <input
+          :id="`olist-fiscal-ncm-${orderId}`"
+          ref="fiscalNcmField"
+          v-model="productFiscal.ncm"
+          type="text"
+          inputmode="numeric"
+          maxlength="8"
+          required
+          @input="clearPreview"
+        />
+        <label :for="`olist-fiscal-origin-${orderId}`"
+          >Origem fiscal (código de 0 a 8)</label
+        >
+        <input
+          :id="`olist-fiscal-origin-${orderId}`"
+          ref="fiscalOriginField"
+          v-model="productFiscal.origin"
+          type="text"
+          inputmode="numeric"
+          maxlength="1"
+          required
+          @input="clearPreview"
+        />
+        <label :for="`olist-fiscal-unit-${orderId}`"
+          >Unidade dos produtos</label
+        >
+        <input
+          :id="`olist-fiscal-unit-${orderId}`"
+          ref="fiscalUnitField"
+          v-model="productFiscal.unit"
+          type="text"
+          autocapitalize="characters"
+          maxlength="6"
+          required
+          @input="clearPreview"
+        />
+      </fieldset>
       <p v-if="busy" role="status">Conferindo a preparação…</p>
       <div v-if="error || message || preview" ref="notice" tabindex="-1">
         <p v-if="error" role="alert" class="inline-error">{{ error }}</p>
@@ -639,6 +765,14 @@ onBeforeUnmount(() => {
             origem ou os parâmetros. A habilitação Olist não concede edição.
           </p>
           <dl class="olist-preview-summary">
+            <div v-if="preview.productFiscal">
+              <dt>Cadastro fiscal conferido</dt>
+              <dd>
+                NCM {{ preview.productFiscal.ncm }} · Origem
+                {{ preview.productFiscal.origin }} ·
+                {{ preview.productFiscal.unit }}
+              </dd>
+            </div>
             <div v-if="preview.customer">
               <dt>Comprador</dt>
               <dd>
@@ -665,6 +799,14 @@ onBeforeUnmount(() => {
               <dd>
                 {{
                   paymentConditionLabel(preview.commercial?.paymentCondition)
+                }}
+              </dd>
+            </div>
+            <div>
+              <dt>Vencimento do pagamento</dt>
+              <dd>
+                {{
+                  dayLabel(preview.commercial?.paymentDueOn) || 'Não informado'
                 }}
               </dd>
             </div>
@@ -845,6 +987,20 @@ onBeforeUnmount(() => {
           <dt>Total conferido</dt>
           <dd>{{ amountLabel(preview?.commercial?.totalCents) }}</dd>
         </div>
+        <div>
+          <dt>Vencimento conferido</dt>
+          <dd>
+            {{ dayLabel(preview?.commercial?.paymentDueOn) || 'Não informado' }}
+          </dd>
+        </div>
+        <div v-if="preview?.productFiscal">
+          <dt>Cadastro fiscal conferido</dt>
+          <dd>
+            NCM {{ preview.productFiscal.ncm }} · Origem
+            {{ preview.productFiscal.origin }} ·
+            {{ preview.productFiscal.unit }}
+          </dd>
+        </div>
       </dl>
       <p>
         Confira a composição e o plano de cadastros antes de continuar. Se o
@@ -869,6 +1025,16 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.olist-payment-due {
+  display: grid;
+  gap: var(--space-2);
+  margin-block: var(--space-4);
+}
+.olist-product-fiscal {
+  display: grid;
+  gap: var(--space-2);
+  margin-block: var(--space-4);
+}
 .olist-preparation {
   margin-block: var(--space-6);
   min-inline-size: 0;

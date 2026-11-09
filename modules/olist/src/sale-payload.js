@@ -30,6 +30,18 @@ function day(value) {
   const d = new Date(value + 'T00:00:00.000Z');
   return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === value;
 }
+/** v3 schema documents a calendar day; the live installment response also
+ * uses its literal midnight suffix. Do not parse a timestamp or convert zones.
+ * @param {unknown} value */
+function returnedDueDay(value) {
+  if (
+    typeof value !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}(?: 00:00:00)?$/u.test(value)
+  )
+    return null;
+  const calendar = value.slice(0, 10);
+  return day(calendar) ? calendar : null;
+}
 /** @param {unknown} value */
 function id(value) {
   const s = String(value);
@@ -66,7 +78,25 @@ export function buildOlistSalePayload({ snapshot, resolved, reference }) {
     refuse();
   buildCustomerPayload(snapshot.customer, 'CRM-sale-buyer');
   const settings = snapshot.settings;
-  if (!settings || !day(settings.paymentDueOn))
+  if (
+    (settings &&
+      Object.hasOwn(settings, 'paymentDuePolicy') &&
+      !['fixed_date', 'per_order'].includes(settings.paymentDuePolicy)) ||
+    (settings?.paymentDuePolicy === 'per_order' &&
+      settings.paymentDueOn !== null &&
+      settings.paymentDueOn !== undefined)
+  )
+    refuse('OLIST_PAYMENT_DUE_REQUIRED');
+  const paymentDueOn =
+    settings?.paymentDuePolicy === 'per_order'
+      ? snapshot.commercial?.paymentDueOn
+      : settings?.paymentDueOn;
+  if (!settings || !day(paymentDueOn)) refuse('OLIST_PAYMENT_DUE_REQUIRED');
+  if (
+    settings.paymentDuePolicy !== 'per_order' &&
+    snapshot.commercial?.paymentDueOn !== undefined &&
+    snapshot.commercial.paymentDueOn !== paymentDueOn
+  )
     refuse('OLIST_PAYMENT_DUE_REQUIRED');
   if (
     !day(snapshot.commercial?.orderDate) ||
@@ -160,7 +190,7 @@ export function buildOlistSalePayload({ snapshot, resolved, reference }) {
         : {}),
       parcelas: [
         {
-          data: settings.paymentDueOn,
+          data: paymentDueOn,
           valor: cents(/** @type {number} */ (prepared.totalCents)),
         },
       ],
@@ -195,7 +225,8 @@ export function buildOlistSalePayload({ snapshot, resolved, reference }) {
       purchaseOrder: settings.purchaseOrder ?? null,
       paymentMethodId: settings.paymentMethodId,
       receivingMethodId: settings.receivingMethodId ?? null,
-      paymentDueOn: settings.paymentDueOn,
+      paymentDueOn,
+      paymentDuePolicy: settings.paymentDuePolicy ?? 'fixed_date',
     },
     totalLexeme: cents(/** @type {number} */ (prepared.totalCents)),
   });
@@ -292,6 +323,11 @@ export function reconcileOlistSale(plan, raw, remoteId) {
       !(body.numeroOrdemCompra === '' && plan.settings.purchaseOrder === null)
     )
       refuse('OLIST_SALE_READBACK_MISMATCH');
+    if (
+      plan.settings.paymentDuePolicy === 'per_order' &&
+      !Array.isArray(body.pagamento?.parcelas)
+    )
+      refuse('OLIST_SALE_READBACK_MISMATCH');
     if (body.pagamento) {
       optionalId(body.pagamento.meioPagamento, plan.settings.paymentMethodId);
       optionalId(
@@ -305,7 +341,7 @@ export function reconcileOlistSale(plan, raw, remoteId) {
         const installments = dense(body.pagamento.parcelas);
         if (
           installments.length !== 1 ||
-          installments[0].data !== plan.settings.paymentDueOn ||
+          returnedDueDay(installments[0].data) !== plan.settings.paymentDueOn ||
           !emptyObject(installments[0].transacao)
         )
           refuse('OLIST_SALE_READBACK_MISMATCH');

@@ -545,6 +545,434 @@ else
         );
       }
 
+      async function explicitLegacyFixture() {
+        const f = await fixture();
+        await pool.query(
+          'UPDATE crm.olist_settings SET settings_envelope=$2::jsonb WHERE account_key=$1',
+          [
+            config.accountKey,
+            JSON.stringify(
+              seal(
+                {
+                  ...EMPTY_OLIST_SETTINGS,
+                  paymentDuePolicy: 'per_order',
+                  paymentDueOn: null,
+                },
+                config.envelopeKey,
+                'settings',
+                config.accountKey,
+                'central',
+              ),
+            ),
+          ],
+        );
+        for (const [path, product] of f.responses)
+          if (path.startsWith('/produtos/')) {
+            product.sku = '';
+            product.ncm = '';
+            product.unidade = '';
+            product.origem = '0';
+            if (Array.isArray(product.variacoes)) {
+              delete product.tipo;
+              product.tipoVariacao = 'P';
+              product.descricao = 'Uniforme legado conferido';
+              for (const child of product.variacoes) child.sku = '';
+            }
+          }
+        f.sale.ecommerce.id = 0;
+        f.sale.listaPreco = { id: 0 };
+        f.sale.numeroOrdemCompra = 'SYNTHETIC-PO-41';
+        f.sale.pagamento = {
+          parcelas: [{ data: '2026-11-04 00:00:00', valor: 6, transacao: {} }],
+        };
+        const context = (await f.runtime.administration(f.input))
+          .legacyLinkContext;
+        assert.ok(
+          context,
+          'The administrator receives the explicit group/line selector',
+        );
+        const mapping = {
+          groups: context.groups.map((/** @type {any} */ group) => ({
+            groupId: group.groupId,
+            parentProductId: '201',
+            lines: group.lines.map((/** @type {any} */ line) => ({
+              lineId: line.lineId,
+              childProductId: '202',
+              itemIndex: 0,
+            })),
+          })),
+        };
+        return { ...f, mapping };
+      }
+      async function legacyCounts() {
+        return (
+          await pool.query(`SELECT
+          (SELECT count(*)::int FROM crm.olist_exports) exports,
+          (SELECT count(*)::int FROM crm.olist_resources) resources,
+          (SELECT count(*)::int FROM crm.olist_export_resources) bindings,
+          (SELECT count(*)::int FROM crm.olist_attempts) attempts,
+          (SELECT count(*)::int FROM crm.outbox_jobs WHERE job_type LIKE 'olist.%') jobs,
+          (SELECT count(*)::int FROM crm.olist_events WHERE event_code='OLIST_LEGACY_SALE_LINKED') links`)
+        ).rows[0];
+      }
+      await t.test(
+        'canonical existing link freezes explicit fiscal only when central policy is absent and fences later changes',
+        async () => {
+          for (const mode of ['link', 'central-change']) {
+            const f = await fixture(),
+              productFiscal = { ncm: '61091000', origin: 0, unit: 'UN' };
+            await pool.query(
+              'UPDATE crm.olist_settings SET settings_envelope=$2::jsonb WHERE account_key=$1',
+              [
+                config.accountKey,
+                JSON.stringify(
+                  seal(
+                    { ...settings, productFiscal: null },
+                    config.envelopeKey,
+                    'settings',
+                    config.accountKey,
+                    'central',
+                  ),
+                ),
+              ],
+            );
+            assert.equal(
+              (await f.runtime.administration(f.input)).productFiscalRequired,
+              true,
+            );
+            await assert.rejects(
+              f.runtime.existingPreview({ ...f.input, saleId: '401' }),
+              { code: 'OLIST_PRODUCT_FISCAL_REQUIRED' },
+            );
+            const preview = await f.runtime.existingPreview({
+              ...f.input,
+              saleId: '401',
+              productFiscal,
+            });
+            assert.deepEqual(preview.productFiscal, productFiscal);
+            assert.equal(preview.productFiscalRequired, true);
+            const command = {
+              ...f.input,
+              previewToken: preview.previewToken,
+              reason: 'Synthetic reviewed fiscal',
+              idempotencyKey: 'canonical-selected-fiscal',
+            };
+            await assert.rejects(
+              f.runtime.linkExisting({
+                ...command,
+                productFiscal: { ...productFiscal, ncm: '99999999' },
+              }),
+              { code: 'INVALID_REQUEST' },
+            );
+            if (mode === 'central-change') {
+              await pool.query(
+                'UPDATE crm.olist_settings SET version=version+1,settings_envelope=$2::jsonb WHERE account_key=$1',
+                [
+                  config.accountKey,
+                  JSON.stringify(
+                    seal(
+                      {
+                        ...settings,
+                        productFiscal: { ...productFiscal, ncm: '99999999' },
+                      },
+                      config.envelopeKey,
+                      'settings',
+                      config.accountKey,
+                      'central',
+                    ),
+                  ),
+                ],
+              );
+              await assert.rejects(f.runtime.linkExisting(command), {
+                code: 'OLIST_PREVIEW_STALE',
+              });
+              assert.equal((await legacyCounts()).exports, 0);
+            } else {
+              const linked = await f.runtime.linkExisting(command);
+              assert.deepEqual(await f.runtime.linkExisting(command), linked);
+              const row = (
+                await pool.query(
+                  'SELECT snapshot_envelope FROM crm.olist_exports WHERE id=$1',
+                  [linked.operationId],
+                )
+              ).rows[0];
+              const snapshot = open(
+                row.snapshot_envelope,
+                config.envelopeKey,
+                'export-snapshot',
+                config.accountKey,
+                linked.operationId,
+              );
+              assert.deepEqual(snapshot.productFiscal, productFiscal);
+              assert.equal(snapshot.settings.productFiscal, null);
+              const central = (
+                await pool.query(
+                  'SELECT settings_envelope FROM crm.olist_settings WHERE account_key=$1',
+                  [config.accountKey],
+                )
+              ).rows[0];
+              assert.equal(
+                open(
+                  central.settings_envelope,
+                  config.envelopeKey,
+                  'settings',
+                  config.accountKey,
+                  'central',
+                ).productFiscal,
+                null,
+              );
+              await assert.rejects(
+                f.runtime.linkExisting({ ...command, productFiscal }),
+                { code: 'INVALID_REQUEST' },
+              );
+            }
+            noWrites(f);
+          }
+        },
+      );
+      await t.test(
+        'OLIST-T16: explicit legacy link is isolated, audited, replayable and never adopts canonical resources',
+        async () => {
+          const f = await explicitLegacyFixture(),
+            before = await legacyCounts();
+          const resourcesBefore = (
+            await pool.query(
+              'SELECT * FROM crm.olist_resources WHERE account_key=$1 ORDER BY id',
+              [config.accountKey],
+            )
+          ).rows;
+          const orderBefore = (
+            await pool.query(
+              'SELECT status,version,final_amount_cents,ficha_envelope FROM crm.orders WHERE id=$1',
+              [f.orderId],
+            )
+          ).rows[0];
+          const preview = await f.runtime.legacyExistingPreview({
+            ...f.input,
+            saleId: '401',
+            mapping: f.mapping,
+          });
+          assert.equal(preview.mode, 'legacy-sale-only-v1');
+          assert.equal(preview.eligible, true);
+          assert.deepEqual(await legacyCounts(), before);
+          const input = {
+            ...f.input,
+            previewToken: preview.previewToken,
+            confirmed: true,
+            reason: 'PRIVATE_LEGACY_HUMAN_REASON',
+            idempotencyKey: 'legacy-commit',
+          };
+          await assert.rejects(
+            f.runtime.linkLegacyExisting({ ...input, confirmed: false }),
+            { code: 'INVALID_REQUEST' },
+          );
+          await assert.rejects(f.runtime.linkExisting(input), {
+            code: 'OLIST_PREVIEW_INVALID',
+          });
+          await assert.rejects(
+            f.runtime.existingPreview({ ...f.input, saleId: '401' }),
+            { code: 'OLIST_ORDER_INCOMPLETE' },
+          );
+          const linked = await f.runtime.linkLegacyExisting(input),
+            after = await legacyCounts();
+          assert.equal(linked.mode, 'legacy-sale-only-v1');
+          assert.equal(linked.state, 'linked');
+          assert.deepEqual(after, {
+            ...before,
+            exports: before.exports + 1,
+            links: before.links + 1,
+          });
+          assert.deepEqual(
+            (
+              await pool.query(
+                'SELECT * FROM crm.olist_resources WHERE account_key=$1 ORDER BY id',
+                [config.accountKey],
+              )
+            ).rows,
+            resourcesBefore,
+          );
+          assert.deepEqual(
+            (
+              await pool.query(
+                'SELECT status,version,final_amount_cents,ficha_envelope FROM crm.orders WHERE id=$1',
+                [f.orderId],
+              )
+            ).rows[0],
+            orderBefore,
+          );
+          const calls = f.calls.length;
+          assert.deepEqual(await f.runtime.linkLegacyExisting(input), linked);
+          assert.equal(
+            f.calls.length,
+            calls,
+            'Replay does not repeat ERP reads or a mutation',
+          );
+          assert.deepEqual(await legacyCounts(), after);
+          const row = (
+            await pool.query('SELECT * FROM crm.olist_exports WHERE id=$1', [
+              linked.operationId,
+            ])
+          ).rows[0];
+          const mapping = open(
+            row.resource_mapping_envelope,
+            config.envelopeKey,
+            'sale-resources',
+            config.accountKey,
+            row.id,
+          );
+          const evidence = open(
+            row.readback_envelope,
+            config.envelopeKey,
+            'sale-readback',
+            config.accountKey,
+            row.id,
+          );
+          assert.equal(mapping.mode, 'legacy-sale-only-v1');
+          assert.equal(evidence.humanConfirmed, true);
+          assert.equal(evidence.reason, input.reason);
+          assert.ok(
+            !(
+              await pool.query(
+                'SELECT reason FROM crm.audit_events WHERE target_id=$1',
+                [row.id],
+              )
+            ).rows.some((entry) => entry.reason === input.reason),
+          );
+          await assert.rejects(
+            f.runtime.legacyExistingPreview({
+              ...f.input,
+              saleId: '401',
+              mapping: f.mapping,
+            }),
+            { code: 'OLIST_RECONCILIATION_REQUIRED' },
+          );
+          // The only subsequent job is an explicitly requested read-only check;
+          // legacy resource selectors cannot confer reusable canonical identities.
+          const request = await f.runtime.reconcile({
+            ...f.input,
+            stage: 'sale',
+            resourceId: null,
+            expectedVersion: Number(row.version),
+            reason: 'Synthetic later verification',
+            idempotencyKey: 'legacy-read',
+          });
+          const dispatcher = createOlistReconciliationRuntime({
+            database,
+            environment,
+            fetch: f.fetcher,
+            clock: () => NOW,
+          });
+          const checked = await createOlistReconciliationHandler({
+            dispatcher,
+          })(
+            {
+              jobType: 'olist.reconcile',
+              queue: 'olist_reconcile',
+              idempotencyKey: request.id,
+              olistExportId: row.id,
+            },
+            { heartbeat: async () => true },
+          );
+          assert.equal(checked.outcome, 'sent', JSON.stringify(checked));
+          noWrites(f);
+        },
+      );
+      await t.test(
+        'OLIST-T16: stale ERP/source evidence, session loss and changed correspondence cannot commit',
+        async () => {
+          for (const mode of ['remote', 'source', 'session', 'mapping']) {
+            const f = await explicitLegacyFixture(),
+              before = await legacyCounts();
+            const preview = await f.runtime.legacyExistingPreview({
+              ...f.input,
+              saleId: '401',
+              mapping: f.mapping,
+            });
+            if (mode === 'remote')
+              f.responses.get('/produtos/201').descricao =
+                'Changed after review';
+            if (mode === 'source')
+              await pool.query(
+                'UPDATE crm.orders SET version=version+1 WHERE id=$1',
+                [f.orderId],
+              );
+            if (mode === 'session')
+              await pool.query(
+                'UPDATE crm.sessions SET revoked_at=$2 WHERE token_hash=$1',
+                [f.input.sessionBinding, NOW],
+              );
+            const input = {
+              ...f.input,
+              previewToken: preview.previewToken,
+              confirmed: true,
+              reason: 'Synthetic attestation',
+              idempotencyKey: 'legacy-stale',
+            };
+            if (mode === 'mapping')
+              input.previewToken = input.previewToken.slice(0, -4) + 'AAAA';
+            await assert.rejects(f.runtime.linkLegacyExisting(input), {
+              code:
+                mode === 'session'
+                  ? 'FORBIDDEN'
+                  : mode === 'mapping'
+                    ? 'OLIST_PREVIEW_INVALID'
+                    : 'OLIST_PREVIEW_STALE',
+            });
+            assert.deepEqual(await legacyCounts(), before);
+            noWrites(f);
+          }
+        },
+      );
+      await t.test(
+        'OLIST-T16: concurrent legacy commands link the remote sale once and cannot replace a canonical operation',
+        async () => {
+          const f = await explicitLegacyFixture(),
+            before = await legacyCounts();
+          const previews = await Promise.all(
+            [1, 2].map(() =>
+              f.runtime.legacyExistingPreview({
+                ...f.input,
+                saleId: '401',
+                mapping: f.mapping,
+              }),
+            ),
+          );
+          const results = await Promise.allSettled(
+            previews.map((preview, index) =>
+              f.runtime.linkLegacyExisting({
+                ...f.input,
+                previewToken: preview.previewToken,
+                confirmed: true,
+                reason: 'Synthetic concurrent review',
+                idempotencyKey: 'legacy-race-' + index,
+              }),
+            ),
+          );
+          assert.equal(
+            results.filter((entry) => entry.status === 'fulfilled').length,
+            1,
+          );
+          assert.deepEqual(await legacyCounts(), {
+            ...before,
+            exports: before.exports + 1,
+            links: before.links + 1,
+          });
+          noWrites(f);
+          const canonical = await fixture();
+          await canonical.runtime.linkExisting(await command(canonical));
+          const countsBefore = await legacyCounts();
+          await assert.rejects(
+            canonical.runtime.legacyExistingPreview({
+              ...canonical.input,
+              saleId: '401',
+              mapping: f.mapping,
+            }),
+            { code: 'OLIST_RECONCILIATION_REQUIRED' },
+          );
+          assert.deepEqual(await legacyCounts(), countsBefore);
+        },
+      );
+
       await t.test(
         'LIVENESS API reads wait briefly for a busy shared quota window instead of failing the request (administration)',
         async () => {

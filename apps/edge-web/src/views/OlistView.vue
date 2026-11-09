@@ -81,6 +81,7 @@ const idFields = [
 const settings = reactive(
   Object.fromEntries([
     ...idFields.map((field) => [field.key, '']),
+    ['paymentDuePolicy', 'fixed_date'],
     ['paymentDueOn', ''],
     ['paymentTerms', ''],
     ['purchaseOrder', ''],
@@ -220,6 +221,8 @@ async function loadStatus() {
 function copySettings() {
   for (const key of Object.keys(settings))
     settings[key] = String(status.value?.settings?.[key] ?? '');
+  settings.paymentDuePolicy =
+    status.value?.settings?.paymentDuePolicy ?? 'fixed_date';
   for (const key of Object.keys(fiscal))
     fiscal[key] = String(status.value?.settings?.productFiscal?.[key] ?? '');
 }
@@ -354,7 +357,11 @@ function saveSettings() {
     }
     values[field.key] = value ? Number(value) : null;
   }
-  values.paymentDueOn = settings.paymentDueOn || null;
+  values.paymentDuePolicy = settings.paymentDuePolicy;
+  values.paymentDueOn =
+    settings.paymentDuePolicy === 'per_order'
+      ? null
+      : settings.paymentDueOn || null;
   values.paymentTerms = settings.paymentTerms.trim() || null;
   const fiscalValues = Object.values(fiscal).map((value) => value.trim());
   if (
@@ -743,6 +750,23 @@ onBeforeUnmount(() => {
                 />
               </div>
               <div class="olist-field">
+                <label for="olist-payment-policy">Vencimento nos pedidos</label>
+                <select
+                  id="olist-payment-policy"
+                  v-model="settings.paymentDuePolicy"
+                  :disabled="accountBusy"
+                >
+                  <option value="fixed_date">Data central fixa</option>
+                  <option value="per_order">Informado em cada pedido</option>
+                </select>
+                <p class="field-help">
+                  A vendedora confere a data antes de gerar a venda.
+                </p>
+              </div>
+              <div
+                v-if="settings.paymentDuePolicy !== 'per_order'"
+                class="olist-field"
+              >
                 <label for="olist-payment-due">Vencimento do pagamento</label>
                 <input
                   id="olist-payment-due"
@@ -780,7 +804,8 @@ onBeforeUnmount(() => {
               <legend>Cadastro fiscal de novos produtos</legend>
               <p class="field-help">
                 Preencha com orientação fiscal. Deixe os três campos vazios para
-                manter o cadastro de novos produtos bloqueado.
+                exigir que a operadora informe o cadastro fiscal na prévia de
+                cada pedido.
               </p>
               <div class="olist-settings-grid">
                 <div class="olist-field">
@@ -843,13 +868,15 @@ onBeforeUnmount(() => {
               <dt>Vencimento do pagamento</dt>
               <dd>
                 {{
-                  status.settings?.paymentDueOn
-                    ? new Intl.DateTimeFormat('pt-BR', {
-                        timeZone: 'UTC',
-                      }).format(
-                        new Date(status.settings.paymentDueOn + 'T00:00:00Z'),
-                      )
-                    : 'Não informado'
+                  status.settings?.paymentDuePolicy === 'per_order'
+                    ? 'Informado em cada pedido'
+                    : status.settings?.paymentDueOn
+                      ? new Intl.DateTimeFormat('pt-BR', {
+                          timeZone: 'UTC',
+                        }).format(
+                          new Date(status.settings.paymentDueOn + 'T00:00:00Z'),
+                        )
+                      : 'Não informado'
                 }}
               </dd>
               <dt>Cadastro fiscal de novos produtos</dt>
@@ -857,7 +884,7 @@ onBeforeUnmount(() => {
                 {{
                   status.settings?.productFiscal
                     ? `NCM ${status.settings.productFiscal.ncm} · Origem ${status.settings.productFiscal.origin} · ${status.settings.productFiscal.unit}`
-                    : 'Não informado; cadastro de novos produtos bloqueado'
+                    : 'Informado na prévia de cada pedido'
                 }}
               </dd>
               <dt>Prazo de pagamento</dt>

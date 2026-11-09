@@ -62,7 +62,7 @@ function calendarDay(value) {
  *
  * @param {{source:{order:any,sourceRevision:number,issues:{code:string,field:string}[]},
  * buyer:{name:string,phone:string|null,email?:string|null,registration:any}|null,
- * settings:any,now:Date}} input
+ * settings:any,now:Date,paymentDueOn?:unknown}} input
  * @returns {{eligible:boolean,issues:{code:string,field:string}[],commercial:any,customer:any,productFiscal?:any}}
  */
 export function buildOlistPreviewPlan(input) {
@@ -79,8 +79,21 @@ export function buildOlistPreviewPlan(input) {
   for (const key of REQUIRED_SETTINGS)
     if (!Number.isSafeInteger(settings?.[key]) || settings[key] <= 0)
       issue('OLIST_SETTINGS_REQUIRED', 'settings.' + key);
-  if (!calendarDay(settings?.paymentDueOn))
-    issue('OLIST_SETTINGS_REQUIRED', 'settings.paymentDueOn');
+  const perOrderDue = settings?.paymentDuePolicy === 'per_order';
+  const paymentDueOn = perOrderDue
+    ? input.paymentDueOn
+    : settings?.paymentDueOn;
+  if (!calendarDay(paymentDueOn))
+    issue(
+      perOrderDue ? 'OLIST_PAYMENT_DUE_REQUIRED' : 'OLIST_SETTINGS_REQUIRED',
+      perOrderDue ? 'commercial.paymentDueOn' : 'settings.paymentDueOn',
+    );
+  if (
+    !perOrderDue &&
+    input.paymentDueOn !== undefined &&
+    input.paymentDueOn !== paymentDueOn
+  )
+    issue('OLIST_SETTINGS_INVALID', 'commercial.paymentDueOn');
   if (
     settings?.receivingMethodId !== undefined &&
     settings.receivingMethodId !== null &&
@@ -167,6 +180,7 @@ export function buildOlistPreviewPlan(input) {
     orderDate: null,
     deliveryOn: null,
     paymentCondition: null,
+    paymentDueOn: calendarDay(paymentDueOn) ? paymentDueOn : null,
   };
   if (!order) issue('OLIST_SOURCE_INCOMPLETE', 'source');
   else {

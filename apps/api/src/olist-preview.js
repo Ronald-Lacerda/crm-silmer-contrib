@@ -18,11 +18,13 @@ import {
   createOlistClient,
   olistReadWait,
   olistSettings,
+  olistProductFiscal,
 } from '@crm-silmer/olist';
 import { buildOlistPreviewPlan } from './olist-preview-plan.js';
 import { planOlistResources } from './olist-preview-resources.js';
 
 const TTL = 15 * 60_000;
+const REVIEWED_FISCAL = Symbol('reviewed-product-fiscal');
 const SAFE_LOOKUP_ERRORS = new Set([
   'OLIST_AMBIGUOUS_MATCH',
   'OLIST_INCOMPLETE_LOOKUP',
@@ -197,6 +199,31 @@ export function createOlistPreview(database, options) {
         !row?.reconnect_required &&
         !row?.exchange_nonce,
       );
+      const paymentDuePolicy = settings?.paymentDuePolicy ?? 'fixed_date';
+      const centralFiscal = settings?.productFiscal ?? null;
+      const suppliedFiscal = Object.hasOwn(input, 'productFiscal')
+        ? olistProductFiscal(input.productFiscal)
+        : null;
+      if (
+        centralFiscal &&
+        suppliedFiscal &&
+        identityHash(config.hmacKey, 'fiscal-policy', centralFiscal) !==
+          identityHash(config.hmacKey, 'fiscal-policy', suppliedFiscal)
+      )
+        throw new OlistError(
+          input[REVIEWED_FISCAL] ? 'OLIST_PREVIEW_STALE' : 'INVALID_REQUEST',
+          input[REVIEWED_FISCAL] ? 409 : 400,
+        );
+      const productFiscal = centralFiscal ?? suppliedFiscal;
+      const productFiscalHash = productFiscal
+        ? identityHash(config.hmacKey, 'fiscal-policy', productFiscal)
+        : null;
+      const paymentDueOn =
+        paymentDuePolicy === 'per_order'
+          ? typeof input.paymentDueOn === 'string'
+            ? input.paymentDueOn
+            : null
+          : (settings?.paymentDueOn ?? null);
       const binding = {
         actorId: actor.id,
         authorizationVersion: actor.olistAuthorizationVersion,
@@ -211,6 +238,8 @@ export function createOlistPreview(database, options) {
         proposedDay: order.orderDate ? null : operationalDay(clock()),
         sourceRevision: source.sourceRevision,
         buyerVersion,
+        paymentDueOn,
+        productFiscalHash,
         // Hash contents as well as versions: a malformed/stale writer cannot reuse a receipt.
         contents: identityHash(config.hmacKey, 'preview-source', [
           source,
@@ -219,6 +248,7 @@ export function createOlistPreview(database, options) {
           settings,
           resources,
           operation,
+          productFiscal,
         ]),
       };
       return {
@@ -231,6 +261,10 @@ export function createOlistPreview(database, options) {
         order: { id: order.id, number: order.number, status: order.status },
         connected,
         creationEnabled,
+        paymentDuePolicy,
+        paymentDueOn,
+        productFiscal,
+        productFiscalRequired: centralFiscal === null,
         sourceVersions: {
           contactId: buyerContactId,
           contactVersion: buyerVersion,
@@ -264,6 +298,7 @@ export function createOlistPreview(database, options) {
         buyer: before.buyer,
         settings: before.settings,
         now: startedAt,
+        paymentDueOn: input.paymentDueOn,
       });
       const preparationIssues = [];
       // A normal token refresh changes the connection version. Prepare it
@@ -283,6 +318,7 @@ export function createOlistPreview(database, options) {
           buyer: before.buyer,
           settings: before.settings,
           now: startedAt,
+          paymentDueOn: input.paymentDueOn,
         });
       }
       if (
@@ -292,7 +328,12 @@ export function createOlistPreview(database, options) {
       )
         throw new OlistError('OLIST_PREVIEW_STALE', 409);
       const issues = [...plan.issues, ...preparationIssues];
-      plan.productFiscal = before.settings?.productFiscal ?? null;
+      plan.productFiscal = before.productFiscal;
+      if (!plan.productFiscal)
+        issues.push({
+          code: 'OLIST_PRODUCT_FISCAL_REQUIRED',
+          field: 'productFiscal',
+        });
       if (!before.connected && preparationIssues.length === 0)
         issues.push({ code: 'OLIST_RECONNECT_REQUIRED', field: 'connection' });
       if (before.operation)
@@ -392,6 +433,9 @@ export function createOlistPreview(database, options) {
         status: before.order.status,
         eligible,
         creationEnabled: before.creationEnabled,
+        paymentDuePolicy: before.paymentDuePolicy,
+        productFiscal: before.productFiscal,
+        productFiscalRequired: before.productFiscalRequired,
         issues,
         commercial: plan.commercial,
         customer: plan.customer
@@ -422,8 +466,11 @@ export function createOlistPreview(database, options) {
     /** Re-read current authority and all local versions; no remote call or reservation.
      * @param {any} input */
     async checkPreview(input) {
-      const current = await snapshot(input);
+      // Preserve current ACL/order checks before opening any stored receipt.
+      const initial = await snapshot(input);
       const receipt = readReceipt(input);
+      const source = receiptSource(input, receipt);
+      const current = source === input ? initial : await snapshot(source);
       validateFresh(current, receipt);
       return {
         valid: true,
@@ -467,6 +514,41 @@ export function createOlistPreview(database, options) {
       throw new OlistError('OLIST_PREVIEW_INVALID', 409);
     return receipt;
   }
+  /** A receipt owns its chosen due day. Commands cannot replace it later.
+   * @param {any} input @param {any} receipt */
+  function receiptSource(input, receipt) {
+    if (
+      Object.hasOwn(input, 'paymentDueOn') ||
+      Object.hasOwn(input, 'productFiscal')
+    )
+      throw new OlistError('INVALID_REQUEST', 400);
+    let source = input;
+    if (
+      (receipt.settings?.productFiscal === null ||
+        receipt.settings?.productFiscal === undefined) &&
+      receipt.productFiscal !== null &&
+      receipt.productFiscal !== undefined
+    ) {
+      const productFiscal = olistProductFiscal(receipt.productFiscal);
+      if (
+        receipt.binding.productFiscalHash !==
+        identityHash(config.hmacKey, 'fiscal-policy', productFiscal)
+      )
+        throw new OlistError('OLIST_PREVIEW_INVALID', 409);
+      source = { ...source, productFiscal, [REVIEWED_FISCAL]: true };
+    }
+    if (receipt.settings?.paymentDuePolicy !== 'per_order') return source;
+    const due = receipt.commercial?.paymentDueOn;
+    if (
+      typeof due !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/u.test(due) ||
+      !Number.isFinite(Date.parse(due + 'T00:00:00Z')) ||
+      new Date(due + 'T00:00:00Z').toISOString().slice(0, 10) !== due ||
+      receipt.binding?.paymentDueOn !== due
+    )
+      throw new OlistError('OLIST_PREVIEW_INVALID', 409);
+    return { ...source, paymentDueOn: due };
+  }
   /** @param {any} current @param {any} receipt */
   function validateFresh(current, receipt) {
     if (clock().getTime() >= Date.parse(receipt.expiresAt))
@@ -481,7 +563,7 @@ export function createOlistPreview(database, options) {
   /** Inside the export command's transaction: no HTTP or separate connection.
    * @param {any} input @param {any} receipt */
   async function assertFreshReceipt(input, receipt) {
-    const current = await snapshot(input);
+    const current = await snapshot(receiptSource(input, receipt));
     validateFresh(current, receipt);
     return current;
   }

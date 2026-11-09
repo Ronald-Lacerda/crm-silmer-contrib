@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { commandKey, request } from '../../lib/api-client.js';
 import { openDialog } from '../../lib/ui.js';
+import { amountLabel, dayLabel } from '../../lib/order-format.js';
 import { normalizeReasonText } from '../../lib/order-cancel.js';
 import {
   olistOperationReason,
@@ -73,6 +74,17 @@ const lkReason = ref('');
 const lkError = ref('');
 const lkAlert = ref(null);
 const lkReview = ref(null);
+const lkMode = ref('canonical');
+const lkDueOn = ref('');
+const lkDueField = ref(null);
+const lkFiscal = ref({ ncm: '', origin: '', unit: '' });
+const lkNcmField = ref(null);
+const lkOriginField = ref(null);
+const lkUnitField = ref(null);
+const lkFiscalInvalid = ref('');
+const lkConfirmed = ref(false);
+const lkConfirmationField = ref(null);
+const lkGroups = ref([]);
 let lkKey = '';
 let lkSettled = false;
 let lkKeyReason = '';
@@ -146,6 +158,58 @@ const linkOffered = computed(
   () =>
     Boolean(data.value) && !props.cancelled && canOfferLink(operation.value),
 );
+const legacyContext = computed(() => data.value?.legacyLinkContext ?? null);
+const legacyOffered = computed(
+  () =>
+    linkOffered.value &&
+    Array.isArray(legacyContext.value?.groups) &&
+    legacyContext.value.groups.length > 0,
+);
+const dueRequired = computed(
+  () =>
+    lkMode.value !== 'legacy' &&
+    (data.value?.paymentDuePolicy ?? legacyContext.value?.paymentDuePolicy) ===
+      'per_order',
+);
+const fiscalRequired = computed(
+  () => lkMode.value !== 'legacy' && data.value?.productFiscalRequired === true,
+);
+watch(
+  () => [lkFiscal.value.ncm, lkFiscal.value.origin, lkFiscal.value.unit],
+  () => {
+    if (lkFiscalInvalid.value) {
+      lkFiscalInvalid.value = '';
+      lkError.value = '';
+    }
+    if (!lkPreview.value || lkMode.value === 'legacy') return;
+    lkPreview.value = null;
+    lkStep.value = 'sale';
+    lkKey = '';
+    lkReason.value = '';
+  },
+);
+/** @param {Record<string, any>} attributes */
+function groupAttributes(attributes = {}) {
+  let fabric = attributes.fabric ?? '';
+  try {
+    const fabrics = JSON.parse(fabric);
+    if (
+      Array.isArray(fabrics) &&
+      fabrics.every((value) => typeof value === 'string')
+    )
+      fabric = fabrics.join(', ');
+  } catch {
+    // Older read models may already expose the display label.
+  }
+  return [
+    attributes.garment,
+    attributes.color,
+    fabric,
+    attributes.application,
+    attributes.collar,
+    attributes.audience,
+  ].filter(Boolean);
+}
 const invalidateOffered = computed(
   () =>
     Boolean(data.value) &&
@@ -461,9 +525,10 @@ async function submitReconcile() {
 
 /* Vincular venda existente ----------------------------------------------- */
 let lkTrigger = null;
-async function openLink(event) {
+async function openLink(event, mode = 'canonical') {
   if (
     busy.value ||
+    (mode === 'legacy' && !legacyOffered.value) ||
     props.disabled ||
     rcOpen.value ||
     lkOpen.value ||
@@ -473,6 +538,23 @@ async function openLink(event) {
   lkTrigger = event.currentTarget;
   const trigger = lkTrigger;
   lkStep.value = 'sale';
+  lkMode.value = mode;
+  lkDueOn.value = '';
+  lkFiscal.value = { ncm: '', origin: '', unit: '' };
+  lkFiscalInvalid.value = '';
+  lkConfirmed.value = false;
+  lkGroups.value =
+    mode === 'legacy'
+      ? (legacyContext.value?.groups ?? []).map((group) => ({
+          ...group,
+          parentProductId: '',
+          lines: group.lines.map((line) => ({
+            ...line,
+            childProductId: '',
+            itemIndex: '',
+          })),
+        }))
+      : [];
   lkSaleId.value = '';
   lkPreview.value = null;
   lkReason.value = '';
@@ -501,12 +583,14 @@ async function backToSale() {
   lkStep.value = 'sale';
   lkPreview.value = null;
   lkError.value = '';
+  lkFiscalInvalid.value = '';
   lkKey = '';
   await focusElement(lkSaleField);
 }
 /** Primeiro gesto: conferir a venda. Não cria nada nem vincula. */
 async function previewLink() {
   if (busy.value) return;
+  lkFiscalInvalid.value = '';
   const saleId = lkSaleId.value.trim();
   if (!/^[1-9][0-9]{0,15}$/u.test(saleId)) {
     lkError.value =
@@ -514,24 +598,121 @@ async function previewLink() {
     await focusElement(lkSaleField);
     return;
   }
+  if (dueRequired.value && !/^\d{4}-\d{2}-\d{2}$/u.test(lkDueOn.value)) {
+    lkError.value = 'Informe o vencimento desta venda.';
+    await focusElement(lkDueField);
+    return;
+  }
+  let productFiscal;
+  if (fiscalRequired.value) {
+    const ncm = lkFiscal.value.ncm.trim(),
+      origin = lkFiscal.value.origin.trim(),
+      unit = lkFiscal.value.unit.trim().toUpperCase();
+    if (!/^\d{8}$/u.test(ncm)) {
+      lkFiscalInvalid.value = 'ncm';
+      lkError.value = 'Informe o NCM com oito dígitos.';
+      await focusElement(lkNcmField);
+      return;
+    }
+    if (!/^[0-8]$/u.test(origin)) {
+      lkFiscalInvalid.value = 'origin';
+      lkError.value = 'Informe a origem fiscal de 0 a 8.';
+      await focusElement(lkOriginField);
+      return;
+    }
+    if (!/^[A-Z0-9]{1,6}$/u.test(unit)) {
+      lkFiscalInvalid.value = 'unit';
+      lkError.value =
+        'Informe a unidade fiscal com até seis letras ou números.';
+      await focusElement(lkUnitField);
+      return;
+    }
+    productFiscal = { ncm, origin: Number(origin), unit };
+  }
+  let mapping;
+  if (lkMode.value === 'legacy') {
+    const indexes = new Set();
+    if (
+      !lkGroups.value.length ||
+      lkGroups.value.some(
+        (group) =>
+          !/^[1-9][0-9]{0,15}$/u.test(group.parentProductId) ||
+          !group.lines.length ||
+          group.lines.some((line) => {
+            const invalid =
+              !/^[1-9][0-9]{0,15}$/u.test(line.childProductId) ||
+              !/^(0|[1-9][0-9]*)$/u.test(line.itemIndex) ||
+              !Number.isSafeInteger(Number(line.itemIndex)) ||
+              indexes.has(line.itemIndex);
+            indexes.add(line.itemIndex);
+            return invalid;
+          }),
+      )
+    ) {
+      lkError.value =
+        'Informe os IDs de produto pai e de cada variação e a posição de cada item. Não repita posições.';
+      await focusElement(lkAlert);
+      return;
+    }
+    mapping = {
+      groups: lkGroups.value.map((group) => ({
+        groupId: group.groupId,
+        parentProductId: group.parentProductId,
+        lines: group.lines.map((line) => ({
+          lineId: line.lineId,
+          childProductId: line.childProductId,
+          itemIndex: Number(line.itemIndex),
+        })),
+      })),
+    };
+  }
   const id = props.orderId;
   busy.value = true;
   lkError.value = '';
   try {
-    const response = await request(`${base.value}/existing/previews`, {
-      method: 'POST',
-      body: { saleId },
-      idempotencyKey: commandKey(),
-    });
+    const response = await request(
+      `${base.value}/existing/${lkMode.value === 'legacy' ? 'legacy/' : ''}previews`,
+      {
+        method: 'POST',
+        body: {
+          saleId,
+          ...(lkDueOn.value ? { paymentDueOn: lkDueOn.value } : {}),
+          ...(mapping ? { mapping } : {}),
+          ...(productFiscal ? { productFiscal } : {}),
+        },
+        idempotencyKey: commandKey(),
+      },
+    );
     if (disposed || props.orderId !== id) return;
     const result = response.data;
+    const historical = result?.historicalMetadata;
+    const validHistorical =
+      historical &&
+      historical.reusable === false &&
+      historical.fiscalVerified === false &&
+      typeof historical.productFiscalMissing === 'boolean' &&
+      (historical.originId === null ||
+        (Number.isSafeInteger(historical.originId) &&
+          historical.originId >= 0)) &&
+      (historical.purchaseOrder === null ||
+        (typeof historical.purchaseOrder === 'string' &&
+          historical.purchaseOrder.length <= 120)) &&
+      typeof historical.paymentDueOn === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/u.test(historical.paymentDueOn);
     if (
       result?.eligible !== true ||
       typeof result.previewToken !== 'string' ||
       !result.previewToken ||
       String(result.sale?.id) !== saleId ||
       typeof result.sale?.number !== 'string' ||
-      !Number.isFinite(Date.parse(result.expiresAt ?? ''))
+      !Number.isFinite(Date.parse(result.expiresAt ?? '')) ||
+      (lkMode.value === 'legacy' &&
+        (result.mode !== 'legacy-sale-only-v1' || !validHistorical)) ||
+      (fiscalRequired.value &&
+        (!result.productFiscal ||
+          result.productFiscal.ncm !== productFiscal?.ncm ||
+          result.productFiscal.origin !== productFiscal?.origin ||
+          result.productFiscal.unit !== productFiscal?.unit))
     ) {
       lkError.value =
         'A conferência não devolveu uma venda utilizável. Nenhum vínculo foi criado.';
@@ -543,8 +724,27 @@ async function previewLink() {
       saleId,
       number: result.sale.number.slice(0, 40),
       expiresAt: result.expiresAt,
+      paymentDueOn: result.commercial?.paymentDueOn ?? lkDueOn.value,
+      productFiscal:
+        lkMode.value !== 'legacy' && result.productFiscal
+          ? {
+              ncm: result.productFiscal.ncm,
+              origin: result.productFiscal.origin,
+              unit: result.productFiscal.unit,
+            }
+          : null,
+      historicalMetadata:
+        lkMode.value === 'legacy'
+          ? {
+              originId: historical.originId,
+              purchaseOrder: historical.purchaseOrder,
+              paymentDueOn: historical.paymentDueOn,
+              productFiscalMissing: historical.productFiscalMissing,
+            }
+          : null,
     };
     lkReason.value = '';
+    lkConfirmed.value = false;
     lkKey = commandKey();
     lkKeyReason = '';
     lkStep.value = 'review';
@@ -572,6 +772,12 @@ async function submitLink() {
     return;
   }
   const reason = normalizeReasonText(lkReason.value);
+  if (lkMode.value === 'legacy' && !lkConfirmed.value) {
+    lkError.value =
+      'Confirme a correspondência dos atributos de cada produto e tamanho.';
+    await focusElement(lkConfirmationField);
+    return;
+  }
   if (!reason || reason.length > 1000) {
     lkError.value = reason
       ? 'O motivo pode ter no máximo 1000 caracteres.'
@@ -598,11 +804,18 @@ async function submitLink() {
   busy.value = true;
   lkError.value = '';
   try {
-    const response = await request(`${base.value}/links`, {
-      method: 'POST',
-      body: { previewToken: preview.token, reason },
-      idempotencyKey: lkKey,
-    });
+    const response = await request(
+      `${base.value}/${lkMode.value === 'legacy' ? 'existing/legacy/links' : 'links'}`,
+      {
+        method: 'POST',
+        body: {
+          previewToken: preview.token,
+          reason,
+          ...(lkMode.value === 'legacy' ? { confirmed: true } : {}),
+        },
+        idempotencyKey: lkKey,
+      },
+    );
     if (disposed || props.orderId !== id) return;
     const receipt = response.data;
     const valid =
@@ -992,6 +1205,21 @@ onBeforeUnmount(() => {
             confere cliente, itens e total antes de vincular.
           </p>
         </div>
+        <div v-if="legacyOffered" class="olist-recovery-link">
+          <button
+            type="button"
+            :disabled="busy || disabled"
+            @click="openLink($event, 'legacy')"
+          >
+            Vincular venda histórica por linha
+          </button>
+          <p class="field-help">
+            Para uma venda antiga cujos produtos não têm a identificação
+            padronizada do CRM. Exige conferir os atributos de cada produto e
+            informar a correspondência de cada linha. Os cadastros ficam
+            restritos ao histórico desta venda.
+          </p>
+        </div>
         <div v-if="invalidateOffered" class="olist-recovery-link">
           <button
             type="button"
@@ -1139,10 +1367,24 @@ onBeforeUnmount(() => {
       :aria-describedby="`olist-lk-desc-${orderId}`"
       @cancel.prevent="cancelLink"
     >
-      <h2 :id="`olist-lk-title-${orderId}`">Vincular venda existente</h2>
+      <h2 :id="`olist-lk-title-${orderId}`">
+        {{
+          lkMode === 'legacy'
+            ? 'Vincular venda histórica por linha'
+            : 'Vincular venda existente'
+        }}
+      </h2>
       <p :id="`olist-lk-desc-${orderId}`">
         Nenhuma venda será criada no Olist. Primeiro o CRM confere a venda
         informada; depois você confirma o vínculo com um motivo.
+      </p>
+      <p v-if="lkMode === 'legacy'" class="field-help">
+        Confira no Olist a peça, cor, tecido, aplicação, gola, público e
+        tamanho. Essa correspondência depende da sua conferência: descrições
+        livres e SKUs vazios não comprovam esses atributos. O vínculo não
+        disponibiliza esses produtos para gerar novos pedidos. O vencimento, a
+        origem e a ordem de compra serão conferidos na própria venda histórica
+        do Olist.
       </p>
       <form v-if="lkStep === 'sale'" novalidate @submit.prevent="previewLink">
         <div class="olist-dialog-field">
@@ -1162,8 +1404,164 @@ onBeforeUnmount(() => {
             Somente o número do ID, sem endereço de página.
           </p>
         </div>
+        <div v-if="dueRequired" class="olist-dialog-field">
+          <label :for="`olist-lk-due-${orderId}`">Vencimento desta venda</label>
+          <input
+            :id="`olist-lk-due-${orderId}`"
+            ref="lkDueField"
+            v-model="lkDueOn"
+            type="date"
+            required
+            :disabled="busy"
+          />
+          <p class="field-help">
+            Informe a data registrada nesta venda no Olist.
+          </p>
+        </div>
+        <fieldset
+          v-if="fiscalRequired"
+          class="olist-legacy-group"
+          :disabled="busy"
+        >
+          <legend>Cadastro fiscal para esta conferência</legend>
+          <p class="field-help">
+            Informe os dados fiscais que devem corresponder ao produto já
+            lançado no Olist. Eles ficam congelados nesta prévia.
+          </p>
+          <div class="olist-dialog-field">
+            <label :for="`olist-lk-ncm-${orderId}`">NCM do produto</label>
+            <input
+              :id="`olist-lk-ncm-${orderId}`"
+              ref="lkNcmField"
+              v-model="lkFiscal.ncm"
+              inputmode="numeric"
+              autocomplete="off"
+              maxlength="8"
+              required
+              :aria-invalid="lkFiscalInvalid === 'ncm' ? 'true' : undefined"
+              :aria-describedby="
+                lkFiscalInvalid === 'ncm'
+                  ? `olist-lk-error-${orderId}`
+                  : undefined
+              "
+            />
+          </div>
+          <div class="olist-dialog-field">
+            <label :for="`olist-lk-origin-${orderId}`"
+              >Origem fiscal do produto</label
+            >
+            <input
+              :id="`olist-lk-origin-${orderId}`"
+              ref="lkOriginField"
+              v-model="lkFiscal.origin"
+              inputmode="numeric"
+              autocomplete="off"
+              maxlength="1"
+              required
+              :aria-invalid="lkFiscalInvalid === 'origin' ? 'true' : undefined"
+              :aria-describedby="`olist-lk-origin-help-${orderId}${lkFiscalInvalid === 'origin' ? ` olist-lk-error-${orderId}` : ''}`"
+            />
+            <p :id="`olist-lk-origin-help-${orderId}`" class="field-help">
+              Código fiscal de 0 a 8, conforme o cadastro do produto.
+            </p>
+          </div>
+          <div class="olist-dialog-field">
+            <label :for="`olist-lk-unit-${orderId}`"
+              >Unidade fiscal do produto</label
+            >
+            <input
+              :id="`olist-lk-unit-${orderId}`"
+              ref="lkUnitField"
+              v-model="lkFiscal.unit"
+              type="text"
+              autocomplete="off"
+              maxlength="6"
+              autocapitalize="characters"
+              required
+              :aria-invalid="lkFiscalInvalid === 'unit' ? 'true' : undefined"
+              :aria-describedby="
+                lkFiscalInvalid === 'unit'
+                  ? `olist-lk-error-${orderId}`
+                  : undefined
+              "
+            />
+          </div>
+        </fieldset>
+        <template v-if="lkMode === 'legacy'">
+          <fieldset
+            v-for="(group, groupIndex) in lkGroups"
+            :key="group.groupId"
+            class="olist-legacy-group"
+            :disabled="busy"
+          >
+            <legend>Grupo {{ groupIndex + 1 }}</legend>
+            <p>
+              {{ groupAttributes(group.attributes).join(' · ') }}
+            </p>
+            <div class="olist-dialog-field">
+              <label :for="`olist-legacy-parent-${orderId}-${groupIndex}`"
+                >ID do produto pai no Olist — grupo {{ groupIndex + 1 }}</label
+              >
+              <input
+                :id="`olist-legacy-parent-${orderId}-${groupIndex}`"
+                v-model="group.parentProductId"
+                inputmode="numeric"
+                autocomplete="off"
+                maxlength="16"
+                required
+              />
+            </div>
+            <fieldset
+              v-for="(line, lineIndex) in group.lines"
+              :key="line.lineId"
+              class="olist-legacy-line"
+            >
+              <legend>Tamanho {{ line.size }}</legend>
+              <p>
+                {{ line.quantity }} peças ·
+                {{ amountLabel(line.subtotalCents) }}
+              </p>
+              <div class="olist-dialog-field">
+                <label
+                  :for="`olist-legacy-child-${orderId}-${groupIndex}-${lineIndex}`"
+                  >ID da variação no Olist — grupo {{ groupIndex + 1 }},
+                  {{ line.size }}</label
+                >
+                <input
+                  :id="`olist-legacy-child-${orderId}-${groupIndex}-${lineIndex}`"
+                  v-model="line.childProductId"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  maxlength="16"
+                  required
+                />
+              </div>
+              <div class="olist-dialog-field">
+                <label
+                  :for="`olist-legacy-item-${orderId}-${groupIndex}-${lineIndex}`"
+                  >Posição do item na venda Olist — grupo {{ groupIndex + 1 }},
+                  {{ line.size }}</label
+                >
+                <input
+                  :id="`olist-legacy-item-${orderId}-${groupIndex}-${lineIndex}`"
+                  v-model="line.itemIndex"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  maxlength="6"
+                  required
+                  :aria-describedby="`olist-legacy-item-help-${orderId}`"
+                />
+              </div>
+            </fieldset>
+          </fieldset>
+          <p :id="`olist-legacy-item-help-${orderId}`" class="field-help">
+            A posição começa em 0: primeiro item = 0, segundo = 1. Cada item
+            deve aparecer uma única vez.
+          </p>
+        </template>
         <p
           v-if="lkError"
+          :id="`olist-lk-error-${orderId}`"
           ref="lkAlert"
           role="alert"
           class="inline-error"
@@ -1202,11 +1600,104 @@ onBeforeUnmount(() => {
             <dt>Válida até</dt>
             <dd>{{ olistTime(lkPreview?.expiresAt) }}</dd>
           </div>
+          <div v-if="lkMode !== 'legacy' && lkPreview?.paymentDueOn">
+            <dt>Vencimento</dt>
+            <dd>{{ dayLabel(lkPreview.paymentDueOn) }}</dd>
+          </div>
+          <div v-if="lkMode !== 'legacy' && lkPreview?.productFiscal">
+            <dt>Cadastro fiscal conferido</dt>
+            <dd>
+              NCM {{ lkPreview.productFiscal.ncm }} · origem
+              {{ lkPreview.productFiscal.origin }} ·
+              {{ lkPreview.productFiscal.unit }}
+            </dd>
+          </div>
         </dl>
+        <section
+          v-if="lkMode === 'legacy' && lkPreview?.historicalMetadata"
+          aria-label="Dados históricos da venda"
+        >
+          <h4>Dados históricos no Olist</h4>
+          <dl>
+            <div>
+              <dt>Origem no Olist (ID)</dt>
+              <dd>
+                {{ lkPreview.historicalMetadata.originId ?? 'Não informada' }}
+              </dd>
+            </div>
+            <div>
+              <dt>Ordem de compra histórica</dt>
+              <dd>
+                {{
+                  lkPreview.historicalMetadata.purchaseOrder || 'Não informada'
+                }}
+              </dd>
+            </div>
+            <div>
+              <dt>Vencimento registrado no Olist</dt>
+              <dd>{{ dayLabel(lkPreview.historicalMetadata.paymentDueOn) }}</dd>
+            </div>
+          </dl>
+          <p
+            v-if="lkPreview.historicalMetadata.productFiscalMissing"
+            class="field-help"
+          >
+            Cadastro fiscal legado ausente; esses dados não serão reutilizados
+            em novas vendas.
+          </p>
+          <p v-else class="field-help">
+            Os dados fiscais permanecem apenas como evidência histórica; não
+            serão reutilizados em novas vendas.
+          </p>
+        </section>
         <p class="field-help">
           O Olist confirmou comprador, itens, quantidades e total desta venda
           com o pedido. Vincular não altera a venda nem o pedido.
         </p>
+        <section
+          v-if="lkMode === 'legacy'"
+          aria-label="Correspondência conferida"
+        >
+          <div
+            v-for="(group, index) in lkGroups"
+            :key="group.groupId"
+            class="olist-legacy-group"
+          >
+            <h4>
+              Grupo {{ index + 1 }} · produto pai {{ group.parentProductId }}
+            </h4>
+            <p>
+              {{ groupAttributes(group.attributes).join(' · ') }}
+            </p>
+            <ul>
+              <li v-for="line in group.lines" :key="line.lineId">
+                {{ line.size }} · {{ line.quantity }} peças ·
+                {{ amountLabel(line.subtotalCents) }} · variação
+                {{ line.childProductId }} · posição {{ line.itemIndex }}
+              </li>
+            </ul>
+          </div>
+        </section>
+        <div v-if="lkMode === 'legacy'" class="olist-dialog-field">
+          <label
+            :for="`olist-lk-confirmed-${orderId}`"
+            class="olist-confirmation"
+          >
+            <input
+              :id="`olist-lk-confirmed-${orderId}`"
+              ref="lkConfirmationField"
+              v-model="lkConfirmed"
+              type="checkbox"
+              required
+            />
+            Conferi no Olist os atributos de todos os produtos e tamanhos e
+            confirmo a correspondência de cada linha deste pedido.
+          </label>
+          <p class="field-help">
+            Somente o histórico da venda será vinculado. Nenhum cadastro será
+            criado, alterado ou liberado para outros pedidos.
+          </p>
+        </div>
         <div class="olist-dialog-field">
           <label :for="`olist-lk-reason-${orderId}`"
             >Motivo do vínculo (obrigatório)</label
@@ -1254,6 +1745,23 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.olist-legacy-group,
+.olist-legacy-line {
+  display: grid;
+  gap: var(--space-3);
+  min-inline-size: 0;
+  margin-block: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border-subtle);
+}
+.olist-legacy-group legend,
+.olist-legacy-line legend {
+  font-weight: 600;
+}
+.olist-legacy-group p,
+.olist-legacy-group li {
+  overflow-wrap: anywhere;
+}
 .olist-recovery {
   display: grid;
   gap: var(--space-4);
@@ -1358,6 +1866,17 @@ onBeforeUnmount(() => {
   inline-size: 100%;
   min-inline-size: 0;
   box-sizing: border-box;
+}
+.olist-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-block-size: var(--target-min);
+}
+.olist-dialog-field input[type='checkbox'] {
+  flex: none;
+  inline-size: auto;
+  margin-block-start: var(--space-1);
 }
 .olist-dialog .field-help,
 .olist-dialog .inline-error {

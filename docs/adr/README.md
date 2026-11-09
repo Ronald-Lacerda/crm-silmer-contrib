@@ -2,6 +2,9 @@
 
 ## Decisão de 09/11/2026
 
+- [071 — Vencimento explícito e vínculo histórico isolado no Olist](071-vencimento-explicito-e-vinculo-historico-isolado-no-olist.md),
+  proposta na RFC 055, OLIST-T15–T17.
+
 - [070 — Olist: quota com espera de leitura e folga](070-olist-quota-com-espera-de-leitura-e-folga.md),
   RFC 050 / OLIST-T28, OLIST-52: só leitura espera quota, escrita nunca espera e
   só começa com folga para a leitura pós-venda; `verifyAccount` espera 15 s.

@@ -115,13 +115,15 @@ async function principal(request, runtime, write, action) {
       .digest('hex'),
   };
 }
-/** @param {unknown} body @param {string[]} fields */
-function strictBody(body, fields) {
+/** @param {unknown} body @param {string[]} fields @param {string[]} [optional] */
+function strictBody(body, fields, optional = []) {
   if (
     !body ||
     typeof body !== 'object' ||
     Array.isArray(body) ||
-    Object.keys(body).length !== fields.length ||
+    Object.keys(body).some(
+      (field) => !fields.includes(field) && !optional.includes(field),
+    ) ||
     fields.some((field) => !Object.hasOwn(body, field))
   )
     throw new OlistError('INVALID_REQUEST', 400);
@@ -200,6 +202,7 @@ export function registerOlistRoutes(api, runtime, contextFor) {
           const body = strictBody(
             request.body,
             /** @type {string[]} */ (fields),
+            method === 'preview' ? ['paymentDueOn', 'productFiscal'] : [],
           );
           if (method === 'exportOrder') reply.code(202);
           return runtime[/** @type {string} */ (method)]({
@@ -214,6 +217,18 @@ export function registerOlistRoutes(api, runtime, contextFor) {
   }
   for (const [path, method, fields, action] of [
     ['/existing/previews', 'existingPreview', ['saleId'], 'olist.link'],
+    [
+      '/existing/legacy/previews',
+      'legacyExistingPreview',
+      ['saleId', 'mapping'],
+      'olist.link',
+    ],
+    [
+      '/existing/legacy/links',
+      'linkLegacyExisting',
+      ['previewToken', 'confirmed', 'reason'],
+      'olist.link',
+    ],
     ['/links', 'linkExisting', ['previewToken', 'reason'], 'olist.link'],
     [
       '/reconcile',
@@ -246,6 +261,11 @@ export function registerOlistRoutes(api, runtime, contextFor) {
           const body = strictBody(
             request.body,
             /** @type {string[]} */ (fields),
+            method === 'existingPreview'
+              ? ['paymentDueOn', 'productFiscal']
+              : method === 'legacyExistingPreview'
+                ? ['paymentDueOn']
+                : [],
           );
           if (method === 'reconcile') reply.code(202);
           return runtime[/** @type {string} */ (method)]({

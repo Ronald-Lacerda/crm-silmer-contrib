@@ -79,6 +79,11 @@ export function createOlistExportCommand(
   return Object.freeze({
     /** @param {any} input */
     async exportOrder(input) {
+      if (
+        Object.hasOwn(input, 'paymentDueOn') ||
+        Object.hasOwn(input, 'productFiscal')
+      )
+        throw new OlistError('INVALID_REQUEST', 400);
       assertOlistPilotActor(config.pilotUserIds, input);
       if (!config.configured || key.length !== 32)
         throw new OlistError('OLIST_NOT_CONFIGURED', 503);

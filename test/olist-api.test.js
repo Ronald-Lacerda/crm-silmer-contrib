@@ -121,6 +121,8 @@ function fixture(patch = {}) {
     'mappings',
     'project',
     'exportOrder',
+    'preview',
+    'checkPreview',
   ]) {
     runtime[method] = async (/** @type {any} */ input) => {
       calls.push({ method, input });
@@ -182,6 +184,41 @@ test('Olist status is an authenticated admin read with private cache, referrer a
     createHash('sha256').update(session).digest('hex'),
   );
   assert.ok(!JSON.stringify(calls).includes(session));
+});
+
+test('per-order due date enters only the preview; export and check remain token-only', async (t) => {
+  const f = fixture({ olistEnabled: true });
+  t.after(() => f.api.close());
+  const prefix = '/api/v1/orders/synthetic-order/olist';
+  const result = await f.api.inject({
+    method: 'POST',
+    url: prefix + '/preview',
+    headers,
+    payload: {
+      paymentDueOn: '2026-11-20',
+      productFiscal: { ncm: '61091000', origin: 0, unit: 'UN' },
+    },
+  });
+  assert.equal(result.statusCode, 200);
+  assert.equal(f.calls.at(-1)?.input.paymentDueOn, '2026-11-20');
+  assert.deepEqual(f.calls.at(-1)?.input.productFiscal, {
+    ncm: '61091000',
+    origin: 0,
+    unit: 'UN',
+  });
+  for (const path of ['/export', '/preview/check'])
+    for (const substitution of [
+      { paymentDueOn: '2026-12-20' },
+      { productFiscal: { ncm: '99999999', origin: 0, unit: 'UN' } },
+    ]) {
+      const refused = await f.api.inject({
+        method: 'POST',
+        url: prefix + path,
+        headers,
+        payload: { previewToken: 'synthetic-token', ...substitution },
+      });
+      assert.equal(refused.statusCode, 400);
+    }
 });
 
 test('Olist writes forward the current actor, CSRF, origin, correlation and idempotency header', async (t) => {

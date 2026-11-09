@@ -1,5 +1,23 @@
 # TDD — CRM Silmer MVP
 
+## OLIST-T16/T17 — vencimento e vínculo histórico (09/11/2026)
+
+[ADR 071](docs/adr/071-vencimento-explicito-e-vinculo-historico-isolado-no-olist.md),
+[RFC 055](docs/rfc/055-vencimento-por-pedido-e-vinculo-historico-no-olist.md).
+`paymentDuePolicy=per_order` exige `paymentDueOn` na prévia; a data resolvida
+fica cifrada no snapshot e participa da assinatura comercial. Check e export
+recuperam o valor congelado; export continua token-only. A política ausente
+preserva a data central fixa anterior.
+
+`existing/legacy/previews` recebe IDs de pai/filho e a posição de cada item;
+`existing/legacy/links` exige recibo, declaração e motivo. A trilha exclusiva
+`legacy-sale-only-v1` relê e confere a correspondência completa antes do commit,
+sem publicar recursos compartilhados, reservas ou jobs. Operações incertas e
+vínculos canônicos mantêm seus verificadores anteriores. Autorização, sessão,
+versões, idempotência e unicidade da venda permanecem obrigatórias.
+O leitor histórico confere os valores exatos e congela metadados reais do ERP;
+não usa defaults fiscais ou de origem das novas vendas para simular o passado.
+
 ## OLIST-T27/T28 — invalidação administrativa e quota (09/11/2026)
 
 [ADR 069](docs/adr/069-olist-invalidacao-administrativa-de-export.md) e

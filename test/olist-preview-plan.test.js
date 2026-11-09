@@ -393,3 +393,43 @@ test('T06 no compensation between lines or mutation of historical/store snapshot
   assert.equal(plan.commercial.totalCents, 1800);
   assert.deepEqual(input, before);
 });
+
+test('T17 per-order due day is explicit, calendar-valid and independent of payment text or clock', () => {
+  const input = fixture();
+  const settings = {
+    ...input.settings,
+    paymentDuePolicy: 'per_order',
+    paymentDueOn: null,
+  };
+  for (const paymentDueOn of [
+    undefined,
+    null,
+    '',
+    'amanhã',
+    '30 dias',
+    '2027-02-29',
+    '2026-11-31',
+    '2026-11-30T00:00:00Z',
+    20261130,
+  ])
+    hasIssue(
+      buildOlistPreviewPlan({ ...input, settings, paymentDueOn }),
+      'OLIST_PAYMENT_DUE_REQUIRED',
+    );
+  const plan = buildOlistPreviewPlan({
+    ...input,
+    settings,
+    paymentDueOn: '2028-02-29',
+  });
+  assert.equal(plan.eligible, true);
+  assert.equal(plan.commercial.paymentDueOn, '2028-02-29');
+  assert.equal(settings.paymentDueOn, null);
+  assert.equal(
+    buildOlistPreviewPlan(input).commercial.paymentDueOn,
+    '2026-11-30',
+  );
+  hasIssue(
+    buildOlistPreviewPlan({ ...input, paymentDueOn: '2026-12-01' }),
+    'OLIST_SETTINGS_INVALID',
+  );
+});

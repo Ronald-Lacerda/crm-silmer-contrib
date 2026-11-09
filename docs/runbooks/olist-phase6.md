@@ -95,6 +95,37 @@ procedural continua necessária; não existe interlock externo ao banco restaura
 
 ## Critérios para liberar o teste da operadora
 
+### Vencimento e cadastro fiscal na conferência
+
+Decisões do proprietário em 09/11/2026: preservar as configurações do ERP;
+a operadora informa o vencimento de cada pedido e pode informar o cadastro
+fiscal na hora. [RFC 055](../rfc/055-vencimento-por-pedido-e-vinculo-historico-no-olist.md)
+e [ADR 071](../adr/071-vencimento-explicito-e-vinculo-historico-isolado-no-olist.md).
+O CRM aponta para os identificadores já existentes; não alterar gatilhos ou
+parâmetros globais do ERP para fazer o teste passar. Ordem de compra histórica
+não se torna padrão de novas vendas.
+
+Com `paymentDuePolicy=per_order`, preencher o dia combinado antes da prévia.
+Quando não há `productFiscal` central, preencher NCM, origem e unidade aprovados
+para todos os itens da prévia. Nenhum desses campos recebe default inferido.
+Sem os dados, a geração fica pendente e o pedido permanece salvo no CRM.
+Alterá-los exige nova prévia; check e export recebem apenas o token congelado.
+A venda é incluída com situação 0, sem comando de nota, estoque ou baixa.
+
+### Venda histórica sem identidade canônica
+
+O caminho **Vincular venda histórica** exige ID da venda e correspondência
+explícita de cada grupo/linha com pai, filho e posição do item. Conferir os
+atributos humanos, cliente, tamanhos, quantidades, datas e todos os valores.
+Origem, vencimento, OC e fiscal observados pertencem ao passado; não são os
+defaults atuais nem dados para novos cadastros. Fiscal ausente aparece como
+não verificado. A confirmação com motivo gera um vínculo cifrado e auditado
+`legacy-sale-only-v1`, sem recursos compartilhados, jobs criadores ou POST ERP.
+Qualquer mudança remota ou local exige nova conferência. A reconferência desse
+vínculo continua apenas por leitura; tentativas incertas usam a trilha estrita.
+
+### Checklist do piloto restrito
+
 O piloto permanece individual. A configuração privada contém o ID exato da
 conta ativa, além do checkbox Olist. Administrador, e-mail parecido, nome igual
 ou posse do Pedido não conferem essa habilitação. A API e o worker devem usar a
@@ -107,7 +138,15 @@ Antes do aviso à operadora, registrar evidência real de:
 - vínculo T16 do caso privado existente, com zero POSTs criadores;
 - teste controlado T17, com uma entidade por identidade, uma venda e valores por linha;
 - replay/recarga sem nova venda e ausência de incerteza sem responsável;
-- backup externo e preservação privada das chaves, suporte e procedimento de desligamento.
+- backup atual concluído, preservação privada das chaves, suporte e procedimento de desligamento.
+
+O piloto individual não comprova recuperação da perda total da VPS. Backup
+externo, escrow com dois custodians e o drill completo continuam nos gates
+operacionais independentes da topologia/recovery. Não ampliar esse ensaio para
+provisionar armazenamento novo sem decisão do proprietário. A evidência local
+de restore lógico e o backup EasyPanel não fecham esses gates gerais. Após
+qualquer restauração, despacho e criação permanecem parados até reconciliar a
+janela; nunca restaurar e religar automaticamente.
 
 O aviso de prontidão para teste não encerra o período de observação do piloto.
 T18 exige avaliação posterior e decisão explícita de ampliar ou manter restrito;
@@ -115,6 +154,21 @@ nenhum outro usuário recebe permissão por herança. A ficha v7 continua sob se
 gate de aprovação de amostra; não trocar `PRINT_TEMPLATE` para concluir o piloto.
 
 ## Evidência do ambiente real
+
+Em 09/11/2026, a correção de formatos reais dos catálogos foi integrada no
+[PR 327](https://github.com/romulosutil/crm-silmer/pull/327), commit
+`b01d39b681c774049b54c1bcc25503a64d174446`. API, worker e edge implantados
+automaticamente em `master`, todos saudáveis; live, ready e healthz retornaram
+200. Consultas limitadas comprovaram vendedores e depósitos sem mutação ERP.
+Os identificadores das opções e as correspondências reais permanecem privados.
+
+Validação da fatia seguinte (vencimento/fiscal por prévia e vínculo histórico):
+`npm run validate` aprovado, 2.379 testes, 2.331 aprovados e 48 skips
+condicionais; revisão independente sem crítico/alto. SQL administrativo/runtime
+afetado 58/58 e inspector final 28/28, incluindo o nome de grade legado no
+plural e a recusa de aliases ambíguos. UI Olist cobriu 171 cenários, com
+reexecuções focadas aprovadas após corrigir seletor de mensagem e substituir
+números privados por fixtures sintéticas. Esses gates não são criação real.
 
 Em 09/11/2026, o PostgreSQL permaneceu ativo; a API conectava ao banco, mas
 readiness retornava 503 e o login não completava. O esquema aplicado terminava
@@ -146,4 +200,6 @@ ainda em validação.
 
 Identidade, documento, credenciais, pedidos reais e capturas com dados pessoais
 ficam em evidência privada. Vínculo T16, criação controlada T17, parâmetros e
-cópia externa do backup ainda precisam de evidência no alvo antes da liberação.
+backup atual com chaves recuperáveis ainda precisam de conferência final no
+alvo antes da liberação. A cópia externa permanece pendência de recuperação
+geral, separada da prontidão para o teste individual supervisionado.

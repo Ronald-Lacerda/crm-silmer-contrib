@@ -150,7 +150,14 @@ async function setup(page, options = {}) {
     if (path === operation && method === 'GET') return json(projection);
     if (path === `${operation}/preview`) {
       expect(method).toBe('POST');
-      expect(body).toEqual({});
+      expect(body).toEqual({
+        ...(projection.paymentDuePolicy === 'per_order'
+          ? { paymentDueOn: '2026-12-10' }
+          : {}),
+        ...(projection.productFiscalRequired
+          ? { productFiscal: { ncm: '61091000', origin: 0, unit: 'UN' } }
+          : {}),
+      });
       expect(req.headers()['x-csrf-token']).toBe('t12-csrf');
       if (options.delayPreview) await previewGate;
       if (options.previewFailure)
@@ -275,6 +282,103 @@ test('T12 eligible exact-cent preview remains read only with generation disabled
           .length,
     )
     .toBe(1);
+  expectNoEffectsOrGeneralRead(state);
+});
+
+test('T17 per-order due date is required, reviewed, and changing it discards the prior preview', async ({
+  page,
+}) => {
+  const state = await setup(page, {
+    projection: { paymentDuePolicy: 'per_order', creationEnabled: true },
+    preview: previewFixture({
+      commercial: {
+        ...previewFixture().commercial,
+        paymentDueOn: '2026-12-10',
+      },
+    }),
+  });
+  await page.goto(`/olist?pedido=${orderId}`);
+  const date = page.getByLabel('Vencimento deste pedido', { exact: true });
+  await expect(
+    page.getByText('Confira os dados e a prévia antes de gerar a venda.', {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Gerar venda no Olist', exact: true }),
+  ).toHaveCount(0);
+  const confer = page.getByRole('button', {
+    name: 'Conferir prévia Olist',
+    exact: true,
+  });
+  await confer.click();
+  await expect(date).toBeFocused();
+  await expect(page.getByRole('alert')).toContainText('Informe o vencimento');
+  expect(
+    state.calls.filter(({ path }) => path === `${operation}/preview`),
+  ).toHaveLength(0);
+  await date.fill('2026-12-10');
+  await confer.click();
+  await expect(page.getByText('10/12/2026', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Validar prévia', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Gerar venda no Olist', exact: true }),
+  ).toHaveAttribute('aria-disabled', 'true');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await date.fill('2026-12-11');
+  await expect(
+    page.getByRole('button', { name: 'Validar prévia', exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByText('10/12/2026', { exact: true })).toHaveCount(0);
+  expect(
+    state.calls.filter(({ path }) => path === `${operation}/preview`),
+  ).toHaveLength(1);
+  expectNoEffectsOrGeneralRead(state);
+});
+
+test('T17 fiscal data is entered explicitly, frozen for review and changing it discards the preview', async ({
+  page,
+}) => {
+  const productFiscal = { ncm: '61091000', origin: 0, unit: 'UN' };
+  const state = await setup(page, {
+    projection: { productFiscalRequired: true },
+    preview: previewFixture({ productFiscal }),
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/olist?pedido=${orderId}`);
+  const confer = page.getByRole('button', {
+    name: 'Conferir prévia Olist',
+    exact: true,
+  });
+  const ncm = page.getByLabel('NCM (8 dígitos)', { exact: true });
+  const origin = page.getByLabel('Origem fiscal (código de 0 a 8)', {
+    exact: true,
+  });
+  const unit = page.getByLabel('Unidade dos produtos', { exact: true });
+  await expect(ncm).toHaveValue('');
+  await expect(origin).toHaveValue('');
+  await expect(unit).toHaveValue('');
+  await confer.click();
+  await expect(ncm).toBeFocused();
+  await ncm.fill(productFiscal.ncm);
+  await confer.click();
+  await expect(origin).toBeFocused();
+  expect(
+    state.calls.filter(({ path }) => path === `${operation}/preview`),
+  ).toHaveLength(0);
+  await origin.fill('0');
+  await unit.fill(productFiscal.unit);
+  await confer.click();
+  await expect(
+    page.getByText('NCM 61091000 · Origem 0 · UN', { exact: true }),
+  ).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await unit.fill('PC');
+  await expect(
+    page.getByRole('button', { name: 'Validar prévia', exact: true }),
+  ).toHaveCount(0);
   expectNoEffectsOrGeneralRead(state);
 });
 

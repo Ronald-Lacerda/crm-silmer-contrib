@@ -676,11 +676,45 @@ test('T11 edits every central setting without dropping fiscal, receipt or due da
   expect(calls.find((call) => call.path === `${base}/settings`)?.body).toEqual({
     expectedVersion: 4,
     reason: 'Parâmetros comerciais Olist atualizados pelo administrador',
-    settings: { ...configuredSettings, paymentTerms: 'Prazo explícito' },
+    settings: {
+      ...configuredSettings,
+      paymentDuePolicy: 'fixed_date',
+      paymentTerms: 'Prazo explícito',
+    },
   });
   expect(
     calls.filter((call) => /export|previews|reconcile|links/u.test(call.path)),
   ).toHaveLength(0);
+});
+
+test('T17 admin selects per-order due dates without retaining a hidden central date', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    initialStatus: { settings: { ...settings, paymentDueOn: '2026-11-30' } },
+  });
+  await page.goto('/olist');
+  await page.getByText('Parâmetros comerciais', { exact: true }).click();
+  await page.getByRole('button', { name: 'Editar parâmetros' }).click();
+  await page
+    .getByLabel('Vencimento nos pedidos', { exact: true })
+    .selectOption('per_order');
+  await expect(
+    page.getByLabel('Vencimento do pagamento', { exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole('button', { name: 'Salvar parâmetros' }).click();
+  await expect(
+    page.getByText('Informado em cada pedido', { exact: true }),
+  ).toBeVisible();
+  const saved = calls.find((call) => call.path === `${base}/settings`)?.body
+    .settings;
+  expect(saved.paymentDuePolicy).toBe('per_order');
+  expect(saved.paymentDueOn).toBeNull();
+  await expect(
+    page.getByRole('heading', { name: 'Olist', exact: true }),
+  ).toBeFocused();
 });
 
 test('T11 rejects partial fiscal policy before any command and cancels with predictable focus', async ({

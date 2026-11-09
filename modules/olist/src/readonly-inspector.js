@@ -1,6 +1,10 @@
 import { OlistError, text } from './errors.js';
+import {
+  prepareExactCentExport,
+  reconcileExactCentExport,
+} from '@crm-silmer/orders';
 import { identityHash } from './crypto.js';
-import { olistProductFiscal } from './configuration.js';
+import { olistProductFiscal, normalizeDocument } from './configuration.js';
 import { buildCustomerPayload } from './resource-payloads.js';
 import {
   normalizeContactPhone,
@@ -143,6 +147,375 @@ export function createOlistReadonlyInspector({ client, config }) {
         return value;
       },
       digest: () => identityHash(config.hmacKey, 'readonly-evidence', trail),
+    };
+  }
+  /** Explicit, sale-local correspondence. It never establishes a reusable
+   * product identity and is never a fallback for a canonical uncertain effect.
+   * @param {any} input */
+  async function legacyExistingSale({
+    snapshot,
+    reference,
+    remoteId: selectedId,
+    mapping,
+    paymentDueOn,
+  }) {
+    if (
+      snapshot?.policy !== 'legacy-sale-only-v1' ||
+      snapshot?.linkMode !== 'legacy-sale-only-v1' ||
+      !/^CRM-[A-Za-z0-9-]{1,100}$/u.test(reference)
+    )
+      refuse('OLIST_RECONCILIATION_REQUIRED');
+    const prepared = prepareExactCentExport(
+      snapshot.commercial.groups.map((/** @type {any} */ group) => ({
+        id: group.groupId,
+        lines: group.lines.map((/** @type {any} */ line) => ({
+          id: line.lineId,
+          size: line.size,
+          quantity: line.quantity,
+          subtotalCents: line.subtotalCents,
+          subtotalReviewed: true,
+        })),
+      })),
+    );
+    if (
+      !prepared.eligible ||
+      prepared.totalCents !== snapshot.commercial.totalCents
+    )
+      refuse();
+    /** @param {any} value @param {string[]} fields */
+    function shape(value, fields) {
+      if (
+        !value ||
+        typeof value !== 'object' ||
+        Array.isArray(value) ||
+        Object.keys(value).length !== fields.length ||
+        fields.some((field) => !Object.hasOwn(value, field))
+      )
+        throw new OlistError('INVALID_REQUEST', 400);
+    }
+    shape(mapping, ['groups']);
+    if (
+      !Array.isArray(mapping.groups) ||
+      !mapping.groups.length ||
+      mapping.groups.length > 50
+    )
+      throw new OlistError('INVALID_REQUEST', 400);
+    const reads = scope(),
+      wantedId = remoteId(selectedId);
+    const body = parseOlistLosslessJson(await reads.read('orderRaw', wantedId));
+    if (
+      olistIntegerFromJson(body?.id) !== wantedId ||
+      !Array.isArray(body.itens) ||
+      !body.itens.length ||
+      body.itens.length > 250
+    )
+      refuse();
+    const actualReference = body.ecommerce?.numeroPedidoEcommerce;
+    if (
+      actualReference !== undefined &&
+      actualReference !== null &&
+      actualReference !== '' &&
+      actualReference !== reference
+    )
+      refuse('OLIST_SALE_REFERENCE_CONFLICT');
+    const customerId = olistIntegerFromJson(body.cliente?.id);
+    const customer = await reads.read('contact', customerId);
+    if (remoteId(customer?.id) !== customerId)
+      refuse('OLIST_CUSTOMER_DIVERGENT');
+    customerMatches(
+      customer,
+      buildCustomerPayload(snapshot.customer, 'CRM-legacy-sale-buyer'),
+    );
+    if (
+      normalizeDocument(body.cliente?.cpfCnpj) !==
+      normalizeDocument(snapshot.customer.cpfCnpj)
+    )
+      refuse('OLIST_CUSTOMER_DIVERGENT');
+    /** @type {Map<number,any>} */ const products = new Map();
+    /** @param {number} id */
+    async function product(id) {
+      if (!products.has(id)) products.set(id, await reads.read('product', id));
+      const found = products.get(id);
+      if (remoteId(found?.id) !== id) refuse('OLIST_PRODUCT_DIVERGENT');
+      return found;
+    }
+    /** @param {unknown} value */
+    const normalized = (value) =>
+      String(value ?? '')
+        .normalize('NFC')
+        .trim()
+        .toLocaleLowerCase('pt-BR');
+    const usedGroups = new Set(),
+      usedLines = new Set(),
+      usedItems = new Set();
+    /** @type {any[]} */ const groups = [],
+      correspondence = [],
+      fiscalObservations = [];
+    for (const group of snapshot.commercial.groups) {
+      const supplied = mapping.groups.filter(
+        (/** @type {any} */ entry) => entry?.groupId === group.groupId,
+      );
+      if (supplied.length !== 1 || usedGroups.has(group.groupId))
+        refuse('OLIST_RESOURCE_DIVERGENT');
+      const selected = supplied[0];
+      shape(selected, ['groupId', 'parentProductId', 'lines']);
+      if (typeof selected.parentProductId !== 'string')
+        throw new OlistError('INVALID_REQUEST', 400);
+      if (
+        !Array.isArray(selected.lines) ||
+        selected.lines.length !== group.lines.length
+      )
+        refuse('OLIST_RESOURCE_DIVERGENT');
+      usedGroups.add(group.groupId);
+      const parentId = remoteId(selected.parentProductId),
+        parent = await product(parentId);
+      if (
+        parent.situacao !== 'A' ||
+        !(parent.tipo === 'V' || parent.tipoVariacao === 'P') ||
+        !Array.isArray(parent.variacoes)
+      )
+        refuse('OLIST_PRODUCT_DIVERGENT');
+      // Historical fiscal fields are observations, never a verified policy or
+      // a reusable product identity. This path cannot create a product/order.
+      const ncm =
+        typeof parent.ncm === 'string' && parent.ncm.trim()
+          ? text(parent.ncm, 20)
+          : null;
+      const unit =
+        typeof parent.unidade === 'string' && parent.unidade.trim()
+          ? text(parent.unidade, 20)
+          : null;
+      fiscalObservations.push({
+        parentProductId: String(parentId),
+        description:
+          typeof parent.descricao === 'string'
+            ? parent.descricao.slice(0, 12000)
+            : null,
+        sku: typeof parent.sku === 'string' ? parent.sku.slice(0, 1000) : null,
+        ncm,
+        unit,
+        origin:
+          parent.origem === undefined || parent.origem === null
+            ? null
+            : text(String(parent.origem), 20),
+        fiscalMissing: !ncm || !unit,
+      });
+      const parentChildIds = new Set();
+      for (const candidate of parent.variacoes) {
+        const id = remoteId(candidate.id);
+        if (parentChildIds.has(id)) refuse('OLIST_VARIATION_DIVERGENT');
+        parentChildIds.add(id);
+      }
+      /** @type {any[]} */ const lines = [],
+        explicitLines = [];
+      for (const line of group.lines) {
+        const matches = selected.lines.filter(
+          (/** @type {any} */ entry) => entry?.lineId === line.lineId,
+        );
+        if (matches.length !== 1 || usedLines.has(line.lineId))
+          refuse('OLIST_RESOURCE_DIVERGENT');
+        const mapped = matches[0];
+        shape(mapped, ['lineId', 'childProductId', 'itemIndex']);
+        if (typeof mapped.childProductId !== 'string')
+          throw new OlistError('INVALID_REQUEST', 400);
+        const index = mapped.itemIndex;
+        if (
+          !Number.isSafeInteger(index) ||
+          index < 0 ||
+          index >= body.itens.length ||
+          usedItems.has(index)
+        )
+          refuse('OLIST_RESOURCE_DIVERGENT');
+        const childId = remoteId(mapped.childProductId),
+          child = await product(childId);
+        if (
+          child.situacao !== 'A' ||
+          child.tipoVariacao !== 'V' ||
+          remoteId(child.produtoPai?.id) !== parentId ||
+          childId === parentId
+        )
+          refuse('OLIST_VARIATION_DIVERGENT');
+        const grade = parent.variacoes.filter(
+          (/** @type {any} */ entry) =>
+            Array.isArray(entry.grade) &&
+            entry.grade.length === 1 &&
+            ['tamanho', 'tamanhos'].includes(
+              normalized(entry.grade[0].chave),
+            ) &&
+            normalized(entry.grade[0].valor) === normalized(line.size),
+        );
+        if (grade.length !== 1 || remoteId(grade[0].id) !== childId)
+          refuse('OLIST_VARIATION_DIVERGENT');
+        const item = body.itens[index];
+        if (
+          olistIntegerFromJson(item?.produto?.id) !== childId ||
+          (item.infoAdicional !== undefined &&
+            item.infoAdicional !== null &&
+            item.infoAdicional !== '' &&
+            item.infoAdicional !== line.lineId)
+        )
+          refuse();
+        item.infoAdicional = line.lineId;
+        usedLines.add(line.lineId);
+        usedItems.add(index);
+        lines.push({
+          lineId: line.lineId,
+          productId: String(childId),
+          itemIndex: index,
+        });
+        explicitLines.push({
+          lineId: line.lineId,
+          childProductId: String(childId),
+          itemIndex: index,
+        });
+      }
+      groups.push({
+        groupId: group.groupId,
+        productId: String(parentId),
+        lines,
+      });
+      correspondence.push({
+        groupId: group.groupId,
+        parentProductId: String(parentId),
+        lines: explicitLines,
+      });
+    }
+    if (
+      usedGroups.size !== mapping.groups.length ||
+      usedItems.size !== body.itens.length
+    )
+      refuse('OLIST_RESOURCE_DIVERGENT');
+    const resources = {
+      resolved: true,
+      mode: 'legacy-sale-only-v1',
+      customerId: String(customerId),
+      groups,
+      legacyCorrespondence: { groups: correspondence },
+    };
+    /** @param {any} value */
+    const emptyObject = (value) =>
+      value === undefined ||
+      value === null ||
+      (value &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        Object.keys(value).length === 0);
+    /** @param {any} value */
+    const emptyArray = (value) =>
+      value === undefined ||
+      value === null ||
+      (Array.isArray(value) && value.length === 0);
+    /** @param {any} value */
+    const zero = (value) =>
+      value === undefined ||
+      value === null ||
+      /^-?0(?:\.0+)?(?:[eE][+-]?[0-9]+)?$/u.test(olistNumberLexeme(value));
+    if (
+      olistIntegerFromJson(body.situacao, true) !== 0 ||
+      !zero(body.idNotaFiscal) ||
+      !emptyObject(body.notaFiscal) ||
+      !emptyArray(body.pagamentosIntegrados) ||
+      ![undefined, null, ''].includes(body.dataFaturamento) ||
+      !zero(body.origemPedido) ||
+      ![body.valorDesconto, body.valorFrete, body.valorOutrasDespesas].every(
+        zero,
+      )
+    )
+      refuse();
+    /** Literal day or documented ERP midnight, never an inferred timezone.
+     * @param {unknown} value */
+    function historicalDay(value) {
+      if (
+        typeof value !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}(?: 00:00:00)?$/u.test(value)
+      )
+        refuse();
+      const day = value.slice(0, 10),
+        date = new Date(day + 'T00:00:00Z');
+      if (
+        !Number.isFinite(date.getTime()) ||
+        date.toISOString().slice(0, 10) !== day
+      )
+        refuse();
+      return day;
+    }
+    const orderDate = historicalDay(body.data);
+    if (
+      snapshot.commercial.orderDate &&
+      snapshot.commercial.orderDate !== orderDate
+    )
+      refuse();
+    const deliveryOn =
+      body.dataPrevista === undefined ||
+      body.dataPrevista === null ||
+      body.dataPrevista === ''
+        ? null
+        : historicalDay(body.dataPrevista);
+    if (deliveryOn && deliveryOn !== snapshot.commercial.deliveryOn) refuse();
+    const installments = body.pagamento?.parcelas;
+    if (
+      !Array.isArray(installments) ||
+      installments.length !== 1 ||
+      !emptyObject(installments[0].transacao) ||
+      unitCents(installments[0].valor) !==
+        BigInt(snapshot.commercial.totalCents)
+    )
+      refuse();
+    const due = historicalDay(installments[0].data);
+    if (paymentDueOn !== undefined && paymentDueOn !== due) refuse();
+    let checked;
+    try {
+      checked = reconcileExactCentExport(prepared, {
+        lines: body.itens.map((/** @type {any} */ item) => ({
+          lineId: item.infoAdicional,
+          quantity: olistIntegerFromJson(item.quantidade),
+          unitLexeme: olistNumberLexeme(item.valorUnitario),
+        })),
+        totalProductsLexeme: olistNumberLexeme(body.valorTotalProdutos),
+        totalOrderLexeme: olistNumberLexeme(body.valorTotalPedido),
+      });
+    } catch {
+      refuse();
+    }
+    const number = String(olistIntegerFromJson(body.numeroPedido));
+    /** @param {any} value */
+    const optionalId = (value) =>
+      value === undefined || value === null
+        ? null
+        : olistIntegerFromJson(value, true);
+    const historicalMetadata = {
+      originId: optionalId(body.ecommerce?.id),
+      priceListId: optionalId(body.listaPreco?.id),
+      purchaseOrder:
+        body.numeroOrdemCompra === undefined ||
+        body.numeroOrdemCompra === null ||
+        body.numeroOrdemCompra === ''
+          ? null
+          : text(body.numeroOrdemCompra, 120),
+      orderDate,
+      deliveryOn,
+      paymentDueOn: due,
+      productFiscalMissing: fiscalObservations.some(
+        (entry) => entry.fiscalMissing,
+      ),
+      fiscalVerified: false,
+      reusable: false,
+      products: fiscalObservations,
+    };
+    const proof = {
+      ...checked,
+      number,
+      mode: 'legacy-sale-only-v1',
+      fiscalVerified: false,
+    };
+    return {
+      remoteId: String(wantedId),
+      number,
+      resources,
+      proof,
+      commercial: { ...snapshot.commercial, orderDate, paymentDueOn: due },
+      historicalMetadata,
+      remoteDigest: reads.digest(),
     };
   }
   /** @param {any} input */
@@ -326,11 +699,46 @@ export function createOlistReadonlyInspector({ client, config }) {
   }
   return Object.freeze({
     existingSale,
+    legacyExistingSale,
     /** Historical sale effects retain their original strict request and marker
      * evidence. The manual legacy exception never clears an uncertain effect.
      * @param {{operation:any}} input */
     async reconcileSale({ operation }) {
       const attempt = operation?.saleAttempt;
+      const legacy = operation?.resourceMapping ?? operation?.resources;
+      if (legacy?.mode === 'legacy-sale-only-v1') {
+        if (
+          attempt ||
+          operation.state !== 'linked' ||
+          operation.snapshot?.linkMode !== 'legacy-sale-only-v1' ||
+          operation.snapshot?.policy !== 'legacy-sale-only-v1' ||
+          !operation.remote_id
+        )
+          refuse('OLIST_RECONCILIATION_REQUIRED');
+        const checked = await legacyExistingSale({
+          snapshot: operation.snapshot,
+          reference: operation.reference,
+          remoteId: operation.remote_id,
+          mapping: legacy.legacyCorrespondence,
+          paymentDueOn: operation.snapshot.commercial.paymentDueOn,
+        });
+        if (checked.number !== operation.remote_number)
+          refuse('OLIST_SALE_READBACK_MISMATCH');
+        if (
+          identityHash(
+            config.hmacKey,
+            'legacy-metadata',
+            checked.historicalMetadata,
+          ) !==
+          identityHash(
+            config.hmacKey,
+            'legacy-metadata',
+            operation.snapshot.historicalMetadata,
+          )
+        )
+          refuse('OLIST_SALE_READBACK_MISMATCH');
+        return checked;
+      }
       if (!attempt) {
         const reads = scope();
         const known = operation?.observed_sale_id ?? operation?.remote_id;

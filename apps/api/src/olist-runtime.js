@@ -13,6 +13,8 @@ import {
   lockOlistActor,
   OlistError,
   identityHash,
+  open,
+  olistSettings,
 } from '@crm-silmer/olist';
 /** @param {any} database @param {{access:any,environment?:Record<string,string|undefined>,fetch?:typeof fetch,clock?:()=>Date,timeoutMs?:number}} options */
 export function createOlistApiRuntime(database, options) {
@@ -137,6 +139,24 @@ export function createOlistApiRuntime(database, options) {
         [config.accountKey, order.id],
       );
       const operation = exports.rows[0];
+      const settingsRow = (
+        await client.query(
+          'SELECT settings_envelope FROM crm.olist_settings WHERE account_key=$1',
+          [config.accountKey],
+        )
+      ).rows[0];
+      const settings =
+        config.configured && settingsRow?.settings_envelope
+          ? olistSettings(
+              open(
+                settingsRow.settings_envelope,
+                config.envelopeKey,
+                'settings',
+                config.accountKey,
+                'central',
+              ),
+            )
+          : null;
       const availability = (
         await client.query(
           'SELECT a.creation_enabled,a.recovery_required,c.token_envelope IS NOT NULL AS connected,c.reconnect_required,c.expires_at,c.refresh_nonce,c.exchange_nonce FROM crm.olist_accounts a JOIN crm.olist_connections c USING(account_key) WHERE a.account_key=$1 AND c.context_key=$2',
@@ -158,6 +178,10 @@ export function createOlistApiRuntime(database, options) {
         number: order.number,
         status: order.status,
         creationEnabled,
+        paymentDuePolicy: settings?.paymentDuePolicy ?? 'fixed_date',
+        productFiscalRequired:
+          settings?.productFiscal === null ||
+          settings?.productFiscal === undefined,
         pendingFields: creationEnabled
           ? []
           : [

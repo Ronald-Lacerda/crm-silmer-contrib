@@ -879,9 +879,13 @@ if (connectionString) {
               'number',
               'operation',
               'orderId',
+              'paymentDuePolicy',
               'pendingFields',
+              'productFiscalRequired',
               'status',
             ]);
+            assert.equal(byNumber.paymentDuePolicy, 'fixed_date');
+            assert.equal(byNumber.productFiscalRequired, true);
             assert.equal(byNumber.status, 'confirmado');
             assert.equal(byNumber.creationEnabled, false);
             assert.deepEqual(byNumber.pendingFields, [

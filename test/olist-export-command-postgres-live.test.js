@@ -55,6 +55,7 @@ const settings = {
   originId: 15,
   paymentTerms: '30 dias',
   paymentDueOn: '2026-11-30',
+  productFiscal: { ncm: '61091000', origin: 0, unit: 'UN' },
 };
 const registration = {
   personType: /** @type {const} */ ('individual'),
@@ -360,6 +361,9 @@ else
           responses.set('/produtos/' + parent, {
             id: parent,
             tipo: 'V',
+            ncm: settings.productFiscal.ncm,
+            origem: settings.productFiscal.origin,
+            unidade: settings.productFiscal.unit,
             situacao: 'A',
             sku:
               'CRM-P-' +

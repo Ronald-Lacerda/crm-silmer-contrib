@@ -32,6 +32,7 @@ import {
   EMPTY_OLIST_SETTINGS,
   identityHash,
   olistConfiguration,
+  open,
   seal,
 } from '../modules/olist/src/index.js';
 import { syntheticArtwork, syntheticItems } from './fixtures/order-items.js';
@@ -63,6 +64,7 @@ const settings = {
   originId: 15,
   paymentTerms: '30 dias',
   paymentDueOn: '2026-11-30',
+  productFiscal: { ncm: '61091000', origin: 0, unit: 'UN' },
 };
 const registration = {
   personType: /** @type {const} */ ('individual'),
@@ -104,9 +106,17 @@ else
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
       await migrate(pool, { migrations: await loadMigrations() });
-      /** @param {{status?:string,subtotal?:number,legacy?:boolean,missingSeller?:boolean,expiredAccess?:boolean,changeDuringFetch?:()=>Promise<void>}} [patch] */
+      /** @param {{status?:string,subtotal?:number,legacy?:boolean,missingSeller?:boolean,expiredAccess?:boolean,perOrderDue?:boolean,manualFiscal?:boolean,changeDuringFetch?:()=>Promise<void>}} [patch] */
       async function fixture(patch = {}) {
         await pool.query('TRUNCATE crm.olist_accounts CASCADE');
+        let accountSettings = patch.perOrderDue
+          ? { ...settings, paymentDuePolicy: 'per_order', paymentDueOn: null }
+          : settings;
+        if (patch.manualFiscal)
+          accountSettings = {
+            ...accountSettings,
+            productFiscal: /** @type {any} */ (null),
+          };
         let current = new Date(NOW);
         /** @type {Record<string,any>} */
         const actors = {};
@@ -164,7 +174,7 @@ else
             config.accountKey,
             JSON.stringify(
               seal(
-                settings,
+                accountSettings,
                 config.envelopeKey,
                 'settings',
                 config.accountKey,
@@ -368,6 +378,9 @@ else
           responses.set('/produtos/' + parent, {
             id: parent,
             tipo: 'V',
+            ncm: settings.productFiscal.ncm,
+            origem: settings.productFiscal.origin,
+            unidade: settings.productFiscal.unit,
             situacao: 'A',
             sku:
               'CRM-P-' +
@@ -469,7 +482,7 @@ else
         const runtime = createOlistApiRuntime(database, {
           environment: {
             ...environment,
-            ...(patch.expiredAccess
+            ...(patch.expiredAccess || patch.perOrderDue || patch.manualFiscal
               ? { OLIST_PILOT_USER_IDS: actors.finance.actor.id }
               : {}),
           },
@@ -514,6 +527,269 @@ else
           );
         return result;
       }
+      await t.test(
+        'T17 missing central fiscal requires an explicit review and freezes it without changing settings',
+        async () => {
+          const f = await fixture({ manualFiscal: true });
+          await pool.query(
+            'UPDATE crm.olist_accounts SET creation_enabled=true,recovery_required=false WHERE account_key=$1',
+            [config.accountKey],
+          );
+          assert.equal(
+            (await f.runtime.project(f.input)).productFiscalRequired,
+            true,
+          );
+          assert.equal(
+            (
+              await f.runtime.project({
+                ...f.actors.admin,
+                orderId: f.orderId,
+                action: 'order.read',
+              })
+            ).productFiscalRequired,
+            true,
+          );
+          const missing = await f.runtime.preview(f.input);
+          assert.equal(missing.eligible, false);
+          assert.ok(
+            missing.issues.some(
+              (/** @type {any} */ issue) =>
+                issue.code === 'OLIST_PRODUCT_FISCAL_REQUIRED',
+            ),
+          );
+          assert.equal(f.calls.length, 0);
+          for (const productFiscal of [
+            null,
+            undefined,
+            {},
+            { ...settings.productFiscal, origin: '0' },
+            { ...settings.productFiscal, unit: '' },
+          ])
+            await assert.rejects(
+              f.runtime.preview({ ...f.input, productFiscal }),
+              {
+                code:
+                  productFiscal === null || productFiscal === undefined
+                    ? 'INVALID_REQUEST'
+                    : 'OLIST_PRODUCT_FISCAL_REQUIRED',
+              },
+            );
+          const preview = await f.runtime.preview({
+            ...f.input,
+            productFiscal: settings.productFiscal,
+          });
+          assert.equal(preview.eligible, true, JSON.stringify(preview.issues));
+          assert.equal(preview.productFiscalRequired, true);
+          assert.deepEqual(preview.productFiscal, settings.productFiscal);
+          const command = {
+            ...f.input,
+            previewToken: preview.previewToken,
+            idempotencyKey: 'manual-fiscal-export',
+          };
+          assert.equal((await f.runtime.checkPreview(command)).valid, true);
+          await assert.rejects(
+            f.runtime.checkPreview({
+              ...command,
+              productFiscal: settings.productFiscal,
+            }),
+            { code: 'INVALID_REQUEST' },
+          );
+          const accepted = await f.runtime.exportOrder(command);
+          const row = (
+            await pool.query(
+              'SELECT snapshot_envelope FROM crm.olist_exports WHERE id=$1',
+              [accepted.operationId],
+            )
+          ).rows[0];
+          const frozen = open(
+            row.snapshot_envelope,
+            config.envelopeKey,
+            'export-snapshot',
+            config.accountKey,
+            accepted.operationId,
+          );
+          assert.equal(frozen.settings.productFiscal, null);
+          assert.deepEqual(frozen.productFiscal, settings.productFiscal);
+          assert.deepEqual(await f.runtime.exportOrder(command), accepted);
+          await assert.rejects(
+            f.runtime.exportOrder({
+              ...command,
+              productFiscal: settings.productFiscal,
+            }),
+            { code: 'INVALID_REQUEST' },
+          );
+          assert.equal(
+            (await f.runtime.status(f.actors.admin)).settings.productFiscal,
+            null,
+          );
+        },
+      );
+      await t.test(
+        'T17 central fiscal cannot be replaced and a new central policy invalidates a manual receipt',
+        async () => {
+          const central = await fixture();
+          assert.equal(
+            (await central.runtime.project(central.input))
+              .productFiscalRequired,
+            false,
+          );
+          await assert.rejects(
+            central.runtime.preview({
+              ...central.input,
+              productFiscal: { ...settings.productFiscal, origin: 1 },
+            }),
+            { code: 'INVALID_REQUEST' },
+          );
+          await assert.rejects(
+            central.runtime.preview({ ...central.input, productFiscal: null }),
+            { code: 'INVALID_REQUEST' },
+          );
+          const f = await fixture({ manualFiscal: true });
+          const preview = await f.runtime.preview({
+            ...f.input,
+            productFiscal: settings.productFiscal,
+          });
+          await pool.query(
+            'UPDATE crm.olist_settings SET version=version+1,settings_envelope=$2::jsonb WHERE account_key=$1',
+            [
+              config.accountKey,
+              JSON.stringify(
+                seal(
+                  {
+                    ...settings,
+                    productFiscal: { ...settings.productFiscal, origin: 1 },
+                  },
+                  config.envelopeKey,
+                  'settings',
+                  config.accountKey,
+                  'central',
+                ),
+              ),
+            ],
+          );
+          await assert.rejects(
+            f.runtime.checkPreview({
+              ...f.input,
+              previewToken: preview.previewToken,
+            }),
+            { code: 'OLIST_PREVIEW_STALE' },
+          );
+        },
+      );
+      await t.test(
+        'T17 per-order due day is receipt-bound, rejects replacement and freezes once in the queued snapshot',
+        async () => {
+          const f = await fixture({ perOrderDue: true });
+          await pool.query(
+            'UPDATE crm.olist_accounts SET creation_enabled=true,recovery_required=false WHERE account_key=$1',
+            [config.accountKey],
+          );
+          assert.equal(
+            (await f.runtime.project(f.input)).paymentDuePolicy,
+            'per_order',
+          );
+          const missing = await f.runtime.preview(f.input);
+          assert.equal(missing.eligible, false);
+          assert.ok(
+            missing.issues.some(
+              (/** @type {any} */ issue) =>
+                issue.code === 'OLIST_PAYMENT_DUE_REQUIRED',
+            ),
+          );
+          assert.equal(f.calls.length, 0);
+          const chosen = await f.runtime.preview({
+            ...f.input,
+            paymentDueOn: '2028-02-29',
+          });
+          assert.equal(chosen.eligible, true, JSON.stringify(chosen.issues));
+          assert.equal(chosen.paymentDuePolicy, 'per_order');
+          assert.equal(chosen.commercial.paymentDueOn, '2028-02-29');
+          const different = await f.runtime.preview({
+            ...f.input,
+            paymentDueOn: '2028-03-01',
+          });
+          assert.equal(different.eligible, true);
+          assert.equal(different.commercial.paymentDueOn, '2028-03-01');
+          assert.notEqual(chosen.previewToken, different.previewToken);
+          const command = {
+            ...f.input,
+            previewToken: chosen.previewToken,
+            idempotencyKey: 'per-order-due-export',
+          };
+          assert.equal((await f.runtime.checkPreview(command)).valid, true);
+          await assert.rejects(
+            f.runtime.checkPreview({ ...command, paymentDueOn: '2028-03-01' }),
+            { code: 'INVALID_REQUEST' },
+          );
+          await assert.rejects(
+            f.runtime.exportOrder({ ...command, paymentDueOn: '2028-03-01' }),
+            { code: 'INVALID_REQUEST' },
+          );
+          const accepted = await f.runtime.exportOrder(command);
+          const saved = (
+            await pool.query(
+              'SELECT snapshot_envelope FROM crm.olist_exports WHERE id=$1',
+              [accepted.operationId],
+            )
+          ).rows[0];
+          const frozen = open(
+            saved.snapshot_envelope,
+            config.envelopeKey,
+            'export-snapshot',
+            config.accountKey,
+            accepted.operationId,
+          );
+          assert.equal(frozen.settings.paymentDuePolicy, 'per_order');
+          assert.equal(frozen.settings.paymentDueOn, null);
+          assert.equal(frozen.commercial.paymentDueOn, '2028-02-29');
+          assert.deepEqual(await f.runtime.exportOrder(command), accepted);
+          await assert.rejects(
+            f.runtime.exportOrder({
+              ...command,
+              previewToken: different.previewToken,
+              idempotencyKey: 'different-due-export',
+            }),
+            { code: 'OLIST_EXPORT_CONFLICT' },
+          );
+          assert.equal(
+            f.calls.filter((call) => call.method === 'POST').length,
+            0,
+          );
+        },
+      );
+      await t.test(
+        'T17 changing the central due policy/version invalidates an earlier per-order receipt',
+        async () => {
+          const f = await fixture({ perOrderDue: true });
+          const chosen = await f.runtime.preview({
+            ...f.input,
+            paymentDueOn: '2028-02-29',
+          });
+          assert.equal(chosen.eligible, true);
+          await pool.query(
+            'UPDATE crm.olist_settings SET version=version+1,settings_envelope=$2::jsonb WHERE account_key=$1',
+            [
+              config.accountKey,
+              JSON.stringify(
+                seal(
+                  { ...settings, paymentDuePolicy: 'fixed_date' },
+                  config.envelopeKey,
+                  'settings',
+                  config.accountKey,
+                  'central',
+                ),
+              ),
+            ],
+          );
+          await assert.rejects(
+            f.runtime.checkPreview({
+              ...f.input,
+              previewToken: chosen.previewToken,
+            }),
+            { code: 'OLIST_PREVIEW_STALE' },
+          );
+        },
+      );
       await t.test(
         'OLIST-T17: expired access refreshes before the first preview receipt and keeps the enabled pilot usable',
         async () => {
@@ -1007,6 +1283,9 @@ else
           f.responses.set('/produtos/401', {
             id: 401,
             tipo: 'V',
+            ncm: settings.productFiscal.ncm,
+            origem: settings.productFiscal.origin,
+            unidade: settings.productFiscal.unit,
             situacao: 'A',
             sku,
             descricao: [

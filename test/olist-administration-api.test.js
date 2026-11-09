@@ -22,6 +22,24 @@ const headers = {
 /** @type {Array<{path:string,method:string,action:string,payload:Record<string,any>,status:number}>} */
 const commands = [
   {
+    path: '/existing/legacy/previews',
+    method: 'legacyExistingPreview',
+    action: 'olist.link',
+    payload: { saleId: '401', mapping: { groups: [] } },
+    status: 200,
+  },
+  {
+    path: '/existing/legacy/links',
+    method: 'linkLegacyExisting',
+    action: 'olist.link',
+    payload: {
+      previewToken: 'synthetic-legacy-token',
+      confirmed: true,
+      reason: 'Synthetic explicit correspondence',
+    },
+    status: 200,
+  },
+  {
     path: '/existing/previews',
     method: 'existingPreview',
     action: 'olist.link',
@@ -71,6 +89,63 @@ const reads = [
     action: 'olist.reconcile',
   },
 ];
+
+test('legacy and canonical existing previews accept only an optional reviewed due-date input', async (t) => {
+  const f = fixture();
+  t.after(() => f.api.close());
+  for (const command of commands.filter(
+    (entry) =>
+      entry.method === 'existingPreview' ||
+      entry.method === 'legacyExistingPreview',
+  )) {
+    const accepted = await f.api.inject({
+      method: 'POST',
+      url: prefix + command.path,
+      headers,
+      payload: { ...command.payload, paymentDueOn: '2026-11-04' },
+    });
+    assert.equal(accepted.statusCode, 200);
+    assert.equal(f.calls.at(-1)?.input.paymentDueOn, '2026-11-04');
+  }
+  const commit = commands.find(
+    (entry) => entry.method === 'linkLegacyExisting',
+  );
+  assert.ok(commit);
+  const refused = await f.api.inject({
+    method: 'POST',
+    url: prefix + commit.path,
+    headers,
+    payload: { ...commit.payload, paymentDueOn: '2026-12-20' },
+  });
+  assert.equal(refused.statusCode, 400);
+});
+
+test('only the canonical existing preview accepts explicit fiscal input; historical and commit bodies reject it', async (t) => {
+  const f = fixture();
+  t.after(() => f.api.close());
+  const productFiscal = { ncm: '61091000', origin: 0, unit: 'UN' };
+  const accepted = await f.api.inject({
+    method: 'POST',
+    url: prefix + '/existing/previews',
+    headers,
+    payload: { saleId: '401', productFiscal },
+  });
+  assert.equal(accepted.statusCode, 200);
+  assert.deepEqual(f.calls.at(-1)?.input.productFiscal, productFiscal);
+  for (const command of commands.filter((entry) =>
+    ['legacyExistingPreview', 'linkExisting', 'linkLegacyExisting'].includes(
+      entry.method,
+    ),
+  )) {
+    const refused = await f.api.inject({
+      method: 'POST',
+      url: prefix + command.path,
+      headers,
+      payload: { ...command.payload, productFiscal },
+    });
+    assert.equal(refused.statusCode, 400);
+  }
+});
 
 /** @param {Partial<import('../modules/identity-access/src/authorization.js').AccessActor>} [patch] */
 function fixture(patch = {}) {
@@ -230,7 +305,7 @@ test('T09 administrator without export checkbox can use only the dedicated link/
     for (const [key, value] of Object.entries(command.payload))
       assert.deepEqual(call?.input[key], value);
   }
-  assert.equal(f.calls.length, 4);
+  assert.equal(f.calls.length, commands.length);
   assert.doesNotMatch(JSON.stringify(f.calls), new RegExp(session, 'u'));
 });
 

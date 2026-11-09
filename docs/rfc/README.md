@@ -2,6 +2,9 @@
 
 ## Emenda de 09/11/2026
 
+- [055 — Vencimento por pedido e vínculo histórico no Olist](055-vencimento-por-pedido-e-vinculo-historico-no-olist.md),
+  adotada na ADR 071 para OLIST-T15–T17.
+
 - [050 — Geração assistida de pedidos de venda no Olist](050-geracao-assistida-de-pedidos-no-olist.md),
   emendada com OLIST-51/52 e T27/T28, decididas nas ADRs
   [069](../adr/069-olist-invalidacao-administrativa-de-export.md) (invalidação
