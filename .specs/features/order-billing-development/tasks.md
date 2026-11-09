@@ -39,7 +39,12 @@ Where: ops/n8n/workflows/create-order-billing-workflow.mjs
 Tests: test/billing-development-workflow.test.js e regressão do gerador padrão; recusa de destino remoto/expressões, export inativo, credenciais e paths próprios.
 Gate: Workflow
 Done when: BDEV-01–03 têm perfil explícito e isolado do mesmo grafo, sem relaxar produção.
-Status: Pending
+Status: Complete
+
+15/15 cenários de workflow aprovados (10 regressões e 5 DEV). Hash do export
+padrão de produção preservado byte a byte. Typecheck global, lint focal e
+formatação aprovados. O CLI DEV gera export inativo sem sobrescrever arquivo.
+O gate de T1 executa expressões; o motor n8n real é evidência própria de T2.
 
 ### T2: Executar n8n real contra simulador e persistência financeira
 
