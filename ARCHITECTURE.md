@@ -1,5 +1,14 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Recência em Responder (08/11/2026)
+
+[ADR 066](docs/adr/066-responder-por-mensagem-mais-recente.md) /
+[RFC 053](docs/rfc/053-responder-por-mensagem-mais-recente.md), PCX-19e e
+INBOX-VEZ-08: Responder ordena pela última mensagem decrescente, sem fixar
+falhas. SQL e cursor compartilham precisão em milissegundos; o fingerprint
+recusa cursores antigos. O relógio de espera, classificação e demais abas
+mantêm seus contratos. Sem migration ou infraestrutura nova.
+
 ## Triagem prioritária do Vendedor (06/11/2026)
 
 A [ADR 063](docs/adr/063-triagem-prioritaria-do-vendedor.md), autorizada pelo

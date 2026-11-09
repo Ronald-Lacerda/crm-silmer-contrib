@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import test from 'node:test';
 
 import {
@@ -254,7 +254,31 @@ test('INBOX-VEZ-01: a tab binds its cursor to reader, tab, owner, order-ready an
       bucket: 'respond',
       owner: 'all',
       orderReady: false,
+      orderVersion: 'latest-message-v1',
     }),
+  );
+  // A correctly signed cursor from the former order cannot skip recent rows.
+  const legacyPayload = {
+    ...payload,
+    fingerprint: fingerprintOf({
+      actorId: 'seller-1',
+      bucket: 'respond',
+      owner: 'all',
+      orderReady: false,
+    }),
+  };
+  const encoded = Buffer.from(JSON.stringify(legacyPayload)).toString(
+    'base64url',
+  );
+  const signature = createHmac('sha256', Buffer.alloc(32, 1))
+    .update(encoded)
+    .digest('base64url');
+  await assert.rejects(
+    service.listInbox(
+      { bucket: 'respond', cursor: `${encoded}.${signature}` },
+      { actorId: 'seller-1' },
+    ),
+    { code: 'INVALID_CURSOR' },
   );
   await service.listInbox(
     { bucket: 'respond', limit: 1, cursor: first.nextCursor },

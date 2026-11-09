@@ -66,6 +66,45 @@ test.beforeEach(async ({ context, baseURL }) => {
   ]);
 });
 
+test('INBOX-VEZ-08: recentes no topo; nova mensagem preserva espera, seleção e rascunho', async ({
+  page,
+}) => {
+  const { items } = await installMocks(page, { writes: [], unmocked: [] });
+  await keepEventSources(page);
+  await page.goto('/inbox/r-joao');
+  const rows = page.locator('.conversation-row');
+  await expect(rows.first()).toHaveAttribute('data-conversation-id', 'r-gabi');
+  await expect(page.locator('.inbox-list-summary')).toContainText(
+    'Mais recentes primeiro',
+  );
+  // Old send problems keep their alert without taking the first position.
+  await expect(row(page, 'r-ana')).toContainText('Falha de envio');
+  const draft = page.getByRole('textbox', { name: 'Responder', exact: true });
+  await draft.fill('Rascunho sintético preservado');
+  const since = await row(page, 'r-fabio').locator('.conv-waiting').innerText();
+  // A refreshed API page derives the order from the new synthetic message.
+  const item = items.find((candidate) => candidate.id === 'r-fabio');
+  if (!item) throw new Error('Missing synthetic conversation');
+  item.updatedAt = '2026-11-06T17:29:59.000Z';
+  item.lastMessage.occurredAt = item.updatedAt;
+  item.lastMessage.preview = 'Nova mensagem sintética';
+  await page.evaluate(() => {
+    const source = /** @type {any} */ (globalThis).__sources.at(-1);
+    source.dispatchEvent(
+      new globalThis.MessageEvent('inbox.conversation.changed', { data: '{}' }),
+    );
+  });
+  await expect(rows.first()).toHaveAttribute('data-conversation-id', 'r-fabio');
+  await expect(row(page, 'r-fabio').locator('.conv-waiting')).toHaveText(
+    since,
+    {
+      useInnerText: true,
+    },
+  );
+  await expect(row(page, 'r-joao')).toHaveAttribute('aria-current', 'true');
+  await expect(draft).toHaveValue('Rascunho sintético preservado');
+});
+
 test('P1-A: o tempo do card cruza 15 para 16 min sem nova chamada à lista', async ({
   page,
   context,

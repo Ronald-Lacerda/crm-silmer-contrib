@@ -288,11 +288,10 @@ const squash = (sql) => sql.replace(/\s+/gu, ' ');
 
 test('INBOX-VEZ-01: a tab is worked out once and its page and total share predicates and parameters', async () => {
   const expectedOrder = {
-    respond:
-      /ORDER BY base\.turn_rank ASC, base\.turn_since ASC, base\.id ASC\s+LIMIT \$6\)/u,
-    awaiting: /ORDER BY base\.turn_since DESC, base\.id DESC\s+LIMIT \$6\)/u,
-    silent: /ORDER BY base\.turn_since ASC, base\.id ASC\s+LIMIT \$6\)/u,
-    lost: /ORDER BY base\.turn_since DESC, base\.id DESC\s+LIMIT \$6\)/u,
+    respond: /ORDER BY base\.sort_position DESC, base\.id DESC\s+LIMIT \$6\)/u,
+    awaiting: /ORDER BY base\.sort_position DESC, base\.id DESC\s+LIMIT \$6\)/u,
+    silent: /ORDER BY base\.sort_position ASC, base\.id ASC\s+LIMIT \$6\)/u,
+    lost: /ORDER BY base\.sort_position DESC, base\.id DESC\s+LIMIT \$6\)/u,
   };
   for (const bucket of /** @type {const} */ ([
     'respond',
@@ -305,6 +304,10 @@ test('INBOX-VEZ-01: a tab is worked out once and its page and total share predic
         turn_bucket: bucket,
         turn_rank: bucket === 'respond' ? 1 : 0,
         turn_since: '2026-11-07T10:00:00.123Z',
+        sort_position:
+          bucket === 'respond'
+            ? '2026-11-08T14:00:00.456Z'
+            : '2026-11-07T10:00:00.123Z',
         turn_business_minutes: 42,
         turn_stalled: false,
         total_count: 174,
@@ -366,7 +369,10 @@ test('INBOX-VEZ-01: a tab is worked out once and its page and total share predic
     assert.equal(result.items[0].assistantStalled, false);
     assert.deepEqual(result.nextPosition, {
       rank: bucket === 'respond' ? 1 : 0,
-      updatedAt: '2026-11-07T10:00:00.123Z',
+      updatedAt:
+        bucket === 'respond'
+          ? '2026-11-08T14:00:00.456Z'
+          : '2026-11-07T10:00:00.123Z',
     });
     assert.equal(result.totalCount, 174);
   }
@@ -394,22 +400,22 @@ test('INBOX-VEZ-01: each tab has its own cursor comparator and precedence', asyn
   const cases = [
     [
       'respond',
-      /\(base\.turn_rank, base\.turn_since, base\.id\) > \(\$6::integer, \$7::timestamptz, \$8\)/u,
-      [1, after.updatedAt, 'previous', 2],
+      /\(base\.sort_position, base\.id\) < \(\$6::timestamptz, \$7\)/u,
+      [after.updatedAt, 'previous', 2],
     ],
     [
       'awaiting',
-      /\(base\.turn_since, base\.id\) < \(\$6::timestamptz, \$7\)/u,
+      /\(base\.sort_position, base\.id\) < \(\$6::timestamptz, \$7\)/u,
       [after.updatedAt, 'previous', 2],
     ],
     [
       'silent',
-      /\(base\.turn_since, base\.id\) > \(\$6::timestamptz, \$7\)/u,
+      /\(base\.sort_position, base\.id\) > \(\$6::timestamptz, \$7\)/u,
       [after.updatedAt, 'previous', 2],
     ],
     [
       'lost',
-      /\(base\.turn_since, base\.id\) < \(\$6::timestamptz, \$7\)/u,
+      /\(base\.sort_position, base\.id\) < \(\$6::timestamptz, \$7\)/u,
       [after.updatedAt, 'previous', 2],
     ],
   ];

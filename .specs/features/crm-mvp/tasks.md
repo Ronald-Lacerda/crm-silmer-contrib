@@ -1,5 +1,27 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## INBOX-VEZ-08 — Responder por mensagem mais recente (08/11/2026)
+
+[RFC 053](../../../docs/rfc/053-responder-por-mensagem-mais-recente.md) /
+[ADR 066](../../../docs/adr/066-responder-por-mensagem-mais-recente.md), PCX-19e,
+solicitada pelo proprietário após observar mensagens novas no fim da fila.
+
+- [x] Ordenar Responder pela última mensagem decrescente e ID decrescente,
+      sem prioridade fixa para falhas e sem mudar o relógio de espera.
+- [x] Alinhar cursor SQL, invalidar cursores da ordem anterior e atualizar
+      o rótulo da interface, preservando classificação, ACL e outras abas.
+- [x] Verificar banco, paginação, regressão e interface; revisão independente.
+- [x] Commit e push da entrega atômica. Operação e rollback no runbook da Inbox.
+- Evidência local: `npm run validate` passou (1.957 testes aprovados, 22 skips,
+  zero falhas, com build); PostgreSQL isolado passou 15 testes sem skips,
+  cobrindo Inbox, consultas e lembretes. E2E/axe completo: 588 aprovados,
+  sete skips e uma corrida no teste preexistente de dispensar sugestão do
+  Dashboard (`mock.writes` lido antes do callback); a repetição isolada passou.
+  O cenário novo de recência/SSE/seleção/rascunho passou no gate completo.
+  Auditoria npm sem vulnerabilidades; capturas sintéticas em 1366×768 e
+  390×844 conferidas; detector visual sem findings e revisão independente sem
+  bloqueantes. Publicação no ambiente permanece sujeita ao merge/deploy.
+
 ## OPS-CI-02 — E2E e PostgreSQL em paralelo (08/11/2026)
 
 Manutenção interna de INT-3 / T00.2, autorizada pelo mantenedor.
@@ -312,6 +334,7 @@ oito moderate preexistentes). Revisão independente sem findings P1/P2.
 Operação: rascunhos são temporários e saem com a instância da Inbox. Não há
 API, migration ou configuração nova. Rollback é reverter a entrega de frontend;
 mensagens aceitas pela API não devem ser reenviadas para testar apresentação.
+
 ## OLIST-T01 — Revisão do contrato da Fase 1 (04/11/2026)
 
 - [x] Conferir ADR 057 e emendas canônicas, mapear OLIST-01–50, alocar donos
@@ -1324,6 +1347,7 @@ sem anexos e recursos do scanner indisponíveis para a API; o worker os possui.
 Implementação e gates em [operational-health](../operational-health/tasks.md).
 OPSH-01–05, OPS-ERR-03/04/08, ADR060, RFC045 e issue11.
 Coleta permanece manual; expurgo diário14dias autorizado pelo proprietário.
+
 ## OLIST-PLAN-01 — Preparação da integração Olist (04/11/2026)
 
 - [x] Preparar especificação completa com requisitos OLIST-01–32, seis fases,

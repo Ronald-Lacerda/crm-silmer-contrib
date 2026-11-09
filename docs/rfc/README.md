@@ -2,6 +2,8 @@
 
 ## Decisão de 08/11/2026
 
+- [053 — Responder por mensagem mais recente](053-responder-por-mensagem-mais-recente.md),
+  decidida na ADR 066 / INBOX-VEZ-08: mensagens recentes no topo de Responder.
 - [052 — Caixa de entrada organizada por "de quem é a vez"](052-caixa-de-entrada-por-vez-de-responder.md),
   decidida na ADR 065 / INBOX-VEZ-01: quatro abas pela vez de quem, seletor de
   responsável e lembrete por pessoa, com migration condicionada ao p95 real.
@@ -18,6 +20,7 @@
   tempos de atendimento, retomada em 72h, lead perdido com motivo e presença.
 - [044 — Performance comercial, checkpoint e central de ações](044-performance-comercial-e-central-de-acoes.md),
   protótipo refinado aprovado e recorte registrado na ADR 059 / ACT-T01.
+
 ## Decisão de 04/11/2026
 
 - [050 — Geração assistida de pedidos de venda no Olist](050-geracao-assistida-de-pedidos-no-olist.md),

@@ -1,5 +1,14 @@
 # TDD — CRM Silmer MVP
 
+## Ordem de Responder — INBOX-VEZ-08 (08/11/2026)
+
+[ADR 066](docs/adr/066-responder-por-mensagem-mais-recente.md), PCX-19e:
+o repositório da Inbox ordena Responder pela última mensagem e ID decrescentes.
+`sort_position` trunca `last_message_at` a milissegundos e alimenta SQL e cursor;
+`turn_since` continua exclusivo do início da espera e das ordens das demais abas.
+O fingerprint versiona somente Responder com `latest-message-v1`, recusando
+cursores da antiga ordem. Classificação, alertas e consultas legadas permanecem.
+
 ## Triagem prioritária do Vendedor — VND-L05 (06/11/2026)
 
 [ADR 063](docs/adr/063-triagem-prioritaria-do-vendedor.md), AGT-01–05/08:

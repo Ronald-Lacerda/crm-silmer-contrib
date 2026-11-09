@@ -40,6 +40,7 @@ test('four tabs, in the order of whose turn it is, with stable URL names', () =>
     ],
   );
   assert.equal(INBOX_BUCKETS[1].name, 'Aguardando cliente');
+  assert.equal(INBOX_BUCKETS[0].order, 'Mais recentes primeiro');
 });
 
 test('a span reads short on screen and in full for a screen reader', () => {

@@ -147,8 +147,17 @@ Decidida pela [ADR 065](../adr/065-caixa-de-entrada-por-vez-de-responder.md) em
 
 ### Ordem de deploy e rollback
 
+- INBOX-VEZ-08 / ADR 066: Responder usa a última mensagem mais recente,
+  desempate por ID decrescente, sem fixar falhas no topo. O início da espera
+  continua em `turnSince`. Publicar API e frontend juntos mantém o rótulo
+  "Mais recentes primeiro" coerente com o servidor. Não há migration.
+  Cursor antigo de Responder retorna `INVALID_CURSOR`: atualizar a lista.
+  Outras abas e `sort=urgency` mantêm suas ordens e cursores. Verificar uma
+  segunda mensagem recente elevando a conversa e a navegação entre páginas.
+  Rollback reverte API/frontend deste delta; recarregar Responder para renovar
+  o cursor, preservando mensagens, classificação e alertas de envio.
 - Publicar a API antes do frontend. A API nova mantém `workQueue`,
-  `sort=urgency` e os cursores atuais, então o frontend anterior continua
+  `sort=urgency` e os cursores das consultas legadas, então o frontend anterior continua
   funcionando. Antes do frontend, conferir health/readiness e uma chamada
   autenticada de `GET /inbox/buckets` no alvo.
 - `POST lead-outcome` agora publica o evento SSE `conversation` na mesma

@@ -135,7 +135,7 @@ export function buildItems(
     assignedUser: { id: OTHER.id, name: OTHER.name, functionName: 'Vendedor' },
   };
 
-  /** Responder: failures first, then the longest wait (business minutes). */
+  /** Responder: most recent message first, with send alerts kept on the row. */
   const respond = [
     conversation('r-ana', 'Cliente Ana T.', {
       bucket: 'respond',

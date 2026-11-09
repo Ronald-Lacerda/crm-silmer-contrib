@@ -12,7 +12,7 @@ export const INBOX_BUCKETS = Object.freeze([
     route: 'responder',
     label: 'Responder',
     name: 'Responder',
-    order: 'Maior espera primeiro',
+    order: 'Mais recentes primeiro',
     emptyTitle: 'Ninguém esperando resposta',
     emptyText: 'Quando um cliente escrever, a conversa aparece aqui.',
   }),

@@ -122,6 +122,9 @@ test(
     const labelById = new Map();
     /** @type {Map<string, any>} */
     const firstInbound = new Map();
+    /** Fixture timestamps, independent of the repository's SQL projections.
+     * @type {Map<string, number>} */
+    const latestMessageMinutesAgo = new Map();
     let sequence = 0;
 
     /** A fresh conversation with its first customer message.
@@ -154,6 +157,7 @@ test(
       const id = /** @type {string} */ (received.conversation.id);
       labelById.set(id, label);
       firstInbound.set(id, input);
+      latestMessageMinutesAgo.set(id, inboundMinutesAgo);
       return id;
     }
     /** Another customer message, through the real inbound path.
@@ -164,6 +168,10 @@ test(
         externalMessageId: `inbound-${runId}-${(sequence += 1)}`,
         occurredAt: ago(minutesAgo).toISOString(),
       });
+      latestMessageMinutesAgo.set(
+        id,
+        Math.min(latestMessageMinutesAgo.get(id) ?? Infinity, minutesAgo),
+      );
     }
     /** @param {string} id */
     async function lastInboundId(id) {
@@ -211,6 +219,17 @@ test(
           ok || failed ? status : null,
           at,
         ],
+      );
+      // Real outbound writes advance the conversation's message timestamp.
+      await pool.query(
+        `UPDATE crm.conversations
+         SET last_message_at=greatest(last_message_at, $2::timestamptz)
+         WHERE id=$1`,
+        [id, at],
+      );
+      latestMessageMinutesAgo.set(
+        id,
+        Math.min(latestMessageMinutesAgo.get(id) ?? Infinity, minutesAgo),
       );
       return messageId;
     }
@@ -386,7 +405,7 @@ test(
         },
         expect: { bucket: 'respond', rank: 1, since: 500 },
       },
-      // --- Responder: send failures come first
+      // --- Responder: send failures stay visible without a pinned position
       {
         label: 'failure_after_inbound',
         owner: 'A',
@@ -742,7 +761,7 @@ test(
         build: async (id) => {
           await readyOrder(id);
         },
-        expect: { bucket: 'respond', rank: 1, since: 30 },
+        expect: { bucket: 'respond', rank: 1, since: 30 - 123 / 60_000 },
       },
     ];
 
@@ -771,6 +790,26 @@ test(
         ],
       );
     }
+    // Opposite sub-millisecond timestamps and id order: sorting raw timestamps
+    // would disagree with the cursor's millisecond precision.
+    const tiedResponseIds = ['respond_second_inbound', 'order_ready_respond']
+      .map((label) => /** @type {string} */ (idByLabel.get(label)))
+      .sort();
+    const tiedMillis = ago(30).getTime() + 123;
+    for (const [index, id] of tiedResponseIds.entries()) {
+      const timestamp = new Date(tiedMillis)
+        .toISOString()
+        .replace('Z', `${index === 0 ? '789' : '456'}Z`);
+      await pool.query(
+        'UPDATE crm.messages SET occurred_at=$2, created_at=$2 WHERE id=$1',
+        [await lastInboundId(id), timestamp],
+      );
+      await pool.query(
+        'UPDATE crm.conversations SET last_message_at=$2 WHERE id=$1',
+        [id, timestamp],
+      );
+      latestMessageMinutesAgo.set(id, (NOW.getTime() - tiedMillis) / 60_000);
+    }
     const caseOf = (/** @type {string} */ id) =>
       cases.find((item) => item.label === labelById.get(id));
     const idsOf = (/** @type {any[]} */ items) =>
@@ -790,9 +829,12 @@ test(
       return members
         .sort((left, right) => {
           if (bucket === 'respond') {
+            const leftId = /** @type {string} */ (idByLabel.get(left.label));
+            const rightId = /** @type {string} */ (idByLabel.get(right.label));
             return (
-              (left.expect.rank ?? 1) - (right.expect.rank ?? 1) ||
-              key(right) - key(left)
+              /** @type {number} */ (latestMessageMinutesAgo.get(leftId)) -
+                /** @type {number} */ (latestMessageMinutesAgo.get(rightId)) ||
+              rightId.localeCompare(leftId)
             );
           }
           // since is minutes ago: bigger = older.
@@ -861,15 +903,48 @@ test(
         }
         const open = cases.filter((item) => item.expect.bucket !== null);
         assert.equal(seen.size, open.length);
-        // Respond lists the failures before every other wait.
-        const respond = await list({ bucket: 'respond', limit: 100 });
-        const ranks = respond.items.map((/** @type {any} */ item) =>
-          item.deliveryIssue ? 0 : 1,
+      },
+    );
+
+    await t.test(
+      'INBOX-VEZ-08: latest message moves an old wait ahead of older failures; ties use id',
+      async () => {
+        const { items } = await list({ bucket: 'respond', limit: 100 });
+        const labels = labelsOf(items);
+        assert.ok(
+          labels.indexOf('respond_second_inbound') <
+            labels.indexOf('respond_other_owner'),
+          'a recent second inbound outranks an older last message',
         );
+        assert.ok(
+          labels.indexOf('respond_new_unowned') <
+            labels.indexOf('failure_after_inbound'),
+          'an old send failure does not pin itself ahead of a recent customer',
+        );
+        const repeated = items.find(
+          (/** @type {any} */ item) =>
+            labelById.get(item.id) === 'respond_second_inbound',
+        );
+        assert.equal(repeated.turnSince, ago(900).toISOString());
+        assert.equal(repeated.updatedAt, new Date(tiedMillis).toISOString());
+        const tieIds = [...tiedResponseIds].reverse();
         assert.deepEqual(
-          ranks,
-          [...ranks].sort((left, right) => left - right),
+          items
+            .filter((/** @type {any} */ item) => tieIds.includes(item.id))
+            .map((/** @type {any} */ item) => item.id),
+          tieIds,
         );
+        const { items: paged } = await fullList({ bucket: 'respond' });
+        assert.deepEqual(idsOf(paged), idsOf(items));
+        assert.equal(new Set(idsOf(paged)).size, items.length);
+        let cursor;
+        const oneByOne = [];
+        for (let index = 0; index < items.length; index += 1) {
+          const page = await list({ bucket: 'respond', limit: 1, cursor });
+          oneByOne.push(...idsOf(page.items));
+          cursor = page.nextCursor;
+        }
+        assert.deepEqual(oneByOne, idsOf(items));
       },
     );
 
@@ -1091,6 +1166,7 @@ test(
                 bucket: 'respond',
                 owner: 'all',
                 orderReady: false,
+                orderVersion: 'latest-message-v1',
               }),
             )
             .digest('hex'),
@@ -1349,6 +1425,27 @@ test(
             }
           }
         }
+      },
+    );
+    await t.test(
+      'INBOX-VEZ-08: a new inbound lifts a conversation without resetting its wait',
+      async () => {
+        const id = /** @type {string} */ (idByLabel.get('respond_old'));
+        const before = await list({ bucket: 'respond', limit: 100 });
+        const waiting = before.items.find(
+          (/** @type {any} */ item) => item.id === id,
+        );
+        assert.notEqual(before.items[0].id, id);
+        await customer(id, 0.25);
+        const after = await list({ bucket: 'respond', limit: 100 });
+        assert.equal(after.items[0].id, id);
+        assert.equal(after.items[0].turnSince, waiting.turnSince);
+        assert.equal(
+          after.items[0].turnBusinessMinutes,
+          waiting.turnBusinessMinutes,
+        );
+        const { items: paged } = await fullList({ bucket: 'respond' });
+        assert.deepEqual(idsOf(paged), idsOf(after.items));
       },
     );
   },

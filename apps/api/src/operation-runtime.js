@@ -434,7 +434,12 @@ export function createOperationReadService({
         }
       }
       const ranked = filters.sort === 'urgency' || input.bucket !== undefined;
-      const fingerprint = filterFingerprint(filters);
+      // Reject cursors from Responder's former oldest-wait/failure-first order.
+      const fingerprint = filterFingerprint(
+        filters.bucket === 'respond'
+          ? { ...filters, orderVersion: 'latest-message-v1' }
+          : filters,
+      );
       const limit = readLimit(input.limit);
       const after = readCursor(input.cursor, {
         cursorKey,

@@ -2,6 +2,9 @@
 
 ## Decisão de 08/11/2026
 
+- [066 — Responder por mensagem mais recente](066-responder-por-mensagem-mais-recente.md),
+  RFC 053 / INBOX-VEZ-08: recência da última mensagem, sem fixar falhas no topo,
+  com cursor próprio e preservação do relógio de espera.
 - [065 — Caixa por vez de responder](065-caixa-de-entrada-por-vez-de-responder.md),
   RFC 052 / INBOX-VEZ-01: quatro abas derivadas em leitura, Todos como padrão,
   72 h corridas, lembrete por pessoa e p95 real como critério para migration.

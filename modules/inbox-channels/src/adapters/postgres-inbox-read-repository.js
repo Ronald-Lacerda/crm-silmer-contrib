@@ -468,9 +468,9 @@ function turnJoins(p) {
  */
 const BUCKET_ORDER = {
   respond: {
-    orderBy: ([rank, since, id]) => `${rank} ASC, ${since} ASC, ${id} ASC`,
-    after: ([rank, since, id], first) =>
-      `(${rank}, ${since}, ${id}) > ($${first}::integer, $${first + 1}::timestamptz, $${first + 2})`,
+    orderBy: ([, since, id]) => `${since} DESC, ${id} DESC`,
+    after: ([, since, id], first) =>
+      `(${since}, ${id}) < ($${first}::timestamptz, $${first + 1})`,
   },
   awaiting: {
     orderBy: ([, since, id]) => `${since} DESC, ${id} DESC`,
@@ -1273,21 +1273,24 @@ export class PostgresInboxReadRepository {
     const baseValues = [...values];
     const baseWhere = predicates.join(' AND ');
     const order = BUCKET_ORDER[input.bucket];
+    // INBOX-VEZ-08: recency is independent of the first unanswered message.
+    // Keep turn_since for the wait clock and all other tabs' ordering.
+    const position =
+      input.bucket === 'respond'
+        ? "date_trunc('milliseconds', conversation.last_message_at)"
+        : 'turn.since';
     let cursor = '';
     if (input.after) {
-      // Only the respond tab orders by rank; an unused parameter would have
-      // no type.
       const first = values.length + 1;
-      if (input.bucket === 'respond') values.push(input.after.rank ?? 0);
       values.push(input.after.updatedAt, input.after.id);
-      cursor = `WHERE ${order.after(['base.turn_rank', 'base.turn_since', 'base.id'], first)}`;
+      cursor = `WHERE ${order.after(['base.turn_rank', 'base.sort_position', 'base.id'], first)}`;
     }
     values.push(input.limit + 1);
     // The tab is evaluated once, into `base`: the page is cut from it and the
     // total counts it, so the two can never disagree.
     const withBase = `${reminderCte(p)},
          base AS MATERIALIZED (
-           SELECT conversation.id, ${TURN_COLUMNS}
+           SELECT conversation.id, ${TURN_COLUMNS}, ${position} sort_position
            FROM crm.conversations conversation
            JOIN crm.contact_identities identity
              ON identity.id=conversation.contact_identity_id
@@ -1300,17 +1303,17 @@ export class PostgresInboxReadRepository {
          ranked AS (
            SELECT base.* FROM base
            ${cursor}
-           ORDER BY ${order.orderBy(['base.turn_rank', 'base.turn_since', 'base.id'])}
+           ORDER BY ${order.orderBy(['base.turn_rank', 'base.sort_position', 'base.id'])}
            LIMIT $${values.length})
          SELECT ${listProjection(false)},
-                ${TURN_NAMES.map((name) => `ranked.${name}`).join(', ')},
+                ${TURN_NAMES.map((name) => `ranked.${name}`).join(', ')}, ranked.sort_position,
                 ${businessMinutes('ranked.turn_since', p)},
                 (SELECT count(*)::integer FROM base) total_count
          FROM ranked
          JOIN crm.conversations conversation ON conversation.id=ranked.id
          ${SUMMARY_JOINS}
          ${LAST_MESSAGE_JOIN}
-         ORDER BY ${order.orderBy(['ranked.turn_rank', 'ranked.turn_since', 'ranked.id'])}`,
+         ORDER BY ${order.orderBy(['ranked.turn_rank', 'ranked.sort_position', 'ranked.id'])}`,
       values,
     );
     // Past the last page there is no row to carry the total.
@@ -1334,7 +1337,7 @@ export class PostgresInboxReadRepository {
         ? {
             nextPosition: {
               rank: Number(last.turn_rank),
-              updatedAt: iso(last.turn_since),
+              updatedAt: iso(last.sort_position),
             },
           }
         : {}),

@@ -12,8 +12,6 @@ import {
 } from './inbox-vez-fixtures.js';
 
 const BUCKET_ORDER = ['respond', 'awaiting', 'silent', 'lost'];
-const failed = (item) =>
-  ['failed', 'outcome_unknown'].includes(item.deliveryIssue?.status ?? '');
 
 /** @param {Record<string, any>[]} items @param {string} bucket */
 function sortBucket(items, bucket) {
@@ -21,8 +19,8 @@ function sortBucket(items, bucket) {
   if (bucket === 'respond')
     return [...items].sort(
       (a, b) =>
-        Number(failed(b)) - Number(failed(a)) ||
-        String(a.turnSince).localeCompare(String(b.turnSince)),
+        String(b.updatedAt).localeCompare(String(a.updatedAt)) ||
+        b.id.localeCompare(a.id),
     );
   if (bucket === 'awaiting')
     return [...items].sort(by((item) => item.turnSince)).reverse();
@@ -424,4 +422,5 @@ export async function installMocks(page, log = {}, options = {}) {
     log.unmocked?.push(`${method} ${path}`);
     return json({ code: 'NOT_FOUND' }, 404);
   });
+  return { items };
 }

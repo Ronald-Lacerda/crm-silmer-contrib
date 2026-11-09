@@ -22,10 +22,14 @@ Tarefa INBOX-VEZ-01 (API); UI e Sem retorno/Perdidos ficam em INBOX-VEZ-02/03.
 - **PCX-19d:** As quatro contagens SHALL vir de um único snapshot, com os
   mesmos predicados e responsável das listas, sem dados de outro ator.
 - **PCX-19e:** Cada aba SHALL ter ordem e cursor próprios: Responder pela
-  maior espera, com falhas primeiro; Aguardando pela atividade mais recente;
+  última mensagem mais recente, sem fixar falhas no topo (ADR 066);
+  Aguardando pela atividade mais recente;
   Sem retorno pelo silêncio mais antigo; Perdidos pela declaração mais recente.
+  Responder SHALL desempatar por ID decrescente, paginar na mesma precisão
+  em milissegundos e rejeitar cursores da ordem anterior. A posição SHALL NOT
+  alterar o início nem a duração da espera.
   O cursor SHALL ficar vinculado a ator, aba, responsável e ordem. `workQueue`,
-  `sort=urgency` e os fingerprints atuais SHALL permanecer inalterados.
+  `sort=urgency` e os fingerprints das demais consultas SHALL permanecer inalterados.
 - **PCX-19f:** O item da lista e o detalhe SHALL trazer `bucket`,
   `turnSince`, `turnBusinessMinutes`, `turnAsOf`, `assistantStalled`,
   `lostOutcome` e `reminder`, nulos fora do universo aberto. `reminder.mine`
