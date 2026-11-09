@@ -22,6 +22,7 @@ import ConversationHandoffSummary from '../components/inbox/ConversationHandoffS
 import ConversationOrderAssistance from '../components/inbox/ConversationOrderAssistance.vue';
 import ConversationOrderSummary from '../components/inbox/ConversationOrderSummary.vue';
 import ConversationShippingQuote from '../components/inbox/ConversationShippingQuote.vue';
+import ConversationBillingAction from '../components/inbox/ConversationBillingAction.vue';
 import InboxTabs from '../components/inbox/InboxTabs.vue';
 import InboxTurnStrip from '../components/inbox/InboxTurnStrip.vue';
 import MediaMessage from '../components/inbox/MediaMessage.vue';
@@ -3371,6 +3372,16 @@ onBeforeUnmount(() => {
               @sent="mediaSent"
             >
               <template #tools="{ disabled: quoteDisabled }">
+                <ConversationBillingAction
+                  v-if="canQuoteShipping || (canReply && isAdmin)"
+                  :key="`billing-${active.id}`"
+                  :conversation-id="active.id"
+                  :conversation-version="active.version"
+                  :destination-label="active.contact?.label || ''"
+                  :subjects="subjectState.subjects"
+                  :disabled="quoteDisabled || busy || mediaSending || !canReply"
+                  :revision="orderRevision"
+                />
                 <ConversationShippingQuote
                   v-if="canQuoteShipping"
                   ref="shippingQuote"

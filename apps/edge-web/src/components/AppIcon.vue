@@ -4,6 +4,7 @@ import { computed } from 'vue';
 // Ícones de traço 24×24 no desenho do Lucide (ISC), o mesmo conjunto que o
 // ReUI usa. Um só peso de traço para toda a navegação e o shell.
 const ICONS = Object.freeze({
+  'credit-card': ['M2 5h20v14H2z', 'M2 10h20', 'M6 15h3'],
   dashboard: [
     'M4 3h5a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z',
     'M15 3h5a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z',

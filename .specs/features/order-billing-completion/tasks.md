@@ -80,7 +80,14 @@ Where: apps/edge-web/src/components/order/OrderBillingSection.vue
 Tests: BFUI-01–06, cinco ações, seleção/revisão, recebimento externo/conferência/histórico, foco/draft/axe/mobile/temas.
 Gate: Frontend
 Done when: as duas entradas usam contratos reais compartilhados e seguem os componentes atuais, sem fixtures em produção.
-Status: Pending
+Status: Complete
+
+Workspace financeiro real compartilhado na Inbox/Pedido. Gate HEAD51/51
+aprovado (13 novos,17 Pedido,8 rascunho,13 frete), sem skips. Temas reais
+claro/escuro,1440/390/320, axe, CTA legível, foco/teclado/Escape e rascunho
+verificados. Revisão independente preliminar corrigiu reconsulta após409 e
+reversão de externo em revisão. Loading/foco de sucesso têm cenário próprio.
+Typecheck/lint/design-tokens PASS. Sem fixture no runtime da aplicação.
 
 ### T4: Executar transporte simulado completo no n8n
 
