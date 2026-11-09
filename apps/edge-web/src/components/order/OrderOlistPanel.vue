@@ -581,6 +581,13 @@ watch(liveEvent, (event) => {
       return;
     }
     invalidate();
+    // A reset may abort the very first CRM read before there is a projection.
+    // Restore that read only; an actual denial remains denied and no receipt
+    // or ERP operation is generated automatically.
+    if (!projection.value) {
+      if (!denied.value) void load();
+      return;
+    }
     // Explicit refresh avoids ERP polling and never reuses a receipt after a live change.
     error.value =
       'Os dados ou o acesso podem ter mudado. Revise o envio novamente.';

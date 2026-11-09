@@ -176,3 +176,57 @@ test('T14: administrative Olist reads authorize through the real identity runtim
     'readReconciliation',
   ]);
 });
+
+test('Olist projection falls back to order.read for the real administrator session without the export checkbox', async (t) => {
+  const database = accountDatabase(),
+    identity = createIdentityApiRuntime(database, environment),
+    operations = createOperationReadRuntime(database, {
+      identity,
+      environment,
+    });
+  /** @type {any[]} */ const served = [];
+  const api = createApi(
+    {},
+    {
+      olist: {
+        authorizeRead: operations.authorizeRead,
+        project: async (/** @type {any} */ input) => {
+          served.push(input);
+          return { orderId: input.orderId, creationEnabled: false };
+        },
+      },
+    },
+  );
+  t.after(() => api.close());
+  for (const context of [
+    { origin, 'sec-fetch-site': 'same-origin' },
+    { 'sec-fetch-site': 'same-origin' },
+    { 'sec-fetch-site': 'none' },
+  ]) {
+    const response = await api.inject({
+      url: prefix,
+      headers: { ...context, cookie: 'crm_session=admin' },
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.equal(served.at(-1).action, 'order.read');
+    assert.equal(served.at(-1).actor.olistEnabled, false);
+  }
+  for (const context of [
+    { 'sec-fetch-site': 'cross-site' },
+    {
+      origin: 'https://untrusted.example.test',
+      'sec-fetch-site': 'same-origin',
+    },
+  ]) {
+    assert.equal(
+      (
+        await api.inject({
+          url: prefix,
+          headers: { ...context, cookie: 'crm_session=admin' },
+        })
+      ).statusCode,
+      403,
+    );
+  }
+  assert.equal(served.length, 3);
+});

@@ -4,6 +4,8 @@ import test from 'node:test';
 import { Pool } from 'pg';
 import { createApi } from '../apps/api/src/app.js';
 import { createOlistApiRuntime } from '../apps/api/src/olist-runtime.js';
+import { createIdentityApiRuntime } from '../apps/api/src/identity-runtime.js';
+import { createOperationReadRuntime } from '../apps/api/src/operation-runtime.js';
 import {
   loadMigrations,
   migrate,
@@ -920,6 +922,102 @@ if (connectionString) {
         },
       );
 
+      await t.test(
+        'real identity and PostgreSQL serve the unchecked administrator projection without enabling export or accepting cross-site reads',
+        async () => {
+          const f = await fixture(),
+            order = await seedOrder(f.actors.seller);
+          const key = Buffer.alloc(32, 43).toString('base64url');
+          const realEnvironment = {
+            ...environment,
+            AUTH_THROTTLE_HMAC_KEY: key,
+            IDENTITY_BOOTSTRAP_TOKEN:
+              'synthetic-bootstrap-token-at-least-32-characters',
+            CONTACT_IDENTITY_ENVELOPE_KEY: key,
+            CONTACT_IDENTITY_LOOKUP_KEY: key,
+            HANDOFF_ENVELOPE_KEY: key,
+            INBOX_MESSAGE_ENVELOPE_KEY: key,
+            OPERATION_CURSOR_HMAC_KEY: key,
+          };
+          // The real identity adapter uses the system clock for live sessions.
+          await pool.query(
+            "UPDATE crm.sessions SET created_at=clock_timestamp()-interval '1 minute',last_seen_at=clock_timestamp(),absolute_expires_at=clock_timestamp()+interval '1 day' WHERE user_id=$1",
+            [f.actors.admin.actor.id],
+          );
+          const identity = createIdentityApiRuntime(database, realEnvironment),
+            operations = createOperationReadRuntime(database, {
+              identity,
+              environment: realEnvironment,
+            });
+          const runtime = createOlistApiRuntime(database, {
+            access: operations,
+            environment: realEnvironment,
+            clock: () => NOW,
+            fetch: async () => assert.fail('Projection must not call ERP'),
+          });
+          const api = createApi({}, { olist: runtime });
+          try {
+            for (const context of [
+              {
+                origin: environment.APP_ORIGIN,
+                'sec-fetch-site': 'same-origin',
+              },
+              { 'sec-fetch-site': 'same-origin' },
+              { 'sec-fetch-site': 'none' },
+            ]) {
+              const response = await api.inject({
+                url: `/api/v1/orders/${order.id}/olist`,
+                headers: {
+                  ...context,
+                  cookie: 'crm_session=' + f.actors.admin.token,
+                },
+              });
+              assert.equal(response.statusCode, 200, response.body);
+              assert.equal(response.json().orderId, order.id);
+              assert.equal(response.json().creationEnabled, false);
+            }
+            const crossSite = await api.inject({
+              url: `/api/v1/orders/${order.id}/olist`,
+              headers: {
+                'sec-fetch-site': 'cross-site',
+                cookie: 'crm_session=' + f.actors.admin.token,
+              },
+            });
+            assert.equal(crossSite.statusCode, 403);
+            const send = await api.inject({
+              method: 'POST',
+              url: `/api/v1/orders/${order.id}/olist/export`,
+              headers: {
+                origin: environment.APP_ORIGIN,
+                'sec-fetch-site': 'same-origin',
+                cookie: 'crm_session=' + f.actors.admin.token,
+                'x-csrf-token': 'synthetic-csrf',
+                'idempotency-key': 'unchecked-admin-must-not-export',
+              },
+              payload: { previewToken: 'synthetic' },
+            });
+            assert.equal(send.statusCode, 403);
+            await pool.query(
+              'UPDATE crm.sessions SET revoked_at=clock_timestamp() WHERE user_id=$1',
+              [f.actors.admin.actor.id],
+            );
+            assert.equal(
+              (
+                await api.inject({
+                  url: `/api/v1/orders/${order.id}/olist`,
+                  headers: {
+                    'sec-fetch-site': 'same-origin',
+                    cookie: 'crm_session=' + f.actors.admin.token,
+                  },
+                })
+              ).statusCode,
+              403,
+            );
+          } finally {
+            await api.close();
+          }
+        },
+      );
       await t.test(
         'a forged/stale actor never bypasses current checkbox, disabled user, session or commercial profile restrictions',
         async () => {

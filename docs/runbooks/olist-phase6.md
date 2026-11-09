@@ -235,3 +235,25 @@ Exceção T16: SQL administrativo 24/24, unitários focados 57/57, QA independen
 3/3 e UI 23/23 (13 históricos e 10 da rotina normal). Revisão independente sem
 finding alto/crítico. O gate SQL completo da simplificação continua registrado
 como 356/356; o CI do head final repete os gates integrados antes do merge.
+
+O [PR 330](https://github.com/romulosutil/crm-silmer/pull/330) passou todos os
+jobs do CI (PostgreSQL, estáticos/E2E, dependências e build/scan das duas
+imagens) e foi integrado como `13a0ff0104bd3c3260ed322820f40a55f47ec5c9`.
+API, worker e edge foram observados saudáveis nessa versão; live, ready e
+healthz retornaram 200. Parâmetros centrais foram salvos em modo ERP, sem
+alteração dos parâmetros globais do Olist. Identificadores reais permanecem
+na evidência privada.
+
+A verificação real identificou uma corrida na entrada da ficha: `stream.reset`
+podia abortar a primeira leitura CRM antes da projeção e ocultar a conferência
+administrativa. A correção repõe somente essa leitura enquanto ainda não há
+projeção; uma recusa de acesso permanece recusada. Não gera prévia, consulta
+ERP, reutiliza recibo nem envia automaticamente. O teste reproduz o EventSource
+real com GET inicial atrasado, além de cobrir operadora e recusa 403. Regressões
+com adaptadores reais e PostgreSQL preservam leitura administrativa sem checkbox,
+recusa de exportação, origem externa e sessão revogada.
+
+Hotfix de entrada da ficha: `npm run validate` aprovado (2.405 testes, 2.357
+aprovados, 48 skips condicionais, zero falhas); E2E 76/76, autenticação real
+2/2 e SQL runtime 37/37. Revisão QA independente sem blocker. A reprodução
+antes do patch falhou com a mesma ausência da administração observada no alvo.
