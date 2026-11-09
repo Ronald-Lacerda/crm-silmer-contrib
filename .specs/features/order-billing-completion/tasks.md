@@ -50,7 +50,14 @@ Where: apps/api/src/order-billing-runtime.js
 Tests: BFIN-01–08 HTTP/PG/worker; R$30 gateway+R$70 externos quita R$100; replay, concorrência, auditrollback, reabertura, excesso, consulta verificada e autorização.
 Gate: Backend
 Done when: livro externo, guardas financeiras e consultas duráveis preservam saldo, histórico e quitação nas duas fontes, com worker seguro.
-Status: Pending
+Status: Complete
+
+Migração0065 e backend completos. Gates do autor: 59/59 PostgreSQL e19/19
+HTTP/worker; integrador: 69/69 PostgreSQL incluindo Financeiro e30/30
+HTTP/worker/contratos, zero skips. Typecheck global, lint e diff check PASS.
+Registros externos/reversões/candidatos/resultado são duráveis; notas e
+identificadores cifrados. Receive-only e endpoint de consulta configurado
+são independentes da emissão. Sem mutação operacional remota.
 
 ### T2: Gerar workflow dedicado para conferência de pagamento
 

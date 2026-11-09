@@ -3,7 +3,7 @@
   "info": {
     "title": "CRM Silmer — Cobranças InfinitePay",
     "version": "1.0.0",
-    "description": "COB-01–16 / ADR058. Valores em centavos; nenhuma rota pública de quitação. Corpos limitados a 8KiB; respostas privadas no-store. Pedido cancelado localmente (OLIST-19/46, ADR 068) recusa emissão e comandos com 409 ORDER_CANCELLED; recebimento de cobrança já emitida é preservado em revisão e a consulta por ID continua."
+    "description": "COB-01–16 / ADR058. Valores em centavos; nenhuma rota pública de quitação. Corpos limitados a 8KiB; respostas privadas no-store. Pedido cancelado localmente (OLIST-19/46, ADR 068) recusa emissão e comandos com 409 ORDER_CANCELLED; recebimento de cobrança já emitida é preservado em revisão e a consulta por ID continua. ADR067/BFIN-01–08: recebimentos externos e conferência verificável."
   },
   "servers": [
     {
@@ -814,6 +814,489 @@
                     "type": ["string", "null"],
                     "format": "uri",
                     "maxLength": 2048
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{orderId}/billing/external-receipts": {
+      "parameters": [
+        {
+          "name": "orderId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      ],
+      "post": {
+        "operationId": "recordExternalOrderBillingReceipt",
+        "summary": "Registrar dinheiro recebido fora da InfinitePay",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Sessão humana. Responsável atual ou administrador para mutações; versões e propriedade são revalidadas sob lock, inclusive no replay.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedVersion",
+                  "expectedBillingVersion",
+                  "amountCents",
+                  "receivedOn",
+                  "method",
+                  "note"
+                ],
+                "properties": {
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "expectedBillingVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "amountCents": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "receivedOn": {
+                    "type": "string",
+                    "format": "date"
+                  },
+                  "method": {
+                    "enum": [
+                      "cash",
+                      "pix_external",
+                      "bank_transfer",
+                      "card_external"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{orderId}/billing/external-receipts/{receiptId}/reverse": {
+      "parameters": [
+        {
+          "name": "orderId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        {
+          "name": "receiptId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "reverseExternalOrderBillingReceipt",
+        "summary": "Reverter lançamento externo sem movimentar dinheiro",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Sessão humana. Responsável atual ou administrador para mutações; versões e propriedade são revalidadas sob lock, inclusive no replay.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedVersion",
+                  "expectedBillingVersion",
+                  "reason"
+                ],
+                "properties": {
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "expectedBillingVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orders/{orderId}/billing/charges/{chargeId}/check-payment": {
+      "parameters": [
+        {
+          "name": "orderId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        {
+          "name": "chargeId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "requestOrderBillingPaymentCheck",
+        "summary": "Conferir transação no provedor por consulta assíncrona",
+        "security": [
+          {
+            "sessionCookie": [],
+            "csrfHeader": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Consulta persistida; não comprova pagamento"
+          }
+        },
+        "description": "Sessão humana. Responsável atual ou administrador para mutações; versões e propriedade são revalidadas sob lock, inclusive no replay.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedVersion",
+                  "expectedBillingVersion",
+                  "invoiceSlug",
+                  "transactionNsu"
+                ],
+                "properties": {
+                  "expectedVersion": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  },
+                  "expectedBillingVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "invoiceSlug": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "transactionNsu": {
+                    "type": "string",
+                    "pattern": "^[a-zA-Z0-9_-]{1,128}$",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/integrations/n8n/billing/payment-checks/{checkId}": {
+      "parameters": [
+        {
+          "name": "checkId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "lookupOrderBillingPaymentCheck",
+        "summary": "Consultar candidato conhecido de conferência",
+        "security": [
+          {
+            "automationBasic": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Silmer-Workflow-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "const": "silmer-order-billing"
+            }
+          },
+          {
+            "name": "X-Silmer-Workflow-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Silmer-Execution-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "description": "Workflow silmer-order-billing; candidato não é prova. paid exige recebimento correspondente já persistido."
+      }
+    },
+    "/integrations/n8n/billing/payment-checks/{checkId}/result": {
+      "parameters": [
+        {
+          "name": "checkId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "recordOrderBillingPaymentCheckResult",
+        "summary": "Registrar resultado após verificação no provedor",
+        "security": [
+          {
+            "automationBasic": [],
+            "idempotencyKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resultado persistido; criação de link é assíncrona quando aplicável"
+          },
+          "default": {
+            "description": "Erro com código seguro, sem payload externo",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["status", "code"],
+                  "properties": {
+                    "status": {
+                      "type": "integer"
+                    },
+                    "code": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Silmer-Workflow-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "const": "silmer-order-billing"
+            }
+          },
+          {
+            "name": "X-Silmer-Workflow-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-Silmer-Execution-Id",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "description": "Workflow silmer-order-billing; candidato não é prova. paid exige recebimento correspondente já persistido.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["status"],
+                "properties": {
+                  "status": {
+                    "enum": ["paid", "not_paid"]
                   }
                 }
               }

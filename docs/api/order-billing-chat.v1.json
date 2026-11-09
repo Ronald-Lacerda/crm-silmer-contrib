@@ -561,6 +561,9 @@
             "minimum": 100,
             "maximum": 9007199254740991
           },
+          "canRetry": {
+            "type": "boolean"
+          },
           "supersedesChargeId": {
             "type": ["string", "null"],
             "maxLength": 255
@@ -643,10 +646,8 @@
                   "pattern": "^[!-~]+$"
                 },
                 "chargeId": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 255,
-                  "pattern": "^[!-~]+$"
+                  "type": ["string", "null"],
+                  "maxLength": 255
                 },
                 "intentId": {
                   "type": ["string", "null"],
@@ -660,13 +661,23 @@
                   "type": ["string", "null"],
                   "maxLength": 255
                 },
+                "externalReceiptId": {
+                  "type": ["string", "null"],
+                  "maxLength": 255
+                },
+                "source": {
+                  "enum": [null, "external", "infinitepay"]
+                },
                 "kind": {
                   "enum": [
                     "charge",
                     "receipt",
                     "intent",
                     "correction",
-                    "refund"
+                    "refund",
+                    "external_receipt",
+                    "external_reversal",
+                    "payment_check"
                   ]
                 },
                 "amountCents": {
@@ -688,7 +699,8 @@
                     "waiting",
                     "paid",
                     "review",
-                    "closed"
+                    "closed",
+                    "not_paid"
                   ]
                 },
                 "occurredAt": {
