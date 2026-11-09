@@ -500,7 +500,15 @@ async function submit() {
         record.mode === 'external'
           ? 'Recebimento externo registrado no histórico.'
           : 'Registro estornado no histórico. Nenhum dinheiro foi devolvido por esta ação.';
-    dialog.value?.close();
+    await new Promise((resolve) => {
+      const current = dialog.value;
+      if (!current?.open) {
+        resolve();
+        return;
+      }
+      current.addEventListener('close', () => resolve(), { once: true });
+      current.close();
+    });
     await load();
     emit('changed');
     await nextTick();

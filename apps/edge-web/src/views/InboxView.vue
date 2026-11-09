@@ -3379,6 +3379,7 @@ onBeforeUnmount(() => {
                   :conversation-version="active.version"
                   :destination-label="active.contact?.label || ''"
                   :subjects="subjectState.subjects"
+                  :linked-order="active.order"
                   :disabled="quoteDisabled || busy || mediaSending || !canReply"
                   :revision="orderRevision"
                 />

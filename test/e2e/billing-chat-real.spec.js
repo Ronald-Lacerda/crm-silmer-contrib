@@ -10,6 +10,23 @@ async function setup(page, options = {}) {
     multiple: true,
     owner: options.owner,
   });
+  if (options.noDirectOrder)
+    /** @type {any} */ (shell.conversations[0]).order = null;
+  if (options.emptySubjects)
+    await page.route(
+      /\/api\/v1\/inbox\/conversations\/[^/]+\/subjects(?:\?.*)?$/u,
+      (route) =>
+        route.fulfill({
+          json: {
+            currentSubjectId: null,
+            subjects: [],
+            orders: [],
+            links: [],
+            needsSubjectMessageIds: [],
+            ordersHasMore: false,
+          },
+        }),
+    );
   const order = {
     ...ownConfirmedOrder,
     id: 'shipping-order-1',
@@ -307,6 +324,54 @@ test('BFUI-01/02: chat reviews an explicit order and destination, queues one sig
   await expect(
     page.getByRole('textbox', { name: 'Responder', exact: true }),
   ).toHaveValue('Rascunho preservado');
+});
+
+test('BFUI-01/02: direct conversation order remains selectable without a subject and sends only after explicit review', async ({
+  page,
+}) => {
+  const state = await setup(page, { emptySubjects: true });
+  const { dialog } = await openChat(page);
+  await expect(
+    dialog.getByLabel('Pedido deste atendimento').getByRole('option', {
+      name: 'Pedido 01-CRM · Pedido vinculado à conversa',
+    }),
+  ).toHaveCount(1);
+  await sendSignal(page, dialog);
+  expect(state.calls).toHaveLength(1);
+  expect(state.calls[0].path).toBe(
+    '/api/v1/orders/shipping-order-1/billing/send-intents',
+  );
+  expect(state.calls[0].body).toMatchObject({
+    action: 'issue',
+    conversationId: 'shipping-conversation-1',
+    percent: 30,
+    expectedConversationVersion: 4,
+  });
+  await dialog
+    .getByRole('button', { name: 'Fechar cobranças', exact: true })
+    .click();
+  await expect(
+    page.getByRole('textbox', { name: 'Responder', exact: true }),
+  ).toHaveValue('Rascunho preservado');
+});
+
+test('BFUI-01: absent direct order and empty subjects do not invent a billing destination', async ({
+  page,
+}) => {
+  const state = await setup(page, { emptySubjects: true, noDirectOrder: true });
+  await page.goto('/inbox/shipping-conversation-1');
+  await page
+    .getByRole('button', { name: 'Cobranças e pagamentos', exact: true })
+    .click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Cobranças e pagamentos',
+    exact: true,
+  });
+  await expect(dialog).toContainText(
+    'Vincule um pedido confirmado a um assunto',
+  );
+  await expect(dialog.getByLabel('Pedido deste atendimento')).toHaveCount(0);
+  expect(state.calls).toHaveLength(0);
 });
 
 test('BFUI-02/03: partial receipt switches to server-calculated balance and preserves the prior charge', async ({

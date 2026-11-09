@@ -278,7 +278,7 @@ async function save() {
       <p class="op-hint">
         {{
           billingReadonly
-            ? 'Pago em é calculado pelas cobranças confirmadas na InfinitePay; receber um sinal não registra quitação integral.'
+            ? 'Pago em é calculado pelos recebimentos registrados; receber um sinal não registra quitação integral.'
             : isManual
               ? 'Pago em é informado aqui. Entregue em é preenchido ao confirmar a entrega nos seus afazeres do Dashboard.'
               : 'Pago em e Entregue em são informados no pedido.'
