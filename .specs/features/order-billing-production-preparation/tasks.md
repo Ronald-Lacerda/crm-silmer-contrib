@@ -32,3 +32,19 @@ preserva141 nós e acrescenta3 guardas; não foi aplicado ao publicado. API e
 worker sem flags/URLs de cobrança; banco sem0063–0065 e imagem worker sem
 esses arquivos. Health200 não encerra go-live. Evidências no relatório técnico;
 verificação independente em validation.md após commit desta entrega.
+
+### T2: Reutilizar as Basic existentes nos candidatos (COB-OPS-PREP-03)
+
+Depends on: T1
+Where: docs/qa/order-billing-production-preparation-2026-11-08.md
+Tests: PPREP-01/03/04; reexportação dos dois candidatos, comparação de parâmetros/conexões/settings e dez referências Basic; User corresponde aos identificadores da API/worker, sem ler senhas.
+Gate: Preparation
+Done when: Basic existentes vinculadas nas direções corretas, sem rotação/ativação/envio; limites da verificação e instrução de API Key documentados.
+Status: Complete
+
+Autorização explícita do proprietário em09/11/2026. Dois exports privados
+conferidos por asserts: cada um contém4chamadasCRM+1gatilho com referências
+corretas, activefalse e settings preservados. Identificadores correspondem
+ao ambiente. Sem alteração runtime; autenticação financeira ponta a ponta
+depende da implantação compatível e API Key do provedor permanece pendente.
+O relatório independente de T1 é histórico e não declara homologação de T2.
