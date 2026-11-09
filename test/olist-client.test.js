@@ -700,6 +700,118 @@ test('T14 Olist envelopes fix the GCM geometry before deciphering and reject eve
   }
 });
 
+test('Olist seller catalog projects the nested contact name with the seller ID and no contact PII', async () => {
+  const f = harness(() =>
+    page(
+      [
+        {
+          id: 23,
+          situacao: 'A',
+          contato: {
+            id: 901,
+            nome: 'Vendedor sintético',
+            cpfCnpj: 'PRIVATE_DOCUMENT',
+            email: 'private-upstream',
+            endereco: { rua: 'PRIVATE_ADDRESS' },
+          },
+        },
+      ],
+      1,
+    ),
+  );
+  assert.deepEqual(await f.client.catalog('sellers'), [
+    { id: 23, name: 'Vendedor sintético' },
+  ]);
+  assert.equal(f.urls.length, 1);
+  for (const nome of [
+    '',
+    ' ',
+    'x'.repeat(121),
+    'private-upstream\u0007',
+    17,
+    {},
+  ]) {
+    const invalid = harness(() =>
+      page(
+        [{ id: 23, nome: 'Valid legacy label', contato: { id: 901, nome } }],
+        1,
+      ),
+    );
+    await assert.rejects(invalid.client.catalog('sellers'), isSafeRemoteError);
+  }
+  const invalidSellerId = harness(() =>
+    page([{ id: '23', contato: { id: 901, nome: 'Vendedor sintético' } }], 1),
+  );
+  await assert.rejects(
+    invalidSellerId.client.catalog('sellers'),
+    isSafeRemoteError,
+  );
+  const noName = harness(() => page([{ id: 23, contato: { id: 901 } }], 1));
+  await assert.rejects(noName.client.catalog('sellers'), isSafeRemoteError);
+});
+
+test('Olist warehouse catalog unwraps the complete non-paginated itens envelope with bounds and duplicate checks', async () => {
+  const f = harness((url) => {
+    assert.equal(url.pathname, '/public-api/v3/depositos');
+    assert.equal(url.search, '');
+    return json({
+      itens: [
+        {
+          id: 31,
+          descricao: 'Depósito sintético',
+          tipo: 'P',
+          desconsiderarSaldo: false,
+          padrao: true,
+          possuiReserva: false,
+        },
+      ],
+    });
+  });
+  assert.deepEqual(await f.client.catalog('warehouses'), [
+    { id: 31, name: 'Depósito sintético' },
+  ]);
+  assert.equal(f.urls.length, 1);
+  assert.deepEqual(
+    await harness(() => json({ itens: [] })).client.catalog('warehouses'),
+    [],
+  );
+  for (const body of [
+    null,
+    {},
+    { itens: {} },
+    {
+      itens: [{ id: 31, descricao: 'Depósito sintético' }],
+      paginacao: { offset: 0, total: 2 },
+    },
+    {
+      itens: Array.from({ length: 251 }, (_, i) => ({
+        id: i + 1,
+        descricao: 'Opção',
+      })),
+    },
+    {
+      itens: [
+        { id: 31, descricao: 'Um' },
+        { id: 31, descricao: 'Duplicado' },
+      ],
+    },
+  ])
+    await assert.rejects(
+      harness(() => json(body)).client.catalog('warehouses'),
+      { code: 'OLIST_INCOMPLETE_LOOKUP' },
+    );
+  for (const row of [
+    { id: '31', descricao: 'Opção' },
+    { id: 31, descricao: '' },
+    { id: 31, descricao: 'private-upstream\u0007' },
+    { id: 31, contato: { nome: 'Not a warehouse description' } },
+  ])
+    await assert.rejects(
+      harness(() => json({ itens: [row] })).client.catalog('warehouses'),
+      isSafeRemoteError,
+    );
+});
+
 test('T22 absence checks enumerate every customer state and both document formats before returning zero', async () => {
   const { client, urls } = harness(() => page([], 0));
   assert.equal(

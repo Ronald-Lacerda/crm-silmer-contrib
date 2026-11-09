@@ -279,14 +279,34 @@ export function createOlistClient(options) {
       if (!Object.hasOwn(CATALOGS, kind))
         throw new OlistError('INVALID_REQUEST', 400);
       const path = CATALOGS[/** @type {keyof typeof CATALOGS} */ (kind)];
-      const values =
-        kind === 'warehouses' ? await get(path) : await pages(path, {});
+      let values;
+      if (kind === 'warehouses') {
+        const body = await get(path);
+        // /depositos is not paginated: live v3 wraps the complete list in
+        // `itens`; retain the earlier bare-array contract. Do not silently
+        // treat a future paginated/partial envelope as a complete catalogue.
+        values = Array.isArray(body)
+          ? body
+          : body && !Object.hasOwn(body, 'paginacao')
+            ? body.itens
+            : null;
+      } else values = await pages(path, {});
       if (!Array.isArray(values) || values.length > 250)
         throw new OlistError('OLIST_INCOMPLETE_LOOKUP');
-      return values.map((/** @type {any} */ row) => ({
+      const projected = values.map((/** @type {any} */ row) => ({
         id: remoteInteger(row?.id),
-        name: remoteText(row?.nome ?? row?.descricao, 120),
+        // The seller ID is row.id; contato.id is a different entity. Only its
+        // display name is projected, never its document/address/contact data.
+        name: remoteText(
+          (kind === 'sellers' ? row?.contato?.nome : undefined) ??
+            row?.nome ??
+            row?.descricao,
+          120,
+        ),
       }));
+      if (new Set(projected.map((row) => row.id)).size !== projected.length)
+        throw new OlistError('OLIST_INCOMPLETE_LOOKUP');
+      return projected;
     },
     // F2 deliberately has no ERP write transport. T22/T08 must add a reserved,
     // freshly authorized effect port before these closed methods can operate.
