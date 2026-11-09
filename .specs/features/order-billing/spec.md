@@ -1,5 +1,10 @@
 # Cobranças do pedido — contrato aprovado
 
+Continuação autorizada em 08/11/2026: [ADR067](../../../docs/adr/067-recebimentos-externos-e-conciliacao-de-cobrancas.md)
+e [order-billing-completion](../order-billing-completion/spec.md) acrescentam
+recebimentos externos, consultas e frontend real no redesign atual. As seções
+datadas de 06/11 abaixo registram o diferimento anterior, já supersedido.
+
 Decisão: [ADR 058](../../../docs/adr/058-cobrancas-do-pedido-com-infinitepay.md)
 e [RFC 049](../../../docs/rfc/049-cobrancas-do-pedido-com-infinitepay.md).
 Protótipo aprovado pelo proprietário em 05/11/2026, seguido de autorização

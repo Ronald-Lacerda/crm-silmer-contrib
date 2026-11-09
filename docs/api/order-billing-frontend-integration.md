@@ -5,9 +5,10 @@ COB-READY-01 / COB-API-READY, requisitos COB-01–16 e BAPI-01–11 da
 [RFC 047](../rfc/047-enviar-cobranca-pela-conversa.md) e
 [ADR 066](../adr/066-intencoes-de-cobranca-e-envio-transacional.md).
 
-Este documento descreve como consumir os contratos existentes após o redesign.
-Não aprova o visual, implementa componentes, amplia a API ou declara homologação.
-O backend B01–B05 está integrado; o novo fluxo da interface continua pendente.
+Este documento descreve os contratos consumidos pela interface no redesign
+atual, autorizada em 08/11/2026. A entrega integrada é rastreada em
+[order-billing-completion](../../.specs/features/order-billing-completion/spec.md).
+O backend B01–B05 e as extensões financeiras mantêm flags remotas desligadas.
 O [protótipo](../prototypes/README.md) compartilha fixtures entre chat e Pedido;
 esses dados não substituem o contrato real.
 
@@ -16,7 +17,7 @@ esses dados não substituem o contrato real.
 - Inbox: acrescentar a ação de cobrança à composição de ações da conversa em
   `apps/edge-web/src/views/InboxView.vue`, junto à entrada de cotação de frete.
   A referência atual é `ConversationShippingQuote`; reutilizar shell, tokens
-  e padrões de foco vigentes quando o redesign estiver pronto. O botão abre
+  e padrões de foco do redesign vigente. O botão abre
   revisão, não submete um comando financeiro ao ser aberto.
 - Pedido: integrar a mesma operação na seção financeira existente
   `apps/edge-web/src/components/order/OrderBillingSection.vue`, usada por
@@ -31,7 +32,7 @@ esses dados não substituem o contrato real.
 Um pedido pode existir sem conversa elegível: manter geração/compartilhamento
 manual disponível conforme o contrato vigente, sem inventar destinatário ou
 vínculo por nome/telefone. Com vários pedidos elegíveis, exigir seleção explícita.
-Consultar o pedido confirmado e os vínculos de Assunto/Pedido do ciclo atual;
+Consultar o pedido diretamente vinculado à conversa e os vínculos de Assunto/Pedido do ciclo atual;
 o backend continua decidindo elegibilidade sob lock.
 
 ## Leituras que alimentam as duas telas
@@ -141,18 +142,23 @@ e devolução devolvem null nesses campos. A origem pode ser exibida após reloa
 sem depender do estado local do diálogo. Em respostas anteriores sem os campos,
 conservar a lista/histórico e não deduzir a associação por posição ou valor.
 
-O estado `failed` também não expõe um boolean de elegibilidade para retry.
-Não presumir que toda falha ocorreu antes do envio: falha de entrega com ID
-externo não libera outra tentativa. A futura UI deve definir uma projeção
-compatível para essa capacidade, ou apresentar conferência seguida de comando
-explicitamente sujeito à validação do backend, sem prometer que será aceito.
+`canRetry:true` identifica falha comprovadamente anterior ao envio para abrir
+nova revisão humana. Campo ausente ou false não oferece retry. Isso não
+dispensa validade, versões, saldo, contexto e autorização na nova submissão;
+falha de entrega com ID externo não libera repetição do efeito.
 
 Também não existe endpoint de artefato/comprovante fictício na API real.
-`receiptUrl`, método, parcelas e NSU são projetados por cobrança e podem faltar;
-o histórico não fornece uma listagem completa de detalhes de cada pagamento.
+`receiptUrl`, método, parcelas e NSU podem faltar. A projeção `payments` de
+`GET /billing` reúne os pagamentos com fonte e data; `externalReceipts`
+acrescenta notas, autoria e reversão externas. O histórico inclui eventos de
+recebimento, reversão e conferência, cujo valor consultado não é crédito.
 Não transportar a API fictícia do protótipo para produção nem inventar recibos.
 
-## Gate para a futura implementação
+Contrato dessas extensões em [pagamentos](order-billing-payments.md).
+`paymentCheckEnabled` depende do endpoint configurado na API/worker e do
+acesso de gestão; indisponibilidade não vira consulta enfileirada sem consumidor.
+
+## Gate da implementação integrada
 
 - Comandos e ACL: responsável, Admin, outro vendedor, Financeiro, conta
   desativada, pedido pendente/loja, conversa encerrada/transferida, vínculo
@@ -170,5 +176,7 @@ Não transportar a API fictícia do protótipo para produção nem inventar reci
   toque, 320/390 px, claro/escuro, axe e rascunho preservado. Reutilizar o
   componente aprovado, com loading/erro/vazio/permissão e confirmação explícita.
 
-Esse gate depende da implementação real. Os testes do protótipo não concluem
-o frontend nem COB-OPS-01 e não substituem homologação autorizada do provedor.
+A implementação real foi exercitada em DEV com API, PostgreSQL e n8n locais.
+As evidências estão nas tarefas e na validação de order-billing-completion.
+Os testes do protótipo permanecem separados e COB-OPS-01 exige homologação
+autorizada do provedor.

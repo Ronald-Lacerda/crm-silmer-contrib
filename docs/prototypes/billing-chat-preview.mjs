@@ -42,6 +42,16 @@ export async function createBillingChatPreview({ port = 4189 } = {}) {
           }
           if (!id.replaceAll('\\', '/').endsWith('/src/views/InboxView.vue'))
             return;
+          // The real entry now exists. Keep this archived preview on its
+          // synthetic component instead of rendering a second financial action.
+          const actualActions =
+            code.match(/<ConversationBillingAction\b/g) ?? [];
+          if (actualActions.length > 1)
+            throw new Error(
+              'Review the current billing action before previewing.',
+            );
+          if (actualActions.length)
+            code = code.replace(/<ConversationBillingAction\b[\s\S]*?\/>/, '');
           const anchor = '<ConversationShippingQuote';
           if (!code.includes(anchor))
             throw new Error(
