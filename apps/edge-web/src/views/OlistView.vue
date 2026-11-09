@@ -55,6 +55,8 @@ const lookupError = ref('');
 const accountError = ref('');
 const accountMessage = ref('');
 const creationReason = ref('');
+const recoveryReason = ref('');
+const recoveryAttested = ref(false);
 const status = ref(null);
 const accountCreationActive = computed(
   () => status.value?.creationActive ?? status.value?.creationEnabled ?? false,
@@ -257,7 +259,7 @@ async function cancelSettingsEdit() {
   await focus(settingsEditButton);
 }
 
-/** @param {'authorize'|'complete'|'disconnect'|'settings'|'creation'} action @param {Record<string, unknown>} body */
+/** @param {'authorize'|'complete'|'disconnect'|'settings'|'creation'|'recovery'} action @param {Record<string, unknown>} body */
 async function accountAction(action, body) {
   if (!canManage.value || accountBusy.value || loading.value) return;
   if (settingsEditing.value && action !== 'settings') return;
@@ -300,8 +302,14 @@ async function accountAction(action, body) {
             ? accountCreationActive.value
               ? 'Geração Olist ativada para o piloto.'
               : 'Geração Olist desativada.'
-            : 'Conta Olist desconectada do CRM.';
+            : action === 'recovery'
+              ? 'Conferência registrada. A geração continua desativada.'
+              : 'Conta Olist desconectada do CRM.';
     if (action === 'creation') creationReason.value = '';
+    if (action === 'recovery') {
+      recoveryReason.value = '';
+      recoveryAttested.value = false;
+    }
     props.announce(accountMessage.value);
     await focus(heading);
   } catch (cause) {
@@ -597,6 +605,67 @@ onBeforeUnmount(() => {
           <p v-else-if="!status.pilotConfigured" class="field-help">
             A operação precisa configurar a identidade da operadora do piloto.
           </p>
+          <form
+            v-if="status.recoveryRequired"
+            @submit.prevent="
+              accountAction('recovery', {
+                expectedVersion: status.version,
+                confirmed: recoveryAttested,
+                reason: recoveryReason.trim(),
+              })
+            "
+          >
+            <p id="olist-recovery-help" class="field-help">
+              Confira os cadastros e as vendas já existentes antes de liberar a
+              primeira geração ou retomar após uma recuperação. Resolva
+              resultados incertos e confira a janela posterior ao backup.
+              Registrar esta conferência não ativa a geração.
+            </p>
+            <label class="olist-checkbox">
+              <input
+                v-model="recoveryAttested"
+                type="checkbox"
+                required
+                :disabled="
+                  accountBusy ||
+                  loading ||
+                  settingsEditing ||
+                  accountCreationActive
+                "
+                aria-describedby="olist-recovery-help"
+              />
+              Conferi os cadastros e as vendas existentes, inclusive a janela de
+              recuperação.
+            </label>
+            <div class="olist-field">
+              <label for="olist-recovery-reason">Motivo da conferência</label>
+              <input
+                id="olist-recovery-reason"
+                v-model="recoveryReason"
+                required
+                maxlength="200"
+                :disabled="
+                  accountBusy ||
+                  loading ||
+                  settingsEditing ||
+                  accountCreationActive
+                "
+              />
+            </div>
+            <button
+              type="submit"
+              :disabled="
+                accountBusy ||
+                loading ||
+                settingsEditing ||
+                accountCreationActive ||
+                !recoveryAttested ||
+                !recoveryReason.trim()
+              "
+            >
+              Registrar conferência concluída
+            </button>
+          </form>
           <form
             @submit.prevent="
               accountAction('creation', {

@@ -113,6 +113,14 @@ async function setup(page, options = {}) {
           creationEnabled: false,
         });
       if (path === `${base}/complete`) return json(current);
+      if (path === `${base}/recovery`) {
+        current = {
+          ...current,
+          recoveryRequired: false,
+          version: current.version + 1,
+        };
+        return json(current);
+      }
       if (path === `${base}/creation`) {
         current = {
           ...current,
@@ -345,6 +353,103 @@ test('T17 admin stops an active pilot even when its connection is unavailable', 
       reason: 'Interromper durante a reconexão',
     },
   ]);
+});
+
+test('T15 recovery requires explicit human attestation and does not activate creation', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    initialStatus: {
+      creationActive: false,
+      creationEnabled: false,
+      pilotConfigured: true,
+      recoveryRequired: true,
+    },
+  });
+  await page.goto('/olist');
+  await page.getByText('Geração no piloto', { exact: true }).click();
+  const finish = page.getByRole('button', {
+    name: 'Registrar conferência concluída',
+    exact: true,
+  });
+  await expect(finish).toBeDisabled();
+  await page
+    .getByLabel('Motivo da conferência')
+    .fill('Conferência inicial documentada');
+  await expect(finish).toBeDisabled();
+  await page
+    .getByLabel(
+      'Conferi os cadastros e as vendas existentes, inclusive a janela de recuperação.',
+    )
+    .check();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({
+    path: 'var/olist-recovery-admin.png',
+    fullPage: true,
+  });
+  await finish.focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByText('Conferência registrada. A geração continua desativada.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText('Geração desativada.', { exact: true }),
+  ).toBeVisible();
+  expect(
+    calls
+      .filter((call) => call.path === `${base}/recovery`)
+      .map((call) => call.body),
+  ).toEqual([
+    {
+      expectedVersion: 3,
+      confirmed: true,
+      reason: 'Conferência inicial documentada',
+    },
+  ]);
+  expect(calls.filter((call) => call.path === `${base}/creation`)).toHaveLength(
+    0,
+  );
+});
+
+test('T15 pending recovery keeps the declaration and reason with safe focused feedback', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    initialStatus: { recoveryRequired: true, creationActive: false },
+    failures: { recovery: { code: 'OLIST_RECOVERY_BLOCKED', status: 409 } },
+  });
+  await page.goto('/olist');
+  await page.getByText('Geração no piloto', { exact: true }).click();
+  const reason = page.getByLabel('Motivo da conferência');
+  await reason.fill('Conferência ainda em análise');
+  const declaration = page.getByLabel(
+    'Conferi os cadastros e as vendas existentes, inclusive a janela de recuperação.',
+  );
+  await declaration.check();
+  await page
+    .getByRole('button', {
+      name: 'Registrar conferência concluída',
+      exact: true,
+    })
+    .click();
+  await expect(page.getByRole('alert')).toBeFocused();
+  await expect(page.getByRole('alert')).toContainText(
+    'operações pendentes ou divergentes',
+  );
+  await expect(reason).toHaveValue('Conferência ainda em análise');
+  await expect(declaration).toBeChecked();
+  await expect(page.locator('body')).not.toContainText(
+    'private-provider-detail-canary',
+  );
+  expect(calls.filter((call) => call.path === `${base}/creation`)).toHaveLength(
+    0,
+  );
 });
 
 test('lookup refuses incomplete numbers and remains usable on a phone', async ({

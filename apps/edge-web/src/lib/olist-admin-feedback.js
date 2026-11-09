@@ -1,6 +1,8 @@
 /** Safe, fixed feedback; never render provider messages or request details.
  * @param {unknown} cause */
 export function olistAdminFailure(cause) {
+  if (/** @type {any} */ (cause)?.code === 'OLIST_RECOVERY_BLOCKED')
+    return 'Desative a geração e conclua a conferência das operações pendentes ou divergentes antes de registrar a recuperação.';
   const error = /** @type {any} */ (cause);
   if (error?.status === 401 || error?.status === 403)
     return 'Seu acesso mudou ou sua sessão expirou. Entre novamente com uma conta de administrador.';

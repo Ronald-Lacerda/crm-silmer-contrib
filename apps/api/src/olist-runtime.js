@@ -56,9 +56,15 @@ export function createOlistApiRuntime(database, options) {
               enabled: input.enabled,
               reason: input.reason,
             }
-          : name === 'disconnect'
-            ? { expectedVersion: input.expectedVersion, reason: input.reason }
-            : {};
+          : name === 'recovery'
+            ? {
+                expectedVersion: input.expectedVersion,
+                confirmed: input.confirmed,
+                reason: input.reason,
+              }
+            : name === 'disconnect'
+              ? { expectedVersion: input.expectedVersion, reason: input.reason }
+              : {};
     // Include the session so a stored authorize URL cannot cross sessions.
     const fingerprint = identityHash(config.hmacKey, 'command', [
       name,
@@ -92,7 +98,9 @@ export function createOlistApiRuntime(database, options) {
       },
       (client) =>
         connection[
-          /** @type {'authorize'|'disconnect'|'settings'|'creation'} */ (name)
+          /** @type {'authorize'|'disconnect'|'settings'|'creation'|'recovery'} */ (
+            name
+          )
         ]({
           ...input,
           transaction: client,
@@ -191,6 +199,7 @@ export function createOlistApiRuntime(database, options) {
       mutate(input, 'disconnect'),
     /** @param {any} input */ settings: (input) => mutate(input, 'settings'),
     /** @param {any} input */ creation: (input) => mutate(input, 'creation'),
+    /** @param {any} input */ recovery: (input) => mutate(input, 'recovery'),
     preview: preview.preview,
     checkPreview: preview.checkPreview,
     ...createOlistExportCommand(database, {

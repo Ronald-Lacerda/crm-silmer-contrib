@@ -115,6 +115,7 @@ function fixture(patch = {}) {
     'disconnect',
     'settings',
     'creation',
+    'recovery',
     'lookup',
     'lookups',
     'mappings',
@@ -270,6 +271,11 @@ test('each Olist command accepts only its explicit fields and dispatches its clo
       { expectedVersion: 0, reason: 'Synthetic reason', settings },
       'settings',
     ],
+    [
+      'recovery',
+      { expectedVersion: 0, confirmed: true, reason: 'Synthetic recovery' },
+      'recovery',
+    ],
     ['order-lookup', { query: '41-CRM' }, 'lookup'],
     ['lookups', { kind: 'warehouses' }, 'lookups'],
     [
@@ -306,6 +312,41 @@ test('each Olist command accepts only its explicit fields and dispatches its clo
     }
     assert.equal(calls.length, count);
   }
+});
+
+test('OLIST-T15 recovery requires administration and preserves a bounded blocked refusal', async (t) => {
+  const f = fixture();
+  t.after(() => f.api.close());
+  f.runtime.recovery = async () => {
+    throw Object.assign(new Error('PRIVATE_RECOVERY'), {
+      code: 'OLIST_RECOVERY_BLOCKED',
+      statusCode: 409,
+    });
+  };
+  const payload = {
+    expectedVersion: 0,
+    confirmed: true,
+    reason: 'Synthetic checked procedure',
+  };
+  const blocked = await f.api.inject({
+    method: 'POST',
+    url: `${prefix}/recovery`,
+    headers,
+    payload,
+  });
+  assert.equal(blocked.statusCode, 409);
+  assert.equal(blocked.json().code, 'OLIST_RECOVERY_BLOCKED');
+  assert.ok(!blocked.body.includes('PRIVATE_RECOVERY'));
+  const outsider = fixture({ capabilities: [], olistEnabled: true });
+  t.after(() => outsider.api.close());
+  const denied = await outsider.api.inject({
+    method: 'POST',
+    url: `${prefix}/recovery`,
+    headers,
+    payload,
+  });
+  assert.equal(denied.statusCode, 403);
+  assert.deepEqual(outsider.calls, []);
 });
 
 test('Olist rejects missing required command fields before invoking its runtime', async (t) => {

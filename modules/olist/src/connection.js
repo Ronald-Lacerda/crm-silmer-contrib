@@ -292,6 +292,90 @@ export function createOlistConnection(database, options) {
   return Object.freeze({
     quota,
     status,
+    /** Human attestation of the external recovery procedure, never its proof.
+     * No remote call, switch activation, deletion or retry is performed.
+     * @param {any} input */
+    async recovery(input) {
+      requireConfigured();
+      integer(input.expectedVersion, true);
+      text(input.reason, 500);
+      if (input.confirmed !== true)
+        throw new OlistError('INVALID_REQUEST', 400);
+      return transaction(input, async (/** @type {any} */ client) => {
+        await lockOlistActor(client, input, 'olist.manage', clock());
+        const row = await lockConnection(client);
+        const account = (
+          await client.query(
+            'SELECT * FROM crm.olist_accounts WHERE account_key=$1 FOR UPDATE',
+            [config.accountKey],
+          )
+        ).rows[0];
+        if (Number(row.version) !== input.expectedVersion)
+          throw new OlistError('VERSION_CONFLICT');
+        if (account.creation_enabled || row.refresh_nonce || row.exchange_nonce)
+          throw new OlistError('OLIST_RECOVERY_BLOCKED');
+        // The exclusive account/connection fence prevents a new effect ticket
+        // while the known local journal is checked. It cannot observe effects
+        // absent from a restored backup: that remains the human attestation.
+        // Completed reconciliation confirms the target, while an already
+        // uncertain attempt remains immutable history. Only that current proof
+        // (and a matching observed ID/number) resolves its historical error;
+        // a reserved ticket still denotes an effect in flight and always blocks.
+        // Variation POSTs may observe the parent ID: after reconciliation the
+        // child ID differs. Accept only that child's own confirmed same-account
+        // product parent, exactly as the read-only reconciler does.
+        const evidence = (
+          await client.query(
+            `SELECT
+          EXISTS(SELECT 1 FROM crm.olist_exports WHERE account_key=$1 AND
+            (state IN ('queued','resolving','ready','reserved','uncertain') OR
+             (last_error_code ~ '(DIVERGENT|READBACK_MISMATCH|RECONCILIATION_REQUIRED|UNCERTAIN)'
+              AND state<>'invalidated' AND NOT (state IN ('confirmed','linked') AND remote_id IS NOT NULL)))) OR
+          EXISTS(SELECT 1 FROM crm.olist_resources WHERE account_key=$1 AND state IN ('reserved','uncertain')) OR
+          EXISTS(SELECT 1 FROM crm.olist_attempts a
+            LEFT JOIN crm.olist_resources r ON r.id=a.resource_id AND r.account_key=a.account_key
+            LEFT JOIN crm.olist_resources parent ON parent.id=r.parent_id AND parent.account_key=r.account_key AND parent.kind='product'
+            LEFT JOIN crm.olist_exports e ON e.id=a.export_id AND e.account_key=a.account_key
+            WHERE a.account_key=$1 AND (a.outcome='reserved' OR
+              ((a.outcome='uncertain' OR a.safe_code ~ '(DIVERGENT|READBACK_MISMATCH|RECONCILIATION_REQUIRED|UNCERTAIN)')
+               AND NOT COALESCE(
+                 (a.resource_id IS NOT NULL AND r.state='confirmed' AND r.remote_id IS NOT NULL
+                   AND (a.observed_remote_id IS NULL OR a.observed_remote_id=r.remote_id
+                     OR (r.kind='variation' AND parent.state='confirmed' AND parent.remote_id IS NOT NULL
+                       AND parent.remote_id<>r.remote_id AND a.observed_remote_id=parent.remote_id))) OR
+                 (a.export_id IS NOT NULL AND e.state IN ('confirmed','linked') AND e.remote_id IS NOT NULL
+                   AND (a.observed_remote_id IS NULL OR a.observed_remote_id=e.remote_id)
+                   AND (a.observed_remote_number IS NULL OR a.observed_remote_number=e.remote_number)),false)))) OR
+          EXISTS(SELECT 1 FROM crm.olist_read_requests WHERE account_key=$1 AND status='queued') OR
+          EXISTS(SELECT 1 FROM (
+            SELECT DISTINCT ON (export_id,resource_id,stage) status FROM crm.olist_read_requests WHERE account_key=$1
+            ORDER BY export_id,resource_id,stage,created_at DESC,id DESC
+          ) latest WHERE status='blocked') OR
+          EXISTS(SELECT 1 FROM crm.outbox_jobs j JOIN crm.olist_exports e ON e.id=j.olist_export_id
+            WHERE e.account_key=$1 AND j.job_type IN ('olist.export','olist.reconcile') AND j.status='processing') AS blocked`,
+            [config.accountKey],
+          )
+        ).rows[0];
+        if (evidence.blocked) throw new OlistError('OLIST_RECOVERY_BLOCKED');
+        await client.query(
+          'UPDATE crm.olist_accounts SET recovery_required=false WHERE account_key=$1',
+          [config.accountKey],
+        );
+        const saved = (
+          await client.query(
+            'UPDATE crm.olist_connections SET version=version+1,updated_at=$2 WHERE context_key=$1 RETURNING *',
+            [config.contextKey, clock()],
+          )
+        ).rows[0];
+        await event(
+          client,
+          input,
+          'OLIST_RECOVERY_CONFIRMED',
+          Number(saved.version),
+        );
+        return projection(client, saved);
+      });
+    },
     /** Local administrative switch; recovery remains an independent gate.
      * @param {any} input */
     async creation(input) {

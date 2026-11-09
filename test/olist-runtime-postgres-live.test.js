@@ -307,6 +307,515 @@ if (connectionString) {
         },
       );
 
+      await t.test(
+        'OLIST-T15: local human recovery attestation is idempotent, versioned, admin-only and never activates creation',
+        async () => {
+          const f = await fixture();
+          const input = {
+            ...f.actors.admin,
+            idempotencyKey: 'recovery-confirm',
+            expectedVersion: 0,
+            confirmed: true,
+            reason: 'PRIVATE_RECOVERY_REASON_CANARY',
+          };
+          await assert.rejects(
+            f.runtime.recovery({ ...input, confirmed: false }),
+            { code: 'INVALID_REQUEST' },
+          );
+          await assert.rejects(
+            f.runtime.recovery({ ...input, ...f.actors.seller }),
+            { code: 'FORBIDDEN' },
+          );
+          const result = await f.runtime.recovery(input);
+          assert.equal(result.version, 1);
+          assert.equal(result.recoveryRequired, false);
+          assert.equal(result.creationActive, false);
+          assert.equal(result.creationEnabled, false);
+          assert.deepEqual(await f.runtime.recovery(input), result);
+          await assert.rejects(
+            f.runtime.recovery({ ...input, reason: 'Different confirmation' }),
+            { code: 'IDEMPOTENCY_KEY_REUSED' },
+          );
+          await assert.rejects(
+            f.runtime.recovery({ ...input, idempotencyKey: 'recovery-stale' }),
+            { code: 'VERSION_CONFLICT' },
+          );
+          assert.equal(
+            (
+              await pool.query(
+                "SELECT count(*)::int AS count FROM crm.olist_events WHERE event_code='OLIST_RECOVERY_CONFIRMED'",
+              )
+            ).rows[0].count,
+            1,
+          );
+          const audits = (
+            await pool.query(
+              'SELECT action,reason FROM crm.audit_events WHERE actor_id=$1',
+              [f.actors.admin.actor.id],
+            )
+          ).rows;
+          assert.ok(
+            audits.some((entry) => entry.reason === 'OLIST_RECOVERY_CONFIRMED'),
+          );
+          assert.ok(!JSON.stringify(audits).includes(input.reason));
+          await pool.query(
+            'UPDATE crm.sessions SET revoked_at=$2 WHERE token_hash=$1',
+            [f.actors.admin.sessionBinding, NOW],
+          );
+          await assert.rejects(f.runtime.recovery(input), {
+            code: 'FORBIDDEN',
+          });
+          assert.equal(f.calls.length, 0);
+        },
+      );
+
+      await t.test(
+        'OLIST-T15: recovery refuses every known unresolved journal boundary and allows reconciled history',
+        async (t) => {
+          async function initialized() {
+            const f = await fixture();
+            await f.runtime.settings({
+              ...f.actors.admin,
+              idempotencyKey: 'recovery-setup',
+              expectedVersion: 0,
+              settings: EMPTY_OLIST_SETTINGS,
+              reason: 'Synthetic setup',
+            });
+            return f;
+          }
+          /** @param {string} state */
+          async function resource(state = 'pending') {
+            const id = randomUUID();
+            await pool.query(
+              "INSERT INTO crm.olist_resources(id,account_key,kind,identity_hash,reference,state,remote_id) VALUES($1,$2,'customer',$3,$4,$5,$6)",
+              [
+                id,
+                config.accountKey,
+                hash(id),
+                'CRM-' + id,
+                state,
+                state === 'confirmed' ? '901' : null,
+              ],
+            );
+            return id;
+          }
+          /** @param {any} f @param {string} state @param {string|null} [error] */
+          async function operation(f, state, error = null) {
+            const order = await seedOrder(f.actors.seller),
+              id = randomUUID();
+            await pool.query(
+              'INSERT INTO crm.olist_exports(id,account_key,context_key,connection_generation,order_id,order_version,settings_version,actor_id,authorization_version,reference,state,snapshot_envelope,remote_id,last_error_code) VALUES($1,$2,$3,0,$4,1,0,$5,0,$6,$7,$8::jsonb,$9,$10)',
+              [
+                id,
+                config.accountKey,
+                config.contextKey,
+                order.id,
+                f.actors.admin.actor.id,
+                'CRM-' + id,
+                state,
+                JSON.stringify(
+                  seal(
+                    {},
+                    config.envelopeKey,
+                    'recovery-test',
+                    config.accountKey,
+                    id,
+                  ),
+                ),
+                ['confirmed', 'linked'].includes(state) ? '123' : null,
+                error,
+              ],
+            );
+            return id;
+          }
+          /** @param {any} f @param {string} exportId @param {string} status @param {number} [offset] */
+          async function read(f, exportId, status, offset = 0) {
+            const id = randomUUID(),
+              envelope = JSON.stringify(
+                seal(
+                  {},
+                  config.envelopeKey,
+                  'recovery-test',
+                  config.accountKey,
+                  id,
+                ),
+              ),
+              created = new Date(NOW.getTime() + offset);
+            await pool.query(
+              "INSERT INTO crm.olist_read_requests(id,account_key,context_key,export_id,actor_id,authorization_version,connection_generation,expected_version,stage,status,request_envelope,result_envelope,safe_code,created_at,completed_at) VALUES($1,$2,$3,$4,$5,0,0,1,'sale',$6,$7::jsonb,$8::jsonb,$9,$10,$11)",
+              [
+                id,
+                config.accountKey,
+                config.contextKey,
+                exportId,
+                f.actors.admin.actor.id,
+                status,
+                envelope,
+                status === 'queued' ? null : envelope,
+                status === 'blocked' ? 'OLIST_SALE_DIVERGENT' : null,
+                created,
+                status === 'queued' ? null : created,
+              ],
+            );
+          }
+          /** @type {Array<[string,(f:any)=>Promise<unknown>]>} */
+          const cases = [
+            [
+              'creation-active',
+              () =>
+                pool.query(
+                  'UPDATE crm.olist_accounts SET creation_enabled=true WHERE account_key=$1',
+                  [config.accountKey],
+                ),
+            ],
+            [
+              'oauth-in-flight',
+              () =>
+                pool.query(
+                  'UPDATE crm.olist_connections SET exchange_nonce=$2 WHERE context_key=$1',
+                  [config.contextKey, randomUUID()],
+                ),
+            ],
+            ...['reserved', 'uncertain'].map(
+              (state) =>
+                /** @type {[string,(f:any)=>Promise<unknown>]} */ ([
+                  'resource-' + state,
+                  () => resource(state),
+                ]),
+            ),
+            ...['reserved', 'uncertain', 'rejected'].map(
+              (outcome) =>
+                /** @type {[string,(f:any)=>Promise<unknown>]} */ ([
+                  'attempt-' + outcome,
+                  async () => {
+                    const resourceId = await resource();
+                    return pool.query(
+                      "INSERT INTO crm.olist_attempts(id,account_key,resource_id,stage,fence,generation,outcome,safe_code,finished_at) VALUES($1,$2,$3,'customer',$4,0,$5,$6,$7)",
+                      [
+                        randomUUID(),
+                        config.accountKey,
+                        resourceId,
+                        randomUUID(),
+                        outcome,
+                        outcome === 'rejected'
+                          ? 'OLIST_RESOURCE_DIVERGENT'
+                          : null,
+                        outcome === 'reserved' ? null : NOW,
+                      ],
+                    );
+                  },
+                ]),
+            ),
+            ...[
+              'queued',
+              'resolving',
+              'ready',
+              'reserved',
+              'uncertain',
+              'rejected',
+            ].map(
+              (state) =>
+                /** @type {[string,(f:any)=>Promise<unknown>]} */ ([
+                  'export-' + state,
+                  (f) =>
+                    operation(
+                      f,
+                      state,
+                      state === 'rejected'
+                        ? 'OLIST_SALE_READBACK_MISMATCH'
+                        : null,
+                    ),
+                ]),
+            ),
+            ...['queued', 'blocked'].map(
+              (status) =>
+                /** @type {[string,(f:any)=>Promise<unknown>]} */ ([
+                  'read-' + status,
+                  async (f) => read(f, await operation(f, 'confirmed'), status),
+                ]),
+            ),
+            [
+              'processing-job',
+              async (f) => {
+                const exportId = await operation(f, 'confirmed'),
+                  id = randomUUID();
+                return pool.query(
+                  "INSERT INTO crm.outbox_jobs(id,job_type,idempotency_key,olist_export_id,status,queue,effect_policy,available_at,created_at,updated_at,locked_by,locked_until,heartbeat_at) VALUES($1,'olist.export',$1,$2,'processing','olist','queryable',$3,$3,$3,'synthetic-worker',$4,$3)",
+                  [id, exportId, NOW, new Date(NOW.getTime() + 60_000)],
+                );
+              },
+            ],
+          ];
+          for (const [name, setup] of cases)
+            await t.test(name, async () => {
+              const f = await initialized();
+              await setup(f);
+              await assert.rejects(
+                f.runtime.recovery({
+                  ...f.actors.admin,
+                  idempotencyKey: 'recovery-blocked',
+                  expectedVersion: 0,
+                  confirmed: true,
+                  reason: 'Synthetic checked procedure',
+                }),
+                { code: 'OLIST_RECOVERY_BLOCKED' },
+              );
+              assert.equal(
+                (await f.runtime.status(f.actors.admin)).recoveryRequired,
+                true,
+              );
+              assert.equal((await f.runtime.status(f.actors.admin)).version, 0);
+              assert.equal(f.calls.length, 0);
+            });
+          await t.test(
+            'reconciled-resource-keeps-its-immutable-timeout-attempt',
+            async () => {
+              const f = await initialized(),
+                resourceId = await resource('uncertain'),
+                attemptId = randomUUID();
+              await pool.query(
+                "INSERT INTO crm.olist_attempts(id,account_key,resource_id,stage,fence,generation,outcome,safe_code,observed_remote_id,finished_at) VALUES($1,$2,$3,'customer',$4,0,'uncertain','OLIST_RESOURCE_DIVERGENT','901',$5)",
+                [attemptId, config.accountKey, resourceId, randomUUID(), NOW],
+              );
+              const input = {
+                ...f.actors.admin,
+                idempotencyKey: 'recovery-resource-timeout',
+                expectedVersion: 0,
+                confirmed: true,
+                reason: 'Synthetic externally checked timeout',
+              };
+              await assert.rejects(f.runtime.recovery(input), {
+                code: 'OLIST_RECOVERY_BLOCKED',
+              });
+              // Faithful completeReadRequest transition: confirm target; an
+              // attempt already uncertain is immutable and is NOT rewritten.
+              await pool.query(
+                "UPDATE crm.olist_resources SET state='confirmed',remote_id='901',version=version+1,updated_at=$2 WHERE id=$1",
+                [resourceId, NOW],
+              );
+              const result = await f.runtime.recovery(input);
+              assert.equal(result.recoveryRequired, false);
+              assert.equal(result.creationActive, false);
+              assert.equal(
+                (
+                  await pool.query(
+                    'SELECT outcome FROM crm.olist_attempts WHERE id=$1',
+                    [attemptId],
+                  )
+                ).rows[0].outcome,
+                'uncertain',
+              );
+              assert.equal(f.calls.length, 0);
+            },
+          );
+          await t.test(
+            'reconciled-sale-keeps-its-immutable-timeout-attempt',
+            async () => {
+              const f = await initialized(),
+                exportId = await operation(
+                  f,
+                  'uncertain',
+                  'OLIST_SALE_READBACK_MISMATCH',
+                ),
+                attemptId = randomUUID();
+              await pool.query(
+                "INSERT INTO crm.olist_attempts(id,account_key,export_id,stage,fence,generation,outcome,safe_code,observed_remote_id,observed_remote_number,finished_at) VALUES($1,$2,$3,'sale',$4,0,'uncertain','OLIST_SALE_READBACK_MISMATCH','123','7',$5)",
+                [attemptId, config.accountKey, exportId, randomUUID(), NOW],
+              );
+              const input = {
+                ...f.actors.admin,
+                idempotencyKey: 'recovery-sale-timeout',
+                expectedVersion: 0,
+                confirmed: true,
+                reason: 'Synthetic externally checked sale',
+              };
+              await assert.rejects(f.runtime.recovery(input), {
+                code: 'OLIST_RECOVERY_BLOCKED',
+              });
+              // Same target update as positive sale reconciliation; the
+              // uncertain attempt and its diagnostic stay as durable history.
+              await pool.query(
+                "UPDATE crm.olist_exports SET state='confirmed',stage='complete',remote_id='123',remote_number='7',observed_sale_id='123',observed_sale_number='7',readback_envelope=$2::jsonb,last_error_code=NULL,version=version+1,updated_at=$3 WHERE id=$1",
+                [
+                  exportId,
+                  JSON.stringify(
+                    seal(
+                      { matched: true },
+                      config.envelopeKey,
+                      'recovery-proof',
+                      config.accountKey,
+                      exportId,
+                    ),
+                  ),
+                  NOW,
+                ],
+              );
+              const result = await f.runtime.recovery(input);
+              assert.equal(result.recoveryRequired, false);
+              assert.equal(
+                (
+                  await pool.query(
+                    'SELECT outcome,safe_code FROM crm.olist_attempts WHERE id=$1',
+                    [attemptId],
+                  )
+                ).rows[0].outcome,
+                'uncertain',
+              );
+              assert.equal(f.calls.length, 0);
+            },
+          );
+          for (const mode of [
+            'valid-parent-proof',
+            'wrong-parent',
+            'unconfirmed-parent',
+            'foreign-parent',
+          ])
+            await t.test('variation-' + mode, async () => {
+              const f = await initialized();
+              /** @param {string} account @param {string} state @param {string|null} remoteId */
+              const product = async (account, state, remoteId) => {
+                const id = randomUUID();
+                await pool.query(
+                  "INSERT INTO crm.olist_resources(id,account_key,kind,identity_hash,reference,state,remote_id) VALUES($1,$2,'product',$3,$4,$5,$6)",
+                  [id, account, hash(id), 'CRM-' + id, state, remoteId],
+                );
+                return id;
+              };
+              const parentId = await product(
+                config.accountKey,
+                mode === 'unconfirmed-parent' ? 'pending' : 'confirmed',
+                mode === 'unconfirmed-parent' ? null : '501',
+              );
+              if (mode === 'wrong-parent')
+                await product(config.accountKey, 'confirmed', '502');
+              if (mode === 'foreign-parent') {
+                const foreignAccount = hash(randomUUID());
+                await pool.query(
+                  'INSERT INTO crm.olist_accounts(account_key) VALUES($1)',
+                  [foreignAccount],
+                );
+                await product(foreignAccount, 'confirmed', '502');
+              }
+              const childId = randomUUID(),
+                attemptId = randomUUID(),
+                valid = mode === 'valid-parent-proof';
+              await pool.query(
+                "INSERT INTO crm.olist_resources(id,account_key,kind,identity_hash,reference,parent_id,state,remote_id) VALUES($1,$2,'variation',$3,$4,$5,$6,$7)",
+                [
+                  childId,
+                  config.accountKey,
+                  hash(childId),
+                  'CRM-' + childId,
+                  parentId,
+                  valid ? 'uncertain' : 'confirmed',
+                  valid ? null : '901',
+                ],
+              );
+              await pool.query(
+                "INSERT INTO crm.olist_attempts(id,account_key,resource_id,stage,fence,generation,outcome,safe_code,observed_remote_id,finished_at) VALUES($1,$2,$3,'variation',$4,0,'uncertain','OLIST_RESOURCE_UNCERTAIN',$5,$6)",
+                [
+                  attemptId,
+                  config.accountKey,
+                  childId,
+                  randomUUID(),
+                  ['wrong-parent', 'foreign-parent'].includes(mode)
+                    ? '502'
+                    : '501',
+                  NOW,
+                ],
+              );
+              const input = {
+                ...f.actors.admin,
+                idempotencyKey: 'variation-proof',
+                expectedVersion: 0,
+                confirmed: true,
+                reason: 'Synthetic reconciled variation',
+              };
+              await assert.rejects(f.runtime.recovery(input), {
+                code: 'OLIST_RECOVERY_BLOCKED',
+              });
+              if (valid) {
+                // Positive variation reconciliation confirms the child while the
+                // immutable timeout attempt retains the observed parent ID.
+                await pool.query(
+                  "UPDATE crm.olist_resources SET state='confirmed',remote_id='901',version=version+1 WHERE id=$1",
+                  [childId],
+                );
+                assert.equal(
+                  (await f.runtime.recovery(input)).recoveryRequired,
+                  false,
+                );
+                const attempt = (
+                  await pool.query(
+                    'SELECT outcome,observed_remote_id FROM crm.olist_attempts WHERE id=$1',
+                    [attemptId],
+                  )
+                ).rows[0];
+                assert.deepEqual(attempt, {
+                  outcome: 'uncertain',
+                  observed_remote_id: '501',
+                });
+              }
+              assert.equal(f.calls.length, 0);
+            });
+          for (const mode of ['conflicting-observed-id', 'reserved-ticket'])
+            await t.test(mode + '-still-blocks-confirmed-target', async () => {
+              const f = await initialized(),
+                resourceId = await resource('confirmed');
+              await pool.query(
+                "INSERT INTO crm.olist_attempts(id,account_key,resource_id,stage,fence,generation,outcome,safe_code,observed_remote_id,finished_at) VALUES($1,$2,$3,'customer',$4,0,$5,'OLIST_RESOURCE_DIVERGENT',$6,$7)",
+                [
+                  randomUUID(),
+                  config.accountKey,
+                  resourceId,
+                  randomUUID(),
+                  mode === 'reserved-ticket' ? 'reserved' : 'uncertain',
+                  mode === 'reserved-ticket' ? '901' : '902',
+                  mode === 'reserved-ticket' ? null : NOW,
+                ],
+              );
+              await assert.rejects(
+                f.runtime.recovery({
+                  ...f.actors.admin,
+                  idempotencyKey: 'recovery-unproven',
+                  expectedVersion: 0,
+                  confirmed: true,
+                  reason: 'Synthetic incomplete proof',
+                }),
+                { code: 'OLIST_RECOVERY_BLOCKED' },
+              );
+            });
+          await t.test(
+            'latest-success-preserves-confirmed-history',
+            async () => {
+              const f = await initialized(),
+                exportId = await operation(f, 'confirmed');
+              await resource('confirmed');
+              await read(f, exportId, 'blocked');
+              await read(f, exportId, 'succeeded', 1);
+              const result = await f.runtime.recovery({
+                ...f.actors.admin,
+                idempotencyKey: 'recovery-reconciled',
+                expectedVersion: 0,
+                confirmed: true,
+                reason: 'Synthetic externally reconciled',
+              });
+              assert.equal(result.recoveryRequired, false);
+              assert.equal(result.creationActive, false);
+              assert.equal(
+                (
+                  await pool.query(
+                    'SELECT count(*)::int AS count FROM crm.olist_read_requests WHERE export_id=$1',
+                    [exportId],
+                  )
+                ).rows[0].count,
+                2,
+              );
+            },
+          );
+        },
+      );
+
       /** Seed a confirmed legacy order owned by someone other than Financeiro.
        * Its encrypted ficha contains sentinels that must never reach projection.
        * @param {any} owner */

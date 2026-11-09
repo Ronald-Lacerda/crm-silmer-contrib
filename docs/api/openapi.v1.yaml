@@ -553,6 +553,46 @@ paths:
         '409': { $ref: '#/components/responses/OlistFailure' }
         '429': { $ref: '#/components/responses/OlistThrottled' }
         '503': { $ref: '#/components/responses/OlistFailure' }
+  /integrations/olist/recovery:
+    post:
+      operationId: confirmOlistRecovery
+      summary: Atestar a conferência inicial ou o procedimento externo de recuperação
+      description: >-
+        Administrador ativo com sessão, CSRF e idempotência. Comando somente
+        local: confirmed precisa ser true e expectedVersion compara a versão
+        da conexão. Exige criação desligada e ausência de operações, tentativas,
+        recursos ou leituras ainda em voo, incertos ou divergentes conhecidos.
+        Recusa com OLIST_RECOVERY_BLOCKED (409). Atestado humano não comprova
+        efeitos ausentes de um backup restaurado; o procedimento externo
+        continua obrigatório. Remove somente recovery_required, incrementa a
+        versão e audita OLIST_RECOVERY_CONFIRMED sem copiar o motivo livre.
+        Não ativa criação, não chama ERP e não apaga nem reenvia efeitos.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion, confirmed, reason]
+              properties:
+                expectedVersion: { type: integer, minimum: 0 }
+                confirmed: { const: true }
+                reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200':
+          description: Estado conferido, ainda com criação desligada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistStatus' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
   /integrations/olist/creation:
     post:
       operationId: setOlistCreation

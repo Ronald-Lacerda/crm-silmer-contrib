@@ -20,6 +20,21 @@ ativos com checkbox. Desativar é local, sem chamada ao ERP. Não limpa
 `recovery_required` nem apaga entidades/vendas. A interface reflete a flag real
 e bloqueia ativação enquanto há recuperação ou identidade ainda não configurada.
 
+Conta nova também nasce com `recovery_required=true`. Após conferir o caso
+existente e os cadastros/vendas da conta, o administrador usa **Registrar
+conferência concluída**, com declaração explícita e motivo. O comando
+`POST /api/v1/integrations/olist/recovery` exige sessão/CSRF, idempotência e a
+versão atual, registra `OLIST_RECOVERY_CONFIRMED` e incrementa a versão; não
+ativa criação, não consulta o ERP e não apaga nem repete efeitos. A declaração
+atesta o procedimento humano externo, sem prometer detectá-lo automaticamente.
+
+Criação ligada, renovação em voo, operações ativas, reservas, incertezas sem
+prova atual, divergências e leituras pendentes impedem a conclusão. Tentativa
+incerta histórica só deixa de bloquear quando seu alvo atual está confirmado
+com identidade remota compatível; a tentativa é preservada. Desligar a geração
+continua disponível mesmo sem conexão. Não liberar a primeira criação sem
+conferir os registros que já existem na conta.
+
 Revisão QA independente dos ajustes: nenhum blocker de release em
 autorização, concorrência, idempotência ou projeção de segredos. Os ports de
 persistência isolados permitem omitir a política para injeção de teste; os
@@ -121,7 +136,13 @@ Validação local final: `npm run validate` aprovado (2.366 testes, 2.318
 aprovados, 48 pulados condicionais, zero falhas), SQL `test:olist:live`
 316/316 sem skips, auditoria de dependências sem vulnerabilidades. SQL inclui
 renovação OAuth antes da primeira prévia, corrida de ativação, revogação do
-piloto e o ensaio de recuperação. E2E e release da T17 ainda em validação.
+piloto e o ensaio de recuperação. E2E completo do primeiro commit: 790
+aprovados e sete skips previstos, sem falhas. Ajuste T15 posterior: comando de
+conferência com SQL 36/36 e interface administrativa 33/33 (teclado, axe,
+declaração obrigatória e recusa preservando o motivo). `npm run validate` do
+ajuste também aprovado: 2.367 testes, 2.319 aprovados, 48 skips e zero falhas;
+formatação, tipos e lint finais aprovados. Release no alvo
+ainda em validação.
 
 Identidade, documento, credenciais, pedidos reais e capturas com dados pessoais
 ficam em evidência privada. Vínculo T16, criação controlada T17, parâmetros e
