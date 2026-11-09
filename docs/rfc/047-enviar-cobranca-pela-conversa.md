@@ -198,3 +198,56 @@ cartão da loja continuam em COB-DASH-01/COB-STORE-01.
 Esta entrega modifica somente a proposta e sua rastreabilidade. Validação:
 links locais dos documentos alterados e `git diff --check`. Não executa nem
 declara novos testes de runtime; os checks do PR acima são evidência da base.
+
+## Plano de conclusão revisado em 08/11/2026
+
+O backend B01–B05 e os protótipos atualizados da Inbox/Pedido estão concluídos
+localmente. O frontend integrado continua dependente do redesign. O
+proprietário autorizou iniciar as frentes independentes em paralelo, incluindo
+estrutura de testes no ambiente de desenvolvimento antes de produção.
+
+Foi inspecionado, sem executar ou alterar, o workflow publicado
+`Silmer | Loja | Checkout InfinitePay` (`Lu5dpTCA25Fe2Xfh`). Ele cria checkout,
+confere pagamento e registra pedido pago por `store-orders`. Isso confirma uma
+base existente na instância n8n, não a homologação das cobranças do CRM. A
+nota do workflow descreve Pix; opções/credenciais e comportamento do provedor
+para o novo fluxo ainda exigem conferência própria. Reaproveitar instância e
+conta não significa cobrar pedido existente pelo endpoint de criação da loja.
+
+### Entregas e dependências
+
+| Ordem / tarefa    | Trabalho restante                                                                            | Dependência                                                | Critério de fechamento                                                                                                                                         |
+| ----------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| COB-DEV-01 / T1   | Perfil DEV do gerador financeiro compartilhado, inativo e isolado                            | Nenhuma                                                    | Grafo e regras comuns; paths/credenciais DEV; destinos externos recusados; produção preservada                                                                 |
+| COB-DEV-02 / T2   | Simulador HTTP e ensaio no n8n real, API/runtime e PostgreSQL dedicados                      | Interface de T1; simulador pode ser preparado em paralelo  | Sinal/saldo Pix/cartão, replay, recusa de pagamento e recuperação verificados sem efeito real                                                                  |
+| COB-READY-01 / T3 | Corrigir documentação obsoleta e preparar mapa de integração frontend                        | Independente; incorporar evidências T1/T2 ao finalizar     | Rotas, comandos, erros, histórico, permissões e limites conferidos no código                                                                                   |
+| COB-DEV-03        | Completar ensaio da cadeia de transporte pelo n8n DEV e testes de jornada                    | T1/T2; transporte humano DEV existente                     | Outbox, reserva, preflight, envio simulado e callbacks reais de transporte; cinco comandos, correção expirada e callback tardio; flag off preserva recebimento |
+| COB-API-READY     | Expor relação histórica de correção/retry se o redesign usar o rótulo explícito do protótipo | Antes da UI final                                          | Projeção autenticada retorna IDs de origem já persistidos; schema/OpenAPI e teste de reload, sem inferência por ordem/valor                                    |
+| COB-CHAT-UI       | Integrar botão na Inbox e seção do Pedido ao contrato real                                   | Redesign disponível, COB-READY-01 e eventual COB-API-READY | Seleção explícita de pedido, revisão destino/valor, cinco comandos, estados financeiros/transporte separados, histórico e comprovantes reais                   |
+| COB-CHAT-QA       | Validar jornada final e revisar independentemente                                            | COB-CHAT-UI e ensaios DEV                                  | API/PostgreSQL/n8n/navegador; ACL/CSRF, concorrência, falhas, celular, teclado/foco/axe e rascunhos; sensor de regressão                                       |
+| COB-OPS-01        | Preparar candidato, publicar e homologar com liberação operacional                           | Gates anteriores                                           | Imagem/digest/migrações/credenciais/conta conferidos, workflow financeiro dedicado e preflight humano, teste real autorizado e rollback mantendo callbacks     |
+
+T1/T2/T3 têm critérios BDEV-01–07 e tarefas em
+[order-billing-development](../../.specs/features/order-billing-development/spec.md).
+Essa primeira fatia comprova a fronteira financeira no motor n8n e prepara a
+UI. Não declarar transporte completo apenas porque uma mensagem foi gravada
+na outbox. Não declarar sessão/login real a partir do ator de fixture.
+
+### Decisões de execução e isolamento
+
+- Containers de teste novos, rede Docker interna sem saída e portas somente
+  em loopback. Nenhum banco/container existente é reaproveitado para resets.
+- Mesmo gerador para produção e DEV. O simulador substitui somente as chamadas
+  InfinitePay; o CRM conserva domínio, autorização, filas e transações reais.
+- Links fictícios mantêm o formato autorizado pelo domínio, mas não devem ser
+  abertos. Esta fatia é um ensaio técnico, não um checkout visual local.
+- A correção não cancela o link anterior no provedor. Exige vencimento e
+  conferência; callbacks tardios conservam recebimentos e pedem revisão.
+- Preparar e revisar configuração não autoriza ativar flags, migrar banco
+  remoto, publicar workflow nem fazer pagamento ou enviar WhatsApp real.
+
+### Fora do caminho crítico
+
+COB-DASH-01 e COB-STORE-01 permanecem separados. Não alterar a central nem o
+domínio Pix da loja para concluir cobranças pelo chat. Aprovação do protótipo
+e disponibilidade do redesign não são inferidas de testes automatizados.

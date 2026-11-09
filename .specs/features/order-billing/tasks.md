@@ -122,7 +122,8 @@ Pendências preservadas para fatias próprias:
 
 ## COB-OPS-01 — Ativação e homologação reais
 
-- [ ] Aplicar migração 0055 antes de habilitar código.
+- [ ] Aplicar e conferir todas as migrações da versão, incluindo 0055, 0063
+      e 0064, antes de habilitar flags; preservar checksums anteriores.
 - [ ] Conferir conta/credenciais, workflow privado, URLs e flags.
 - [ ] Observar pagamento real autorizado, duplicidade e recuperação;
       preservar taxas e conferir devolução do teste.
@@ -130,6 +131,26 @@ Pendências preservadas para fatias próprias:
 
 Gates locais não comprovam conta remota, deploy ou pagamento real. Evidências
 e passo a passo no [runbook](../../../docs/runbooks/order-billing.md).
+
+## Continuação autorizada em 08/11/2026
+
+Plano de conclusão e dependências na
+[RFC 047](../../../docs/rfc/047-enviar-cobranca-pela-conversa.md#plano-de-conclusão-revisado-em-08112026).
+O workflow publicado da loja foi inspecionado; sua existência não homologa
+cobranças sobre pedido existente. Manter conta/instância n8n e separar rotas
+e IDs financeiros, sem alterar o checkout atual.
+
+- [ ] COB-DEV-01/02: perfil DEV, simulador e n8n real contra API/PostgreSQL
+      sintéticos, conforme [tarefas DEV](../order-billing-development/tasks.md).
+- [ ] COB-READY-01: contrato frontend atualizado e limites de teste registrados.
+- [ ] COB-DEV-03: ensaio integrado do transporte DEV, cinco comandos,
+      correção e callbacks tardios, incluindo recuperação e rollback por flag.
+- [ ] COB-API-READY: projetar IDs de correção/retry antes de reproduzir a
+      associação explícita entre cobranças do protótipo na UI real.
+- [ ] COB-CHAT-UI/QA: frontend definitivo após redesign e jornada integrada.
+- [ ] COB-OPS-01: publicação e homologação reais continuam abertas.
+
+Nenhuma autorização nova para cobranças/envios reais ou publicação remota.
 
 ## Execution Plan
 
