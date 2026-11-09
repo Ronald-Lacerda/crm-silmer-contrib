@@ -169,6 +169,18 @@ afetado 58/58 e inspector final 28/28, incluindo o nome de grade legado no
 plural e a recusa de aliases ambíguos. UI Olist cobriu 171 cenários, com
 reexecuções focadas aprovadas após corrigir seletor de mensagem e substituir
 números privados por fixtures sintéticas. Esses gates não são criação real.
+O gate SQL completo foi reexecutado no commit enviado: **351/351**, sem skips.
+
+Uma leitura adicional de venda previamente criada na prova real confirmou duas
+representações do detalhe: lista opcional não selecionada como `{id:0}` e
+`origemPedido=3`. A conferência aceita ID zero somente quando nenhum ID positivo
+foi configurado e aceita as origens observadas 0/3; não atribui significado
+fiscal ao valor 3. O [schema oficial](https://erp.olist.com/public-api/v3/swagger/swagger-mintlify.json)
+do detalhe declara inteiro nullable, mas descreve apenas 0/1; essa diferença
+com a resposta real fica registrada. Situação aberta, ausência de NF,
+faturamento e pagamentos integrados continuam verificadas separadamente.
+Testes da correção: 17/17, incluindo recusas de identidades divergentes,
+origens desconhecidas e efeitos fiscais/financeiros.
 
 Em 09/11/2026, o PostgreSQL permaneceu ativo; a API conectava ao banco, mas
 readiness retornava 503 e o login não completava. O esquema aplicado terminava

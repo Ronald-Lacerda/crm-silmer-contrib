@@ -265,11 +265,18 @@ function emptyArray(value) {
     (Array.isArray(value) && value.length === 0)
   );
 }
-/** @param {any} actual @param {number|null} expected */
+/** @param {any} actual @param {number|null|undefined} expected */
 function optionalId(actual, expected) {
-  if (actual === null || actual === undefined) return;
-  if (expected === null || olistIntegerFromJson(actual?.id) !== expected)
+  if (actual === undefined) return;
+  if (actual === null) {
+    if (expected === null || expected === undefined) return;
     refuse('OLIST_SALE_READBACK_MISMATCH');
+  }
+  const returned = olistIntegerFromJson(actual?.id, true);
+  // The live v3 detail uses {id:0} for an unselected optional catalogue.
+  // A zero must never erase an explicitly configured positive identity.
+  if ((expected === null || expected === undefined) && returned === 0) return;
+  if (returned !== expected) refuse('OLIST_SALE_READBACK_MISMATCH');
 }
 /** Exact per-line reconciliation. The returned marker correlates identity only;
  * independently returned quantity/unit lexemes prove subtotal, and both totals
@@ -300,7 +307,9 @@ export function reconcileOlistSale(plan, raw, remoteId) {
         body.dataFaturamento !== '') ||
       (body.origemPedido !== undefined &&
         body.origemPedido !== null &&
-        olistIntegerFromJson(body.origemPedido, true) !== 0) ||
+        // 3 is the value observed on the authorized API-created proof order;
+        // it is not interpreted as evidence of invoice or payment effects.
+        ![0, 3].includes(olistIntegerFromJson(body.origemPedido, true))) ||
       ![body.valorDesconto, body.valorFrete, body.valorOutrasDespesas].every(
         absentOrZero,
       )

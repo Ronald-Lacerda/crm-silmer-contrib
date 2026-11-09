@@ -421,6 +421,87 @@ test('T08 optional returned payment fields are verified without treating due dat
     });
 });
 
+test('T17 API proof response permits only observed origin 3 and optional catalogue zero sentinels', () => {
+  const f = fixture();
+  const append = (
+    /** @type {any} */ fields,
+    /** @type {any} */ plan = f.plan,
+  ) => rawOrder(plan).slice(0, -1) + ',' + JSON.stringify(fields).slice(1);
+  for (const origemPedido of [0, 3])
+    assert.equal(
+      reconcileOlistSale(
+        f.plan,
+        append({
+          origemPedido,
+          listaPreco: { id: 0, nome: '' },
+          idNotaFiscal: 0,
+          notaFiscal: null,
+          dataFaturamento: '',
+        }),
+        401,
+      ).matched,
+      true,
+    );
+  for (const origemPedido of [-1, 1, 2, 4, 99, 3.5, '3'])
+    assert.throws(
+      () => reconcileOlistSale(f.plan, append({ origemPedido }), 401),
+      { code: 'OLIST_SALE_READBACK_MISMATCH' },
+    );
+  for (const listaPreco of [{ id: 17 }, { id: null }, { id: '0' }, {}, []])
+    assert.throws(
+      () =>
+        reconcileOlistSale(
+          f.plan,
+          append({ origemPedido: 3, listaPreco }),
+          401,
+        ),
+      { code: 'OLIST_SALE_READBACK_MISMATCH' },
+    );
+  const snapshot = structuredClone(f.snapshot);
+  snapshot.settings.priceListId = /** @type {any} */ (17);
+  const configured = buildOlistSalePayload({
+    snapshot,
+    resolved: f.resolved,
+    reference: REFERENCE,
+  });
+  assert.equal(
+    reconcileOlistSale(
+      configured,
+      append({ origemPedido: 3, listaPreco: { id: 17 } }, configured),
+      401,
+    ).matched,
+    true,
+  );
+  for (const listaPreco of [null, { id: 0 }, { id: null }, { id: 18 }])
+    assert.throws(
+      () =>
+        reconcileOlistSale(
+          configured,
+          append({ origemPedido: 3, listaPreco }, configured),
+          401,
+        ),
+      { code: 'OLIST_SALE_READBACK_MISMATCH' },
+    );
+  for (const effects of [
+    { idNotaFiscal: 7 },
+    { notaFiscal: { id: 7 } },
+    { dataFaturamento: '2026-11-10' },
+    { pagamentosIntegrados: [{ id: 7 }] },
+    { situacao: 1 },
+  ]) {
+    const body =
+      effects.situacao === 1
+        ? append({ origemPedido: 3, listaPreco: { id: 0 } }).replace(
+            '"situacao":0',
+            '"situacao":1',
+          )
+        : append({ origemPedido: 3, listaPreco: { id: 0 }, ...effects });
+    assert.throws(() => reconcileOlistSale(f.plan, body, 401), {
+      code: 'OLIST_SALE_READBACK_MISMATCH',
+    });
+  }
+});
+
 test('T08 lossless parser refuses duplicate keys, malformed/truncated JSON, non-JSON whitespace and excessive nesting', () => {
   for (const raw of [
     '{"x":1,"x":2}',
