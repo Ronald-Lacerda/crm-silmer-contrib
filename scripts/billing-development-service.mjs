@@ -14,8 +14,18 @@ import { createOrderBillingRuntime } from '../apps/api/src/order-billing-runtime
 import { createOrderBillingChatRuntime } from '../apps/api/src/order-billing-chat-runtime.js';
 import { registerOrderBillingRoutes } from '../apps/api/src/order-billing-routes.js';
 import { registerOrderBillingChatRoutes } from '../apps/api/src/order-billing-chat-routes.js';
-import { createBillingWorkerRuntime } from '../apps/worker/src/worker.js';
-import { PostgresN8nCommandOutbox } from '../modules/n8n-integration/src/index.js';
+import {
+  createBillingWorkerRuntime,
+  createWorkerRuntime,
+} from '../apps/worker/src/worker.js';
+import {
+  PostgresN8nCommandOutbox,
+  PostgresN8nCommandStore,
+  PostgresN8nIntegrationRepository,
+  createN8nIntegrationService,
+} from '../modules/n8n-integration/src/index.js';
+import { registerN8nRoutes } from '../apps/api/src/n8n-routes.js';
+import { registerN8nBillingPreflightRoutes } from '../apps/api/src/n8n-billing-preflight-routes.js';
 import {
   seed,
   KEY,
@@ -153,13 +163,33 @@ export async function startBillingDevelopmentService() {
       return { actor: SELLER };
     },
   };
-  const chat = createOrderBillingChatRuntime(database, {
-    access,
-    environment,
-    outboundMessageOutbox: new PostgresN8nCommandOutbox({ envelopeKey: KEY }),
-  });
+  let clockOffset = 0;
+  const clock = () => new Date(Date.now() + clockOffset);
+  let sendEnabled = true;
+  const buildChat = () =>
+    createOrderBillingChatRuntime(database, {
+      access,
+      clock,
+      environment: {
+        ...environment,
+        ORDER_BILLING_CHAT_SEND_ENABLED: sendEnabled ? 'true' : 'false',
+      },
+      outboundMessageOutbox: new PostgresN8nCommandOutbox({ envelopeKey: KEY }),
+    });
+  let activeChat = buildChat();
+  const chat = /** @type {any} */ (
+    new Proxy(
+      {},
+      {
+        get(_target, key) {
+          return /** @type {any} */ (activeChat)[key];
+        },
+      },
+    )
+  );
   const billing = createOrderBillingRuntime(database, {
     access,
+    clock,
     environment,
     billingChat: chat,
   });
@@ -188,6 +218,50 @@ export async function startBillingDevelopmentService() {
         options,
       ),
   });
+  worker.now = () => clock().getTime();
+  const repository = new PostgresN8nIntegrationRepository({
+    database,
+    envelopeKey: KEY,
+    billingSendEnabled: true,
+  });
+  const integration = createN8nIntegrationService({ repository, clock });
+  const commandStore = new PostgresN8nCommandStore({
+    database,
+    envelopeKey: KEY,
+    billingSendEnabled: true,
+  });
+  const timedCommandStore = Object.fromEntries(
+    [
+      'loadForDelivery',
+      'markProcessing',
+      'markDelivered',
+      'markFailed',
+      'markOutcomeUnknown',
+    ].map((name) => [
+      name,
+      (/** @type {string} */ id, /** @type {any} */ context) =>
+        /** @type {any} */ (commandStore)[name](id, {
+          ...context,
+          now: clock(),
+        }),
+    ]),
+  );
+  const commandWorker = createWorkerRuntime({
+    database,
+    commandStore: /** @type {any} */ (timedCommandStore),
+    logger: worker.logger,
+    environment: {
+      ...environment,
+      N8N_COMMAND_URL:
+        'http://127.0.0.1:5678/webhook/silmer/order-billing-dev/send',
+    },
+    fetchImpl: (_url, options) =>
+      globalThis.fetch(
+        'http://n8n:5678/webhook/silmer/order-billing-dev/send',
+        options,
+      ),
+  });
+  commandWorker.now = () => clock().getTime();
   const api = Fastify({ logger: false });
   api.decorate(
     'automationAuth',
@@ -207,6 +281,32 @@ export async function startBillingDevelopmentService() {
   });
   registerOrderBillingRoutes(api, billing, contextFor);
   registerOrderBillingChatRoutes(api, chat, contextFor, { enabled: true });
+  registerN8nRoutes(
+    api,
+    {
+      ...integration,
+      async receiveInbound() {
+        throw new Error('SYNTHETIC_ROUTE_UNUSED');
+      },
+      async storeAttachment() {
+        throw new Error('SYNTHETIC_ROUTE_UNUSED');
+      },
+      async recordOrderIntent() {
+        throw new Error('SYNTHETIC_ROUTE_UNUSED');
+      },
+    },
+    contextFor,
+  );
+  registerN8nBillingPreflightRoutes(
+    api,
+    {
+      readReservedSend: (/** @type {any} */ input) =>
+        repository.readReservedSend({ ...input, now: clock() }),
+    },
+    contextFor,
+  );
+  const transportEffects = new Map();
+  const transportFaults = new Map();
   const simulator = createBillingDevelopmentSimulator();
   const gateway = Fastify({ logger: false });
   gateway.addHook('onRequest', async (request, reply) => {
@@ -223,6 +323,21 @@ export async function startBillingDevelopmentService() {
       failCallback = '';
       return reply.code(503).send({ code: 'SYNTHETIC_CALLBACK_UNAVAILABLE' });
     }
+    if (request.url.endsWith('/preflight')) {
+      const commandId = decodeURIComponent(request.url.split('/').at(-2) ?? '');
+      const fault = transportFaults.get(commandId);
+      if (fault === 'before_send') {
+        transportFaults.delete(commandId);
+        return reply.code(503).send({ valid: false });
+      }
+      if (fault === 'owner') {
+        transportFaults.delete(commandId);
+        await pool.query(
+          'UPDATE crm.conversations SET assigned_user_id=NULL WHERE id=(SELECT conversation_id FROM crm.n8n_commands WHERE command_id=$1)',
+          [commandId],
+        );
+      }
+    }
   });
   api.get('/__billing-development/health', async () => ({ synthetic: true }));
   api.post('/__billing-development/seed', async () => {
@@ -233,11 +348,12 @@ export async function startBillingDevelopmentService() {
     );
     return { orderId };
   });
-  api.post('/__billing-development/submit', async (request) => {
+  api.post('/__billing-development/submit', async (request, reply) => {
     const {
       orderId,
       action = 'issue',
       percent = 30,
+      ...fields
     } = /** @type {any} */ (request.body);
     const row = (
       await pool.query(
@@ -256,10 +372,10 @@ export async function startBillingDevelopmentService() {
         expectedConversationVersion: Number(row.conversation_version),
         expectedBillingVersion: Number(row.billing_version ?? 0),
         ...(action === 'issue' ? { percent } : {}),
+        ...fields,
       },
     });
-    assert.equal(response.statusCode, 202, response.body);
-    return response.json();
+    return reply.code(response.statusCode).send(response.json());
   });
   api.post('/__billing-development/confirm', async (request) => {
     const { chargeId, ...options } = /** @type {any} */ (request.body);
@@ -274,6 +390,94 @@ export async function startBillingDevelopmentService() {
   api.post('/__billing-development/run-worker', async () => {
     await worker.runOnce();
     return { ran: true };
+  });
+  api.post('/__billing-development/legacy-issue', async (request) => {
+    const orderId = /** @type {any} */ (request.body).orderId;
+    const view = await billing.get({ actor: SELLER, orderId });
+    const result = await billing.issue({
+      actor: SELLER,
+      orderId,
+      percent: 30,
+      expectedVersion: view.billing.orderVersion,
+      expectedBillingVersion: view.billing.version,
+      idempotencyKey: randomUUID(),
+      correlationId: randomUUID(),
+    });
+    return { chargeId: result.billing.charges.at(-1).id };
+  });
+  api.post('/__billing-development/run-transport', async () => {
+    let ran = 0;
+    for (let n = 0; n < 30; n++) {
+      const processed = await commandWorker.runOnce();
+      ran += processed;
+      if (!processed) break;
+    }
+    return { ran };
+  });
+  api.post('/__billing-development/transport/fault', async (request) => {
+    const { intentId, fault } = /** @type {any} */ (request.body);
+    assert.ok(['before_send', 'unknown', 'owner'].includes(fault));
+    const row = (
+      await pool.query(
+        'SELECT command_id FROM crm.order_billing_send_intents WHERE id=$1',
+        [intentId],
+      )
+    ).rows[0];
+    assert.ok(row?.command_id);
+    transportFaults.set(row.command_id, fault);
+    return { armed: true };
+  });
+  api.post('/__billing-development/transport/send', async (request, reply) => {
+    const body = /** @type {any} */ (request.body);
+    assert.equal(body.message?.type, 'text');
+    assert.ok(
+      typeof body.message.text === 'string' && body.message.text.length > 0,
+    );
+    const count = transportEffects.get(body.command_id) ?? 0;
+    assert.equal(
+      count,
+      0,
+      'A command cannot produce a second transport effect',
+    );
+    transportEffects.set(body.command_id, count + 1);
+    if (transportFaults.get(body.command_id) === 'unknown') {
+      transportFaults.delete(body.command_id);
+      return reply.code(503).send({ code: 'SYNTHETIC_OUTCOME_UNKNOWN' });
+    }
+    return {
+      id: `synthetic-message-${body.command_id}`,
+      messages: [{ id: `synthetic-message-${body.command_id}` }],
+      simulated: true,
+    };
+  });
+  api.post('/__billing-development/advance-clock', async (request) => {
+    const hours = Number(/** @type {any} */ (request.body).hours);
+    assert.ok(Number.isInteger(hours) && hours >= 0 && hours <= 72);
+    clockOffset += hours * 3600000;
+    return { advanced: true };
+  });
+  api.post('/__billing-development/send-enabled', async (request) => {
+    const enabled = /** @type {any} */ (request.body).enabled;
+    assert.equal(typeof enabled, 'boolean');
+    sendEnabled = enabled;
+    activeChat = buildChat();
+    repository.billingSendEnabled = enabled;
+    commandStore.billingSendEnabled = enabled;
+    return { enabled };
+  });
+  api.post('/__billing-development/close-unpaid', async (request) => {
+    const orderId = /** @type {any} */ (request.body).orderId;
+    const data = await billing.get({ actor: SELLER, orderId });
+    return billing.reconcile({
+      actor: SELLER,
+      orderId,
+      expectedVersion: data.billing.orderVersion,
+      expectedBillingVersion: data.billing.version,
+      decision: 'close_unpaid',
+      confirmedProviderReview: true,
+      idempotencyKey: randomUUID(),
+      correlationId: randomUUID(),
+    });
   });
   api.get('/__billing-development/state/:orderId', async (request) => {
     const orderId = /** @type {any} */ (request.params).orderId;
@@ -293,7 +497,21 @@ export async function startBillingDevelopmentService() {
     const paidOn = (
       await pool.query('SELECT paid_on FROM crm.orders WHERE id=$1', [orderId])
     ).rows[0].paid_on;
-    return { view, payments, messages, paidOn, effects: simulator.counts };
+    const intents = (
+      await pool.query(
+        'SELECT id,action,state,version,charge_id,message_id,command_id,blocked_reason FROM crm.order_billing_send_intents WHERE order_id=$1 ORDER BY created_at,id',
+        [orderId],
+      )
+    ).rows;
+    return {
+      view,
+      payments,
+      messages,
+      paidOn,
+      intents,
+      transportEffects: Object.fromEntries(transportEffects),
+      effects: simulator.counts,
+    };
   });
   await gateway.listen({ host: '0.0.0.0', port: 8080 });
   await api.listen({ host: '0.0.0.0', port: 3000 });
