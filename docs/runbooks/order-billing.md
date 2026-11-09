@@ -1,5 +1,10 @@
 # Cobranças InfinitePay — operação e recuperação
 
+Preparação técnica de produção em08/11/2026:
+[diagnóstico, candidatos inativos e pendências de implantação](../qa/order-billing-production-preparation-2026-11-08.md).
+API/worker permanecem com emissão/envio desligados. A preparação não conclui
+COB-OPS-01 nem autoriza teste financeiro real.
+
 ## Continuação de 08/11/2026
 
 Recebimentos externos, conferência de pagamento e interface real no redesign

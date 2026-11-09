@@ -44,7 +44,9 @@ export function patchBillingSendPreflight(source) {
   if (
     media.type !== 'n8n-nodes-base.if' ||
     template.type !== 'n8n-nodes-base.httpRequest' ||
-    template.parameters?.method !== 'GET' ||
+    // n8n omits the HTTP Request node's default GET method on export.
+    (template.parameters?.method !== undefined &&
+      template.parameters.method !== 'GET') ||
     template.parameters?.genericAuthType !== 'httpBasicAuth' ||
     typeof url !== 'string' ||
     !url.includes('/media?preflight=true') ||
@@ -83,6 +85,7 @@ export function patchBillingSendPreflight(source) {
     onError: 'continueErrorOutput',
     parameters: {
       ...structuredClone(template.parameters),
+      method: 'GET',
       url: url.replace('/media?preflight=true', '/preflight'),
       options: {
         timeout: 10000,
