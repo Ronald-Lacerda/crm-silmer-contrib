@@ -139,7 +139,19 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
       localmente, com limitação registrada no runbook. Integração e implantação
       acompanhadas na [PR 309](https://github.com/romulosutil/crm-silmer/pull/309).
 
-## OLIST-T20b — Início da Fase 3 (05/11/2026)
+## OLIST-INT — integração com a master (08/11/2026)
+
+Fases 2–4 e T14 parcial reaplicadas, com histórico linear, sobre a `origin/master`
+(branch `codex/olist-integracao`). Migrations 0058–0065 → 0063–0070; ADR 060/064 →
+067/068; RFC 047 → 054; ADR 059 → 062 e RFC 044 → 050 já estavam na master.
+
+- [x] Renumeração consistente em todos os commits e mapa antes→depois.
+- [x] Leitores da master sem `cancelled_at` corrigidos (painel, lead-outcome,
+      cobrança, frete, n8n, assunto da Inbox) com sete suítes SQL novas.
+- [x] Gates: validate, E2E (758), auditoria, SQL live em PostgreSQL 17 e upgrade
+      da master para a branch.
+- Geração real segue desligada; sem push nem deploy.
+  [Mapa, conflitos e evidências](../../../docs/runbooks/olist-phase5.md#integração-com-a-master).
 
 ## OLIST-T13 — progresso, recuperação e cancelamento local (08/11/2026)
 

@@ -44,7 +44,7 @@ Usuários, sessão e o shell Vue compartilham a mesma autorização.
 [OpenAPI](../../api/openapi.v1.yaml) publica os campos e os comandos, sem
 permitir ator, conta, payload ERP ou total arbitrários no navegador.
 
-As numerações 0063/0064 evitam colisões com migrações de outras entregas.
+As migrações nasceram como 0058/0059 e foram renumeradas para 0063/0064 na integração com a master (08/11/2026), depois da 0062 da master.
 A extensão da outbox compõe os CHECKs instalados via pg_get_expr: preserva
 tipos/alvos anteriores, inclusive billing.checkout.create, em vez de reconstruir
 uma lista desatualizada. A regressão de upgrade prova jobs de cobrança antes e

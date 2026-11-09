@@ -33,8 +33,8 @@ Fase 3. missing_fields vazio de confirmado não significa pronto para exportar.
 
 As migrações expand 0063/0064 acrescentam apenas colunas/tabelas e alargam a
 outbox preservando os tipos anteriores. Não reescrevem fichas, pagamentos,
-status ou templates. 0063/0064 deixam espaço para as migrações já existentes
-nas branches de trabalho e em master.
+status ou templates. Numeradas depois da última migração da master (0062) na
+integração de 08/11/2026; veja [Integração com a master](olist-phase5.md#integração-com-a-master).
 
 - Conexão por aplicativo/callback/conta esperada com versão e geração; conta
   identificada por HMAC do documento normalizado, nunca documento em claro.

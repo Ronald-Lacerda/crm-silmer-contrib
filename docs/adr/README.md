@@ -11,12 +11,16 @@
 
 ## Decisão de 06/11/2026
 
+- [068 — Cancelamento local terminal pré-exportação](068-cancelamento-local-terminal-pre-exportacao.md),
+  RFC 050 / OLIST-T23: marcador separado dos dois status comerciais, motivo
+  cifrado, ACL comercial, disputa com reserva de venda e histórico financeiro preservado.
 - [063 — Triagem prioritária do Vendedor](063-triagem-prioritaria-do-vendedor.md),
   RFC 051 / VND-L05: dúvidas comerciais e alternativas sem regra inferida,
   urgência antes da ficha completa e perguntas só de campos faltantes.
 
 ## Decisão de 05/11/2026
 
+- [067 — Fontes comerciais suplementares](067-fontes-comerciais-suplementares-sem-reescrever-ficha.md), RFC 054 / T26/T24, preservando ficha, total e pagamentos.
 - [061 — Métricas de expediente, perda declarada e presença](061-metricas-de-expediente-perda-e-presenca.md),
   RFC 048 / ACT-T04: minutos de expediente por função SQL versionada, lead
   perdido em desfecho próprio e presença sob flag; supersede a ADR 059 só nas 48h.
@@ -26,16 +30,6 @@
 - [058 — Cobranças do pedido com InfinitePay](058-cobrancas-do-pedido-com-infinitepay.md),
   RFC 049 / COB-DEL-01: 0%, X% e 100%, sinal/saldo, Pix/cartão e quitação
   verificada de pedidos existentes, após aprovação do protótipo.
-
-## Decisão técnica de 06/11/2026
-
-- [068 — Cancelamento local terminal pré-exportação](068-cancelamento-local-terminal-pre-exportacao.md),
-  RFC 050 / OLIST-T23: marcador separado dos dois status comerciais, motivo
-  cifrado, ACL comercial, disputa com reserva de venda e histórico financeiro preservado.
-
-## Decisão técnica de 05/11/2026
-
-- [067 — Fontes comerciais suplementares](067-fontes-comerciais-suplementares-sem-reescrever-ficha.md), RFC 054 / T26/T24, preservando ficha, total e pagamentos.
 
 ## Decisão de 04/11/2026
 

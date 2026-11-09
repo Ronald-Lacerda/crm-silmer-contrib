@@ -15,17 +15,12 @@
 
 ## Decisão de 05/11/2026
 
+- [054 — Fontes suplementares para Olist](054-fontes-suplementares-para-olist.md), decidida na ADR 067 para T26/T24.
 - [048 — Métricas de expediente, perda declarada e presença](048-metricas-de-expediente-perda-e-presenca.md),
   aceita pelo PO e registrada na ADR 061 / ACT-T04: expediente versionado,
   tempos de atendimento, retomada em 72h, lead perdido com motivo e presença.
 - [044 — Performance comercial, checkpoint e central de ações](044-performance-comercial-e-central-de-acoes.md),
   protótipo refinado aprovado e recorte registrado na ADR 059 / ACT-T01.
-
-
-
-## Decisão técnica de 05/11/2026
-
-- [054 — Fontes suplementares para Olist](054-fontes-suplementares-para-olist.md), decidida na ADR 067 para T26/T24.
 
 ## Decisão de 04/11/2026
 
