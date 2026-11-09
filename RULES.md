@@ -49,7 +49,8 @@ Pix e cartão inclusive parcelado. Emenda a exclusão de recebimentos/saldo da
 regra 16 somente para pedidos geridos pela integração. Sinal não preenche
 “Pago em”; pagamento não confirma pedido. Condições e envio do link são
 humanos. n8n verifica o provedor e mutações oficiais passam pela API.
-APIs de datas não contornam quitação. Financeiro mantém seu check próprio;
+APIs de datas não contornam quitação. O check financeiro segue preservado em
+dados e API, sem operação pela interface ([ADR 074](docs/adr/074-retirada-da-pagina-financeiro.md));
 loja e PAY-01–05 legados são preservados. Contrato
 [COB-01–16](.specs/features/order-billing/spec.md), entrega COB-DEL-01 e
 [runbook](docs/runbooks/order-billing.md).
@@ -91,6 +92,15 @@ comprova pareamento, entrega real ou ausência de bloqueio.
 
 ## Financeiro — implementação autorizada em 22/10/2026
 
+> **Tela retirada em 09/11/2026.** A [ADR 074](docs/adr/074-retirada-da-pagina-financeiro.md)
+> retirou a página `/financeiro`, sua rota e o item de menu do Admin e do perfil
+> Financeiro. O perfil continua em Usuários: a home é `/olist` com habilitação
+> Olist e `/conta` sem ela, e o menu é Olist, se habilitado, e Conta. Uma conta
+> Financeiro sem habilitação Olist só vê Conta. “Nota criada” não é mais operável
+> pela interface. As invariantes abaixo seguem válidas para dados e API; rotas
+> `/api/v1/finance/*`, permissões `finance.*`, migrations 0042/0043 e histórico
+> de checks são preservados, e retirá-los exige decisão separada.
+
 A [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md) aprova
 o perfil restrito Financeiro e os [requisitos FINQ-01–15](.specs/features/financeiro/spec.md).
 Somente pedidos confirmados, integralmente pagos e
@@ -101,17 +111,17 @@ Não altera a ficha ou as travas da loja, não implementa recebimentos/saldo e
 não integra Olist/Sefaz. O Financeiro não herda permissões de Vendedor.
 As regras de edição comercial e handoff abaixo continuam válidas.
 
-O design existente é obrigatório: Fila e detalhe descreve composição e
-interação, sem autorizar novo shell, tema, marca, tipografia ou componentes
+Qualquer interface futura para esse domínio exige nova decisão e segue o design
+existente, sem autorizar novo shell, tema, marca, tipografia ou componentes
 paralelos. Usar [design.md](design.md), ADRs 035/036 e tokens do CRM.
-Implementação e evidências em [FINQ-T01–T05](.specs/features/financeiro/tasks.md).
-Homologação e conta real permanecem em FINQ-T06.
+Implementação e evidências em [FINQ-T01–T05](.specs/features/financeiro/tasks.md);
+retirada da tela em FINQ-T07. A homologação FINQ-T06 foi cancelada pela ADR 074.
 
 Complemento [ADR 041](docs/adr/041-consulta-administrativa-do-financeiro.md):
 FINQ-16 autoriza consulta do Admin ativo às filas, contagens, detalhes e
-histórico, preservando menu completo, login e permissões anteriores. Essa
-consulta não concede concluir/desfazer a rotina financeira. O visual do print
-foi rejeitado pelo PO e não é referência de aparência; usar o design real do
+histórico pela API, preservando login e permissões anteriores; a entrada no
+menu foi retirada. Essa consulta não concede concluir/desfazer a rotina
+financeira. O visual do print foi rejeitado pelo PO e não é referência de aparência; usar o design real do
 CRM. [ADR 042](docs/adr/042-perfis-e-requitacao-do-financeiro.md) complementa:
 Usuários oferece Vendedor/Financeiro/Administrador; trocar perfil revoga
 sessões. Reconfirmar outro valor exige nova quitação e novo check, preservando

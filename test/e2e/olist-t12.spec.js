@@ -134,12 +134,6 @@ async function setup(page, options = {}) {
         body: 'retry: 60000\n\n',
       });
     if (path === '/api/v1/orders/summary') return json({ storeNewCount: 0 });
-    if (path === '/api/v1/finance/orders')
-      return json({
-        items: [],
-        counts: { waiting: 0, completed: 0 },
-        nextCursor: null,
-      });
     if (path === `${integration}/order-lookup`) {
       expect(method).toBe('POST');
       expect(Object.keys(body)).toEqual(['query']);

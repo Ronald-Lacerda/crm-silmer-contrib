@@ -357,8 +357,8 @@ watch(cancelled, async (isCancelled) => {
       </p>
       <ul id="order-cancel-impact" class="op-cancel-impact">
         <li>
-          Sai das vendas ativas, da receita vendida, dos afazeres, das filas de
-          produção e de entrega e da fila financeira ativa.
+          Sai das vendas ativas, da receita vendida, dos afazeres e das filas de
+          produção e de entrega.
         </li>
         <li>
           O histórico, o pagamento e o check anteriores e os registros da ficha

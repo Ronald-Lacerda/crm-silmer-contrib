@@ -6,7 +6,6 @@ import AccountView from './views/AccountView.vue';
 import AssistantPerformanceView from './views/AssistantPerformanceView.vue';
 import ClientsView from './views/ClientsView.vue';
 import DashboardView from './views/DashboardView.vue';
-import FinanceView from './views/FinanceView.vue';
 import HealthErrorsView from './views/HealthErrorsView.vue';
 import InboxView from './views/InboxView.vue';
 import MelhorEnvioView from './views/MelhorEnvioView.vue';
@@ -71,11 +70,6 @@ export const router = createRouter({
       component: ClientsView,
       props: (route) => ({ selectedId: String(route.params.clientId ?? '') }),
       meta: { title: 'Clientes' },
-    },
-    {
-      path: '/financeiro',
-      component: FinanceView,
-      meta: { requiresFinance: true, title: 'Financeiro' },
     },
     {
       path: '/melhor-envio',

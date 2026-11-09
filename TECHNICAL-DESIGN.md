@@ -428,13 +428,18 @@ outra credencial. [Runbook e evidências](docs/runbooks/waha-webjs.md).
 
 ## Financeiro — implementação autorizada em 22/10/2026
 
+> **Tela retirada em 09/11/2026.** A [ADR 074](docs/adr/074-retirada-da-pagina-financeiro.md)
+> retirou `/financeiro`, sua rota e o menu. Rotas `/api/v1/finance/*`, domínio,
+> repositório, permissões `finance.*`, migrations e dados seguem preservados;
+> o que abaixo se refere à composição da tela é histórico.
+
 A [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md) e o
 [RFC 028](docs/rfc/028-financeiro-com-fila-e-check-manual.md), de 21/10/2026,
 definem o perfil Financeiro sem permissões herdadas de Vendedor. A
 política central e as constraints de identidade permitem o novo perfil
 sem abrir as ações comerciais ou alterar o handoff exclusivo de Vendedor.
 Admin mantém a gestão de contas. Requisitos [FINQ-01–19](.specs/features/financeiro/spec.md);
-evidências e homologação pendente em [FINQ-T01–T06](.specs/features/financeiro/tasks.md).
+evidências e homologação cancelada pela ADR 074 em [FINQ-T01–T07](.specs/features/financeiro/tasks.md).
 
 O servidor filtra listagem, contagens e detalhe por confirmado, pagamento
 integral registrado e não teste, abrangendo todas as origens/responsáveis.
@@ -448,8 +453,8 @@ Migrations 0042/0043 acrescentam função, revisão de pagamento legado,
 order_finance e order_finance_events. Cada comando bloqueia ator vigente e
 pedido; idempotência, estado, eventos e auditoria compartilham a transação.
 
-O login do Financeiro abre sua fila, com navegação restrita e composição
-Fila e detalhe no shell existente. Reutilizar componentes, tokens semânticos,
+O login do Financeiro abre `/olist`, com habilitação Olist, ou `/conta`, com
+navegação restrita a esses itens no shell existente (FINQ-20). Reutilizar componentes, tokens semânticos,
 marca, tipografia, temas e padrões de acessibilidade de [design.md](design.md)
 e ADRs 035/036. A referência da conversa não autoriza copiar seu CSS ou
 redesenhar o CRM. Olist permanece manual e sem credenciais, chamadas ou jobs.
@@ -462,11 +467,10 @@ pagamento manual; loja preserva gateway com cobertura do total (ADR 038).
 
 Complemento [ADR 041](docs/adr/041-consulta-administrativa-do-financeiro.md),
 [RFC 029](docs/rfc/029-consulta-administrativa-do-financeiro.md) e FINQ-16:
-leituras do painel aceitam Financeiro ou Admin ativo (`COMMERCIAL_ADMIN`),
-com o mesmo universo de pedidos elegíveis. Admin mantém menu completo,
+leituras da API financeira aceitam Financeiro ou Admin ativo (`COMMERCIAL_ADMIN`),
+com o mesmo universo de pedidos elegíveis. Admin mantém
 login e permissões atuais, sem trocar perfil. A capacidade administrativa
-não concede os comandos financeiros; a UI de consulta omite essas ações e
-a API deve negá-las. FINQ-T01/T03/T05 cobrem essa distinção. O print foi
+não concede os comandos financeiros; a API deve negá-los. FINQ-T01/T03/T05 cobrem essa distinção. O print foi
 rejeitado como referência visual: FINQ-12 exige comparar com as telas e
 componentes reais do CRM, sem copiar sua aparência.
 
@@ -496,7 +500,7 @@ não fazem parte da baseline.
 | postgres | Dados oficiais, auditoria e jobs persistentes             |
 | n8n      | WhatsApp, OpenAI, coleta guiada e handoff; banco próprio  |
 
-O produto inclui Inbox, Clientes, Pedidos, Dashboard, Financeiro, Usuários e Conta, conforme ACL.
+O produto inclui Inbox, Clientes, Pedidos, Dashboard, Usuários e Conta, conforme ACL.
 Pedido/Ficha já existem. Negócio/Kanban estão aposentados pela ADR 004;
 Instagram é fase posterior. Cobrança PIX, envio automático da Ficha, arquivos
 duráveis e interface do cancelamento comercial seguem como fronteiras pendentes;

@@ -221,12 +221,6 @@ async function setup(page, options = {}) {
     if (path === `${integration}/order-lookup` && options.lookup) {
       return json(options.lookup);
     }
-    if (path === '/api/v1/finance/orders')
-      return json({
-        items: [],
-        counts: { waiting: 0, completed: 0 },
-        nextCursor: null,
-      });
     if (path === '/api/v1/integrations/olist/status')
       return json({
         configured: false,

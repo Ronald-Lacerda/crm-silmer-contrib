@@ -1143,6 +1143,13 @@ html[data-theme='dark'] .sidebar-account-avatar {
     border-block-start: 1px solid var(--color-border);
     backdrop-filter: saturate(1.4) blur(12px);
   }
+  /* Perfil Financeiro: sem "Mais", uma coluna para cada link. */
+  .mobile-nav[data-finance] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .mobile-nav[data-finance][data-olist] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .mobile-tab {
     display: grid;
     justify-items: center;

@@ -1,5 +1,14 @@
 # Operação do Financeiro
 
+> **Aviso de 09/11/2026 — rotina pela tela descontinuada.** A
+> [ADR 074](../adr/074-retirada-da-pagina-financeiro.md) retirou a página
+> `/financeiro` e seu menu. A conta Financeiro entra em `/olist`, se tiver a
+> habilitação Olist, ou em `/conta`, e “Nota criada” não é mais operável pela
+> interface. API, dados e histórico de checks permanecem; a homologação abaixo
+> foi cancelada (FINQ-T06). O texto a seguir é histórico da operação pela tela.
+> Continuam valendo a revisão de datas legadas e a recomendação de não reverter
+> migrations nem apagar eventos.
+
 Rastreabilidade: [FINQ-01–19](../../.specs/features/financeiro/spec.md),
 [FINQ-T06](../../.specs/features/financeiro/tasks.md),
 [ADR 042](../adr/042-perfis-e-requitacao-do-financeiro.md).

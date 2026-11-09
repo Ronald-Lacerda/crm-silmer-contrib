@@ -274,7 +274,7 @@ for (const viewer of [
     const mock = await setup(page, { viewer });
     await page.goto('/saude-erros');
     await expect(page).toHaveURL(
-      viewer.functionName === 'Financeiro' ? '/financeiro' : '/dashboard',
+      viewer.functionName === 'Financeiro' ? '/conta' : '/dashboard',
     );
     await expect(
       page.getByRole('link', { name: 'Saúde e erros', exact: true }),

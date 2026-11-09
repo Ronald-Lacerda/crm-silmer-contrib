@@ -1242,7 +1242,10 @@ Requisitos [FINQ-01–19](../financeiro/spec.md), decisão
       Admin mantém menu completo e acessa a tela em consulta.
 - [x] **FINQ-T04:** conclusão, correção, teclado, foco e recuperação de falhas.
 - [x] **FINQ-T05:** QA, segurança, regressão e gates completos da implementação.
-- [ ] **FINQ-T06:** homologação, operação e ativação da conta real.
+- [ ] **FINQ-T06:** homologação, operação e ativação da conta real; cancelada
+      pela [ADR 074](../../../docs/adr/074-retirada-da-pagina-financeiro.md).
+- [x] **FINQ-T07:** retirada da página `/financeiro` e do menu (FINQ-20),
+      preservando perfil, API e dados.
 
 O [plano da fatia](../financeiro/tasks.md) define dependências, fronteiras e
 verificações. O PO autorizou implementação em 22/10/2026, com design vigente.

@@ -7,7 +7,6 @@
 @import './styles/screens/00-shared.css';
 @import './styles/screens/10-dashboard.css';
 @import './styles/screens/20-clients-users.css';
-@import './styles/screens/25-finance.css';
 @import './styles/screens/30-orders-list.css';
 @import './styles/screens/40-order.css';
 @import './styles/screens/45-manual-order.css';

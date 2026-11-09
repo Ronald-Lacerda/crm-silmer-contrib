@@ -1,5 +1,17 @@
 # Financeiro — Fila e detalhe
 
+> **Aviso de 09/11/2026 — página retirada.** A
+> [ADR 074](../../../docs/adr/074-retirada-da-pagina-financeiro.md) retirou a
+> tela `/financeiro`, sua rota e o item de menu. Vale [FINQ-20](#retirada-da-página).
+> Backend, dados, permissões e histórico continuam preservados.
+>
+> **Suspensos:** FINQ-02 (destino e menu, exceto a recusa de link não autorizado),
+> FINQ-07, FINQ-12, FINQ-13 e FINQ-14, além dos critérios de verificação de tela.
+> **Suspensos só na interface:** FINQ-06, FINQ-08, FINQ-09 e FINQ-16; seu
+> comportamento segue na API. **Seguem válidos:** FINQ-01, FINQ-03–05, FINQ-10,
+> FINQ-11, FINQ-15 e FINQ-17–19. O restante deste documento registra o contrato
+> como aprovado e entregue até essa data.
+
 ## Emenda Olist e cancelamento de 04/11/2026
 
 [ADR 057](../../../docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
@@ -24,7 +36,7 @@ a partir do [RFC 028](../../../docs/rfc/028-financeiro-com-fila-e-check-manual.m
 **Complemento aprovado:** [ADR 041](../../../docs/adr/041-consulta-administrativa-do-financeiro.md)
 e [RFC 029](../../../docs/rfc/029-consulta-administrativa-do-financeiro.md):
 consulta administrativa e descarte do print como referência visual.
-**Tarefas:** [FINQ-PLAN-01/02 e FINQ-T01–T06](tasks.md).
+**Tarefas:** [FINQ-PLAN-01/02 e FINQ-T01–T07](tasks.md).
 **Fontes:** [CRM MVP](../crm-mvp/spec.md), [RULES](../../../RULES.md),
 [design vigente](../../../design.md), ADRs 006, 035 e 036.
 
@@ -189,6 +201,21 @@ A alternativa “Conferência ampla” não faz parte da entrega.
     até Vendedor/Admin declarar explicitamente que o valor integral foi recebido.
     Salvar somente entrega, ou reenviar a mesma data sem essa declaração, SHALL
     manter o bloqueio. Não inferir quitação por edição de outros campos.
+
+### Retirada da página
+
+20. **FINQ-20 — Retirada da página:** WHEN uma pessoa abre `/financeiro` ou faz
+    login com perfil Financeiro THEN o sistema SHALL não oferecer a tela e SHALL
+    levar à home da conta: `/olist` para o perfil Financeiro com habilitação
+    Olist, `/conta` para o perfil Financeiro sem ela e o destino vigente para os
+    demais perfis. O menu do perfil Financeiro SHALL conter somente Olist, quando
+    habilitado, e Conta; o menu do Admin SHALL NOT listar Financeiro. A ficha do
+    pedido SHALL NOT citar liberação no Financeiro. A retirada SHALL preservar as
+    rotas `/api/v1/finance/*`, as permissões `finance.*`, as migrations
+    0042/0043, os dados, o histórico de checks, `paid_on` e
+    `finance_payment_review_required`, sem migração destrutiva. O check “Nota
+    criada” SHALL NOT ser operável pela interface, e o fluxo do Olist SHALL NOT
+    ser apresentado como seu equivalente funcional.
 
 ## Critérios de verificação
 

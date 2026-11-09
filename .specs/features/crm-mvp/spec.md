@@ -67,7 +67,8 @@ e [COB-01–16](../order-billing/spec.md) autorizam geração de cobranças e
 recebimentos de pedidos confirmados fora da loja, com 0%, X% e 100%, Pix e
 cartão parcelado. Essa fronteira emenda FIN-01–03 quanto a recebimento/saldo
 somente de pedidos geridos pela integração; não reativa PAY-01–05 antigos.
-Sinal não quita, pagamento não confirma pedido e Financeiro mantém seu check.
+Sinal não quita, pagamento não confirma pedido e o check financeiro segue em
+dados e API, sem operação pela interface ([ADR 074](../../../docs/adr/074-retirada-da-pagina-financeiro.md)).
 Entrega [COB-DEL-01](../order-billing/tasks.md).
 
 ## Filtros horizontais da Inbox — PCX-18 (05/11/2026)
@@ -269,6 +270,12 @@ oficial neste documento exclusivamente no piloto.
 
 ## Evolução aprovada — Financeiro, Fila e detalhe
 
+> **Tela retirada em 09/11/2026.** A
+> [ADR 074](../../../docs/adr/074-retirada-da-pagina-financeiro.md) e
+> [FINQ-20](../financeiro/spec.md) retiraram a página `/financeiro` e seu menu.
+> Onde esta seção cita painel, filas na tela ou menu, vale a ADR 074. API, dados
+> e histórico permanecem.
+
 Em 21/10/2026 o PO aprovou o perfil Financeiro e a composição Fila e detalhe,
 somente com fila e check manual, exigindo o design existente do CRM. Decisão
 na [ADR 040](../../../docs/adr/040-financeiro-com-fila-e-check-manual.md), com
@@ -291,9 +298,9 @@ visual; a aparência seguirá as telas e componentes reais do CRM.
 **Estado:** implementação autorizada em 22/10/2026. Migrations, API, painel e
 seletor em Usuários seguem [ADR 042](../../../docs/adr/042-perfis-e-requitacao-do-financeiro.md).
 Novo valor exige nova quitação/check; datas manuais legadas exigem declaração
-explícita. [FINQ-T01–T06](../financeiro/tasks.md) registram evidências e mantêm
-homologação e conta real pendentes. PNL-04 continua adiado para os vendedores;
-o destino de login próprio aplica-se ao perfil Financeiro.
+explícita. [FINQ-T01–T07](../financeiro/tasks.md) registram evidências, a retirada
+da tela e o cancelamento da homologação e da conta real. PNL-04 continua adiado
+para os vendedores; o destino de login próprio aplica-se ao perfil Financeiro.
 
 ## Problema
 

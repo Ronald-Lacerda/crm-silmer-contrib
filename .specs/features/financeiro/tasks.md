@@ -1,6 +1,6 @@
 # Financeiro — Plano de entrega
 
-**Requisitos:** [FINQ-01–FINQ-19](spec.md).
+**Requisitos:** [FINQ-01–FINQ-20](spec.md).
 **Decisão:** [ADR 040](../../../docs/adr/040-financeiro-com-fila-e-check-manual.md)
 e [RFC 028](../../../docs/rfc/028-financeiro-com-fila-e-check-manual.md).
 **Complemento:** [ADR 041](../../../docs/adr/041-consulta-administrativa-do-financeiro.md)
@@ -115,18 +115,36 @@ Complemento: [ADR 042](../../../docs/adr/042-perfis-e-requitacao-do-financeiro.m
 - Gates: `git diff --check`, `npm run validate`, `npm run test:e2e`,
   `npm audit --audit-level=high` e suites live afetadas, proporcionais à implementação.
 
-### FINQ-T06 — Homologação e ativação do perfil
+### FINQ-T06 — Homologação e ativação do perfil (cancelada pela ADR 074)
 
-- [ ] Validar com a pessoa do Financeiro a fila, os dados de consulta, o
+Cancelada em 09/11/2026 pela
+[ADR 074](../../../docs/adr/074-retirada-da-pagina-financeiro.md): não há mais
+tela a homologar. Os itens abertos ficam sem execução; os marcados são históricos.
+
+- [ ] Cancelado: validar com a pessoa do Financeiro a fila, os dados de consulta, o
       significado do check e a correção, usando pedidos sintéticos.
 - [x] Documentar operação, criação/desativação, revisão de pagamentos legados,
       ativação, recuperação e rollback no [runbook](../../../docs/runbooks/financeiro.md).
-- [ ] Homologar e revisar pagamentos reais; só então criar a conta real pelo
+- [ ] Cancelado: homologar e revisar pagamentos reais; só então criar a conta real pelo
       fluxo administrativo, sem credenciais em documentação ou commits.
 - [x] Atualizar evidências técnicas da entrega; commit/push atômicos na branch
       `codex/financeiro-painel`, com fechamento na PR de implementação.
 - Requisitos: FINQ-01, FINQ-04, FINQ-08–15. Depende de FINQ-T05.
 - A integração Olist não pertence a esta tarefa nem é gate desta fase.
+
+### FINQ-T07 — Retirada da página Financeiro
+
+- [x] Retirar a tela `/financeiro`, a rota e o item de menu do Admin e do perfil
+      Financeiro; ajustar home e guarda de rota conforme a habilitação Olist.
+- [x] Remover da ficha do pedido as dicas que citavam “liberar no Financeiro”.
+- [x] Preservar rotas `/api/v1/finance/*`, domínio, repositório, permissões
+      `finance.*`, migrations 0042/0043, dados e histórico de checks.
+- [x] Registrar [RFC 058](../../../docs/rfc/058-retirada-da-pagina-financeiro.md),
+      [ADR 074](../../../docs/adr/074-retirada-da-pagina-financeiro.md), RULES e
+      sínteses canônicas, sem reescrever as ADRs 040, 041 e 042.
+- Requisito: FINQ-20. Concluída no PR desta retirada, que traz as evidências.
+- Fronteira: shell, router, ficha do pedido, testes E2E e documentação; sem
+  backend, migration ou contrato OpenAPI.
 
 ## Evolução separada — Olist
 
@@ -159,6 +177,11 @@ e notas e tratamento de duplicidade antes de qualquer implementação.
   pagamentos reais e homologar com a pessoa do Financeiro antes de criar conta real.
 
 ## FINQ-DEPREC-01 — Descontinuar o módulo Financeiro (05/11/2026)
+
+> **Nota de 09/11/2026:** a
+> [ADR 074](../../../docs/adr/074-retirada-da-pagina-financeiro.md) adotou um
+> escopo menor. Rota e menu saíram em FINQ-T07; perfil, API, dados e runbook
+> permanecem. Os itens abaixo ficam como registro e exigem decisão separada.
 
 Decisão do PO em 05/11/2026. A cobrança InfinitePay ainda está em
 implementação (commit `9c729681`, fora do master); nada abaixo começa antes

@@ -413,6 +413,12 @@ somente no piloto autorizado.
 
 ## Financeiro — implementação de 22/10/2026
 
+> **Tela retirada em 09/11/2026.** A [ADR 074](docs/adr/074-retirada-da-pagina-financeiro.md)
+> retirou `/financeiro` e seu menu; onde esta seção cita painel, fila na tela ou
+> menu, vale a ADR 074. O perfil continua em Usuários, com home em `/olist` se
+> tiver habilitação Olist e em `/conta` se não tiver. API, dados e permissões
+> `finance.*` são preservados.
+
 Em 21/10/2026 o PO aprovou [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md)
 e [RFC 028](docs/rfc/028-financeiro-com-fila-e-check-manual.md): perfil Financeiro
 com autorização própria, consulta mínima aos pedidos confirmados, integralmente
@@ -425,7 +431,7 @@ Fila e detalhe é composta no shell Vue e no design vigente, sem redesign,
 novas dependências ou infraestrutura. Integração Olist fica diferida.
 [FINQ-01–19](.specs/features/financeiro/spec.md) definem o aceite;
 [FINQ-T01–T06](.specs/features/financeiro/tasks.md) distinguem implementação e
-homologação/ativação real, que permanece pendente.
+homologação/ativação real, cancelada pela ADR 074.
 
 A [ADR 041](docs/adr/041-consulta-administrativa-do-financeiro.md) complementa
 o planejamento com FINQ-16: Admin ativo consulta o mesmo painel/universo,
@@ -448,7 +454,7 @@ Reconciliada com a master em 10/10/2026; ficha v6, arte no RustFS, loja paga, ch
 
 O CRM é um monólito modular. PostgreSQL guarda Contato, Conversa, Mensagem,
 Handoff, Pedido, auditoria e jobs. A interface Vue 3 oferece Dashboard,
-Caixa de Entrada, Clientes, Pedidos, Financeiro, Usuários e Conta, conforme ACL. Negócio/Kanban
+Caixa de Entrada, Clientes, Pedidos, Usuários e Conta, conforme ACL. Negócio/Kanban
 foram aposentados pela [ADR 004](docs/adr/004-aposentar-kanban-e-negocio.md).
 
 Novo Contato manual e novo Pedido manual exigem telefone. Nome identifica a

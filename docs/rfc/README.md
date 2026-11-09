@@ -1,5 +1,11 @@
 # Request for Comments
 
+## Decisão de 09/11/2026
+
+- [058 — Retirada da página Financeiro](058-retirada-da-pagina-financeiro.md),
+  decidida na [ADR 074](../adr/074-retirada-da-pagina-financeiro.md) / FINQ-T07:
+  retirada só da interface, com perfil, API e dados preservados.
+
 ## Emenda de 09/11/2026
 
 - [057 — Comprador no vínculo histórico com telefone divergente](057-comprador-no-vinculo-historico-com-telefone-divergente.md), adotada na ADR 073, exclusiva do vínculo histórico T16.

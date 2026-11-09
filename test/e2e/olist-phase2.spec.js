@@ -170,12 +170,6 @@ async function setup(page, options = {}) {
       target.olistAuthorizationVersion++;
       return json({ user: target });
     }
-    if (path === '/api/v1/finance/orders')
-      return json({
-        items: [],
-        counts: { waiting: 0, completed: 0 },
-        nextCursor: null,
-      });
     return json({
       columns: [],
       items: [],
@@ -244,7 +238,84 @@ test('enabled Financeiro searches exactly by keyboard with a minimum projection 
     fullPage: true,
   });
   await page.goto('/inbox');
-  await expect(page).toHaveURL('/financeiro');
+  await expect(page).toHaveURL('/olist');
+});
+
+/** @param {import('@playwright/test').Page} page */
+async function mobileColumns(page) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  return page
+    .getByRole('navigation', { name: 'Navegação móvel' })
+    .evaluate(
+      (nav) =>
+        globalThis.getComputedStyle(nav).gridTemplateColumns.split(' ').length,
+    );
+}
+
+test('FINQ-20 Financeiro without Olist lands on its account, with no retired link', async ({
+  page,
+}) => {
+  await setup(page, { profile: 'finance', enabled: false });
+  await page.goto('/');
+  await expect(page).toHaveURL('/conta');
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Conta e segurança' }),
+  ).toBeFocused();
+  await expect(page.locator('.app-brand')).toHaveAttribute(
+    'aria-label',
+    /, Minha conta$/u,
+  );
+  const sidebar = page.getByRole('navigation', { name: 'Navegação principal' });
+  await expect(sidebar.getByRole('link')).toHaveText(['Minha conta']);
+  await expect(
+    page.getByRole('link', { name: 'Financeiro', exact: true }),
+  ).toHaveCount(0);
+  expect(await mobileColumns(page)).toBe(1);
+  await expect(
+    page.getByRole('navigation', { name: 'Navegação móvel' }).getByRole('link'),
+  ).toHaveCount(1);
+  await page.goto('/olist');
+  await expect(page).toHaveURL('/conta');
+});
+
+test('FINQ-20 Financeiro with Olist lands on Olist, and an old link follows it there', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, { profile: 'finance' });
+  await page.goto('/');
+  await expect(page).toHaveURL('/olist');
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Olist' }),
+  ).toBeFocused();
+  await expect(page.locator('.app-brand')).toHaveAttribute(
+    'aria-label',
+    /, Olist$/u,
+  );
+  const sidebar = page.getByRole('navigation', { name: 'Navegação principal' });
+  await expect(sidebar.getByRole('link')).toHaveText(['Olist', 'Minha conta']);
+  expect(await mobileColumns(page)).toBe(2);
+  await expect(
+    page.getByRole('navigation', { name: 'Navegação móvel' }).getByRole('link'),
+  ).toHaveCount(2);
+  await page.goto('/financeiro');
+  await expect(page).toHaveURL('/olist');
+  expect(calls.some((call) => call.path.includes('/finance/'))).toBe(false);
+});
+
+test('FINQ-20 the retired /financeiro renders nothing and sends the administrator to the Dashboard', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, { profile: 'admin' });
+  await page.goto('/financeiro');
+  await expect(page).toHaveURL('/dashboard');
+  await expect(page.locator('.topbar-title')).toHaveText('Dashboard');
+  await expect(
+    page.getByRole('heading', { name: 'Financeiro', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole('link', { name: 'Financeiro', exact: true }),
+  ).toHaveCount(0);
+  expect(calls.some((call) => call.path.includes('/finance/'))).toBe(false);
 });
 
 test('T17 admin activates and stops the restricted pilot with an explicit reason', async ({

@@ -131,7 +131,7 @@ test('cancels by keyboard, sends one reason, and lands on Cancelado with one ann
   // Aviso de impacto: nas vendas, receita, afazeres, filas; não é exclusão,
   // estorno nem cancelamento no ERP; sem aviso de pagamento neste pedido.
   await expect(dialog).toHaveAccessibleDescription(
-    /definitivo.*vendas ativas.*receita vendida.*afazeres.*produção e de entrega.*fila financeira ativa.*Não é exclusão de dados, não é estorno e nada é cancelado no Olist ou no ERP/su,
+    /definitivo.*vendas ativas.*receita vendida.*afazeres.*produção e de entrega.*Não é exclusão de dados, não é estorno e nada é cancelado no Olist ou no ERP/su,
   );
   await expect(dialog).not.toContainText('devolve dinheiro');
   await expectNoAxeViolations(page);

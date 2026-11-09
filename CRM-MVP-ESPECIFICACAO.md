@@ -42,6 +42,11 @@ check financeiro permanecem. Contrato
 
 ## Evolução aprovada — Financeiro, Fila e detalhe (21/10/2026)
 
+> **Tela retirada em 09/11/2026.** A [ADR 074](docs/adr/074-retirada-da-pagina-financeiro.md)
+> e [FINQ-20](.specs/features/financeiro/spec.md) retiraram a página `/financeiro`
+> e seu menu. Onde esta seção cita painel, filas na tela, menu ou check pela
+> interface, vale a ADR 074. API, dados e histórico permanecem.
+
 Definição do PO registrada na [ADR 040](docs/adr/040-financeiro-com-fila-e-check-manual.md)
 e no [RFC 028](docs/rfc/028-financeiro-com-fila-e-check-manual.md).
 Implementação autorizada em 22/10/2026, com complemento na
@@ -49,12 +54,12 @@ Implementação autorizada em 22/10/2026, com complemento na
 [FINQ-01–19](.specs/features/financeiro/spec.md) e
 [FINQ-T01–T06](.specs/features/financeiro/tasks.md) detalham entrega e prontidão.
 
-Financeiro é perfil restrito; entra diretamente no painel com Financeiro e
-Minha conta no shell vigente. Consulta pedidos de todos os vendedores e
+Financeiro é perfil restrito; entra em `/olist`, se tiver habilitação Olist, ou
+em `/conta`, com somente esses itens no shell vigente. Até a retirada, consultava pedidos de todos os vendedores e
 origens, exclusivamente confirmados, integralmente pagos e não teste, em
 Aguardando/Concluídos. Sinal não qualifica; “Pago em” representa quitação
-integral, com revisão dos registros legados antes da ativação. Consulta dados
-do pedido e marca “Nota criada” ao terminar sua rotina manual no Olist.
+integral, com revisão dos registros legados antes da ativação. Consultava dados
+do pedido e marcava “Nota criada” ao terminar sua rotina manual no Olist.
 Conclusão e correção preservam autoria, horário e histórico, sem mudar
 status, ficha, preço, datas ou travas da loja e sem certificar autorização Sefaz.
 
@@ -62,8 +67,8 @@ Não acessa atendimento, cadastro geral de clientes, Dashboard comercial,
 administração ou edição comercial. O novo perfil não herda Vendedor. A
 composição aprovada é Fila e detalhe; usar design, componentes, tokens, temas,
 marca e navegação responsiva existentes, sem redesign. Integração Olist fica
-para fase separada. Homologação com a pessoa do Financeiro e criação da conta
-real continuam pendentes na FINQ-T06.
+para fase separada. A homologação com a pessoa do Financeiro e a criação da
+conta real previstas na FINQ-T06 foram canceladas pela ADR 074.
 
 A [ADR 041](docs/adr/041-consulta-administrativa-do-financeiro.md) acrescenta
 FINQ-16: Admin ativo consulta as duas filas, contagens, detalhes e histórico,

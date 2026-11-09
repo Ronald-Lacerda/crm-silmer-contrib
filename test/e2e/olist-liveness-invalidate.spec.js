@@ -181,12 +181,6 @@ async function setup(page, options = {}) {
     if (options.order && path === `/api/v1/orders/${orderId}`) {
       if (method === 'GET') return json({ order: state.order });
     }
-    if (path === '/api/v1/finance/orders')
-      return json({
-        items: [],
-        counts: { waiting: 0, completed: 0 },
-        nextCursor: null,
-      });
     if (path === `${integration}/status`)
       return json({
         configured: false,

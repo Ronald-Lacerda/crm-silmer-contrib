@@ -106,14 +106,20 @@ const isFinance = computed(() => user.value.functionName === 'Financeiro');
 const canOperateOlist = computed(() => user.value.olistEnabled === true);
 const canAccessOlist = computed(() => isAdmin.value || canOperateOlist.value);
 const canAccessHealthErrors = computed(() => canReadHealthErrors(user.value));
-const homePath = computed(() =>
-  isFinance.value ? '/financeiro' : '/dashboard',
-);
+// FINQ-20: the restricted profile has no page of its own; home is the only
+// place it can work in, and the brand link names that destination.
+const home = computed(() => {
+  if (!isFinance.value) return { path: '/dashboard', label: 'Dashboard' };
+  return canOperateOlist.value
+    ? { path: '/olist', label: 'Olist' }
+    : { path: '/conta', label: 'Minha conta' };
+});
+const homePath = computed(() => home.value.path);
+const homeLabel = computed(() => home.value.label);
 const canAccessCurrentRoute = computed(() => {
   if (route.meta.requiresOlist) return canAccessOlist.value;
-  if (isFinance.value) return ['/financeiro', '/conta'].includes(route.path);
+  if (isFinance.value) return route.path === '/conta';
   if (route.meta.requiresHealthErrors) return canAccessHealthErrors.value;
-  if (route.meta.requiresFinance) return isAdmin.value;
   return route.meta.requiresAdmin !== true || isAdmin.value;
 });
 // One list feeds the sidebar and the mobile menu, so both always offer the
@@ -121,7 +127,6 @@ const canAccessCurrentRoute = computed(() => {
 const navItems = computed(() =>
   isFinance.value
     ? [
-        { to: '/financeiro', label: 'Financeiro', icon: 'orders' },
         ...(canOperateOlist.value
           ? [{ to: '/olist', label: 'Olist', icon: 'orders' }]
           : []),
@@ -152,7 +157,6 @@ const navItems = computed(() =>
           : []),
         ...(isAdmin.value
           ? [
-              { to: '/financeiro', label: 'Financeiro', icon: 'orders' },
               { to: '/melhor-envio', label: 'Melhor Envio', icon: 'orders' },
               { to: '/usuarios', label: 'Usuários', icon: 'team' },
             ]
@@ -214,7 +218,8 @@ const connectionLabel = computed(() => {
   return 'Preparando atualização…';
 });
 const connectionDetail = computed(() => {
-  if (isFinance.value) return 'Use Atualizar para conferir a fila financeira';
+  if (isFinance.value)
+    return 'Recarregue a página para ver os dados mais recentes';
   if (route.path === '/dashboard/agente')
     return 'Os números são consultados periodicamente. Confira abaixo o horário da última consulta';
   return connection.value === 'conectado'
@@ -586,7 +591,7 @@ function onCursor(cursor) {
       <RouterLink
         class="brand app-brand"
         :to="homePath"
-        :aria-label="`${brand.productName}, ${isFinance ? 'Financeiro' : 'Dashboard'}`"
+        :aria-label="`${brand.productName}, ${homeLabel}`"
       >
         <BrandMark class="brand-logo" />
         <BrandMark class="brand-monogram" variant="monogram" />
@@ -672,7 +677,7 @@ function onCursor(cursor) {
         <RouterLink
           class="topbar-brand"
           :to="homePath"
-          :aria-label="`${brand.productName}, ${isFinance ? 'Financeiro' : 'Dashboard'}`"
+          :aria-label="`${brand.productName}, ${homeLabel}`"
         >
           <BrandMark class="topbar-logo" />
         </RouterLink>

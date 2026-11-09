@@ -190,8 +190,7 @@ async function save() {
             }}
           </p>
           <p v-if="order.paymentReviewRequired" class="op-hint">
-            Confirme o recebimento integral e salve a data de pagamento para
-            liberar no Financeiro.
+            Confirme o recebimento integral e salve a data de pagamento.
           </p>
           <label
             v-if="order.paymentReviewRequired && !billingReadonly"
@@ -274,8 +273,7 @@ async function save() {
         </li>
       </ol>
       <p v-if="order.paymentReviewRequired && !billingReadonly" class="op-hint">
-        Confirme o recebimento integral e salve a data de pagamento para liberar
-        no Financeiro.
+        Confirme o recebimento integral e salve a data de pagamento.
       </p>
       <p class="op-hint">
         {{
