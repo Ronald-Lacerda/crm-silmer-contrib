@@ -286,6 +286,29 @@ export function createOlistAdministration(database, options) {
         database.transaction(async (/** @type {any} */ tx) => {
           if (options.local) await lockOlistActor(tx, input, action, clock());
           else await repository.guard({ ...input, transaction: tx }, action);
+          if (['link', 'legacy-link'].includes(name)) {
+            const order = (
+              await tx.query(
+                'SELECT conversation_id FROM crm.orders WHERE id=$1',
+                [input.orderId],
+              )
+            ).rows[0];
+            if (order?.conversation_id)
+              await tx.query(
+                'SELECT id FROM crm.conversations WHERE id=$1 FOR SHARE',
+                [order.conversation_id],
+              );
+            await tx.query('SELECT id FROM crm.orders WHERE id=$1 FOR UPDATE', [
+              input.orderId,
+            ]);
+            const held = (
+              await tx.query(
+                "SELECT 1 FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2 AND state='legacy_review_required' FOR SHARE",
+                [config.accountKey, input.orderId],
+              )
+            ).rows[0];
+            if (held) throw new OlistError('OLIST_LEGACY_REVIEW_REQUIRED');
+          }
           return work(tx);
         }),
     };
@@ -460,6 +483,11 @@ export function createOlistAdministration(database, options) {
       if (input.confirmed !== true)
         throw new OlistError('INVALID_REQUEST', 400);
       await repository.guard(input, 'olist.link');
+      if (
+        (await repository.readOperation(input))?.state ===
+        'legacy_review_required'
+      )
+        throw new OlistError('OLIST_LEGACY_REVIEW_REQUIRED');
       const { store, identity } = storeFor(input, 'legacy-link', 'olist.link', [
         input.previewToken,
         input.confirmed,
@@ -553,6 +581,8 @@ export function createOlistAdministration(database, options) {
       await repository.guard(input, 'olist.link');
       const before = await currentSource(input);
       const operation = await repository.readOperation(input);
+      if (operation?.state === 'legacy_review_required')
+        throw new OlistError('OLIST_LEGACY_REVIEW_REQUIRED');
       if (
         operation?.saleAttempt ||
         [
@@ -798,7 +828,10 @@ export function createOlistAdministration(database, options) {
         return {
           operationId: receipt.operationId,
           orderId: receipt.orderId,
-          state: 'invalidated',
+          state:
+            receipt.state === 'legacy_review_required'
+              ? 'legacy_review_required'
+              : 'invalidated',
           version: receipt.version,
           ...(receipt.replayed === true ? { replayed: true } : {}),
         };

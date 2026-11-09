@@ -1254,6 +1254,30 @@ else
       );
 
       await t.test(
+        '0072 ordinary queue status claims do not invert the invalidation export/job lock order',
+        async () => {
+          const f = await fixture('queued'),
+            worker = await held();
+          const job = (
+            await worker.client.query(
+              'SELECT id FROM crm.outbox_jobs WHERE olist_export_id=$1 FOR UPDATE',
+              [f.operation.id],
+            )
+          ).rows[0];
+          const pending = settle(invalidate(f));
+          await lockWaiter();
+          await worker.client.query(
+            "UPDATE crm.outbox_jobs SET status='processing',locked_by='synthetic-claim',locked_until=$2,heartbeat_at=$3 WHERE id=$1",
+            [job.id, new Date(NOW.getTime() + 60_000), NOW],
+          );
+          await worker.commit();
+          const result = await pending;
+          assert.equal(result.ok, false);
+          assert.ok('error' in result);
+          assert.equal(result.error.code, 'OLIST_EXPORT_IN_FLIGHT');
+        },
+      );
+      await t.test(
         '(5) invalidate x worker: exactly one winner, in both orders, and the trigger closes the raw-writer race',
         async () => {
           const planFor = (/** @type {any} */ f) =>
@@ -2122,7 +2146,7 @@ else
             snapshot: f.snapshot,
           });
           const result = await migrate(pool, { migrations });
-          assert.deepEqual(result.applied, ['0071']);
+          assert.deepEqual(result.applied, ['0071', '0072']);
           assert.deepEqual(await names(), [
             'olist_exports_account_key_reference_key',
             'olist_exports_id_account_key_key',

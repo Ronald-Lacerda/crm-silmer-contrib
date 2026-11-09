@@ -290,7 +290,7 @@ paths:
   /orders/{orderId}/olist/invalidate:
     post:
       operationId: invalidateOlistExport
-      summary: Invalidar uma geração de export antes de qualquer venda
+      summary: Invalidar geração pré-venda ou retirar vínculo histórico isolado
       description: >-
         Admin atual (Vendedor com COMMERCIAL_ADMIN), independente do checkbox
         Olist; sessão, CSRF, Origin e Idempotency-Key obrigatórios. Comando local
@@ -307,9 +307,9 @@ paths:
         OLIST_EXPORT_UNAVAILABLE quando não há geração a invalidar. Mesma chave e
         corpo repete o recibo com acesso atual; geração já invalidada devolve o
         recibo com replayed=true. O motivo fica somente em envelope cifrado e
-        nunca no recibo, evento, auditoria ou log. Depois da invalidação o Pedido
+        nunca no recibo, evento, auditoria ou log. Depois da invalidação comum o Pedido
         aceita nova prévia/exportação como nova operação. Dez comandos/minuto,
-        270000 bytes; no-store/no-referrer.
+        270000 bytes; no-store/no-referrer. Exceção ADR 075: vínculo legacy-sale-only-v1 isolado e sem efeitos pode ter o aceite local retirado para legacy_review_required. Preserva IDs, evidências e auditoria, sem HTTP ERP; esse estado mantém bloqueio de criação e alteração do pedido e não oferece reativação por replay ou reconciliação. Novos pedidos permanecem independentes.
       security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
       parameters:
         - $ref: '#/components/parameters/OrderId'
@@ -4191,7 +4191,7 @@ components:
       properties:
         operationId: { type: string, format: uuid }
         orderId: { type: string }
-        state: { const: invalidated }
+        state: { enum: [invalidated, legacy_review_required] }
         version:
           {
             type: integer,
@@ -4269,6 +4269,11 @@ components:
               properties:
                 id: { type: string, format: uuid }
                 actorId: { type: string }
+                canWithdrawLegacyLink:
+                  {
+                    type: boolean,
+                    description: Retirada administrativa permitida somente para vínculo legado autenticado e isolado sem efeitos.,
+                  }
                 version: { type: integer, minimum: 1 }
                 state:
                   {
@@ -4283,6 +4288,7 @@ components:
                         uncertain,
                         rejected,
                         invalidated,
+                        legacy_review_required,
                       ],
                   }
                 stage: { enum: [customer, product, variation, sale, complete] }
@@ -4355,6 +4361,7 @@ components:
                 uncertain,
                 rejected,
                 invalidated,
+                legacy_review_required,
               ],
           }
         stage: { enum: [customer, product, variation, sale, complete] }
@@ -4670,6 +4677,7 @@ components:
                         uncertain,
                         rejected,
                         invalidated,
+                        legacy_review_required,
                       ],
                   }
                 stage: { enum: [customer, product, variation, sale, complete] }

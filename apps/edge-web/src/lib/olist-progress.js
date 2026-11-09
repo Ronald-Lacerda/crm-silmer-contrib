@@ -44,6 +44,7 @@ const STATUS_LABEL = /** @type {Record<string, string>} */ ({
   blocked: 'Bloqueada por incerteza',
   rejected: 'Rejeitada',
   invalidated: 'Invalidada',
+  review_required: 'Conferência pendente',
 });
 const OUTCOME_LABEL = /** @type {Record<string, string>} */ ({
   reserved: 'Reservada',
@@ -77,6 +78,14 @@ const SAFE_REMOTE_ID = /^[A-Za-z0-9._:-]{1,64}$/u;
 /** Código que o servidor grava ao invalidar uma geração por decisão de um
  * administrador (antes de qualquer venda). */
 export const OLIST_INVALIDATED_CODE = 'OLIST_EXPORT_INVALIDATED';
+export const OLIST_LEGACY_REVIEW_GUIDANCE =
+  'Vínculo local retirado; a venda existente no Olist aguarda conferência. Novo envio bloqueado para evitar duplicidade.';
+
+/** This historical hold is not an invalidation that permits a new send.
+ * @param {any} operation */
+export function isLegacyReviewRequired(operation) {
+  return operation?.state === 'legacy_review_required';
+}
 
 /** @param {string|undefined} stage */
 export function olistStageLabel(stage) {
@@ -138,6 +147,8 @@ export function isOperationInProgress(operation) {
  * @param {any} operation */
 export function olistOperationHeadline(operation) {
   const state = operation?.state;
+  if (isLegacyReviewRequired(operation))
+    return 'Venda histórica aguarda conferência';
   if (state === 'confirmed' || state === 'linked')
     return 'Venda Olist conferida';
   if (isOperationUncertain(operation))
@@ -236,28 +247,32 @@ function stepCountDetail(counts, key) {
 export function deriveOlistProgress(operation, resources = null) {
   if (!operation || typeof operation !== 'object') return null;
   const state = String(operation.state ?? '');
+  const legacyReview = isLegacyReviewRequired(operation);
   const complete = state === 'confirmed' || state === 'linked';
   const uncertain = isOperationUncertain(operation);
   const current = complete ? 3 : (STAGE_INDEX[operation.stage] ?? 0);
   const counts = countResources(resources);
   const reason = olistOperationReason(operation.errorCode, state);
-  const kind = complete
-    ? 'done'
-    : uncertain
-      ? 'blocked'
-      : state === 'rejected'
-        ? 'rejected'
-        : state === 'invalidated'
-          ? 'invalidated'
-          : state === 'queued' || state === 'ready'
-            ? 'waiting'
-            : 'active';
+  const kind = legacyReview
+    ? 'legacy_review_required'
+    : complete
+      ? 'done'
+      : uncertain
+        ? 'blocked'
+        : state === 'rejected'
+          ? 'rejected'
+          : state === 'invalidated'
+            ? 'invalidated'
+            : state === 'queued' || state === 'ready'
+              ? 'waiting'
+              : 'active';
   const currentLabel = OLIST_STEPS[Math.min(current, 2)].label;
   const steps = OLIST_STEPS.map((step, index) => {
     /** @type {string} */
     let status = 'waiting';
     let detail = '';
-    if (complete || current > index) status = 'done';
+    if (legacyReview) status = 'review_required';
+    else if (complete || current > index) status = 'done';
     else if (index === current) {
       if (uncertain) status = 'blocked';
       else if (state === 'rejected') status = 'rejected';
@@ -289,6 +304,7 @@ export function deriveOlistProgress(operation, resources = null) {
   });
   /** @type {string[]} */
   const guidance = [];
+  if (legacyReview) guidance.push(OLIST_LEGACY_REVIEW_GUIDANCE);
   if (kind === 'blocked')
     guidance.push(
       'A etapa pode já existir no Olist. Não repita a geração: uma pessoa administradora deve conferir a operação.',
@@ -341,6 +357,8 @@ export function progressAnnouncement(previous, next) {
     next.countSignature !== '' &&
     previous.countSignature !== next.countSignature;
   if (!stateChanged && !countChanged) return '';
+  if (next.kind === 'legacy_review_required')
+    return OLIST_LEGACY_REVIEW_GUIDANCE;
   if (next.kind === 'done')
     return next.saleNumber
       ? `Operação concluída. Venda Olist ${next.saleNumber}.`
@@ -365,7 +383,7 @@ export function progressAnnouncement(previous, next) {
  */
 export function reconcileTargets(administration) {
   const operation = administration?.operation;
-  if (!operation) return [];
+  if (!operation || isLegacyReviewRequired(operation)) return [];
   /** @type {Array<{key:string, stage:string, resourceId:string|null, expectedVersion:number, label:string, stateLabel:string, remoteId:string|null}>} */
   const targets = [];
   /** @type {Record<string, number>} */
@@ -446,6 +464,8 @@ export function canOfferInvalidate({
   resources,
   cancelled = false,
 }) {
+  if (canWithdrawLegacyLink({ operation, attempts, resources, cancelled }))
+    return true;
   if (cancelled || !operation) return false;
   if (!['queued', 'resolving', 'ready'].includes(operation.state)) return false;
   if (typeof operation.id !== 'string' || !operation.id) return false;
@@ -459,6 +479,30 @@ export function canOfferInvalidate({
     return false;
   return !(Array.isArray(resources) ? resources : []).some((resource) =>
     ['reserved', 'uncertain'].includes(resource?.state),
+  );
+}
+
+/** The server flags only an isolated historical link. Missing diagnostics,
+ * any effect, a canonical link or a protected hold never offer withdrawal.
+ * @param {{operation:any,attempts?:any[]|null,resources?:any[]|null,cancelled?:boolean}} input */
+export function canWithdrawLegacyLink({
+  operation,
+  attempts,
+  resources,
+  cancelled = false,
+}) {
+  return (
+    !cancelled &&
+    operation?.state === 'linked' &&
+    operation.canWithdrawLegacyLink === true &&
+    typeof operation.id === 'string' &&
+    operation.id !== '' &&
+    Number.isSafeInteger(Number(operation.version)) &&
+    Number(operation.version) > 0 &&
+    Array.isArray(attempts) &&
+    attempts.length === 0 &&
+    Array.isArray(resources) &&
+    resources.length === 0
   );
 }
 

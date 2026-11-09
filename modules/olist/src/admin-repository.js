@@ -191,7 +191,9 @@ export function createOlistAdminRepository(database, options) {
    * @param {any} tx @param {any} input @param {boolean} [exclusive] */
   async function legacyLinkGuard(tx, input, exclusive = false) {
     const authority = await guard(tx, input, 'olist.link');
-    const { order } = await operation(tx, input, exclusive);
+    const { order, row } = await operation(tx, input, exclusive);
+    if (row?.state === 'legacy_review_required')
+      throw new OlistError('OLIST_LEGACY_REVIEW_REQUIRED');
     if (order.cancelled_at) throw new OlistError('ORDER_CANCELLED');
     const prior = await tx.query(
       `SELECT 1 FROM crm.olist_exports e WHERE e.account_key=$1 AND e.order_id=$2 AND
@@ -201,6 +203,72 @@ export function createOlistAdminRepository(database, options) {
     );
     if (prior.rows[0]) throw new OlistError('OLIST_RECONCILIATION_REQUIRED');
     return { ...authority, order };
+  }
+  /** The modes are inside authenticated envelopes, never SQL-readable flags.
+   * The database independently checks the recorded legacy origin and zero effects.
+   * @param {any} tx @param {any} row */
+  async function canWithdrawLegacyLink(tx, row) {
+    if (
+      row?.state !== 'linked' ||
+      !row.remote_id ||
+      !row.remote_number ||
+      row.observed_sale_id !== row.remote_id ||
+      row.observed_sale_number !== row.remote_number ||
+      !row.readback_envelope
+    )
+      return false;
+    try {
+      const snapshot = open(
+        row.snapshot_envelope,
+        options.envelopeKey,
+        'export-snapshot',
+        row.account_key,
+        row.id,
+      );
+      const mapping = open(
+        row.resource_mapping_envelope,
+        options.envelopeKey,
+        'sale-resources',
+        row.account_key,
+        row.id,
+      );
+      const evidence = open(
+        row.readback_envelope,
+        options.envelopeKey,
+        'sale-readback',
+        row.account_key,
+        row.id,
+      );
+      if (
+        snapshot.policy !== 'legacy-sale-only-v1' ||
+        snapshot.linkMode !== 'legacy-sale-only-v1' ||
+        mapping.mode !== 'legacy-sale-only-v1' ||
+        mapping.resolved !== true ||
+        mapping.customerId === undefined ||
+        evidence.mode !== 'legacy-sale-only-v1' ||
+        evidence.fiscalVerified !== false ||
+        evidence.humanConfirmed !== true ||
+        evidence.remoteId !== row.remote_id ||
+        evidence.number !== row.remote_number ||
+        row.resource_mapping_hash !==
+          identityHash(options.hmacKey, 'sale-resources', [
+            row.account_key,
+            row.id,
+            mapping,
+          ])
+      )
+        return false;
+    } catch {
+      return false;
+    }
+    return (
+      (
+        await tx.query(
+          'SELECT crm.olist_legacy_withdrawal_clear($1,$2) AS allowed',
+          [row.id, row.account_key],
+        )
+      ).rows[0]?.allowed === true
+    );
   }
   /** @param {any} tx @param {any} row */
   async function decodeOperation(tx, row) {
@@ -872,6 +940,8 @@ export function createOlistAdminRepository(database, options) {
         const { actor, connection } = await guard(tx, input, 'olist.reconcile');
         const { row } = await operation(tx, input, true);
         if (!row) throw new OlistError('OLIST_EXPORT_UNAVAILABLE');
+        if (row.state === 'legacy_review_required')
+          throw new OlistError('OLIST_LEGACY_REVIEW_REQUIRED');
         let target = row;
         if (input.resourceId) {
           target = (
@@ -930,11 +1000,13 @@ export function createOlistAdminRepository(database, options) {
       return transaction(input, async (/** @type {any} */ tx) => {
         const row = (
           await tx.query(
-            'SELECT r.*,e.order_id FROM crm.olist_read_requests r JOIN crm.olist_exports e ON e.id=r.export_id AND e.account_key=r.account_key WHERE r.id=$1 AND r.account_key=$2 AND r.context_key=$3',
+            'SELECT r.*,e.order_id,e.state AS export_state FROM crm.olist_read_requests r JOIN crm.olist_exports e ON e.id=r.export_id AND e.account_key=r.account_key WHERE r.id=$1 AND r.account_key=$2 AND r.context_key=$3',
             [input.requestId, input.accountKey, input.contextKey],
           )
         ).rows[0];
         if (!row) throw new OlistError('OLIST_RESOURCE_NOT_FOUND', 404);
+        if (row.export_state === 'legacy_review_required')
+          throw new OlistError('OLIST_LEGACY_REVIEW_REQUIRED');
         return {
           ...row,
           actor: { id: row.actor_id, kind: 'human' },
@@ -1086,7 +1158,11 @@ export function createOlistAdminRepository(database, options) {
                 ],
               );
           } else {
-            if (['invalidated', 'rejected'].includes(row.state))
+            if (
+              ['invalidated', 'rejected', 'legacy_review_required'].includes(
+                row.state,
+              )
+            )
               throw new OlistError('OLIST_RECONCILIATION_REQUIRED');
             const decoded = await decodeOperation(tx, row);
             const mapping = decoded.resources;
@@ -1309,7 +1385,7 @@ export function createOlistAdminRepository(database, options) {
             known ? 'VERSION_CONFLICT' : 'OLIST_EXPORT_UNAVAILABLE',
           );
         }
-        if (row.state === 'invalidated') {
+        if (['invalidated', 'legacy_review_required'].includes(row.state)) {
           const receipt = (
             await tx.query(
               'SELECT id FROM crm.olist_export_invalidations WHERE export_id=$1 AND account_key=$2',
@@ -1320,24 +1396,29 @@ export function createOlistAdminRepository(database, options) {
             return {
               operationId: row.id,
               orderId: order.id,
-              state: 'invalidated',
+              state: row.state,
               version: Number(row.version),
               replayed: true,
             };
         }
         if (Number(row.version) !== expectedVersion)
           throw new OlistError('VERSION_CONFLICT');
-        if (!['queued', 'resolving', 'ready'].includes(row.state))
+        const legacyWithdrawal = await canWithdrawLegacyLink(tx, row);
+        if (
+          !legacyWithdrawal &&
+          !['queued', 'resolving', 'ready'].includes(row.state)
+        )
           throw new OlistError('OLIST_INVALIDATION_BLOCKED');
         if (
-          row.remote_id ||
-          row.observed_sale_id ||
-          (
-            await tx.query(
-              "SELECT 1 FROM crm.olist_attempts WHERE export_id=$1 AND stage='sale' LIMIT 1",
-              [row.id],
-            )
-          ).rows[0]
+          !legacyWithdrawal &&
+          (row.remote_id ||
+            row.observed_sale_id ||
+            (
+              await tx.query(
+                "SELECT 1 FROM crm.olist_attempts WHERE export_id=$1 AND stage='sale' LIMIT 1",
+                [row.id],
+              )
+            ).rows[0])
         )
           throw new OlistError('OLIST_INVALIDATION_BLOCKED');
         const resources = (
@@ -1380,6 +1461,12 @@ export function createOlistAdminRepository(database, options) {
           )
         ).rows[0];
         const now = clock();
+        const targetState = legacyWithdrawal
+          ? 'legacy_review_required'
+          : 'invalidated';
+        const targetCode = legacyWithdrawal
+          ? 'OLIST_LEGACY_REVIEW_REQUIRED'
+          : 'OLIST_EXPORT_INVALIDATED';
         // In flight only while the lease is alive; an expired `processing`
         // lease is an orphaned job (its worker died) and is retired like any
         // other queued job. The effect guards above already exclude a possible
@@ -1392,8 +1479,8 @@ export function createOlistAdminRepository(database, options) {
           throw new OlistError('OLIST_EXPORT_IN_FLIGHT');
         const saved = (
           await tx.query(
-            "UPDATE crm.olist_exports SET state='invalidated',last_error_code='OLIST_EXPORT_INVALIDATED',version=version+1,updated_at=$2 WHERE id=$1 RETURNING *",
-            [row.id, now],
+            'UPDATE crm.olist_exports SET state=$3,last_error_code=$4,version=version+1,updated_at=$2 WHERE id=$1 RETURNING *',
+            [row.id, now, targetState, targetCode],
           )
         ).rows[0];
         // Retire the queued job without redelivery: the claim only takes
@@ -1429,7 +1516,7 @@ export function createOlistAdminRepository(database, options) {
           ],
         );
         await tx.query(
-          "INSERT INTO crm.olist_events(id,account_key,export_id,resource_id,actor_id,event_code,version,correlation_id,occurred_at) VALUES($1,$2,$3,NULL,$4,'OLIST_EXPORT_INVALIDATED',$5,$6,$7)",
+          'INSERT INTO crm.olist_events(id,account_key,export_id,resource_id,actor_id,event_code,version,correlation_id,occurred_at) VALUES($1,$2,$3,NULL,$4,$8,$5,$6,$7)',
           [
             randomUUID(),
             row.account_key,
@@ -1438,10 +1525,11 @@ export function createOlistAdminRepository(database, options) {
             Number(saved.version),
             correlationId,
             now,
+            targetCode,
           ],
         );
         await tx.query(
-          "INSERT INTO crm.audit_events(id,actor_id,action,target_type,target_id,version,reason,correlation_id,occurred_at) VALUES($1,$2,'olist.invalidate','olist-export',$3,$4,'OLIST_EXPORT_INVALIDATED',$5,$6)",
+          "INSERT INTO crm.audit_events(id,actor_id,action,target_type,target_id,version,reason,correlation_id,occurred_at) VALUES($1,$2,'olist.invalidate','olist-export',$3,$4,$7,$5,$6)",
           [
             randomUUID(),
             actor.id,
@@ -1449,12 +1537,13 @@ export function createOlistAdminRepository(database, options) {
             String(saved.version),
             correlationId,
             now,
+            targetCode,
           ],
         );
         return {
           operationId: saved.id,
           orderId: order.id,
-          state: 'invalidated',
+          state: targetState,
           version: Number(saved.version),
         };
       });
@@ -1528,6 +1617,7 @@ export function createOlistAdminRepository(database, options) {
             state: row.state,
             stage: row.stage,
             number: row.remote_number ?? null,
+            canWithdrawLegacyLink: await canWithdrawLegacyLink(tx, row),
             ...(row.last_error_code ? { errorCode: row.last_error_code } : {}),
           },
           resources: resources.map((/** @type {any} */ r) => ({

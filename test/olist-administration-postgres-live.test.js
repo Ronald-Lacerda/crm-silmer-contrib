@@ -24,6 +24,8 @@ import {
   reviewSizePricingSubtotal,
 } from '../modules/orders/src/index.js';
 import { encryptJson } from '../modules/orders/src/adapters/envelope.js';
+import { assertOlistCommercialWrite } from '../modules/orders/src/adapters/olist-commercial-lock.js';
+import { PostgresOrderRepository } from '../modules/orders/src/adapters/postgres-order-repository.js';
 import {
   EMPTY_OLIST_SETTINGS,
   identityHash,
@@ -941,6 +943,511 @@ else
             crmBefore,
           );
           noWrites(f);
+        },
+      );
+      await t.test(
+        'T16 withdrawal holds only the known historical sale, preserves evidence and blocks old receipts/effects while account activation remains available',
+        async () => {
+          const f = await explicitLegacyFixture();
+          await pool.query(
+            'UPDATE crm.contacts SET registration_envelope=NULL,version=version+1 WHERE id=$1',
+            [f.contactId],
+          );
+          f.responses.get('/contatos/101').celular = '5511999990001';
+          const preview = await f.runtime.legacyExistingPreview({
+            ...f.input,
+            saleId: '401',
+            mapping: f.mapping,
+          });
+          const linkCommand = {
+            ...f.input,
+            previewToken: preview.previewToken,
+            confirmed: true,
+            reason: 'Synthetic prior reviewed historical association',
+            idempotencyKey: 'hold-original-link',
+          };
+          const linked = await f.runtime.linkLegacyExisting(linkCommand);
+          const before = (
+            await pool.query('SELECT * FROM crm.olist_exports WHERE id=$1', [
+              linked.operationId,
+            ])
+          ).rows[0];
+          const completedRead = await f.runtime.reconcile({
+            ...f.input,
+            stage: 'sale',
+            resourceId: null,
+            expectedVersion: Number(before.version),
+            reason: 'Synthetic historical read completed without an ERP effect',
+            idempotencyKey: 'hold-completed-read',
+          });
+          await pool.query(
+            "UPDATE crm.olist_read_requests SET status='blocked',safe_code='OLIST_SALE_DIVERGENT',result_envelope=$2::jsonb,completed_at=$3,version=version+1 WHERE id=$1",
+            [
+              completedRead.id,
+              JSON.stringify(
+                seal(
+                  { matched: false },
+                  config.envelopeKey,
+                  'administrative-read-result',
+                  config.accountKey,
+                  completedRead.id,
+                ),
+              ),
+              NOW,
+            ],
+          );
+          await pool.query(
+            "UPDATE crm.outbox_jobs SET status='completed',completed_at=$2,locked_by=NULL,locked_until=NULL WHERE idempotency_key=$1",
+            [completedRead.id, NOW],
+          );
+          const diagnostic = await f.runtime.administration(f.input);
+          assert.equal(diagnostic.operation.canWithdrawLegacyLink, true);
+          const command = {
+            ...f.input,
+            operationId: before.id,
+            expectedVersion: Number(before.version),
+            reason: 'Synthetic withdrawal: operator will review later',
+            idempotencyKey: 'hold-withdraw',
+          };
+          const withdrawn = await f.runtime.invalidate(command);
+          assert.equal(withdrawn.state, 'legacy_review_required');
+          assert.equal(withdrawn.version, Number(before.version) + 1);
+          assert.deepEqual(await f.runtime.invalidate(command), withdrawn);
+          const after = (
+            await pool.query('SELECT * FROM crm.olist_exports WHERE id=$1', [
+              before.id,
+            ])
+          ).rows[0];
+          for (const field of [
+            'remote_id',
+            'remote_number',
+            'observed_sale_id',
+            'observed_sale_number',
+            'snapshot_envelope',
+            'resource_mapping_hash',
+            'resource_mapping_envelope',
+            'readback_envelope',
+          ])
+            assert.deepEqual(after[field], before[field]);
+          assert.equal(after.last_error_code, 'OLIST_LEGACY_REVIEW_REQUIRED');
+          assert.equal(
+            (
+              await pool.query(
+                'SELECT count(*)::int n FROM crm.olist_export_invalidations WHERE export_id=$1',
+                [before.id],
+              )
+            ).rows[0].n,
+            1,
+          );
+          const noHttp = f.calls.length;
+          await assert.rejects(f.runtime.linkLegacyExisting(linkCommand), {
+            code: 'OLIST_LEGACY_REVIEW_REQUIRED',
+          });
+          await assert.rejects(
+            f.runtime.legacyExistingPreview({
+              ...f.input,
+              saleId: '401',
+              mapping: f.mapping,
+            }),
+            { code: 'OLIST_LEGACY_REVIEW_REQUIRED' },
+          );
+          await assert.rejects(
+            f.runtime.existingPreview({ ...f.input, saleId: '401' }),
+            { code: 'OLIST_LEGACY_REVIEW_REQUIRED' },
+          );
+          await assert.rejects(
+            f.runtime.reconcile({
+              ...f.input,
+              stage: 'sale',
+              resourceId: null,
+              expectedVersion: Number(after.version),
+              reason: 'Synthetic denied hold check',
+              idempotencyKey: 'hold-no-read',
+            }),
+            { code: 'OLIST_LEGACY_REVIEW_REQUIRED' },
+          );
+          assert.equal(f.calls.length, noHttp);
+          const admin = await f.runtime.administration(f.input);
+          assert.equal(admin.operation.state, 'legacy_review_required');
+          assert.equal(admin.operation.canWithdrawLegacyLink, false);
+          assert.equal(admin.legacyLinkContext, null);
+          for (const eventType of [
+            'order.edited',
+            'order.reopened',
+            'order.confirmed',
+            'order.milestones_saved',
+          ])
+            await assert.rejects(
+              database.transaction((/** @type {any} */ tx) =>
+                assertOlistCommercialWrite(
+                  tx,
+                  { id: f.orderId, status: 'pendente' },
+                  { status: 'confirmado' },
+                  eventType,
+                ),
+              ),
+              { code: 'ORDER_OLIST_LOCKED' },
+            );
+          const orders = new PostgresOrderRepository({
+            database,
+            envelopeKey: ORDER_KEY,
+          });
+          await assert.rejects(
+            orders.cancelOrder({
+              ...f.input,
+              expectedVersion: 1,
+              reason: 'Synthetic cancellation denied for historical hold',
+              now: NOW,
+            }),
+            { code: 'ORDER_CANCELLATION_BLOCKED' },
+          );
+          const active = f.runtimeFor(database, {
+            environment: {
+              ...environment,
+              OLIST_PILOT_USER_IDS: f.actors.finance.actor.id,
+            },
+          });
+          const recovered = await active.recovery({
+            ...f.input,
+            expectedVersion: 1,
+            confirmed: true,
+            reason:
+              'Synthetic recovery does not treat known hold as uncertainty',
+            idempotencyKey: 'hold-recovery',
+          });
+          assert.equal(recovered.recoveryRequired, false);
+          const enabled = await active.creation({
+            ...f.input,
+            expectedVersion: recovered.version,
+            enabled: true,
+            reason: 'Synthetic activation for new orders only',
+            idempotencyKey: 'hold-activation',
+          });
+          assert.equal(enabled.creationActive, true);
+          const view = await active.project({
+            ...f.input,
+            orderId: f.orderId,
+            action: 'order.read',
+          });
+          assert.equal(view.operation.state, 'legacy_review_required');
+          assert.equal(view.creationEnabled, false);
+          await assert.rejects(
+            active.preview({ ...f.actors.finance, orderId: f.orderId }),
+            { code: 'OLIST_LEGACY_REVIEW_REQUIRED' },
+          );
+          for (const query of [
+            () =>
+              pool.query(
+                "UPDATE crm.olist_exports SET state='linked' WHERE id=$1",
+                [before.id],
+              ),
+            () =>
+              pool.query(
+                "INSERT INTO crm.olist_attempts(id,account_key,export_id,stage,fence,generation) VALUES($1,$2,$3,'sale',$4,1)",
+                [randomUUID(), config.accountKey, before.id, randomUUID()],
+              ),
+            () =>
+              pool.query(
+                "INSERT INTO crm.outbox_jobs(id,job_type,idempotency_key,olist_export_id,status,queue,effect_policy,available_at,created_at,updated_at) VALUES($1,'olist.export',$1,$2,'pending','olist','queryable',$3,$3,$3)",
+                [randomUUID(), before.id, NOW],
+              ),
+          ])
+            await assert.rejects(query());
+          assert.equal(
+            (
+              await pool.query(
+                'SELECT count(*)::int n FROM crm.olist_attempts WHERE export_id=$1',
+                [before.id],
+              )
+            ).rows[0].n,
+            0,
+          );
+          assert.equal(
+            (
+              await pool.query(
+                "SELECT count(*)::int n FROM crm.outbox_jobs WHERE olist_export_id=$1 AND job_type='olist.export'",
+                [before.id],
+              )
+            ).rows[0].n,
+            0,
+          );
+          noWrites(f);
+        },
+      );
+      await t.test(
+        'T16 withdrawal refuses creator history, resources, attempts, pending reads and leased completed reads',
+        async () => {
+          for (const mode of [
+            'canonical',
+            'binding',
+            'attempt',
+            'creator-job',
+            'pending-read',
+            'leased-completed-read',
+          ]) {
+            const f =
+              mode === 'canonical'
+                ? await fixture()
+                : await explicitLegacyFixture();
+            const preview =
+              mode === 'canonical'
+                ? await f.runtime.existingPreview({ ...f.input, saleId: '401' })
+                : await f.runtime.legacyExistingPreview({
+                    ...f.input,
+                    saleId: '401',
+                    mapping: /** @type {any} */ (f).mapping,
+                  });
+            const linkCommand = {
+              ...f.input,
+              previewToken: preview.previewToken,
+              confirmed: true,
+              reason: 'Synthetic negative withdrawal source',
+              idempotencyKey: 'withdraw-negative-link',
+            };
+            const linked =
+              mode === 'canonical'
+                ? await f.runtime.linkExisting(linkCommand)
+                : await f.runtime.linkLegacyExisting(linkCommand);
+            const row = (
+              await pool.query('SELECT * FROM crm.olist_exports WHERE id=$1', [
+                linked.operationId,
+              ])
+            ).rows[0];
+            if (mode === 'binding') {
+              const resourceId = randomUUID();
+              await pool.query(
+                "INSERT INTO crm.olist_resources(id,account_key,kind,identity_hash,reference) VALUES($1,$2,'customer',$3,$4)",
+                [
+                  resourceId,
+                  config.accountKey,
+                  'e'.repeat(64),
+                  'CRM-' + resourceId,
+                ],
+              );
+              await pool.query(
+                'INSERT INTO crm.olist_export_resources(export_id,resource_id,account_key) VALUES($1,$2,$3)',
+                [row.id, resourceId, config.accountKey],
+              );
+            }
+            if (mode === 'attempt')
+              await pool.query(
+                "INSERT INTO crm.olist_attempts(id,account_key,export_id,stage,fence,generation) VALUES($1,$2,$3,'sale',$4,1)",
+                [randomUUID(), config.accountKey, row.id, randomUUID()],
+              );
+            if (mode === 'pending-read')
+              await f.runtime.reconcile({
+                ...f.input,
+                stage: 'sale',
+                resourceId: null,
+                expectedVersion: Number(row.version),
+                reason: 'Synthetic queued read',
+                idempotencyKey: 'withdraw-pending-read',
+              });
+            if (mode === 'creator-job' || mode === 'leased-completed-read') {
+              const insertJob = pool.query(
+                "INSERT INTO crm.outbox_jobs(id,job_type,idempotency_key,olist_export_id,status,queue,effect_policy,available_at,created_at,updated_at,completed_at,locked_by,locked_until) VALUES($1,$2,$1,$3,'completed',$4,$5,$6,$6,$6,$6,$7,$8)",
+                [
+                  randomUUID(),
+                  mode === 'creator-job' ? 'olist.export' : 'olist.reconcile',
+                  row.id,
+                  mode === 'creator-job' ? 'olist' : 'olist_reconcile',
+                  mode === 'creator-job' ? 'queryable' : 'internal',
+                  NOW,
+                  mode === 'creator-job' ? null : 'synthetic-worker',
+                  mode === 'creator-job'
+                    ? null
+                    : new Date(NOW.getTime() + 60_000),
+                ],
+              );
+              if (mode === 'leased-completed-read') {
+                await assert.rejects(insertJob, {
+                  constraint: 'outbox_jobs_lock_check',
+                });
+                continue;
+              }
+              await insertJob;
+            }
+            assert.equal(
+              (await f.runtime.administration(f.input)).operation
+                .canWithdrawLegacyLink,
+              false,
+              mode,
+            );
+            await assert.rejects(
+              f.runtime.invalidate({
+                ...f.input,
+                operationId: row.id,
+                expectedVersion: Number(row.version),
+                reason: 'Synthetic rejected withdrawal',
+                idempotencyKey: 'withdraw-negative',
+              }),
+              { code: 'OLIST_INVALIDATION_BLOCKED' },
+            );
+            assert.equal(
+              (
+                await pool.query(
+                  'SELECT state FROM crm.olist_exports WHERE id=$1',
+                  [row.id],
+                )
+              ).rows[0].state,
+              'linked',
+            );
+            noWrites(f);
+          }
+        },
+      );
+      await t.test(
+        'T16 database withdrawal rechecks a concurrent claim after waiting for its export lock',
+        async () => {
+          const f = await explicitLegacyFixture(),
+            preview = await f.runtime.legacyExistingPreview({
+              ...f.input,
+              saleId: '401',
+              mapping: f.mapping,
+            });
+          const linked = await f.runtime.linkLegacyExisting({
+            ...f.input,
+            previewToken: preview.previewToken,
+            confirmed: true,
+            reason: 'Synthetic race seed',
+            idempotencyKey: 'withdraw-race-link',
+          });
+          const first = await pool.connect(),
+            second = await pool.connect();
+          try {
+            await first.query('BEGIN');
+            await first.query(
+              "INSERT INTO crm.outbox_jobs(id,job_type,idempotency_key,olist_export_id,status,queue,effect_policy,available_at,created_at,updated_at) VALUES($1,'olist.reconcile',$1,$2,'pending','olist_reconcile','internal',$3,$3,$3)",
+              [randomUUID(), linked.operationId, NOW],
+            );
+            await second.query("SET lock_timeout='5s'");
+            const withdrawal = second.query(
+              "UPDATE crm.olist_exports SET state='legacy_review_required',last_error_code='OLIST_LEGACY_REVIEW_REQUIRED',version=version+1 WHERE id=$1",
+              [linked.operationId],
+            );
+            const rejected = assert.rejects(
+              withdrawal,
+              /legacy withdrawal requires isolated recorded evidence/u,
+            );
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            await first.query('COMMIT');
+            await rejected;
+            assert.equal(
+              (
+                await pool.query(
+                  'SELECT state FROM crm.olist_exports WHERE id=$1',
+                  [linked.operationId],
+                )
+              ).rows[0].state,
+              'linked',
+            );
+          } finally {
+            await first.query('ROLLBACK');
+            await second.query('RESET lock_timeout');
+            first.release();
+            second.release();
+          }
+          noWrites(f);
+        },
+      );
+      await t.test(
+        'T16 completed read status claims and withdrawal serialize in both orders without deadlock or reactivation',
+        async () => {
+          for (const claimFirst of [true, false]) {
+            const f = await explicitLegacyFixture(),
+              preview = await f.runtime.legacyExistingPreview({
+                ...f.input,
+                saleId: '401',
+                mapping: f.mapping,
+              });
+            const linked = await f.runtime.linkLegacyExisting({
+                ...f.input,
+                previewToken: preview.previewToken,
+                confirmed: true,
+                reason: 'Synthetic queue race seed',
+                idempotencyKey: 'withdraw-status-race',
+              }),
+              jobId = randomUUID();
+            await pool.query(
+              "INSERT INTO crm.outbox_jobs(id,job_type,idempotency_key,olist_export_id,status,queue,effect_policy,available_at,created_at,updated_at,completed_at) VALUES($1,'olist.reconcile',$1,$2,$4,'olist_reconcile','internal',$3,$3,$3,$5)",
+              [
+                jobId,
+                linked.operationId,
+                NOW,
+                claimFirst ? 'pending' : 'completed',
+                claimFirst ? null : NOW,
+              ],
+            );
+            const first = await pool.connect(),
+              second = await pool.connect();
+            try {
+              await first.query('BEGIN');
+              const secondPid = (
+                await second.query('SELECT pg_backend_pid() AS pid')
+              ).rows[0].pid;
+              await second.query("SET lock_timeout='5s'");
+              const withdraw = (/** @type {any} */ client) =>
+                client.query(
+                  "UPDATE crm.olist_exports SET state='legacy_review_required',last_error_code='OLIST_LEGACY_REVIEW_REQUIRED',version=version+1 WHERE id=$1",
+                  [linked.operationId],
+                );
+              const claim = (/** @type {any} */ client) =>
+                client.query(
+                  "UPDATE crm.outbox_jobs SET status='processing',locked_by='synthetic-claim',locked_until=$2,heartbeat_at=$3 WHERE id=$1",
+                  [jobId, new Date(NOW.getTime() + 60_000), NOW],
+                );
+              if (claimFirst)
+                await first.query(
+                  'SELECT id FROM crm.outbox_jobs WHERE id=$1 FOR UPDATE',
+                  [jobId],
+                );
+              else await withdraw(first);
+              const pending = claimFirst ? withdraw(second) : claim(second);
+              const rejected = assert.rejects(
+                pending,
+                claimFirst
+                  ? /legacy withdrawal requires isolated recorded evidence/u
+                  : /completed Olist read job is terminal/u,
+              );
+              let waiting = false;
+              for (let i = 0; i < 50; i++) {
+                if (
+                  (
+                    await pool.query(
+                      "SELECT wait_event_type='Lock' AS waiting FROM pg_stat_activity WHERE pid=$1",
+                      [secondPid],
+                    )
+                  ).rows[0]?.waiting
+                ) {
+                  waiting = true;
+                  break;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 20));
+              }
+              assert.equal(
+                waiting,
+                true,
+                'The competing transaction really waits on a row lock',
+              );
+              if (claimFirst) await claim(first);
+              await first.query('COMMIT');
+              await rejected;
+              assert.equal(
+                (
+                  await pool.query(
+                    'SELECT state FROM crm.olist_exports WHERE id=$1',
+                    [linked.operationId],
+                  )
+                ).rows[0].state,
+                claimFirst ? 'linked' : 'legacy_review_required',
+              );
+            } finally {
+              await first.query('ROLLBACK');
+              await second.query('RESET lock_timeout');
+              first.release();
+              second.release();
+            }
+          }
         },
       );
       await t.test(

@@ -2,6 +2,8 @@
 
 ## Decisão de 09/11/2026
 
+- [075 — Retirada local de vínculo histórico sem liberar duplicata](075-retirada-local-de-vinculo-historico-sem-liberar-duplicata.md), RFC 059; pendência humana com IDs e proteção preservados.
+
 - [073 — Comprador no vínculo histórico com telefone divergente](073-comprador-no-vinculo-historico-com-telefone-divergente.md), RFC 057; exceção exclusiva de T16, sem referência reutilizável.
 
 - [072 — Envio em aberto sem duplicar cadastros do ERP](072-envio-em-aberto-sem-duplicar-cadastros-do-erp.md),

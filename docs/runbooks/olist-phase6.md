@@ -143,14 +143,33 @@ conta ativa, além do checkbox Olist. Administrador, e-mail parecido, nome igual
 ou posse do Pedido não conferem essa habilitação. A API e o worker devem usar a
 mesma allowlist; vazia ou inválida mantém a criação desligada para todos.
 
-Antes do aviso à operadora, registrar evidência real de:
+Antes do aviso de prontidão para teste, registrar evidência real de:
 
 - release/digests, health e migrações da API/worker/edge no EasyPanel;
 - conexão da empresa correta, parâmetros do envio em aberto e gatilhos ERP;
-- vínculo T16 do caso privado existente, com zero POSTs criadores;
-- teste controlado T17, com uma entidade por identidade, uma venda e valores por linha;
-- replay/recarga sem nova venda e ausência de incerteza sem responsável;
-- backup atual concluído, preservação privada das chaves, suporte e procedimento de desligamento.
+- conta exata da operadora, checkbox e allowlist privada, sem permissão herdada;
+- histórico já existente vinculado ou protegido em conferência pendente, conforme decisão do proprietário; nunca recriá-lo para testar;
+- ausência de incerteza ou efeito em andamento sem responsável;
+- backup atual concluído, preservação privada das chaves e procedimento de desligamento.
+
+Por determinação do proprietário, a conferência do histórico fica com a Rose.
+A [ADR 075](../adr/075-retirada-local-de-vinculo-historico-sem-liberar-duplicata.md)
+permite retirar o aceite local legado para `legacy_review_required`, preservando
+IDs e auditoria. O comando exige os três modos autenticados na API, prova do
+vínculo legado no banco e zero recursos/tentativas/jobs criadores; leituras
+históricas concluídas são preservadas, leituras ou leases em andamento impedem
+a retirada. Esse pedido não oferece criação, edição, reabertura, cancelamento,
+reconciliação que reative ou replay que anuncie vínculo ativo. Não ampliar
+permissões da operadora ou executar outro vínculo no lugar dela.
+
+A prontidão não afirma que T17 foi executada. No primeiro teste supervisionado,
+usar um pedido novo, conferir uma entidade por identidade, uma venda e cada
+subtotal, depois recarregar sem nova venda. Observar a aceitação do produto com
+fiscal adiado e os efeitos reais do envio em aberto; erro não autoriza defaults
+ou repetição cega. A pendência histórica protegida não impede novos pedidos.
+T16 permanece reservado à conferência humana, e T17/T18 só encerram após as
+evidências e o aceite posteriores. O aviso autoriza o teste individual, sem
+ampliar acesso ou declarar o piloto já observado.
 
 O piloto individual não comprova recuperação da perda total da VPS. Backup
 externo, escrow com dois custodians e o drill completo continuam nos gates
@@ -257,3 +276,10 @@ Hotfix de entrada da ficha: `npm run validate` aprovado (2.405 testes, 2.357
 aprovados, 48 skips condicionais, zero falhas); E2E 76/76, autenticação real
 2/2 e SQL runtime 37/37. Revisão QA independente sem blocker. A reprodução
 antes do patch falhou com a mesma ausência da administração observada no alvo.
+
+Retirada local protegida (ADR 075/RFC 059): validação integrada aprovada com
+2.408 testes (2.360 aprovados, 48 skips condicionais, zero falhas). SQL focal
+50/50 inclui claims concorrentes, tuplas atuais após espera por trava e
+preservação da invalidação comum. UI 64/64, focais 22/22, visuais 2/2 e QA
+independente 3/3. Revisão sem bloqueios restantes. O gate SQL completo e o CI
+do head integrado precisam passar antes da implantação e do comando no alvo.

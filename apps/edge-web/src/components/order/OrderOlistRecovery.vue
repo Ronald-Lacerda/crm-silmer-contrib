@@ -11,6 +11,8 @@ import {
 import {
   OLIST_RECONCILE_FOLLOW_MS,
   canOfferInvalidate,
+  canWithdrawLegacyLink,
+  isLegacyReviewRequired,
   canOfferLink,
   olistOperationHeadline,
   olistRequestStatusLabel,
@@ -93,7 +95,9 @@ let lkKeyReason = '';
 const ivOpen = ref(false);
 const ivDialog = ref(null);
 const ivTarget = ref(
-  /** @type {{operationId: string, expectedVersion: number}|null} */ (null),
+  /** @type {{operationId: string, expectedVersion: number, expectedState:'invalidated'|'legacy_review_required'}|null} */ (
+    null
+  ),
 );
 const ivReason = ref('');
 const ivError = ref('');
@@ -219,6 +223,19 @@ const invalidateOffered = computed(
       resources: data.value?.resources,
       cancelled: props.cancelled,
     }),
+);
+const withdrawLegacyOffered = computed(
+  () =>
+    Boolean(data.value) &&
+    canWithdrawLegacyLink({
+      operation: operation.value,
+      attempts: data.value?.attempts,
+      resources: data.value?.resources,
+      cancelled: props.cancelled,
+    }),
+);
+const withdrawingLegacy = computed(
+  () => ivTarget.value?.expectedState === 'legacy_review_required',
 );
 const operationHeadline = computed(() =>
   operation.value ? olistOperationHeadline(operation.value) : '',
@@ -904,6 +921,9 @@ async function openInvalidate(event) {
   ivTarget.value = {
     operationId: operation.value.id,
     expectedVersion: Number(operation.value.version),
+    expectedState: withdrawLegacyOffered.value
+      ? 'legacy_review_required'
+      : 'invalidated',
   };
   ivReason.value = '';
   ivError.value = '';
@@ -927,10 +947,14 @@ async function cancelInvalidate() {
 }
 /** A geração alvo deixou de estar ativa: foi invalidada aqui, em outra aba ou
  * por um reenvio que o servidor já tinha gravado.
- * @param {{operationId: string}} target */
+ * @param {{operationId: string,expectedState:'invalidated'|'legacy_review_required'}} target */
 function targetNoLongerActive(target) {
   if (!data.value) return false;
   const current = data.value.operation;
+  if (target.expectedState === 'legacy_review_required')
+    return (
+      current?.id === target.operationId && isLegacyReviewRequired(current)
+    );
   return (
     !current ||
     current.id !== target.operationId ||
@@ -963,7 +987,9 @@ async function submitInvalidate() {
   if (!reason || reason.length > 1000) {
     ivError.value = reason
       ? 'O motivo pode ter no máximo 1000 caracteres.'
-      : 'Informe o motivo da invalidação.';
+      : withdrawingLegacy.value
+        ? 'Informe o motivo da retirada do vínculo.'
+        : 'Informe o motivo da invalidação.';
     await focusElement(ivReasonField);
     return;
   }
@@ -991,7 +1017,7 @@ async function submitInvalidate() {
     if (disposed || props.orderId !== id) return;
     const receipt = response.data;
     if (
-      receipt?.state !== 'invalidated' ||
+      receipt?.state !== target.expectedState ||
       receipt?.operationId !== target.operationId
     ) {
       // A resposta não prova o resultado: lê o diagnóstico antes de afirmar.
@@ -999,21 +1025,26 @@ async function submitInvalidate() {
       if (disposed || props.orderId !== id) return;
       if (targetNoLongerActive(target)) {
         await finishInvalidate(
-          'A invalidação consta no diagnóstico, apesar de a resposta não ter confirmado. Gere uma nova prévia.',
+          target.expectedState === 'legacy_review_required'
+            ? 'A retirada do vínculo consta no diagnóstico. A venda no Olist foi preservada e novo envio deste pedido continua bloqueado para conferência.'
+            : 'A invalidação consta no diagnóstico, apesar de a resposta não ter confirmado. Gere uma nova prévia.',
           false,
         );
         return;
       }
       emit('refresh', { focus: false });
-      ivError.value =
-        'A resposta não confirmou a invalidação. O diagnóstico foi atualizado; confira antes de tentar de novo.';
+      ivError.value = withdrawingLegacy.value
+        ? 'A resposta não confirmou a retirada do vínculo. O diagnóstico foi atualizado; confira antes de continuar.'
+        : 'A resposta não confirmou a invalidação. O diagnóstico foi atualizado; confira antes de tentar de novo.';
       await focusElement(ivAlert);
       return;
     }
     await finishInvalidate(
-      receipt.replayed === true
-        ? 'Esta geração já estava invalidada. Nada mudou; gere uma nova prévia.'
-        : 'Geração invalidada antes de qualquer venda. Cadastros já criados no Olist foram preservados. Gere uma nova prévia.',
+      target.expectedState === 'legacy_review_required'
+        ? 'Vínculo histórico retirado do CRM. A venda no Olist foi preservada; novo envio deste pedido permanece bloqueado para conferência.'
+        : receipt.replayed === true
+          ? 'Esta geração já estava invalidada. Nada mudou; gere uma nova prévia.'
+          : 'Geração invalidada antes de qualquer venda. Cadastros já criados no Olist foram preservados. Gere uma nova prévia.',
       true,
     );
   } catch (cause) {
@@ -1027,11 +1058,20 @@ async function submitInvalidate() {
     if (cause?.code === 'VERSION_CONFLICT') {
       await loadAdministration();
       if (disposed || props.orderId !== id) return;
-      if (invalidateOffered.value && operation.value) {
+      if (
+        invalidateOffered.value &&
+        operation.value &&
+        (target.expectedState !== 'legacy_review_required' ||
+          (withdrawLegacyOffered.value &&
+            operation.value.id === target.operationId))
+      ) {
         // Segue com o estado atual: a versão nova gera outra chave.
         ivTarget.value = {
           operationId: operation.value.id,
           expectedVersion: Number(operation.value.version),
+          expectedState: withdrawLegacyOffered.value
+            ? 'legacy_review_required'
+            : 'invalidated',
         };
       } else if (data.value) {
         ivError.value = olistRecoveryFailure(
@@ -1047,7 +1087,9 @@ async function submitInvalidate() {
       if (disposed || props.orderId !== id) return;
       if (targetNoLongerActive(target)) {
         await finishInvalidate(
-          'A invalidação foi registrada, apesar da falha na resposta. Gere uma nova prévia.',
+          target.expectedState === 'legacy_review_required'
+            ? 'A retirada do vínculo foi registrada, apesar da falha na resposta. A venda no Olist foi preservada e novo envio deste pedido continua bloqueado para conferência.'
+            : 'A invalidação foi registrada, apesar da falha na resposta. Gere uma nova prévia.',
           false,
         );
         return;
@@ -1237,9 +1279,18 @@ onBeforeUnmount(() => {
             :disabled="busy || disabled"
             @click="openInvalidate"
           >
-            Invalidar esta geração
+            {{
+              withdrawLegacyOffered
+                ? 'Retirar vínculo histórico'
+                : 'Invalidar esta geração'
+            }}
           </button>
-          <p class="field-help">
+          <p v-if="withdrawLegacyOffered" class="field-help">
+            Retira somente o vínculo histórico do CRM. A venda e os cadastros no
+            Olist são preservados; este pedido ficará bloqueado para novo envio
+            até a conferência.
+          </p>
+          <p v-else class="field-help">
             Descarta a geração atual, que ainda não chegou à venda, para
             preparar uma nova. Cadastros já criados no Olist são preservados;
             nada é apagado nem cancelado no Olist.
@@ -1318,17 +1369,33 @@ onBeforeUnmount(() => {
       :aria-describedby="`olist-iv-desc-${orderId}`"
       @cancel.prevent="cancelInvalidate"
     >
-      <h2 :id="`olist-iv-title-${orderId}`">Invalidar esta geração?</h2>
+      <h2 :id="`olist-iv-title-${orderId}`">
+        {{
+          withdrawingLegacy
+            ? 'Retirar vínculo histórico?'
+            : 'Invalidar esta geração?'
+        }}
+      </h2>
       <p :id="`olist-iv-desc-${orderId}`">
-        A geração atual é descartada antes de qualquer venda. Os cadastros já
-        criados no Olist são preservados e nada é apagado nem cancelado no
-        Olist. Depois será preciso gerar uma nova prévia.
+        <template v-if="withdrawingLegacy">
+          Somente o vínculo local desta venda histórica será retirado. A venda e
+          os cadastros no Olist permanecem intactos. Novo envio deste pedido
+          continuará bloqueado para evitar duplicidade enquanto aguarda
+          conferência.
+        </template>
+        <template v-else>
+          A geração atual é descartada antes de qualquer venda. Os cadastros já
+          criados no Olist são preservados e nada é apagado nem cancelado no
+          Olist. Depois será preciso gerar uma nova prévia.
+        </template>
       </p>
       <form novalidate @submit.prevent="submitInvalidate">
         <div class="olist-dialog-field">
-          <label :for="`olist-iv-reason-${orderId}`"
-            >Motivo da invalidação (obrigatório)</label
-          >
+          <label :for="`olist-iv-reason-${orderId}`">{{
+            withdrawingLegacy
+              ? 'Motivo da retirada (obrigatório)'
+              : 'Motivo da invalidação (obrigatório)'
+          }}</label>
           <textarea
             :id="`olist-iv-reason-${orderId}`"
             ref="ivReasonField"
@@ -1363,7 +1430,15 @@ onBeforeUnmount(() => {
             :disabled="busy"
             :aria-busy="busy || undefined"
           >
-            {{ busy ? 'Invalidando…' : 'Invalidar geração' }}
+            {{
+              withdrawingLegacy
+                ? busy
+                  ? 'Retirando vínculo…'
+                  : 'Retirar vínculo histórico'
+                : busy
+                  ? 'Invalidando…'
+                  : 'Invalidar geração'
+            }}
           </button>
         </div>
       </form>

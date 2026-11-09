@@ -11,6 +11,8 @@ autorização, precisão, reserva e recuperação permanecem no servidor.
 
 A [ADR 073](docs/adr/073-comprador-no-vinculo-historico-com-telefone-divergente.md) / [RFC 057](docs/rfc/057-comprador-no-vinculo-historico-com-telefone-divergente.md) permite conferência explícita de telefone divergente somente na venda histórica selecionada. Sua prova própria não vira referência de comprador para novos envios.
 
+A [ADR 075](docs/adr/075-retirada-local-de-vinculo-historico-sem-liberar-duplicata.md) / [RFC 059](docs/rfc/059-retirada-local-de-vinculo-historico-no-olist.md) permite retirar o aceite local de vínculo histórico isolado sem apagar provas ou liberar duplicata. O pedido fica em conferência pendente protegida; novos pedidos mantêm o fluxo simples.
+
 ## Preparação do piloto Olist (09/11/2026)
 
 OLIST-T17/OLIST-48 implementa a restrição individual da ADR 057/RFC 050 por

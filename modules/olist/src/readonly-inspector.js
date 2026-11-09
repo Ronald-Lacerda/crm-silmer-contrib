@@ -805,6 +805,8 @@ export function createOlistReadonlyInspector({ client, config }) {
      * evidence. The manual legacy exception never clears an uncertain effect.
      * @param {{operation:any}} input */
     async reconcileSale({ operation }) {
+      if (operation?.state === 'legacy_review_required')
+        refuse('OLIST_LEGACY_REVIEW_REQUIRED');
       const attempt = operation?.saleAttempt;
       const legacy = operation?.resourceMapping ?? operation?.resources;
       if (legacy?.mode === 'legacy-sale-only-v1') {

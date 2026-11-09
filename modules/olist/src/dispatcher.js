@@ -3,6 +3,7 @@ import { buildOlistSalePayload, reconcileOlistSale } from './sale-payload.js';
 import { verifyOlistExistingBuyer } from './existing-buyer.js';
 
 const STOP = new Set([
+  'OLIST_LEGACY_REVIEW_REQUIRED',
   'ORDER_CANCELLED',
   'FORBIDDEN',
   'VERSION_CONFLICT',
@@ -147,6 +148,8 @@ export function createOlistDispatcher({
           contextKey: config.contextKey,
         });
         base = baseFor(operation);
+        if (operation.state === 'legacy_review_required')
+          return result('failed', 'OLIST_LEGACY_REVIEW_REQUIRED', undefined);
         // An invalidated generation never dispatches, whatever closed it:
         // cancellation keeps its code, an administrative invalidation reads as
         // an unavailable export.

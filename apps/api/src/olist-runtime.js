@@ -177,7 +177,8 @@ export function createOlistApiRuntime(database, options) {
         orderId: order.id,
         number: order.number,
         status: order.status,
-        creationEnabled,
+        creationEnabled:
+          creationEnabled && operation?.state !== 'legacy_review_required',
         paymentDuePolicy: settings?.paymentDuePolicy ?? 'fixed_date',
         productFiscalRequired: false,
         productFiscalDeferred:

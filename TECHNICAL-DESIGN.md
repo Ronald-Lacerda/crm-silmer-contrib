@@ -23,6 +23,10 @@ do comprador continuam sob responsabilidade do Olist.
 
 [ADR 073](docs/adr/073-comprador-no-vinculo-historico-com-telefone-divergente.md) / [RFC 057](docs/rfc/057-comprador-no-vinculo-historico-com-telefone-divergente.md): prova privada própria por conta e venda, nome exato e comprador ativo derivado da venda selecionada. A projeção pública informa a divergência sem expor telefones; confirmação e motivo existentes se aplicam somente ao vínculo histórico. Releitura no commit, replay e reconferência preserva a identidade congelada, sem referência reutilizável, recurso compartilhado, job ou POST ERP. O fluxo automático de novos envios continua exigindo nome e telefone.
 
+## OLIST-T16 — retirada local com venda conhecida
+
+[ADR 075](docs/adr/075-retirada-local-de-vinculo-historico-sem-liberar-duplicata.md) / [RFC 059](docs/rfc/059-retirada-local-de-vinculo-historico-no-olist.md): o comando administrativo existente pode retirar somente o vínculo legado isolado e sem efeitos. A API autentica os modos dos envelopes cifrados; o guard SQL confere estado anterior, IDs preservados, evento legado da mesma operação e ausência de recursos, tentativas, jobs e leituras em voo. O estado terminal `legacy_review_required` mantém os índices ativos, unicidade e bloqueios comerciais do pedido. Não usar `invalidated` comum, reconciliar para reativar ou anunciar replay como vínculo ativo. A retirada serializa export e jobs em ordem estável; inserts/reparentamento de claims cercam o export, mas atualizações normais de status da fila não adquirem a trava inversa. O teste concorrente cobre claim e retirada, sem HTTP dentro da transação. Não alterar ERP nem ampliar ACL; novos pedidos não herdam a pendência.
+
 ## OLIST-T16/T17 — vencimento e vínculo histórico (09/11/2026)
 
 [ADR 071](docs/adr/071-vencimento-explicito-e-vinculo-historico-isolado-no-olist.md),

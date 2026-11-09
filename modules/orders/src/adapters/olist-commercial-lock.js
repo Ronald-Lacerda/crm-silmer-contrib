@@ -34,6 +34,11 @@ export async function assertOlistCommercialWrite(
   eventType,
 ) {
   const locks = await readOlistCommercialLocks(tx, [current.id]);
+  if (locks.some((row) => row.state === 'legacy_review_required'))
+    throw new OrderConflictError(
+      'Historical sale awaits review',
+      'ORDER_OLIST_LOCKED',
+    );
   if (!locks.length || eventType === 'order.milestones_saved') return false;
   if (
     eventType !== 'order.confirmed' ||

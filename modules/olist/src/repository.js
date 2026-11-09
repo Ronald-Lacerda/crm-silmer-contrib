@@ -747,7 +747,12 @@ export function createOlistRepository(database, options) {
         // A terminal row is never annotated: `invalidated` keeps the code that
         // closed it (ORDER_CANCELLED or OLIST_EXPORT_INVALIDATED).
         if (
-          ['confirmed', 'linked', 'invalidated'].includes(row.state) ||
+          [
+            'confirmed',
+            'linked',
+            'invalidated',
+            'legacy_review_required',
+          ].includes(row.state) ||
           row.last_error_code === code
         )
           return row;
@@ -1616,6 +1621,8 @@ export function createOlistRepository(database, options) {
             [input.accountKey, input.orderId],
           )
         ).rows[0];
+        if (row?.state === 'legacy_review_required')
+          throw new OlistError('OLIST_LEGACY_REVIEW_REQUIRED');
         return row
           ? {
               ...row,
@@ -1675,6 +1682,8 @@ export function createOlistRepository(database, options) {
           )
         ).rows[0];
         if (existing) {
+          if (existing.state === 'legacy_review_required')
+            throw new OlistError('OLIST_LEGACY_REVIEW_REQUIRED');
           if (existing.command_fingerprint !== fingerprint)
             throw new OlistError('OLIST_EXPORT_CONFLICT');
           return existing;

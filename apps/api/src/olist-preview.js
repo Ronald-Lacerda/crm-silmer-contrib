@@ -285,7 +285,8 @@ export function createOlistPreview(database, options) {
         operation,
         order: { id: order.id, number: order.number, status: order.status },
         connected,
-        creationEnabled,
+        creationEnabled:
+          creationEnabled && operation?.state !== 'legacy_review_required',
         paymentDuePolicy,
         paymentDueOn,
         productFiscal,
@@ -321,6 +322,8 @@ export function createOlistPreview(database, options) {
       const startedAt = clock();
       let reviewedInput = input;
       let before = await snapshot(input);
+      if (before.operation?.state === 'legacy_review_required')
+        throw new OlistError('OLIST_LEGACY_REVIEW_REQUIRED');
       const buildPlan = (/** @type {any} */ current) =>
         buildOlistPreviewPlan({
           source: current.source,
@@ -413,7 +416,13 @@ export function createOlistPreview(database, options) {
       if (!before.connected && preparationIssues.length === 0)
         issues.push({ code: 'OLIST_RECONNECT_REQUIRED', field: 'connection' });
       if (before.operation)
-        issues.push({ code: 'OLIST_OPERATION_EXISTS', field: 'operation' });
+        issues.push({
+          code:
+            before.operation.state === 'legacy_review_required'
+              ? 'OLIST_LEGACY_REVIEW_REQUIRED'
+              : 'OLIST_OPERATION_EXISTS',
+          field: 'operation',
+        });
       if (before.resources.length > 1000)
         issues.push({ code: 'OLIST_INCOMPLETE_LOOKUP', field: 'resources' });
       let registrations = null;

@@ -8,6 +8,8 @@
 
 ## Emenda de 09/11/2026
 
+- [059 — Retirada local de vínculo histórico no Olist](059-retirada-local-de-vinculo-historico-no-olist.md), adotada na ADR 075 para retirar o aceite local sem liberar duplicata.
+
 - [057 — Comprador no vínculo histórico com telefone divergente](057-comprador-no-vinculo-historico-com-telefone-divergente.md), adotada na ADR 073, exclusiva do vínculo histórico T16.
 
 - [056 — Envio simples da ficha com cadastros no Olist](056-envio-simples-da-ficha-com-cadastros-no-olist.md),

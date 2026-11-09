@@ -348,9 +348,9 @@ export function createOlistConnection(database, options) {
                    AND (a.observed_remote_number IS NULL OR a.observed_remote_number=e.remote_number)),false)))) OR
           EXISTS(SELECT 1 FROM crm.olist_read_requests WHERE account_key=$1 AND status='queued') OR
           EXISTS(SELECT 1 FROM (
-            SELECT DISTINCT ON (export_id,resource_id,stage) status FROM crm.olist_read_requests WHERE account_key=$1
+            SELECT DISTINCT ON (export_id,resource_id,stage) status,export_id FROM crm.olist_read_requests WHERE account_key=$1
             ORDER BY export_id,resource_id,stage,created_at DESC,id DESC
-          ) latest WHERE status='blocked') OR
+          ) latest WHERE status='blocked' AND NOT EXISTS(SELECT 1 FROM crm.olist_exports held WHERE held.id=latest.export_id AND held.account_key=$1 AND held.state='legacy_review_required' AND held.remote_id IS NOT NULL AND crm.olist_legacy_withdrawal_clear(held.id,held.account_key))) OR
           EXISTS(SELECT 1 FROM crm.outbox_jobs j JOIN crm.olist_exports e ON e.id=j.olist_export_id
             WHERE e.account_key=$1 AND j.job_type IN ('olist.export','olist.reconcile') AND j.status='processing') AS blocked`,
             [config.accountKey],

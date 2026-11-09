@@ -12,6 +12,7 @@ import {
   OLIST_FOLLOW_DELAYS_MS,
   isAdminInvalidated,
   isOperationInProgress,
+  isLegacyReviewRequired,
 } from '../../lib/olist-progress.js';
 import OrderOlistProgress from './OrderOlistProgress.vue';
 import OrderOlistRecovery from './OrderOlistRecovery.vue';
@@ -629,15 +630,25 @@ onBeforeUnmount(() => {
         {{
           cancelled
             ? 'Pedido cancelado. A geração está bloqueada.'
-            : generationAllowed
-              ? 'Confira a ficha e confirme o envio.'
-              : projection?.creationEnabled
-                ? 'Revise a ficha antes de enviar para Olist.'
-                : 'O envio para Olist está desativado.'
+            : isLegacyReviewRequired(projection?.operation)
+              ? 'Venda histórica pendente de conferência. Novo envio deste pedido está bloqueado.'
+              : generationAllowed
+                ? 'Confira a ficha e confirme o envio.'
+                : projection?.creationEnabled
+                  ? 'Revise a ficha antes de enviar para Olist.'
+                  : 'O envio para Olist está desativado.'
         }}
-        Revisar não cria cliente, produto ou venda no Olist.
+        <template v-if="!isLegacyReviewRequired(projection?.operation)">
+          Revisar não cria cliente, produto ou venda no Olist.
+        </template>
       </p>
-      <p v-if="projection?.paymentDuePolicy === 'erp'" class="field-help">
+      <p
+        v-if="
+          projection?.paymentDuePolicy === 'erp' &&
+          !isLegacyReviewRequired(projection.operation)
+        "
+        class="field-help"
+      >
         Cadastro fiscal e vencimento são ajustados no Olist.
       </p>
       <p v-if="exportState === 'uncertain'" class="field-help">
@@ -804,7 +815,10 @@ onBeforeUnmount(() => {
           :operation="projection.operation"
           :resources="isAdmin ? (administration?.resources ?? null) : null"
         />
-        <p v-if="hasOperation" class="field-help">
+        <p
+          v-if="hasOperation && !isLegacyReviewRequired(projection.operation)"
+          class="field-help"
+        >
           Não repita a geração. A conferência e a recuperação da operação são
           administrativas.
         </p>
