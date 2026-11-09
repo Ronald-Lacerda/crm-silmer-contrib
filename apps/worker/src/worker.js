@@ -18,6 +18,9 @@ import {
   BILLING_COMMAND_JOB_TYPE,
   BILLING_COMMAND_QUEUE,
   createBillingCommandJobHandler,
+  BILLING_PAYMENT_CHECK_JOB_TYPE,
+  createBillingPaymentCheckJobHandler,
+  scheduleBillingPaymentChecks,
   ClamAvMediaScanner,
   ClamAvDaemon,
   ClamAvSignatureRefresh,
@@ -582,24 +585,67 @@ export function createBillingWorkerRuntime(options) {
     30_000,
     'ORDER_BILLING_N8N_TIMEOUT_MS',
   );
+  const checkEndpoint = environment.ORDER_BILLING_CHECK_N8N_URL;
+  const receivingOnly =
+    environment.ORDER_BILLING_RECEIVE_ENABLED === 'true' &&
+    environment.ORDER_BILLING_ENABLED !== 'true';
+  const baseQueue =
+    options.queue ?? new PostgresJobQueue({ database: options.database });
+  const queue = checkEndpoint
+    ? {
+        claim: async (/** @type {any} */ input) => {
+          await scheduleBillingPaymentChecks(options.database, input.now);
+          return baseQueue.claim(input);
+        },
+        heartbeat: baseQueue.heartbeat.bind(baseQueue),
+        markEffectStarted: baseQueue.markEffectStarted.bind(baseQueue),
+        settle: baseQueue.settle.bind(baseQueue),
+      }
+    : baseQueue;
   return new WorkerRuntime({
     handlers: {
-      [BILLING_COMMAND_JOB_TYPE]: createBillingCommandJobHandler({
-        endpoint: requiredEnvironment(environment, 'ORDER_BILLING_N8N_URL'),
-        clientId: requiredEnvironment(environment, 'N8N_COMMAND_CLIENT_ID'),
-        clientSecret: requiredEnvironment(
-          environment,
-          'N8N_COMMAND_CLIENT_SECRET',
-        ),
-        timeoutMs,
-        allowInsecureLocal:
-          environment.APP_ENV === 'development' &&
-          environment.N8N_COMMAND_ALLOW_INSECURE_LOCAL === 'true',
-        fetchImpl: options.fetchImpl,
-      }),
+      [BILLING_COMMAND_JOB_TYPE]: receivingOnly
+        ? async () => ({
+            outcome: /** @type {const} */ ('failed'),
+            errorCode: 'BILLING_DISABLED',
+            retryable: false,
+            retrySafe: false,
+          })
+        : createBillingCommandJobHandler({
+            endpoint: requiredEnvironment(environment, 'ORDER_BILLING_N8N_URL'),
+            clientId: requiredEnvironment(environment, 'N8N_COMMAND_CLIENT_ID'),
+            clientSecret: requiredEnvironment(
+              environment,
+              'N8N_COMMAND_CLIENT_SECRET',
+            ),
+            timeoutMs,
+            allowInsecureLocal:
+              environment.APP_ENV === 'development' &&
+              environment.N8N_COMMAND_ALLOW_INSECURE_LOCAL === 'true',
+            fetchImpl: options.fetchImpl,
+          }),
+      ...(checkEndpoint
+        ? {
+            [BILLING_PAYMENT_CHECK_JOB_TYPE]:
+              createBillingPaymentCheckJobHandler({
+                endpoint: checkEndpoint,
+                clientId: requiredEnvironment(
+                  environment,
+                  'N8N_COMMAND_CLIENT_ID',
+                ),
+                clientSecret: requiredEnvironment(
+                  environment,
+                  'N8N_COMMAND_CLIENT_SECRET',
+                ),
+                allowInsecureLocal:
+                  environment.N8N_COMMAND_ALLOW_INSECURE_LOCAL === 'true',
+                timeoutMs,
+                fetchImpl: options.fetchImpl,
+              }),
+          }
+        : {}),
     },
-    queue:
-      options.queue ?? new PostgresJobQueue({ database: options.database }),
+    queue: queue,
     queueName: BILLING_COMMAND_QUEUE,
     leaseMs: timeoutMs + 15_000,
     logger: options.logger,
@@ -788,7 +834,9 @@ export async function startWorkerFromEnvironment(options = {}) {
       workerId: `n8n-${process.pid}`,
     });
     const billingWorker =
-      environment.ORDER_BILLING_ENABLED === 'true'
+      environment.ORDER_BILLING_ENABLED === 'true' ||
+      (environment.ORDER_BILLING_RECEIVE_ENABLED === 'true' &&
+        environment.ORDER_BILLING_CHECK_N8N_URL)
         ? createBillingWorkerRuntime({
             database,
             environment,

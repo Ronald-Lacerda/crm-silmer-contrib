@@ -43,6 +43,11 @@ export {
   createBillingCommandJobHandler,
 } from './billing-command-worker.js';
 export {
+  BILLING_PAYMENT_CHECK_JOB_TYPE,
+  createBillingPaymentCheckJobHandler,
+  scheduleBillingPaymentChecks,
+} from './billing-payment-check-worker.js';
+export {
   createMediaDeleteJobHandler,
   MEDIA_DELETE_JOB_TYPE,
   MEDIA_RETENTION_QUEUE,

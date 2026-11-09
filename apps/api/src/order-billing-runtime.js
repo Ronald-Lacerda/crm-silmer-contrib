@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { PostgresAuditTrail } from '@crm-silmer/audit-privacy';
 import { authorize } from '@crm-silmer/identity-access';
 import {
@@ -116,6 +116,10 @@ export function createOrderBillingRuntime(database, options) {
   const enabled = environment.ORDER_BILLING_ENABLED === 'true';
   const receiving =
     enabled || environment.ORDER_BILLING_RECEIVE_ENABLED === 'true';
+  const paymentCheckEnabled =
+    receiving &&
+    typeof environment.ORDER_BILLING_CHECK_N8N_URL === 'string' &&
+    Boolean(environment.ORDER_BILLING_CHECK_N8N_URL.trim());
   const envelopeKey = key(
     environment.N8N_INTEGRATION_ENVELOPE_KEY,
     'N8N_INTEGRATION_ENVELOPE_KEY',
@@ -154,7 +158,7 @@ export function createOrderBillingRuntime(database, options) {
   async function paymentsFor(client, orderId) {
     return (
       await client.query(
-        `SELECT p.* FROM crm.order_billing_payments p JOIN crm.order_billing_charges c ON c.id=p.charge_id WHERE c.order_id=$1 ORDER BY p.verified_at,p.id`,
+        `SELECT p.* FROM crm.order_billing_receipt_ledger p WHERE p.order_id=$1 ORDER BY p.verified_at,p.id`,
         [orderId],
       )
     ).rows;
@@ -204,9 +208,31 @@ export function createOrderBillingRuntime(database, options) {
     const payments = await paymentsFor(client, order.id);
     const paid = received(payments);
     const canManage = owns(actor, order);
+    const external = (
+      await client.query(
+        `SELECT e.*,u.name AS recorded_by_name,r.recorded_at AS reversed_at,r.recorded_by AS reversed_by,ru.name AS reversed_by_name,r.reason_envelope
+      FROM crm.order_billing_external_receipts e LEFT JOIN crm.order_billing_external_reversals r ON r.receipt_id=e.id
+      JOIN crm.users u ON u.id=e.recorded_by LEFT JOIN crm.users ru ON ru.id=r.recorded_by
+      WHERE e.order_id=$1 ORDER BY e.recorded_at,e.id`,
+        [order.id],
+      )
+    ).rows;
+    const checks = (
+      await client.query(
+        `SELECT k.*,j.status AS job_status FROM crm.order_billing_payment_checks k
+      JOIN crm.order_billing_charges c ON c.id=k.charge_id LEFT JOIN crm.outbox_jobs j ON j.id='billing-check:'||k.id::text||':'||k.attempts
+      WHERE c.order_id=$1 ORDER BY k.requested_at DESC,k.id DESC LIMIT 20`,
+        [order.id],
+      )
+    ).rows;
     return {
       billing: {
         enabled,
+        chatSendEnabled:
+          enabled &&
+          environment.ORDER_BILLING_CHAT_SEND_ENABLED === 'true' &&
+          canManage,
+        paymentCheckEnabled: paymentCheckEnabled && canManage,
         managed: Boolean(plan),
         canManage,
         version: Number(plan?.version ?? 0),
@@ -224,6 +250,75 @@ export function createOrderBillingRuntime(database, options) {
             ? 'BILLING_DISABLED'
             : blocked(order, plan, charges, paid),
         reviewRequired: Boolean(plan?.review_required),
+        externalReceipts: external.map((/** @type {any} */ e) => ({
+          id: e.id,
+          amountCents: Number(e.amount_cents),
+          receivedOn: iso(e.received_on)?.slice(0, 10),
+          method: e.method,
+          note: canManage
+            ? decryptOrderPrivateJson(
+                e.note_envelope,
+                `billing-external:${e.id}`,
+                envelopeKey,
+              ).note
+            : null,
+          recordedBy: e.recorded_by,
+          recordedByName: e.recorded_by_name,
+          recordedAt: iso(e.recorded_at),
+          applicationValid: e.application_valid,
+          reversedAt: iso(e.reversed_at),
+          reversedBy: e.reversed_by ?? null,
+          reversedByName: e.reversed_by_name ?? null,
+          reversalReason:
+            e.reason_envelope && canManage
+              ? decryptOrderPrivateJson(
+                  e.reason_envelope,
+                  `billing-external-reversal:${e.id}`,
+                  envelopeKey,
+                ).reason
+              : null,
+        })),
+        payments: payments.map((p) => ({
+          id: p.id,
+          chargeId: p.charge_id,
+          source: p.source,
+          amountCents: Number(p.principal_amount_cents),
+          appliedAmountCents: Number(p.applied_amount_cents),
+          refundedAmountCents: Number(p.refunded_amount_cents),
+          method: p.method,
+          installments: p.installments,
+          receivedOn: iso(p.received_on)?.slice(0, 10),
+          recordedAt: iso(p.verified_at),
+          recordedBy: p.recorded_by ?? null,
+          recordedByName:
+            external.find((/** @type {any} */ e) => e.id === p.id)
+              ?.recorded_by_name ?? null,
+          active:
+            p.application_valid &&
+            Number(p.applied_amount_cents) > Number(p.refunded_amount_cents),
+          transactionNsu: canManage ? p.transaction_nsu : null,
+          receiptUrl:
+            canManage && p.receipt_envelope
+              ? decryptOrderPrivateJson(
+                  p.receipt_envelope,
+                  `billing-receipt:${p.transaction_nsu}`,
+                  envelopeKey,
+                ).url
+              : null,
+        })),
+        paymentChecks: checks.map((/** @type {any} */ c) => ({
+          id: c.id,
+          chargeId: c.charge_id,
+          state:
+            c.status === 'queued' &&
+            ['dead_letter', 'outcome_unknown'].includes(c.job_status)
+              ? 'failed'
+              : c.status,
+          requestedAt: iso(c.requested_at),
+          checkedAt: iso(c.checked_at),
+          nextCheckAt: iso(c.next_check_at),
+          attempts: c.attempts,
+        })),
         charges: charges.map((c) => {
           const receipts = payments.filter((p) => p.charge_id === c.id);
           const receipt = receipts[0];
@@ -327,6 +422,7 @@ export function createOrderBillingRuntime(database, options) {
     )
       throw new BillingError(400, 'INVALID_EXPECTED_VERSION');
     return database.transaction(async (/** @type {any} */ client) => {
+      await options.billingChat?.lockOrder?.(client, input.orderId);
       const actor = await actorFor(client, input.actor, true);
       const order = await lockOrder(client, billingIdentifier(input.orderId));
       if (!owns(actor, order)) throw new BillingError(403, 'FORBIDDEN');
@@ -436,6 +532,310 @@ export function createOrderBillingRuntime(database, options) {
           await lockOrder(client, billingIdentifier(input.orderId)),
           actor,
         );
+      });
+    },
+    /** A human records money already received outside the gateway, never a gateway claim.
+     * @param {any} input */
+    async recordExternal(input) {
+      if (
+        !Number.isSafeInteger(input.amountCents) ||
+        input.amountCents < 1 ||
+        !['cash', 'pix_external', 'bank_transfer', 'card_external'].includes(
+          input.method,
+        ) ||
+        typeof input.note !== 'string' ||
+        input.note.length > 500 ||
+        typeof input.receivedOn !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}$/u.test(input.receivedOn) ||
+        input.receivedOn.startsWith('0000-') ||
+        !Number.isFinite(Date.parse(input.receivedOn)) ||
+        new Date(input.receivedOn).toISOString().slice(0, 10) !==
+          input.receivedOn ||
+        input.receivedOn >
+          new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Sao_Paulo',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(clock())
+      )
+        throw new BillingError(400, 'BILLING_INVALID_EXTERNAL_RECEIPT');
+      return humanCommand(
+        input,
+        'external_receipt',
+        async (client, order, plan, actor) => {
+          if (order.origin === 'loja')
+            throw new BillingError(409, 'BILLING_STORE_ORDER');
+          if (order.status !== 'confirmado')
+            throw new BillingError(409, 'BILLING_ORDER_NOT_CONFIRMED');
+          if (plan?.review_required)
+            throw new BillingError(409, 'BILLING_REVIEW_REQUIRED');
+          if (!plan && (order.paid_on || order.finance_payment_review_required))
+            throw new BillingError(409, 'BILLING_LEGACY_PAYMENT');
+          const paid = received(await paymentsFor(client, order.id));
+          if (input.amountCents > Number(order.final_amount_cents) - paid)
+            throw new BillingError(422, 'BILLING_INVALID_AMOUNT');
+          if (!plan) await savePlan(client, order, null, 0, actor);
+          const id = uuid(idFactory());
+          await client.query(
+            `INSERT INTO crm.order_billing_external_receipts(id,order_id,amount_cents,received_on,method,note_envelope,recorded_by,recorded_at)
+          VALUES($1,$2,$3,$4::date,$5,$6::jsonb,$7,$8)`,
+            [
+              id,
+              order.id,
+              input.amountCents,
+              input.receivedOn,
+              input.method,
+              JSON.stringify(
+                encryptOrderPrivateJson(
+                  { note: input.note },
+                  `billing-external:${id}`,
+                  envelopeKey,
+                ),
+              ),
+              actor.id,
+              clock(),
+            ],
+          );
+          if (plan)
+            await client.query(
+              'UPDATE crm.order_billing_plans SET version=version+1,updated_at=$2 WHERE order_id=$1',
+              [order.id, clock()],
+            );
+          const saved = await refreshSettlement(client, order.id);
+          saved.billing_owner_id = order.billing_owner_id;
+          await options.billingChat?.externalPaymentRecorded?.(
+            client,
+            order.id,
+          );
+          return view(client, saved, actor);
+        },
+        false,
+      );
+    },
+    /** @param {any} input */
+    async reverseExternal(input) {
+      const receiptId = uuid(input.receiptId);
+      if (
+        typeof input.reason !== 'string' ||
+        !input.reason.trim() ||
+        input.reason.length > 500
+      )
+        throw new BillingError(400, 'BILLING_REVERSAL_REASON_REQUIRED');
+      return humanCommand(
+        input,
+        'external_reverse',
+        async (client, order, _plan, actor) => {
+          const record = (
+            await client.query(
+              'SELECT * FROM crm.order_billing_external_receipts WHERE id=$1 AND order_id=$2 FOR UPDATE',
+              [receiptId, order.id],
+            )
+          ).rows[0];
+          if (!record) throw new BillingError(404, 'BILLING_RECEIPT_NOT_FOUND');
+          if (
+            (
+              await client.query(
+                'SELECT id FROM crm.order_billing_external_reversals WHERE receipt_id=$1',
+                [receiptId],
+              )
+            ).rows.length
+          )
+            throw new BillingError(409, 'BILLING_RECEIPT_REVERSED');
+          await client.query(
+            'INSERT INTO crm.order_billing_external_reversals(id,receipt_id,reason_envelope,recorded_by,recorded_at) VALUES($1,$2,$3::jsonb,$4,$5)',
+            [
+              idFactory(),
+              receiptId,
+              JSON.stringify(
+                encryptOrderPrivateJson(
+                  { reason: input.reason },
+                  `billing-external-reversal:${receiptId}`,
+                  envelopeKey,
+                ),
+              ),
+              actor.id,
+              clock(),
+            ],
+          );
+          await client.query(
+            'UPDATE crm.order_billing_plans SET version=version+1,updated_at=$2 WHERE order_id=$1',
+            [order.id, clock()],
+          );
+          const saved = await refreshSettlement(client, order.id);
+          saved.billing_owner_id = order.billing_owner_id;
+          return view(client, saved, actor);
+        },
+        false,
+      );
+    },
+    /** Only identifiers are accepted; payment proof comes from the verified callback.
+     * @param {any} input */
+    async checkPayment(input) {
+      if (!paymentCheckEnabled)
+        throw new BillingError(503, 'BILLING_CHECK_DISABLED');
+      const chargeId = uuid(input.chargeId),
+        invoiceSlug = billingIdentifier(input.invoiceSlug),
+        transactionNsu = billingIdentifier(input.transactionNsu);
+      if (
+        !/^[a-z0-9_-]{1,128}$/iu.test(invoiceSlug) ||
+        !/^[a-z0-9_-]{1,128}$/iu.test(transactionNsu)
+      )
+        throw new BillingError(400, 'INVALID_REQUEST');
+      return humanCommand(
+        input,
+        'payment_check',
+        async (client, order) => {
+          const charge = (
+            await client.query(
+              'SELECT * FROM crm.order_billing_charges WHERE id=$1 AND order_id=$2 FOR UPDATE',
+              [chargeId, order.id],
+            )
+          ).rows[0];
+          if (!charge) throw new BillingError(404, 'BILLING_CHARGE_NOT_FOUND');
+          const candidate = { invoiceSlug, transactionNsu };
+          const hash = createHash('sha256')
+            .update(JSON.stringify(candidate))
+            .digest('hex');
+          const previous = (
+            await client.query(
+              `SELECT k.*,j.status AS job_status FROM crm.order_billing_payment_checks k
+          LEFT JOIN crm.outbox_jobs j ON j.id='billing-check:'||k.id::text||':'||k.attempts
+          WHERE k.charge_id=$1 AND k.candidate_hash=$2 ORDER BY k.requested_at DESC,k.id DESC LIMIT 1`,
+              [chargeId, hash],
+            )
+          ).rows[0];
+          if (
+            previous &&
+            (previous.status === 'paid' ||
+              (previous.status === 'queued' &&
+                ['pending', 'retry', 'processing'].includes(
+                  previous.job_status,
+                )))
+          )
+            return { checkId: previous.id, state: previous.status };
+          await client.query(
+            'UPDATE crm.order_billing_payment_checks SET next_check_at=NULL WHERE charge_id=$1 AND candidate_hash=$2',
+            [chargeId, hash],
+          );
+          const id = uuid(idFactory());
+          await client.query(
+            `INSERT INTO crm.order_billing_payment_checks(id,charge_id,candidate_envelope,candidate_hash,requested_by,requested_at)
+          VALUES($1,$2,$3::jsonb,$4,$5,$6)`,
+            [
+              id,
+              chargeId,
+              JSON.stringify(
+                encryptOrderPrivateJson(
+                  candidate,
+                  `billing-check:${id}`,
+                  envelopeKey,
+                ),
+              ),
+              hash,
+              input.actor.id,
+              clock(),
+            ],
+          );
+          await client.query(
+            `INSERT INTO crm.outbox_jobs(id,job_type,idempotency_key,status,priority,available_at,created_at,queue,attempt_count,max_attempts,updated_at,effect_policy)
+          VALUES($1,'billing.payment.check',$2,'pending',100,$3,$3,'billing',0,3,$3,'queryable')`,
+            [`billing-check:${id}:1`, `${id}:1`, clock()],
+          );
+          await client.query(
+            'UPDATE crm.order_billing_plans SET version=version+1,updated_at=$2 WHERE order_id=$1',
+            [order.id, clock()],
+          );
+          return { checkId: id, state: 'queued' };
+        },
+        false,
+      );
+    },
+    /** @param {any} input */
+    async paymentCheckLookup(input) {
+      return receive(async (client) => {
+        const check = (
+          await client.query(
+            'SELECT * FROM crm.order_billing_payment_checks WHERE id=$1',
+            [uuid(input.checkId)],
+          )
+        ).rows[0];
+        if (!check) throw new BillingError(404, 'BILLING_NOT_FOUND');
+        const context = await chargeContext(client, check.charge_id);
+        const { charge } = context;
+        const candidate = decryptOrderPrivateJson(
+          check.candidate_envelope,
+          `billing-check:${check.id}`,
+          envelopeKey,
+        );
+        return {
+          checkId: check.id,
+          chargeId: charge.id,
+          amountCents: Number(charge.amount_cents),
+          ...candidate,
+          receiptUrl: null,
+          state: check.status,
+        };
+      });
+    },
+    /** @param {any} input */
+    async paymentCheckResult(input) {
+      if (!['paid', 'not_paid'].includes(input.status))
+        throw new BillingError(400, 'INVALID_REQUEST');
+      return receive(async (client) => {
+        let check = (
+          await client.query(
+            'SELECT * FROM crm.order_billing_payment_checks WHERE id=$1',
+            [uuid(input.checkId)],
+          )
+        ).rows[0];
+        if (!check) throw new BillingError(404, 'BILLING_NOT_FOUND');
+        const { charge } = await chargeContext(client, check.charge_id);
+        // Match callback event metadata to the current scheduled attempt after
+        // the shared financial locks; the scheduler never takes those locks.
+        check = (
+          await client.query(
+            'SELECT * FROM crm.order_billing_payment_checks WHERE id=$1 FOR UPDATE',
+            [check.id],
+          )
+        ).rows[0];
+        const candidate = decryptOrderPrivateJson(
+          check.candidate_envelope,
+          `billing-check:${check.id}`,
+          envelopeKey,
+        );
+        const confirmed =
+          (
+            await client.query(
+              `SELECT id FROM crm.order_billing_payments WHERE charge_id=$1 AND crm.infinitepay_transaction_key(transaction_nsu)=crm.infinitepay_transaction_key($2) AND invoice_slug=$3`,
+              [charge.id, candidate.transactionNsu, candidate.invoiceSlug],
+            )
+          ).rows.length > 0;
+        if (input.status === 'paid' && !confirmed)
+          throw new BillingError(409, 'BILLING_PAYMENT_NOT_RECORDED');
+        const status = confirmed ? 'paid' : 'not_paid';
+        const event = await client.query(
+          `INSERT INTO crm.order_billing_payment_check_events(id,check_id,attempt,status,occurred_at)
+          VALUES($1,$2,$3,$4,$5) ON CONFLICT(check_id,attempt,status) DO NOTHING RETURNING id`,
+          [idFactory(), check.id, check.attempts, status, clock()],
+        );
+        if (event.rows.length)
+          await audit(client, {
+            actor: 'system:order-billing',
+            action: 'billing.payment.checked',
+            target: { type: 'billing-check', id: check.id },
+            version: check.attempts,
+            reason:
+              status === 'paid'
+                ? 'BILLING_CHECK_PAID'
+                : 'BILLING_CHECK_NOT_PAID',
+            correlationId: input.correlationId ?? check.id,
+          });
+        await client.query(
+          `UPDATE crm.order_billing_payment_checks SET status=$2,checked_at=$3,next_check_at=CASE WHEN $2='not_paid' AND attempts<6 THEN $3::timestamptz+interval '10 minutes' ELSE NULL END WHERE id=$1`,
+          [check.id, status, clock()],
+        );
+        return { recorded: true, checkId: check.id, status };
       });
     },
     /** @param {any} input */
@@ -859,14 +1259,20 @@ export function createOrderBillingRuntime(database, options) {
             const net = payments.reduce(
               (sum, p) =>
                 sum +
-                Number(p.principal_amount_cents) -
-                Number(p.refunded_amount_cents),
+                (p.source === 'external'
+                  ? Number(p.applied_amount_cents)
+                  : Number(p.principal_amount_cents) -
+                    Number(p.refunded_amount_cents)),
               0,
             );
             if (net > Number(order.final_amount_cents))
               throw new BillingError(409, 'BILLING_OVERPAID');
             await client.query(
               `UPDATE crm.order_billing_payments p SET application_valid=true,applied_amount_cents=principal_amount_cents FROM crm.order_billing_charges c WHERE c.id=p.charge_id AND c.order_id=$1`,
+              [order.id],
+            );
+            await client.query(
+              'UPDATE crm.order_billing_external_receipts SET application_valid=true WHERE order_id=$1',
               [order.id],
             );
             await client.query(

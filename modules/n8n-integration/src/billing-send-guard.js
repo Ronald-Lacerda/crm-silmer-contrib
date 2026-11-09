@@ -1,6 +1,6 @@
 /** Shared lock order for billing callbacks, transport and command recovery.
  * No locks for ordinary Inbox commands. Never acquire these after a message lock.
- * @param {any} client @param {{chargeId?:string,commandId?:string,externalMessageId?:string,conversationId?:string}} selector
+ * @param {any} client @param {{chargeId?:string,commandId?:string,externalMessageId?:string,conversationId?:string,orderId?:string}} selector
  */
 export async function lockBillingSend(client, selector) {
   // Serialize discovery with admission, including the zero-intent case. A
@@ -10,12 +10,14 @@ export async function lockBillingSend(client, selector) {
     await client.query(
       `SELECT order_id FROM crm.order_billing_charges WHERE id=$1::uuid
     UNION SELECT order_id FROM crm.order_billing_send_intents WHERE command_id=$2
-    UNION SELECT i.order_id FROM crm.order_billing_send_intents i JOIN crm.messages m ON m.id=i.message_id WHERE m.external_message_id=$3 AND m.conversation_id=$4`,
+    UNION SELECT i.order_id FROM crm.order_billing_send_intents i JOIN crm.messages m ON m.id=i.message_id WHERE m.external_message_id=$3 AND m.conversation_id=$4
+    UNION SELECT id FROM crm.orders WHERE id=$5`,
       [
         selector.chargeId ?? null,
         selector.commandId ?? null,
         selector.externalMessageId ?? null,
         selector.conversationId ?? null,
+        selector.orderId ?? null,
       ],
     )
   ).rows;
@@ -32,12 +34,14 @@ export async function lockBillingSend(client, selector) {
     JOIN crm.orders o ON o.id=i.order_id WHERE ($1::uuid IS NOT NULL AND i.order_id=(SELECT order_id FROM crm.order_billing_charges WHERE id=$1))
       OR ($2::text IS NOT NULL AND i.command_id=$2)
       OR ($3::text IS NOT NULL AND i.message_id IN (SELECT id FROM crm.messages WHERE external_message_id=$3 AND conversation_id=$4))
+      OR ($5::text IS NOT NULL AND i.order_id=$5)
     ORDER BY i.id`,
       [
         selector.chargeId ?? null,
         selector.commandId ?? null,
         selector.externalMessageId ?? null,
         selector.conversationId ?? null,
+        selector.orderId ?? null,
       ],
     )
   ).rows;
@@ -118,7 +122,7 @@ export async function billingSendBlockReason(client, intent, options) {
     CASE WHEN o.conversation_id IS NULL THEN o.manual_owner_id ELSE primary_c.assigned_user_id END AS current_order_owner,
     o.conversation_id AS primary_id,p.review_required,
     ch.status AS charge_status,ch.valid_until,
-    COALESCE((SELECT sum(greatest(0,bp.applied_amount_cents-bp.refunded_amount_cents)) FROM crm.order_billing_payments bp JOIN crm.order_billing_charges bc ON bc.id=bp.charge_id WHERE bc.order_id=i.order_id AND bp.application_valid),0) AS covered
+    COALESCE((SELECT sum(greatest(0,bp.applied_amount_cents-bp.refunded_amount_cents)) FROM crm.order_billing_receipt_ledger bp WHERE bp.order_id=i.order_id AND bp.application_valid),0) AS covered
     FROM crm.order_billing_send_intents i JOIN crm.users u ON u.id=i.actor_id
     LEFT JOIN crm.user_functions f ON f.user_id=u.id JOIN crm.conversations c ON c.id=i.conversation_id
     JOIN crm.contact_identities ci ON ci.id=c.contact_identity_id JOIN crm.orders o ON o.id=i.order_id

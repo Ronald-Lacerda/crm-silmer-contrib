@@ -51,6 +51,12 @@ const PUBLIC_CODES = new Set([
   'RATE_LIMITED',
   'REQUEST_TOO_LARGE',
   'UNSUPPORTED_MEDIA_TYPE',
+  'BILLING_INVALID_EXTERNAL_RECEIPT',
+  'BILLING_REVERSAL_REASON_REQUIRED',
+  'BILLING_RECEIPT_NOT_FOUND',
+  'BILLING_RECEIPT_REVERSED',
+  'BILLING_PAYMENT_NOT_RECORDED',
+  'BILLING_CHECK_DISABLED',
 ]);
 
 /** @param {string} code @param {number} [statusCode] */
@@ -183,6 +189,17 @@ export function registerOrderBillingRoutes(api, billing, contextFor) {
       ['/charges', 'issue', ['percent']],
       ['/charges/:chargeId/refund', 'refund', ['amountCents']],
       ['/reconcile', 'reconcile', ['decision', 'confirmedProviderReview']],
+      [
+        '/external-receipts',
+        'recordExternal',
+        ['amountCents', 'receivedOn', 'method', 'note'],
+      ],
+      ['/external-receipts/:receiptId/reverse', 'reverseExternal', ['reason']],
+      [
+        '/charges/:chargeId/check-payment',
+        'checkPayment',
+        ['invoiceSlug', 'transactionNsu'],
+      ],
     ])) {
       scope.post(`${prefix}${suffix}`, options, (request, reply) =>
         respond(reply, async () => {
@@ -193,12 +210,16 @@ export function registerOrderBillingRoutes(api, billing, contextFor) {
             ...extra,
           ]);
           const params = /** @type {any} */ (request.params);
+          if (method === 'checkPayment') reply.code(202);
           return billing[method]({
             ...command,
             actor,
             orderId: identifier(params.orderId),
             ...(params.chargeId
               ? { chargeId: identifier(params.chargeId) }
+              : {}),
+            ...(params.receiptId
+              ? { receiptId: identifier(params.receiptId) }
               : {}),
             idempotencyKey: identifier(request.headers['idempotency-key']),
             correlationId: contextFor(request).correlationId,
@@ -208,6 +229,30 @@ export function registerOrderBillingRoutes(api, billing, contextFor) {
     }
     const technicalPrefix =
       '/api/v1/integrations/n8n/billing/charges/:chargeId';
+    for (const [suffix, operation, action, keys] of /** @type {const} */ ([
+      ['', 'paymentCheckLookup', 'billing.checkout.read', []],
+      ['/result', 'paymentCheckResult', 'billing.payment.record', ['status']],
+    ])) {
+      const path =
+        '/api/v1/integrations/n8n/billing/payment-checks/:checkId' + suffix;
+      const handler = (/** @type {any} */ request, /** @type {any} */ reply) =>
+        respond(reply, async () => {
+          const technical = await authorizeRequest(request, contextFor, action);
+          if (technical.workflowKey !== 'silmer-order-billing')
+            throw invalid('FORBIDDEN_AUTOMATION_ACTION', 403);
+          const data = body(suffix ? request.body : (request.query ?? {}), [
+            ...keys,
+          ]);
+          return billing[operation]({
+            ...data,
+            checkId: identifier(request.params.checkId),
+            executionId: technical.executionId,
+            correlationId: technical.correlationId,
+          });
+        });
+      if (suffix) scope.post(path, options, handler);
+      else scope.get(path, options, handler);
+    }
     for (const [operation, action, keys] of /** @type {const} */ ([
       ['reserve', 'billing.checkout.reserve', []],
       ['created', 'billing.checkout.record', ['checkoutUrl']],
