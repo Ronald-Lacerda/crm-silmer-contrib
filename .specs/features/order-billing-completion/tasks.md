@@ -66,7 +66,12 @@ Where: ops/n8n/workflows/create-order-billing-check-workflow.mjs
 Tests: BFIN-06–08; query sem efeito financeiro novo, pago/não pago, falsificação, replay, falhas, agendamento limitado e flag de recebimento.
 Gate: Backend
 Done when: n8n verifica candidatos pelo contrato de T1, sem confiar em evento/usuário nem gerar link duplicado, com perfil DEV próprio.
-Status: Pending
+Status: Complete
+
+Gerador próprio de conferência com perfis produção/DEV inativos; export da
+emissão permanece byte a byte preservado. Gate3/3 com comandos estritos,
+consulta paga/não paga, valor insuficiente e falha de persistência sem ACK.
+Typecheck/lint aprovados. Execução integrada no motor real é gateT5/T6.
 
 ### T3: Integrar cobrança no chat e pedido com o redesign atual
 
