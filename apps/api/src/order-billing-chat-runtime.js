@@ -55,6 +55,8 @@ function present(row) {
     messageId: row.message_id,
     commandId: row.command_id,
     amountCents: cents(row.amount_cents),
+    supersedesChargeId: row.supersedes_charge_id ?? null,
+    retryOfIntentId: row.retry_of_intent_id ?? null,
   };
 }
 
@@ -786,10 +788,10 @@ export function createOrderBillingChatRuntime(database, options) {
         const rows = (
           await client.query(
             `WITH events AS (
-          SELECT 'charge:'||id::text AS id,'charge' AS kind,id AS charge_id,NULL::uuid AS intent_id,amount_cents,status,created_at AS occurred_at FROM crm.order_billing_charges WHERE order_id=$1
-          UNION ALL SELECT 'receipt:'||p.id,'receipt',p.charge_id,NULL,p.principal_amount_cents,CASE WHEN p.application_valid THEN 'paid' ELSE 'review' END,p.verified_at FROM crm.order_billing_payments p JOIN crm.order_billing_charges c ON c.id=p.charge_id WHERE c.order_id=$1
-          UNION ALL SELECT 'refund:'||r.id,'refund',p.charge_id,NULL,r.amount_cents,'review',r.created_at FROM crm.order_billing_refunds r JOIN crm.order_billing_payments p ON p.id=r.payment_id JOIN crm.order_billing_charges c ON c.id=p.charge_id WHERE c.order_id=$1
-          UNION ALL SELECT 'intent:'||e.id,CASE WHEN i.action='correct' THEN 'correction' ELSE 'intent' END,i.charge_id,i.id,i.amount_cents,e.state,e.occurred_at FROM crm.order_billing_send_events e JOIN crm.order_billing_send_intents i ON i.id=e.intent_id WHERE i.order_id=$1
+          SELECT 'charge:'||id::text AS id,'charge' AS kind,id AS charge_id,NULL::uuid AS intent_id,amount_cents,status,created_at AS occurred_at,NULL::uuid AS supersedes_charge_id,NULL::uuid AS retry_of_intent_id FROM crm.order_billing_charges WHERE order_id=$1
+          UNION ALL SELECT 'receipt:'||p.id,'receipt',p.charge_id,NULL,p.principal_amount_cents,CASE WHEN p.application_valid THEN 'paid' ELSE 'review' END,p.verified_at,NULL,NULL FROM crm.order_billing_payments p JOIN crm.order_billing_charges c ON c.id=p.charge_id WHERE c.order_id=$1
+          UNION ALL SELECT 'refund:'||r.id,'refund',p.charge_id,NULL,r.amount_cents,'review',r.created_at,NULL,NULL FROM crm.order_billing_refunds r JOIN crm.order_billing_payments p ON p.id=r.payment_id JOIN crm.order_billing_charges c ON c.id=p.charge_id WHERE c.order_id=$1
+          UNION ALL SELECT 'intent:'||e.id,CASE WHEN i.action='correct' THEN 'correction' ELSE 'intent' END,i.charge_id,i.id,i.amount_cents,e.state,e.occurred_at,i.supersedes_charge_id,i.retry_of_intent_id FROM crm.order_billing_send_events e JOIN crm.order_billing_send_intents i ON i.id=e.intent_id WHERE i.order_id=$1
         ) SELECT *,to_char(occurred_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS instant FROM events
         WHERE ($2::timestamptz IS NULL OR (occurred_at,id)<($2::timestamptz,$3::text)) ORDER BY occurred_at DESC,id DESC LIMIT $4`,
             [c.order.id, cursor?.t ?? null, cursor?.i ?? null, limit + 1],
@@ -820,6 +822,8 @@ export function createOrderBillingChatRuntime(database, options) {
             kind: row.kind,
             chargeId: row.charge_id,
             intentId: row.intent_id,
+            supersedesChargeId: row.supersedes_charge_id ?? null,
+            retryOfIntentId: row.retry_of_intent_id ?? null,
             amountCents: cents(row.amount_cents),
             status: row.status,
             occurredAt: row.instant,

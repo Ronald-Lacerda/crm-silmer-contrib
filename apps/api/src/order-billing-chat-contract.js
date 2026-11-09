@@ -94,6 +94,8 @@ export const billingIntentSchema = {
     messageId: { type: ['string', 'null'], maxLength: 255 },
     commandId: { type: ['string', 'null'], maxLength: 255 },
     amountCents: cents,
+    supersedesChargeId: { type: ['string', 'null'], maxLength: 255 },
+    retryOfIntentId: { type: ['string', 'null'], maxLength: 255 },
   },
 };
 
@@ -137,6 +139,8 @@ export const billingHistorySchema = {
           id: identifier,
           chargeId: identifier,
           intentId: { type: ['string', 'null'], maxLength: 255 },
+          supersedesChargeId: { type: ['string', 'null'], maxLength: 255 },
+          retryOfIntentId: { type: ['string', 'null'], maxLength: 255 },
           kind: {
             enum: ['charge', 'receipt', 'intent', 'correction', 'refund'],
           },

@@ -419,6 +419,15 @@ if (!url) {
     );
     assert.equal(corrected.amountCents, 24000);
     assert.notEqual(corrected.chargeId, first.chargeId);
+    assert.equal(corrected.supersedesChargeId, first.chargeId);
+    assert.equal(corrected.retryOfIntentId, null);
+    const reloaded = await runtime.getIntent({
+      actor: SELLER,
+      orderId: id,
+      intentId: corrected.id,
+    });
+    assert.equal(reloaded.supersedesChargeId, first.chargeId);
+    assert.equal(reloaded.retryOfIntentId, null);
     const old = (
       await pool.query(
         'SELECT status,checkout_envelope,amount_cents FROM crm.order_billing_charges WHERE id=$1',
@@ -438,6 +447,20 @@ if (!url) {
       '120000',
     );
     const history = await runtime.getHistory({ actor: SELLER, orderId: id });
+    const correctionEvents = history.items.filter(
+      (/** @type {any} */ item) => item.intentId === corrected.id,
+    );
+    assert.ok(correctionEvents.length > 0);
+    for (const event of correctionEvents) {
+      assert.equal(event.supersedesChargeId, first.chargeId);
+      assert.equal(event.retryOfIntentId, null);
+    }
+    for (const event of history.items.filter(
+      (/** @type {any} */ item) => !item.intentId,
+    )) {
+      assert.equal(event.supersedesChargeId, null);
+      assert.equal(event.retryOfIntentId, null);
+    }
     assert.ok(
       history.items.some(
         (/** @type {any} */ r) =>
@@ -495,6 +518,24 @@ if (!url) {
     assert.ok(success && success.status === 'fulfilled');
     assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
     assert.equal(success.value.chargeId, first.chargeId);
+    assert.equal(success.value.retryOfIntentId, first.id);
+    assert.equal(success.value.supersedesChargeId, null);
+    const reloaded = await runtime.getIntent({
+      actor: SELLER,
+      orderId: id,
+      intentId: success.value.id,
+    });
+    assert.equal(reloaded.retryOfIntentId, first.id);
+    assert.equal(reloaded.supersedesChargeId, null);
+    const history = await runtime.getHistory({ actor: SELLER, orderId: id });
+    const retryEvents = history.items.filter(
+      (/** @type {any} */ item) => item.intentId === success.value.id,
+    );
+    assert.ok(retryEvents.length > 0);
+    for (const event of retryEvents) {
+      assert.equal(event.retryOfIntentId, first.id);
+      assert.equal(event.supersedesChargeId, null);
+    }
     assert.equal((await counts(pool, id)).charges, 1);
     assert.equal((await counts(pool, id)).jobs, 1);
     assert.equal((await counts(pool, id)).intents, 2);

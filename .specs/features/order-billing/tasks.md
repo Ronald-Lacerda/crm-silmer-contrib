@@ -145,7 +145,7 @@ e IDs financeiros, sem alterar o checkout atual.
 - [ ] COB-READY-01: contrato frontend atualizado e limites de teste registrados.
 - [ ] COB-DEV-03: ensaio integrado do transporte DEV, cinco comandos,
       correção e callbacks tardios, incluindo recuperação e rollback por flag.
-- [ ] COB-API-READY: projetar IDs de correção/retry antes de reproduzir a
+- [x] COB-API-READY: projetar IDs de correção/retry antes de reproduzir a
       associação explícita entre cobranças do protótipo na UI real.
 - [ ] COB-CHAT-UI/QA: frontend definitivo após redesign e jornada integrada.
 - [ ] COB-OPS-01: publicação e homologação reais continuam abertas.
@@ -252,3 +252,19 @@ permanece adiado. Evidência final no relatório de validação do backend.
 Gate integrado repetido: 1.801 aprovados/17 skips; suíte PostgreSQL de
 transporte 15/15, incluindo bloqueio pelo worker, ausência de mensagem,
 evento único e falha com rollback/reentrega. Sem nova implementação de UI.
+
+### T6: Projetar origem de correção e retry para o histórico (COB-API-READY)
+
+Depends on: T5
+Where: apps/api/src/order-billing-chat-runtime.js
+Tests: correção e retry persistidos continuam vinculados após nova leitura; eventos projetam origem correta, demais registros null, schema/OpenAPI e privacidade.
+Gate: Full
+Done when: BAPI-11 atendido sem migration, alteração de comandos, frontend ou efeito remoto.
+Status: Complete
+
+Campos opcionais `supersedesChargeId` e `retryOfIntentId` projetados das
+relações já persistidas, inclusive na timeline. Testes de releitura em
+PostgreSQL e serialização HTTP preservam vínculo de correção/retry e null
+nos demais registros. Gate HTTP 11/11, matriz PostgreSQL 46/46 e validate
+integrado 2.002 aprovados/24 skips condicionais, zero falhas e build aprovado.
+Sem migração ou alteração do frontend; homologação remota continua aberta.
