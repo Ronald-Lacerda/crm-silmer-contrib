@@ -45,6 +45,16 @@ falhas. SQL e cursor compartilham precisão em milissegundos; o fingerprint
 recusa cursores antigos. O relógio de espera, classificação e demais abas
 mantêm seus contratos. Sem migration ou infraestrutura nova.
 
+## Pagamentos mistos e conciliação, 08/11/2026
+
+[ADR067](docs/adr/067-recebimentos-externos-e-conciliacao-de-cobrancas.md) /
+[RFC053](docs/rfc/053-recebimentos-externos-e-conciliacao-de-cobrancas.md)
+estendem o saldo de pedidos geridos com recebimentos externos e reversões
+auditadas. Consultas de pagamento guardam candidatos cifrados e seguem
+worker/n8n/payment_check/callback; rechecagem limitada não descobre transações
+sem identificadores. UI real foi autorizada no redesign atual e DEV isolado
+inclui transporte simulado. Nenhum go-live ou efeito financeiro real autorizado.
+
 ## Backend de envio de cobranças, 06/11/2026
 
 [ADR 066](docs/adr/066-intencoes-de-cobranca-e-envio-transacional.md) decide
