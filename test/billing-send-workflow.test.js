@@ -96,6 +96,46 @@ test('BAPI-09: strict authorization rejects malformed and negative CRM responses
     assert.equal(billingSendPreflightValid(value), false);
 });
 
+test('BAPI-07/09/10: omitted default GET is accepted without changing the exported source or weakening method validation', () => {
+  const before = source();
+  const template = node(before, 'CRM - Preflight midia reservada (MVP)');
+  delete template.parameters.method;
+  const snapshot = structuredClone(before);
+  const { workflow } = patchBillingSendPreflight(before);
+  const request = node(workflow, CHECK);
+  assert.deepEqual(before, snapshot);
+  for (const original of before.nodes)
+    assert.deepEqual(node(workflow, original.name), original);
+  assert.equal(request.parameters.method, 'GET');
+  assert.equal(
+    request.parameters.url,
+    template.parameters.url.replace('/media?preflight=true', '/preflight'),
+  );
+  assert.deepEqual(
+    request.parameters.headerParameters,
+    template.parameters.headerParameters,
+  );
+  assert.deepEqual(request.credentials, template.credentials);
+  assert.deepEqual(patchBillingSendPreflight(workflow).changedNodeNames, []);
+  for (const method of [
+    'POST',
+    'HEAD',
+    'DELETE',
+    '',
+    null,
+    'get',
+    '={{ "GET" }}',
+  ]) {
+    const invalid = structuredClone(before);
+    node(invalid, 'CRM - Preflight midia reservada (MVP)').parameters.method =
+      method;
+    assert.throws(
+      () => patchBillingSendPreflight(invalid),
+      /BILLING_PREFLIGHT_CONTEXT_MISMATCH/,
+    );
+  }
+});
+
 test('BAPI-10: a private workflow keeps its CRM Basic credential identity', () => {
   const before = source();
   const credentials = {
