@@ -744,7 +744,7 @@ export class PostgresOrderRepository {
           FROM (SELECT order_date, count(*)::integer AS confirmed_count,
                        coalesce(sum(final_amount_cents), 0)::bigint AS sold_amount_cents
                 FROM crm.orders
-                WHERE NOT is_test AND cancelled_at IS NULL AND status = 'confirmado'
+                WHERE NOT is_test AND status = 'confirmado' AND cancelled_at IS NULL
                   AND order_date BETWEEN $3::date AND $4::date
                 GROUP BY order_date) sold) AS daily
        FROM crm.orders
