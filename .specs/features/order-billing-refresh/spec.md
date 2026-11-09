@@ -49,17 +49,33 @@ Open questions: none.
 - REFRESH-06: WHEN o diagrama é apresentado, THE diagram SHALL refletir
   intenção humana, persistência/fila, emissão no n8n/InfinitePay, reserva de
   transporte e confirmação de recebimento, sem afirmar ativação real.
+- REFRESH-07: WHEN o pedido de demonstração é aberto, THE prototype SHALL
+  reutilizar a tela atual do Pedido e apresentar total, recebido, saldo,
+  cobranças, validade, links e pagamentos confirmados com comprovantes fictícios.
+- REFRESH-08: WHEN cobrança, correção ou pagamento muda no protótipo, THE chat
+  and order SHALL refletir os mesmos registros e valores, inclusive ao navegar
+  entre telas ou mantê-las abertas simultaneamente, sem duplicar recebimentos.
+- REFRESH-09: WHEN o histórico do pedido é consultado, THE prototype SHALL
+  mostrar criação, correção, envio e pagamento como eventos distintos, conservar
+  a cobrança e o link anteriores e oferecer retorno à conversa vinculada.
+- REFRESH-10: WHEN o pedido é usado por teclado ou em tela estreita, THE
+  prototype SHALL preservar foco, rótulos, contraste e leitura sem overflow,
+  mantendo dados sintéticos e bloqueio de comandos financeiros reais.
 
 ## Requirement Traceability
 
-| Critério | Tarefa | Fronteira |
-| --- | --- | --- |
-| REFRESH-01 | T1 | integração, CI e preservação do backend BAPI-01–10 |
-| REFRESH-02 | T2 | botão e aparência da Inbox atual |
-| REFRESH-03 | T2 | operações simuladas e revisão |
-| REFRESH-04 | T2 | histórico, saldo, correção e recuperação |
-| REFRESH-05 | T2 | teclado, foco e telas estreitas |
-| REFRESH-06 | T3 | diagrama do fluxo conferido contra o código |
+| Critério   | Tarefa | Fronteira                                             |
+| ---------- | ------ | ----------------------------------------------------- |
+| REFRESH-01 | T1     | integração, CI e preservação do backend BAPI-01–10    |
+| REFRESH-02 | T2     | botão e aparência da Inbox atual                      |
+| REFRESH-03 | T2     | operações simuladas e revisão                         |
+| REFRESH-04 | T2     | histórico, saldo, correção e recuperação              |
+| REFRESH-05 | T2     | teclado, foco e telas estreitas                       |
+| REFRESH-06 | T3     | diagrama do fluxo conferido contra o código           |
+| REFRESH-07 | T4     | detalhes financeiros na tela real do Pedido           |
+| REFRESH-08 | T4     | estado e registros compartilhados entre chat e Pedido |
+| REFRESH-09 | T4     | histórico, correções, comprovantes e retorno ao chat  |
+| REFRESH-10 | T4     | acessibilidade e isolamento da tela do Pedido         |
 
 ## Out of Scope
 

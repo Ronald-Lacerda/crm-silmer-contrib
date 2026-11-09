@@ -35,6 +35,29 @@ porta, caso necessário.
 6. Verifique tema claro/escuro, celular e Tab/Shift+Tab/Enter/Escape; fechar
    devolve o foco ao botão do chat.
 
+## Pedido e histórico compartilhado
+
+Abra o link **Pedido 24-CRM** no cabeçalho do chat ou vá diretamente para
+http://127.0.0.1:4189/pedidos/billing-preview-order?conversa=billing-preview#cobrancas.
+A tela usa o `OrderView` e os componentes atuais; o servidor de preview troca
+somente a seção de cobranças em memória, sem alterar a aplicação publicada.
+
+- **Cobranças e pagamentos** mostra total, recebido, saldo, links/validade,
+  correções e estado do envio separado do pagamento.
+- **Pagamentos confirmados** mostra valor, meio, parcelas e confirmação.
+  **Ver comprovante** abre os detalhes fictícios e devolve o foco ao fechar.
+- O histórico registra criação, correção, fila, envio, entrega e recebimento.
+  O link anterior permanece disponível para conferência.
+- **Gerenciar cobranças** abre o mesmo diálogo do chat. **Voltar à conversa**
+  conserva o rascunho ao navegar na mesma aba.
+- Chat e Pedido consultam o mesmo estado em memória, inclusive em duas abas
+  abertas. Simule um pagamento no chat e acompanhe recebido e saldo no Pedido,
+  sem precisar recarregar ou registrar o pagamento novamente.
+
+Exemplo: cobrar e receber R$ 360 deixa saldo R$ 840. Ao corrigir uma cobrança
+vencida de R$ 360 para R$ 240, o histórico conserva ambas; confirmar o pagamento
+de R$ 240 deixa saldo R$ 960. O total comercial continua R$ 1.200.
+
 As rotas `/api/v1` são atendidas exclusivamente por fixtures locais. Escritas
 reais são recusadas e rotas desconhecidas devolvem 404, sem proxy/fallback.
 Links `pagamento.exemplo.test` são fictícios. Não há n8n, InfinitePay, WhatsApp,

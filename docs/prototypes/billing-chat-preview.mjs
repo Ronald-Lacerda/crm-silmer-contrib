@@ -13,6 +13,10 @@ const previewComponent = resolve(
   repository,
   'docs/prototypes/BillingChatPreviewAction.vue',
 ).replaceAll('\\', '/');
+const orderPreviewComponent = resolve(
+  repository,
+  'docs/prototypes/BillingOrderPreview.vue',
+).replaceAll('\\', '/');
 export async function createBillingChatPreview({ port = 4189 } = {}) {
   const fixtures = createBillingPreviewFixtures();
   const server = await createServer({
@@ -24,6 +28,18 @@ export async function createBillingChatPreview({ port = 4189 } = {}) {
         name: 'isolated-billing-chat-preview',
         enforce: 'pre',
         transform(code, id) {
+          if (id.replaceAll('\\', '/').endsWith('/src/views/OrderView.vue')) {
+            if ((code.match(/<OrderBillingSection\b/g) ?? []).length !== 1)
+              throw new Error(
+                'The current Order billing section changed; review preview insertion.',
+              );
+            return code
+              .replace(
+                '<script setup>',
+                `<script setup>\nimport BillingOrderPreview from '${orderPreviewComponent}';`,
+              )
+              .replace('<OrderBillingSection', '<BillingOrderPreview');
+          }
           if (!id.replaceAll('\\', '/').endsWith('/src/views/InboxView.vue'))
             return;
           const anchor = '<ConversationShippingQuote';
@@ -69,6 +85,19 @@ export async function createBillingChatPreview({ port = 4189 } = {}) {
               res.end(JSON.stringify(body));
             };
             try {
+              if (
+                path.startsWith('/__billing-preview/receipts/') &&
+                req.method === 'GET'
+              ) {
+                const payment = fixtures
+                  .view()
+                  .payments.find(
+                    (item) => path === `/__billing-preview/receipts/${item.id}`,
+                  );
+                return payment
+                  ? json({ demonstration: true, payment })
+                  : json({ code: 'PREVIEW_NOT_FOUND' }, 404);
+              }
               if (path === '/__billing-preview/state' && req.method === 'GET')
                 return json(fixtures.view());
               if (

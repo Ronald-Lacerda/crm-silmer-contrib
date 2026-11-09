@@ -1,9 +1,20 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from 'vue';
 import { openDialog } from '../../apps/edge-web/src/lib/ui.js';
 import AppIcon from '../../apps/edge-web/src/components/AppIcon.vue';
 
-defineProps({ disabled: { type: Boolean, default: false } });
+defineProps({
+  disabled: { type: Boolean, default: false },
+  presentation: { type: String, default: 'icon' },
+  label: { type: String, default: 'Gerar e enviar cobrança' },
+});
 const emit = defineEmits(['sent']);
 const dialog = ref(null);
 const state = ref(null);
@@ -34,6 +45,16 @@ const pending = computed(() =>
 );
 const uncertain = computed(() => intent.value?.state === 'unknown');
 const due = computed(() => state.value?.balanceAmountCents ?? 0);
+watch(
+  () => state.value?.receivedAmountCents,
+  (received, previous) => {
+    if (received > 0) {
+      mode.value = 'balance';
+      if (previous !== undefined && step.value.endsWith('review'))
+        step.value = 'choose';
+    } else if (mode.value === 'balance') mode.value = 'signal';
+  },
+);
 const value = computed(() =>
   mode.value === 'balance'
     ? due.value
@@ -206,8 +227,9 @@ onBeforeUnmount(() => clearInterval(timer));
   <div class="conversation-shipping-action">
     <button
       type="button"
-      title="Gerar e enviar cobrança"
-      aria-label="Gerar e enviar cobrança"
+      :title="label"
+      :aria-label="label"
+      :class="presentation === 'text' ? 'primary' : undefined"
       :disabled="disabled"
       @click="open($event.currentTarget)"
     >
@@ -224,7 +246,9 @@ onBeforeUnmount(() => clearInterval(timer));
         <rect x="2" y="5" width="20" height="14" rx="2" />
         <path d="M2 10h20M6 15h3" />
       </svg>
-      <span class="sr-only">Gerar e enviar cobrança</span>
+      <span :class="presentation === 'text' ? undefined : 'sr-only'">{{
+        label
+      }}</span>
     </button>
     <Teleport to="body"
       ><dialog
@@ -352,7 +376,12 @@ onBeforeUnmount(() => clearInterval(timer));
                 <fieldset class="billing-preview-options">
                   <legend>O que você quer cobrar?</legend>
                   <label
-                    ><input v-model="mode" type="radio" value="signal" />
+                    ><input
+                      v-model="mode"
+                      type="radio"
+                      value="signal"
+                      :disabled="state.receivedAmountCents > 0"
+                    />
                     Sinal</label
                   >
                   <label
