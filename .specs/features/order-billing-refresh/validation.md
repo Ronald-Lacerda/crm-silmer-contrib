@@ -1,3 +1,65 @@
+# Pedido compartilhado — validação incremental T4
+
+**Verdict: PASS**
+
+**Date**: 2026-11-08 (America/Sao_Paulo)
+**Spec**: `.specs/features/order-billing-refresh/spec.md`
+**Diff range**: `60447f8e..30ec87cc31507d3ecde08573c940f407518792c2`
+**Verifier**: independent sub-agent, author != verifier; implementação e testes reais somente leitura.
+
+T4 está Complete; REFRESH-07–10 foram conferidos independentemente. A validação
+histórica de REFRESH-01–06 foi preservada integralmente abaixo. O diff incremental
+contém apenas protótipo, testes e documentação; nenhum arquivo de `apps/`,
+`modules/`, workflow ou configuração de ativação foi alterado nesta fatia.
+
+## Critérios e evidências T4
+
+| Critério   | Resultado esperado e evidência                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Resultado |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| REFRESH-07 | Pedido real e seção financeira no shell atual: transformação somente em memória em `docs/prototypes/billing-chat-preview.mjs:35`; reutilização de OrderSheetHead em `docs/prototypes/BillingOrderPreview.vue:173`, total/recebido/saldo em `:196`, validade em `:290` e comprovante em `:377`. `test/e2e/prototype-billing-chat.spec.js:296` verifica o heading Pedido 24-CRM; `:301` exige cobrança R$ 360,00, `:310`/`:311` exigem recebido R$ 360,00 e saldo R$ 840,00; `:320`/`:321`/`:322` exigem comprovante com R$ 360,00, Pix e referência sintética. Cartão 3x verificado em `:531`.                                                                                                                                                                     | PASS      |
+| REFRESH-08 | Uma fixture central conserva cobranças, pagamentos e eventos, consultada pelas duas telas. O teste abre segunda aba do Pedido ANTES de pagar no chat (`test/e2e/prototype-billing-chat.spec.js:293`) e exige atualização dos valores sem recarregar (`:310`/`:311`). Ao navegar de volta exige o saldo correto (`:351`), o rascunho (`:357`) e apenas um recebimento (`:358`, `expect(...payments).toHaveLength(1)`). Correção e saldo chegam à quitação com dois pagamentos (`:467`), recebido de 120000 centavos (`:476`) e saldo zero (`:477`). Watch do diálogo seleciona saldo após pagamento em `docs/prototypes/BillingChatPreviewAction.vue:48`; emissão de sinal após recebido é recusada na fixture em `docs/prototypes/billing-chat-fixtures.mjs:262`. | PASS      |
+| REFRESH-09 | Eventos distintos são registrados por criação (`docs/prototypes/billing-chat-fixtures.mjs:100`), correção (`:323`), envio (`:155`) e pagamento (`:69`) e rotulados separadamente em `docs/prototypes/BillingOrderPreview.vue:90`. `test/e2e/prototype-billing-chat.spec.js:339`/`:340` exigem entrega e pagamento distintos; `:341` exige pagamento como evento final. Correção exige 2 cobranças (`:408`), preserva os links /cobranca/1 e /cobranca/2 (`:414`/`:420`) e referência à anterior (`:433`). O retorno usa link da conversa (`:435`) e termina em saldo correto (`:440`).                                                                                                                                                                            | PASS      |
+| REFRESH-10 | `test/e2e/prototype-billing-chat.spec.js:486` percorre 1440/390/320 px e claro/escuro; `:503` e `:509` exigem ausência de overflow na seção e documento. Enter abre comprovante e foco chega ao status (`:521`); fechar devolve foco (`:535`). Axe exige `violations` igual a `[]` (`:539`). O gate preserva recusa de comandos financeiros reais: `:263` exige 403 e `:264` PREVIEW_READ_ONLY; `:266` exige 404 para endpoint desconhecido. Harness local loopback, sem proxy financeiro.                                                                                                                                                                                                                                                                        | PASS      |
+
+Não foram identificadas lacunas de precisão: os requisitos descrevem resultados
+observáveis do protótipo. As quantias e referências acima pertencem aos dados
+sintéticos do cenário, não constituem evidência financeira real.
+
+## Gates e integridade
+
+- Execução independente com Node v24.20.0 fixado: `rtk proxy <node-v24.20.0-win-x64/node.exe> node_modules/@playwright/test/cli.js test --config docs/prototypes/billing-chat.playwright.config.mjs`.
+- Resultado: **8 passed**, zero falhas e skips, 40,5 s. Log: `var/order-verifier-gate.log`. Cinco testes anteriores preservados e três novos, sem redução de assertions anteriores.
+- `git diff --check`: PASS antes da gravação deste relatório.
+- Servidores de teste usam porta efêmera (`port: 0`) e foram fechados por `afterAll`; todos os processos iniciados nesta verificação terminaram. Preview compartilhado 4189 e browser do usuário não foram tocados.
+- Typecheck/lint/formatação da autoria foram informados pelo integrador; o gate independente desta revisão é a suíte de navegador com axe e isolamento da API. Nenhum banco foi utilizado.
+
+## Sensor semântico em cópias isoladas
+
+Profundidade leve: interface de demonstração, sem efeitos de pagamento reais.
+Copiei componentes, fixture, harness, config e teste para
+`var/order-verifier-scratch`; imports de componentes/harness foram redirecionados
+às cópias, preservando aplicação e dependências reais somente leitura.
+
+1. Baseline das cópias sem erro: cenário `live receipts` **1 passed (7,8 s)**,
+   log `var/order-verifier-scratch-baseline.log`.
+2. Mutação somente na cópia de `docs/prototypes/BillingOrderPreview.vue:379`:
+   `money(artifact.item.amountCents)` para `money(artifact.item.amountCents + 100)`.
+3. Resultado: **KILLED** por assertion comportamental em
+   `test/e2e/prototype-billing-chat.spec.js:320`,
+   `expect(artifact).toContainText('R$ 360,00')`; recebeu `R$ 361,00`.
+   Página, pagamento e comprovante carregaram antes da falha; não é falha de
+   import/startup. Log: `var/order-verifier-mutant.log`.
+4. Scratch descartado somente após validar o caminho absoluto sob `var/`.
+   Porcelain da árvore real vazio antes do setup, após a mutação e após cleanup;
+   somente este relatório foi escrito depois da comparação. Nenhum stash.
+
+**Sensor**: 1 injetado, 1 morto, 0 sobreviventes — PASS.
+**Gaps priorizados**: nenhum. Não há falha fundamentada para registrar como
+lesson; o mutante morto é evidência positiva. Aprovação visual do produto e
+operações reais de InfinitePay/WhatsApp/n8n continuam fora deste parecer.
+
+---
+
 # Order billing refresh — Validation
 
 **Verdict: PASS**
