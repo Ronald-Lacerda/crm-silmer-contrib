@@ -69,6 +69,68 @@ export function normalizeBillingInput(body, config, mode = 'command') {
   return { ...common, invoiceSlug, transactionNsu, receiptUrl };
 }
 
+/** Local-only transport profile; financial validation stays identical.
+ * Embedded in the DEV workflow alongside the unchanged production normalizer.
+ * @param {any} body @param {any} config @param {'command'|'payment'} [mode]
+ * @param {typeof normalizeBillingInput} [normalize] */
+export function normalizeDevelopmentBillingInput(
+  body,
+  config,
+  mode = 'command',
+  normalize = normalizeBillingInput,
+) {
+  /** @param {unknown} value @param {string} kind */
+  function localUrl(value, kind) {
+    const match =
+      typeof value === 'string'
+        ? /^http:\/\/(127\.0\.0\.1|localhost|host\.docker\.internal|billing-crm|billing-simulator|n8n):([1-9][0-9]{0,4})(\/[^\s?#]*)?$/.exec(
+            value,
+          )
+        : null;
+    const host = match?.[1];
+    const port = match?.[2];
+    const pathname = match?.[3] || '/';
+    const service =
+      kind === 'crm'
+        ? ['billing-crm', '3000']
+        : kind === 'gateway'
+          ? ['billing-simulator', '8080']
+          : ['n8n', '5678'];
+    const localHost = [
+      '127.0.0.1',
+      'localhost',
+      'host.docker.internal',
+    ].includes(host ?? '');
+    if (
+      !match ||
+      Number(port) > 65535 ||
+      !(localHost || (host === service[0] && port === service[1])) ||
+      pathname !==
+        (kind === 'webhook' ? '/webhook/silmer/order-billing-dev/paid' : '/')
+    )
+      throw new Error('BILLING_DEV_CONFIGURATION_INVALID');
+    return `http://${host}:${port}${kind === 'webhook' ? pathname : ''}`;
+  }
+  if (config?.handle !== 'synthetic-billing')
+    throw new Error('BILLING_DEV_CONFIGURATION_INVALID');
+  const crmBaseUrl = localUrl(config.crmBaseUrl, 'crm');
+  const webhookUrl = localUrl(config.webhookUrl, 'webhook');
+  const gatewayBaseUrl = localUrl(config.gatewayBaseUrl, 'gateway');
+  // The production normalizer validates the command/candidate and provider URLs.
+  // Its HTTPS configuration is replaced only after local destinations are checked.
+  const normalized = normalize(
+    body,
+    {
+      crmBaseUrl: 'https://crm.example.test',
+      webhookUrl:
+        'https://automation.example.test/webhook/silmer/order-billing/paid',
+      handle: 'synthetic-billing',
+    },
+    mode,
+  );
+  return { ...normalized, crmBaseUrl, webhookUrl, gatewayBaseUrl };
+}
+
 /** The webhook contributes only identifiers, never proof of payment.
  * @param {any} check @param {any} candidate @param {any} charge */
 export function verifiedBillingPayment(check, candidate, charge) {
@@ -171,12 +233,44 @@ export function billingCreatedResult(response) {
  * @param {{crmBaseUrl?:string,handle?:string,webhookUrl?:string}} [configuration]
  */
 export function createOrderBillingWorkflow(configuration = {}) {
+  return buildOrderBillingWorkflow(configuration, false);
+}
+
+/** Offline synthetic profile. Never bind production credentials or visit its fake checkout URLs.
+ * @param {{crmBaseUrl?:string,handle?:string,webhookUrl?:string,gatewayBaseUrl?:string}} [configuration] */
+export function createOrderBillingDevelopmentWorkflow(configuration = {}) {
+  if (
+    !configuration ||
+    typeof configuration !== 'object' ||
+    Array.isArray(configuration)
+  )
+    throw new TypeError('BILLING_DEV_CONFIGURATION_INVALID');
+  return buildOrderBillingWorkflow(
+    {
+      crmBaseUrl: 'http://billing-crm:3000',
+      webhookUrl: 'http://n8n:5678/webhook/silmer/order-billing-dev/paid',
+      gatewayBaseUrl: 'http://billing-simulator:8080',
+      handle: 'synthetic-billing',
+      ...configuration,
+    },
+    true,
+  );
+}
+
+/** @param {any} configuration @param {boolean} development */
+function buildOrderBillingWorkflow(configuration, development) {
   if (
     !configuration ||
     typeof configuration !== 'object' ||
     Array.isArray(configuration) ||
     Object.keys(configuration).some(
-      (key) => !['crmBaseUrl', 'handle', 'webhookUrl'].includes(key),
+      (key) =>
+        ![
+          'crmBaseUrl',
+          'handle',
+          'webhookUrl',
+          ...(development ? ['gatewayBaseUrl'] : []),
+        ].includes(key),
     )
   )
     throw new TypeError('Only non-secret billing configuration is accepted');
@@ -184,6 +278,9 @@ export function createOrderBillingWorkflow(configuration = {}) {
     crmBaseUrl: configuration.crmBaseUrl ?? '',
     handle: configuration.handle ?? '',
     webhookUrl: configuration.webhookUrl ?? '',
+    ...(development
+      ? { gatewayBaseUrl: configuration.gatewayBaseUrl ?? '' }
+      : {}),
   };
   if (
     Object.values(publicConfiguration).some(
@@ -196,6 +293,14 @@ export function createOrderBillingWorkflow(configuration = {}) {
     throw new TypeError(
       'Only fixed non-secret billing configuration is accepted',
     );
+  if (development)
+    normalizeDevelopmentBillingInput(
+      {
+        schema_version: '1.0',
+        charge_id: '50c242cc-7a80-48a0-b2ce-750807589e17',
+      },
+      publicConfiguration,
+    );
   /** @type {any[]} */
   const nodes = [];
   /** @type {Record<string,any>} */
@@ -204,7 +309,7 @@ export function createOrderBillingWorkflow(configuration = {}) {
   /** @param {string} name @param {string} type @param {any} parameters @param {any} [extra] */
   function add(name, type, parameters, extra = {}) {
     const node = {
-      id: `order-billing-${++sequence}`,
+      id: `${development ? 'order-billing-dev' : 'order-billing'}-${++sequence}`,
       name,
       type: `n8n-nodes-base.${type}`,
       typeVersion:
@@ -290,19 +395,25 @@ export function createOrderBillingWorkflow(configuration = {}) {
         },
       },
       {
-        credentials: { httpBasicAuth: { name: 'Silmer n8n para CRM Basic' } },
+        credentials: {
+          httpBasicAuth: {
+            name: `Silmer n8n para CRM Basic${development ? ' DEV' : ''}`,
+          },
+        },
         retryOnFail: false,
       },
     );
   }
-  /** @param {string} name @param {string} path @param {string} body */
-  function gateway(name, path, body) {
+  /** @param {string} name @param {string} path @param {string} body @param {string} source */
+  function gateway(name, path, body, source) {
     return add(
       name,
       'httpRequest',
       {
         method: 'POST',
-        url: 'https://api.checkout.infinitepay.io/' + path,
+        url: development
+          ? `={{ $('${source}').first().json.gatewayBaseUrl + '/${path}' }}`
+          : 'https://api.checkout.infinitepay.io/' + path,
         authentication: 'genericCredentialType',
         genericAuthType: 'httpHeaderAuth',
         sendBody: true,
@@ -317,7 +428,9 @@ export function createOrderBillingWorkflow(configuration = {}) {
       },
       {
         credentials: {
-          httpHeaderAuth: { name: 'InfinitePay Checkout API Key' },
+          httpHeaderAuth: {
+            name: `InfinitePay Checkout API Key${development ? ' DEV' : ''}`,
+          },
         },
         retryOnFail: false,
       },
@@ -335,21 +448,31 @@ export function createOrderBillingWorkflow(configuration = {}) {
     'Receber emissão autorizada',
     'webhook',
     {
-      path: 'silmer/order-billing/create',
+      path: development
+        ? 'silmer/order-billing-dev/create'
+        : 'silmer/order-billing/create',
       httpMethod: 'POST',
       authentication: 'basicAuth',
       responseMode: 'responseNode',
       options: {},
     },
     {
-      webhookId: 'f0689210-cf56-4771-bc76-b08a3aa03616',
-      credentials: { httpBasicAuth: { name: 'Silmer CRM para n8n Basic' } },
+      webhookId: development
+        ? '6ce6fc24-cd84-4cce-9214-1cbfbcd7f001'
+        : 'f0689210-cf56-4771-bc76-b08a3aa03616',
+      credentials: {
+        httpBasicAuth: {
+          name: `Silmer CRM para n8n Basic${development ? ' DEV' : ''}`,
+        },
+      },
     },
   );
   const commandConfig = configure('Configurar emissão sem segredos');
   const normalized = add('Validar cobrança e configuração', 'code', {
     mode: 'runOnceForEachItem',
-    jsCode: `const normalize=${normalizeBillingInput.toString()};return {json:normalize($json.body,${config})};`,
+    jsCode: development
+      ? `const normalize=${normalizeBillingInput.toString()};const normalizeDevelopment=${normalizeDevelopmentBillingInput.toString()};return {json:normalizeDevelopment($json.body,${config},'command',normalize)};`
+      : `const normalize=${normalizeBillingInput.toString()};return {json:normalize($json.body,${config})};`,
   });
   const reserve = crm('Reservar efeito no CRM', normalized, 'reserve');
   const allowed = add('Emissão permitida nesta execução', 'if', {
@@ -380,6 +503,7 @@ export function createOrderBillingWorkflow(configuration = {}) {
     'InfinitePay criar link uma única vez',
     'links',
     '={{ $json }}',
+    normalized,
   );
   const created = add('Validar URL de checkout', 'code', {
     mode: 'runOnceForEachItem',
@@ -415,17 +539,25 @@ export function createOrderBillingWorkflow(configuration = {}) {
     'Receber aviso de pagamento',
     'webhook',
     {
-      path: 'silmer/order-billing/paid',
+      path: development
+        ? 'silmer/order-billing-dev/paid'
+        : 'silmer/order-billing/paid',
       httpMethod: 'POST',
       responseMode: 'responseNode',
       options: {},
     },
-    { webhookId: 'b561842f-af4f-4094-a305-dd0e4f17ddba' },
+    {
+      webhookId: development
+        ? '6ce6fc24-cd84-4cce-9214-1cbfbcd7f002'
+        : 'b561842f-af4f-4094-a305-dd0e4f17ddba',
+    },
   );
   const paymentConfig = configure('Configurar recebimento sem segredos');
   const candidate = add('Validar identificadores do aviso', 'code', {
     mode: 'runOnceForEachItem',
-    jsCode: `const normalize=${normalizeBillingInput.toString()};return {json:normalize($json.body,${config},'payment')};`,
+    jsCode: development
+      ? `const normalize=${normalizeBillingInput.toString()};const normalizeDevelopment=${normalizeDevelopmentBillingInput.toString()};return {json:normalizeDevelopment($json.body,${config},'payment',normalize)};`
+      : `const normalize=${normalizeBillingInput.toString()};return {json:normalize($json.body,${config},'payment')};`,
   });
   const lookup = crm(
     'Consultar cobrança conhecida no CRM',
@@ -437,6 +569,7 @@ export function createOrderBillingWorkflow(configuration = {}) {
     'InfinitePay verificar pagamento no servidor',
     'payment_check',
     `={{ ({handle:$('${candidate}').first().json.handle,order_nsu:$('${candidate}').first().json.chargeId,transaction_nsu:$('${candidate}').first().json.transactionNsu,slug:$('${candidate}').first().json.invoiceSlug}) }}`,
+    candidate,
   );
   const verified = add('Conferir pagamento verificado', 'code', {
     mode: 'runOnceForEachItem',
@@ -466,7 +599,9 @@ export function createOrderBillingWorkflow(configuration = {}) {
   ))
     node.position[1] = 480;
   return {
-    name: 'Silmer | CRM | Cobranças InfinitePay',
+    name: development
+      ? 'DEV | Silmer | CRM | Cobranças InfinitePay'
+      : 'Silmer | CRM | Cobranças InfinitePay',
     active: false,
     nodes,
     connections,
