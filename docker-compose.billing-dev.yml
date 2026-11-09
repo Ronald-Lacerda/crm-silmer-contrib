@@ -1,0 +1,86 @@
+name: crm-silmer-billing-dev
+
+services:
+  billing-postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: crm_silmer_billing_dev
+      POSTGRES_USER: synthetic
+      POSTGRES_PASSWORD: synthetic-billing-local-only
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U synthetic -d crm_silmer_billing_dev']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - billing-postgres-data:/var/lib/postgresql/data
+    networks: [billing-internal]
+
+  billing-crm:
+    image: node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
+    working_dir: /workspace
+    command:
+      [
+        'node',
+        '--import',
+        './scripts/billing-development-loader.mjs',
+        './scripts/billing-development-interactive-service.mjs',
+      ]
+    depends_on:
+      billing-postgres:
+        condition: service_healthy
+    environment:
+      RUN_BILLING_INTERACTIVE: synthetic-local-only
+    volumes:
+      - .:/workspace:ro
+      - billing-simulator-data:/development-state
+    networks:
+      billing-internal:
+        aliases: [billing-simulator]
+
+  n8n:
+    image: n8nio/n8n:2.38.7
+    mem_limit: 2g
+    cpus: 1
+    environment:
+      N8N_DIAGNOSTICS_ENABLED: 'false'
+      N8N_PERSONALIZATION_ENABLED: 'false'
+      N8N_SECURE_COOKIE: 'false'
+      N8N_LOG_LEVEL: error
+      N8N_CONCURRENCY_PRODUCTION_LIMIT: '1'
+      N8N_EDITOR_BASE_URL: http://127.0.0.1:5685
+      N8N_PROXY_HOPS: '1'
+      WEBHOOK_URL: http://n8n:5678/
+    volumes:
+      - billing-n8n-data:/home/node/.n8n
+      - ./var/billing-development-interactive:/bootstrap:ro
+    entrypoint: ['/bin/sh', '-ec']
+    command:
+      - >-
+        n8n import:credentials --input=/bootstrap/credentials.json >/tmp/credentials.log 2>&1;
+        n8n import:workflow --input=/bootstrap/workflows.json >/tmp/import.log 2>&1;
+        n8n publish:workflow --id=SyntheticBillingDev >/tmp/publish.log 2>&1;
+        n8n publish:workflow --id=SyntheticBillingTransportDev >>/tmp/publish.log 2>&1;
+        n8n publish:workflow --id=SyntheticBillingCheckDev >>/tmp/publish.log 2>&1;
+        exec n8n start
+    networks: [billing-internal]
+
+  ingress:
+    image: node:24.20.0-bookworm-slim@sha256:ba849c60be29959425b8734d57b8b4b7d56f98edd9504c9af091d5281095a71e
+    command: ['node', '/workspace/scripts/billing-development-ingress.mjs']
+    volumes:
+      - .:/workspace:ro
+    ports:
+      - '127.0.0.1:4180:4180'
+      - '127.0.0.1:5685:5685'
+    networks: [billing-internal, ingress]
+
+networks:
+  billing-internal:
+    internal: true
+  ingress: {}
+
+volumes:
+  billing-postgres-data: {}
+  billing-n8n-data: {}
+  billing-simulator-data: {}

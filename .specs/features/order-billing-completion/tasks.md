@@ -104,7 +104,15 @@ Where: scripts/billing-development-interactive.mjs
 Tests: BDEV2-03/04, API/login/UI sintéticos, rotas n8n/simulator, saúde, isolamento, stop e reset explícito.
 Gate: Development
 Done when: usuário pode navegar na jornada real local sem provedor/cliente real, com comandos de operação documentados.
-Status: Pending
+Status: Complete
+
+DEV interativo disponível em127.0.0.1:4180 e editor n8n5685; contas sintéticas
+com sessão/CSRF reais. Probe de emissão/entrega/conciliação sem webhook,
+externo7000/reversão PASS (`var/billing-interactive-smoke-result.json`).
+Stop/up preservou banco, simulador e workflows; reentrega não duplicou crédito
+(`var/billing-interactive-restart-result.json`). Unit DEV15/15, typecheck/lint
+e formato PASS. Reset exige flag explícita e projeto fixo; não foi executado
+sobre o ambiente mantido para avaliação. Nenhum recurso de outro projeto alterado.
 
 ### T6: Validar e documentar a jornada integrada
 
