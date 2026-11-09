@@ -141,6 +141,23 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 ## OLIST-T20b — Início da Fase 3 (05/11/2026)
 
+## OLIST-T13 — progresso, recuperação e cancelamento local (08/11/2026)
+
+- [x] Progresso por etapa (cliente → produto/variações → venda) com estado em
+      texto, número da venda, contagens do admin e anúncio só da mudança relevante.
+- [x] Incerteza, rejeição e invalidação sem repetição criadora; enviado/vinculado,
+      incerto ou reservado sem editar, cancelar, reabrir ou gerar de novo.
+- [x] Histórico de tentativas, conferência (reconciliação só leitura) e vínculo
+      de venda existente em dois gestos, apenas para `COMMERCIAL_ADMIN`.
+- [x] Cancelar pedido local e terminal, com motivo, aviso de impacto, foco e ACL
+      comercial; o checkbox Olist não concede cancelamento.
+- [x] Revisão independente de QA/Segurança/A11y: sem crítico/alto; sete médios e
+      baixos corrigidos e cobertos por testes.
+
+OLIST-16–18, 22–25, 30 e 45–47. [Contrato, gates e limites](../../../docs/runbooks/olist-phase4.md#t13--progresso-recuperação-e-cancelamento-local-08112026).
+Sem alteração de backend, flag, migration, credencial, conta ou deploy; geração
+real desligada. Fase 5 (T14/T15) e Fase 6 permanecem pendentes.
+
 ## OLIST-T12 — composição e prévia por Pedido (08/11/2026)
 
 - [x] Editor por IDs de grupo/tamanho, subtotal negociado e total calculado
@@ -158,7 +175,7 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
 
 OLIST-01–12, 21–24, 33–35 e 40–44; [contrato e evidências](../../../docs/runbooks/olist-phase4.md#t12--composição-e-conferência-por-pedido-08112026).
 Mesma branch `codex/olist-phase4-t11`; nenhum deploy, conta habilitada ou flag
-real alterada. T13 e as Fases 5–6 permanecem separadas; T25 está registrada abaixo.
+real alterada. As Fases 5–6 permanecem separadas; T25 e T13 estão registradas acima/abaixo.
 
 ## OLIST-T25 — rótulos e ficha-canonical-v7 (08/11/2026)
 
@@ -180,7 +197,7 @@ Aprovação da amostra e troca do template pendentes (humanas). Geração real d
 - [x] Teclado/foco/axe, estados negativos e reflow claro/escuro verificados.
 
 OLIST-03–05, 11, 22–25 e 48. [Contrato, evidências e rollback](../../../docs/runbooks/olist-phase4.md).
-T11 iniciou a Fase 4; T12 concluída na continuação acima; T25 concluída (ver OLIST-T25). T13 pendente.
+T11 iniciou a Fase 4; T12 concluída na continuação acima; T25 e T13 concluídas (ver OLIST-T25 e OLIST-T13). Fase 5 pendente.
 Geração real desligada,
 sem deploy, habilitação, conexão real homologada ou piloto.
 
@@ -196,7 +213,7 @@ sem deploy, habilitação, conexão real homologada ou piloto.
       regressão de Pedidos/Loja/Financeiro/filas/n8n executadas.
 
 OLIST-02, 06, 16, 19, 21, 27–30, 39, 45–47. [Contrato e evidências](../../../docs/runbooks/olist-phase3.md#t10--guardas-comerciais-e-recuperação).
-F3 concluída localmente; próximas T11/T12/T13/T25 (T11/T12/T25 já entregues), sem despacho real/deploy/piloto.
+F3 concluída localmente; T11/T12/T13/T25 já entregues, sem despacho real/deploy/piloto.
 
 ## OLIST-T23 — cancelamento local pré-exportação (06/11/2026)
 

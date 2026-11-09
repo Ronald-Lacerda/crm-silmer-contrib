@@ -19,6 +19,16 @@ campos já respondidos não são perguntados novamente. `mvp-simple-23`, tarefa
 VND-L05/AGT-01–05/08, sem novo contrato ou infraestrutura. Publicação como
 delta sobre Evolution e rollback no [runbook](docs/runbooks/vendedor-prioridades.md).
 
+## Olist T13 — progresso, recuperação e cancelamento local (08/11/2026)
+
+A T13 completa a interface da Fase 4 sobre os contratos já existentes, sem
+mudança de backend: linha do tempo de etapas (cliente, produto/variações, venda)
+lida da projeção do CRM, com releitura limitada e sem polling do ERP; histórico,
+conferência (reconciliação só leitura) e vínculo de venda existente apenas para
+`COMMERCIAL_ADMIN`; e a ação **Cancelar pedido** local e terminal, bloqueada
+por qualquer trava Olist. Incerteza nunca oferece repetição criadora. Geração
+real segue desligada. [Contrato, gates e limites](docs/runbooks/olist-phase4.md#t13--progresso-recuperação-e-cancelamento-local-08112026).
+
 ## Olist T12 — interface de composição e prévia (08/11/2026)
 
 A T12 aplica os contratos existentes das ADRs 057/062/067/068 à interface:
@@ -52,7 +62,7 @@ Sem transporte criador, migration, dependência ou infraestrutura nova; geraçã
 real permanece desligada. [Contrato, evidências e rollback](docs/runbooks/olist-phase4.md).
 T11 iniciou F4; T12 foi concluída na continuação acima. T25 trouxe os rótulos
 Previsão de entrega/Aplicação e a `ficha-canonical-v7`, preparada e não
-selecionada (`PRINT_TEMPLATE` segue na v6). T13 e os gates operacionais F5/F6
+selecionada (`PRINT_TEMPLATE` segue na v6). T13 foi concluída (seção acima); os gates operacionais F5/F6
 continuam pendentes.
 
 ## OLIST-T10 — guardas comerciais e recuperação (06/11/2026)

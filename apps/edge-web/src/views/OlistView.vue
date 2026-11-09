@@ -42,6 +42,14 @@ const lookupNotice = ref(null);
 const accountNotice = ref(null);
 const query = ref('');
 const result = ref(null);
+// The Olist projection carries no cancellation; the lookup of this same order
+// does. A page opened straight from the address has no lookup: the API
+// refuses (ORDER_CANCELLED) and the panel explains it.
+const lookupCancelled = computed(
+  () =>
+    result.value?.orderId === selectedOrderId.value &&
+    result.value?.status === 'cancelado',
+);
 const lookupBusy = ref(false);
 const lookupError = ref('');
 const accountError = ref('');
@@ -482,6 +490,7 @@ onBeforeUnmount(() => {
       v-if="canOperate && selectedOrderId"
       :key="selectedOrderId"
       :order-id="selectedOrderId"
+      :cancelled="lookupCancelled"
     />
     <p
       v-else-if="canOperate && route.query.pedido"

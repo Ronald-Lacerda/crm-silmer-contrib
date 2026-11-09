@@ -12,16 +12,32 @@ import {
   olistFailure,
   registrationAction,
 } from '../../lib/olist-feedback.js';
+import {
+  OLIST_FOLLOW_DELAYS_MS,
+  isOperationInProgress,
+} from '../../lib/olist-progress.js';
+import OrderOlistProgress from './OrderOlistProgress.vue';
+import OrderOlistRecovery from './OrderOlistRecovery.vue';
 
 const props = defineProps({
   orderId: { type: String, required: true },
   revision: { type: Number, default: 0 },
   disabled: { type: Boolean, default: false },
+  /** Pedido cancelado localmente: a geração, a conferência e o vínculo param. */
+  cancelled: { type: Boolean, default: false },
 });
 const emit = defineEmits(['operation']);
 const user = inject('sessionUser', ref({}));
 const liveEvent = inject('liveEvent', ref(null));
 const canOperate = computed(() => user.value.olistEnabled === true);
+// A administração Olist segue a capacidade de Admin, não o checkbox; a API
+// revalida cada leitura e comando, a tela só evita oferecer o que será recusado.
+const isAdmin = computed(() =>
+  (user.value.capabilities ?? []).includes('COMMERCIAL_ADMIN'),
+);
+const administration = ref(null);
+const loadStamp = ref(0);
+const progressRef = ref(null);
 const projection = ref(null);
 const preview = ref(null);
 const busy = ref(false);
@@ -51,6 +67,7 @@ const generationAllowed = computed(
   () =>
     canOperate.value &&
     !denied.value &&
+    !props.cancelled &&
     !props.disabled &&
     !hasOperation.value &&
     exportState.value === 'idle' &&
@@ -61,16 +78,6 @@ const generationAllowed = computed(
     typeof preview.value?.previewToken === 'string' &&
     preview.value.previewToken.length > 0,
 );
-const operationLabel = computed(() => {
-  const state = projection.value?.operation?.state;
-  if (state === 'confirmed' || state === 'linked')
-    return 'Venda Olist conferida';
-  if (
-    ['outcome_unknown', 'divergent', 'reconciliation_required'].includes(state)
-  )
-    return 'Operação bloqueada para conferência administrativa';
-  return 'Operação Olist em acompanhamento';
-});
 const expiryLabel = computed(() => {
   const stamp = Date.parse(preview.value?.expiresAt ?? '');
   return Number.isFinite(stamp)
@@ -147,6 +154,7 @@ async function load(interactive = false) {
   const data = await run('', undefined, interactive);
   if (!data) return;
   projection.value = data;
+  loadStamp.value += 1;
   emit(
     'operation',
     data.operation ??
@@ -155,9 +163,92 @@ async function load(interactive = false) {
         : null),
   );
 }
+/** Releitura limitada do CRM (nunca do ERP) enquanto a operação anda. Uma
+ * operação nunca some por causa de uma releitura: só uma leitura explícita
+ * ou o recarregamento da página substituem o que a tela já mostra. */
+let followTimer = 0;
+let followAttempt = 0;
+let followController;
+function stopFollow() {
+  if (followTimer) globalThis.clearTimeout(followTimer);
+  followTimer = 0;
+  followController?.abort();
+  followController = undefined;
+}
+async function pollOperation() {
+  if (
+    disposed ||
+    busy.value ||
+    props.disabled ||
+    denied.value ||
+    !isOperationInProgress(projection.value?.operation)
+  )
+    return;
+  const own = new AbortController();
+  followController?.abort();
+  followController = own;
+  const id = props.orderId;
+  try {
+    const response = await request(base.value, { signal: own.signal });
+    if (
+      disposed ||
+      own.signal.aborted ||
+      busy.value ||
+      props.orderId !== id ||
+      !response.data?.operation
+    )
+      return;
+    const current = projection.value?.operation;
+    const next = response.data.operation;
+    const unchanged = ['state', 'stage', 'number', 'errorCode'].every(
+      (key) => current?.[key] === next[key],
+    );
+    if (!unchanged) {
+      projection.value = response.data;
+      emit('operation', next);
+    }
+    // The admin counts ("3 de 5 variações vinculadas") move without the state
+    // or the stage changing: the diagnosis is read again on every bounded poll.
+    if (!unchanged || isAdmin.value) loadStamp.value += 1;
+  } catch (cause) {
+    if (disposed || own.signal.aborted) return;
+    if ([401, 403].includes(Number(cause?.status))) {
+      denied.value = true;
+      projection.value = null;
+      emit('operation', { unavailable: true });
+      error.value = olistFailure(cause);
+    }
+  }
+}
+function scheduleFollow() {
+  if (followTimer) globalThis.clearTimeout(followTimer);
+  followTimer = 0;
+  if (
+    disposed ||
+    followAttempt >= OLIST_FOLLOW_DELAYS_MS.length ||
+    !isOperationInProgress(projection.value?.operation)
+  )
+    return;
+  followTimer = globalThis.setTimeout(async () => {
+    followTimer = 0;
+    await pollOperation();
+    followAttempt += 1;
+    scheduleFollow();
+  }, OLIST_FOLLOW_DELAYS_MS[followAttempt]);
+}
+/** Recuperação administrativa mudou algo: reler a projeção e, se pedido,
+ * levar o foco ao progresso (o acionador pode ter saído da tela). */
+async function recoveryChanged(change) {
+  await load(false);
+  if (change?.focus) {
+    await nextTick();
+    if (!disposed) progressRef.value?.focus();
+  }
+}
 async function confer() {
   if (
     !canOperate.value ||
+    props.cancelled ||
     busy.value ||
     props.disabled ||
     hasOperation.value ||
@@ -191,6 +282,7 @@ async function confer() {
 async function validate() {
   if (
     !canOperate.value ||
+    props.cancelled ||
     !preview.value?.previewToken ||
     busy.value ||
     props.disabled ||
@@ -374,9 +466,18 @@ watch(
   () => [props.orderId, props.revision],
   (next, previous) => {
     invalidate();
-    if (!previous || next[0] !== previous[0]) exportState.value = 'idle';
+    stopFollow();
+    // Only another order discards what the panel shows. A new revision of the
+    // same order (live event, someone else's edit) keeps the previous data
+    // until the re-read arrives, so an open dialog and a command in flight
+    // are not torn down underneath the person.
+    if (!previous || next[0] !== previous[0]) {
+      exportState.value = 'idle';
+      administration.value = null;
+      projection.value = null;
+      loadStamp.value = 0;
+    }
     checkDisabled.value = false;
-    projection.value = null;
     denied.value = false;
     void load();
   },
@@ -389,17 +490,30 @@ watch(
     if (!disabled) void load();
   },
 );
+// A single primitive: a session refresh that changes nothing does not fire.
 watch(
-  () => [
-    user.value.id,
-    user.value.olistEnabled,
-    user.value.olistAuthorizationVersion,
-  ],
+  () =>
+    [
+      user.value.id,
+      user.value.olistEnabled === true,
+      user.value.olistAuthorizationVersion,
+      isAdmin.value,
+    ].join('|'),
   () => {
     invalidate();
-    projection.value = null;
-    denied.value = !canOperate.value;
-    if (!denied.value) void load();
+    stopFollow();
+    // "No capacity to generate" (canOperate) is not "access lost" (denied, from
+    // a 401/403): an administrator without the Olist checkbox keeps reading the
+    // progress and administering, and the API revalidates every call.
+    denied.value = false;
+    void load();
+  },
+);
+// The order was cancelled with a preview or a review dialog open: both go.
+watch(
+  () => props.cancelled,
+  (cancelled) => {
+    if (cancelled) clearPreview();
   },
 );
 watch(liveEvent, (event) => {
@@ -411,14 +525,36 @@ watch(liveEvent, (event) => {
       'identity.user.changed',
     ].includes(event?.type)
   ) {
+    // With an operation (underway or finished) there is no preview to renew:
+    // an event for another order is ignored, one for this order (or a reset)
+    // only re-reads the CRM, and nothing asks for a new preview.
+    if (hasOperation.value && exportState.value !== 'submitting') {
+      if (event?.reset || event?.orderId === props.orderId) {
+        invalidate();
+        void load();
+      }
+      return;
+    }
     invalidate();
     // Explicit refresh avoids ERP polling and never reuses a receipt after a live change.
     error.value =
       'Os dados ou o acesso podem ter mudado. Atualize a preparação e confira uma nova prévia.';
   }
 });
+watch(
+  () => {
+    const operation = projection.value?.operation;
+    return operation ? operation.state + ':' + operation.stage : '';
+  },
+  () => {
+    followAttempt = 0;
+    scheduleFollow();
+  },
+  { immediate: true },
+);
 onBeforeUnmount(() => {
   disposed = true;
+  stopFollow();
   invalidate();
 });
 </script>
@@ -439,9 +575,11 @@ onBeforeUnmount(() => {
     <div class="op-sheet-body">
       <p :id="`olist-generation-${orderId}`">
         {{
-          generationAllowed
-            ? 'A geração exige sua conferência e confirmação humana.'
-            : 'A geração de vendas está desativada.'
+          cancelled
+            ? 'Pedido cancelado. A geração está bloqueada.'
+            : generationAllowed
+              ? 'A geração exige sua conferência e confirmação humana.'
+              : 'A geração de vendas está desativada.'
         }}
         Conferir a prévia consulta os cadastros e não cria cliente, produto ou
         venda no Olist.
@@ -453,6 +591,11 @@ onBeforeUnmount(() => {
       </p>
       <p v-if="!canOperate" class="field-help">
         Seu usuário não está habilitado para conferir a prévia Olist.
+      </p>
+      <p v-if="cancelled && canOperate" class="field-help">
+        A conferência da prévia e o vínculo de uma venda existente ficam
+        bloqueados enquanto o pedido estiver cancelado. O histórico continua
+        consultável.
       </p>
       <p v-if="disabled" class="field-help">
         Salve ou cancele a edição aberta antes de conferir.
@@ -586,17 +729,27 @@ onBeforeUnmount(() => {
         </template>
       </div>
       <template v-if="hasOperation && !denied">
-        <p>
-          {{ operationLabel
-          }}<span v-if="projection.operation.number">
-            · Venda {{ projection.operation.number }}</span
-          >
-        </p>
+        <OrderOlistProgress
+          ref="progressRef"
+          :order-id="orderId"
+          :crm-number="projection.number"
+          :operation="projection.operation"
+          :resources="isAdmin ? (administration?.resources ?? null) : null"
+        />
         <p class="field-help">
           Não repita a geração. A conferência e a recuperação da operação são
           administrativas.
         </p>
       </template>
+      <OrderOlistRecovery
+        v-if="isAdmin && !denied && projection"
+        :order-id="orderId"
+        :refresh-signal="loadStamp"
+        :disabled="disabled"
+        :cancelled="cancelled"
+        @administration="administration = $event"
+        @refresh="recoveryChanged"
+      />
       <div class="form-actions">
         <button
           v-if="!preview?.eligible || exportState !== 'idle' || hasOperation"
@@ -604,11 +757,15 @@ onBeforeUnmount(() => {
           :disabled="busy || disabled || denied"
           @click="load(true)"
         >
-          Atualizar preparação
+          {{ hasOperation ? 'Atualizar progresso' : 'Atualizar preparação' }}
         </button>
         <button
           v-if="
-            canOperate && !denied && !hasOperation && exportState === 'idle'
+            canOperate &&
+            !denied &&
+            !cancelled &&
+            !hasOperation &&
+            exportState === 'idle'
           "
           type="button"
           :disabled="busy || disabled"
@@ -619,6 +776,7 @@ onBeforeUnmount(() => {
         <button
           v-if="
             canOperate &&
+            !cancelled &&
             preview?.eligible &&
             preview?.previewToken &&
             !hasOperation &&
@@ -633,6 +791,7 @@ onBeforeUnmount(() => {
         <button
           v-if="
             canOperate &&
+            !cancelled &&
             preview?.eligible &&
             !hasOperation &&
             exportState === 'idle'

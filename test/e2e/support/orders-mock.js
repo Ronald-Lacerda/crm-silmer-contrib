@@ -198,6 +198,17 @@ function applySection(order, section, value) {
 
 /** @param {any} order @param {string} action @param {any} body */
 function applyCommand(order, action, body) {
+  // OLIST-T13 (ADR 068): terminal local cancellation; the commercial status
+  // stays and the effective one reads Cancelado.
+  if (action === 'cancel') {
+    return {
+      cancelledAt: '2026-11-08T15:30:00.000Z',
+      cancelledBy: { id: session.user.id, name: session.user.name },
+      cancellationReason: body.reason,
+      effectiveStatus: 'cancelado',
+      version: order.version + 1,
+    };
+  }
   if (action === 'reopen') {
     const reopened = {
       ...order,
@@ -378,7 +389,7 @@ async function routeFiles(route, request, match, store, options) {
 
 /**
  * @param {import('@playwright/test').Page} page
- * @param {{orders?: any[], failDetailOnce?: boolean, failListOnce?: boolean, liveEvent?: Record<string, unknown>|null, onDetail?: (orderId: string) => void, onList?: (params: URLSearchParams) => void, onWrite?: (call: {section?: string, action?: string, body: any}) => void, pages?: any[][], writeFailure?: {status: number, body: Record<string, unknown>}, files?: Record<string, {final: any, references: any[]}>, onUpload?: (call: {filename: string, hasThumbnail: boolean, slot: string}) => void, onRemove?: (fileId: string) => void, uploadFailure?: {status: number, body: Record<string, unknown>}}} [options]
+ * @param {{user?: Record<string, unknown>, orders?: any[], failDetailOnce?: boolean, failListOnce?: boolean, liveEvent?: Record<string, unknown>|null, onDetail?: (orderId: string) => void, onList?: (params: URLSearchParams) => void, onWrite?: (call: {section?: string, action?: string, body: any}) => void, pages?: any[][], writeFailure?: {status: number, body: Record<string, unknown>, persist?: Record<string, unknown>}, files?: Record<string, {final: any, references: any[]}>, onUpload?: (call: {filename: string, hasThumbnail: boolean, slot: string}) => void, onRemove?: (fileId: string) => void, uploadFailure?: {status: number, body: Record<string, unknown>}}} [options]
  */
 export async function mockOrders(page, options = {}) {
   // A write mutates the order it answers with, so each test gets its own
@@ -412,7 +423,11 @@ export async function mockOrders(page, options = {}) {
     if (path === '/api/v1/sessions/current') {
       await route.fulfill({
         contentType: 'application/json',
-        body: JSON.stringify(session),
+        body: JSON.stringify(
+          options.user
+            ? { user: { ...session.user, ...options.user } }
+            : session,
+        ),
       });
       return;
     }
@@ -513,14 +528,21 @@ export async function mockOrders(page, options = {}) {
       return;
     }
 
-    const command = /^\/api\/v1\/orders\/([^/]+)\/(confirm|reopen)$/u.exec(
-      path,
-    );
+    const command =
+      /^\/api\/v1\/orders\/([^/]+)\/(confirm|reopen|cancel)$/u.exec(path);
     if (command && request.method() === 'POST') {
       const body = request.postDataJSON();
       options.onWrite?.({ action: command[2], body });
       expect(request.headers()['idempotency-key']).toBeTruthy();
       if (options.writeFailure) {
+        // The persisted state the failure left behind (e.g. a lock that won
+        // the race), read again by the page.
+        if (options.writeFailure.persist) {
+          Object.assign(
+            orders.find((candidate) => candidate.id === command[1]),
+            options.writeFailure.persist,
+          );
+        }
         await route.fulfill({
           status: options.writeFailure.status,
           contentType: 'application/json',

@@ -10,6 +10,7 @@ import {
   watch,
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import OrderCancelAction from '../components/order/OrderCancelAction.vue';
 import OrderOlistPanel from '../components/order/OrderOlistPanel.vue';
 import OrderPriceBreakdown from '../components/order/OrderPriceBreakdown.vue';
 import OrderClosingSection from '../components/order/OrderClosingSection.vue';
@@ -26,6 +27,7 @@ import OrderStoreCorrection from '../components/order/OrderStoreCorrection.vue';
 import OrderSummarySection from '../components/order/OrderSummarySection.vue';
 import OrderShippingEstimate from '../components/order/OrderShippingEstimate.vue';
 import { commandKey, request } from '../lib/api-client.js';
+import { isOperationUncertain } from '../lib/olist-progress.js';
 import { usePhone } from '../lib/media-query.js';
 import {
   canSharePdf,
@@ -128,12 +130,28 @@ const olistLocked = computed(() =>
     order.value?.olistLocked ||
     olistOperation.value?.unavailable ||
     (olistOperation.value &&
-      !['invalidated', 'rejected'].includes(olistOperation.value.state)),
+      (isOperationUncertain(olistOperation.value) ||
+        !['invalidated', 'rejected'].includes(olistOperation.value.state))),
   ),
 );
 const canEdit = computed(
   () =>
     commercialAccess.value && !order.value?.cancelledAt && !olistLocked.value,
+);
+// OLIST-T13 (ADR 068): cancelling follows the commercial ACL (owner or admin;
+// the Olist checkbox grants nothing, a store order asks for an admin) and
+// stops at any Olist lock — sent, linked, reserved or uncertain.
+const canCancel = computed(
+  () =>
+    commercialAccess.value &&
+    !order.value?.cancelledAt &&
+    !olistLocked.value &&
+    (!isStore.value || isAdmin.value),
+);
+const statusLabel = computed(() =>
+  order.value?.cancelledAt
+    ? 'Cancelado'
+    : orderStatusLabel(order.value?.status),
 );
 const canEditMilestones = computed(
   () => commercialAccess.value && !order.value?.cancelledAt,
@@ -728,9 +746,14 @@ onBeforeUnmount(() => {
           <div class="op-head-title">
             <h1 ref="heading" tabindex="-1">Pedido {{ order.number }}</h1>
             <!-- LOJ-34: a site order is Confirmado, like any generated one. -->
-            <span class="op-status" :data-status="order.status">
-              <OrderIcon :name="isPending ? 'clock' : 'check'" />
-              {{ orderStatusLabel(order.status) }}
+            <span
+              class="op-status"
+              :data-status="order.cancelledAt ? 'cancelado' : order.status"
+            >
+              <OrderIcon
+                :name="order.cancelledAt ? 'x' : isPending ? 'clock' : 'check'"
+              />
+              {{ statusLabel }}
             </span>
             <!-- ADR 028: the shop's number travels with the CRM number. -->
             <span v-if="isStore" class="badge" data-tone="info">{{
@@ -795,7 +818,7 @@ onBeforeUnmount(() => {
       </p>
       <p v-else-if="olistLocked" class="op-readonly">
         Pedido protegido por uma operação Olist. A composição não pode ser
-        editada ou reaberta.
+        editada, reaberta ou cancelada.
       </p>
       <p v-else-if="isStore" class="op-readonly">
         <OrderIcon name="lock" />
@@ -877,8 +900,16 @@ onBeforeUnmount(() => {
         v-if="olistEnabled || isAdmin"
         :order-id="order.id"
         :revision="order.version"
+        :cancelled="Boolean(order.cancelledAt)"
         :disabled="editingSection !== ''"
         @operation="olistOperation = $event"
+      />
+      <OrderCancelAction
+        :order="order"
+        :can-cancel="canCancel"
+        :disabled="editingSection !== ''"
+        @cancelled="order = $event"
+        @refresh="load(true)"
       />
 
       <div
@@ -934,3 +965,10 @@ onBeforeUnmount(() => {
     </template>
   </div>
 </template>
+
+<style scoped>
+.op-status[data-status='cancelado'] {
+  color: var(--status-error-text);
+  background: var(--status-error-surface);
+}
+</style>

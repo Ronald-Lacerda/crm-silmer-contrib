@@ -5,7 +5,7 @@
 Tarefa OLIST-T11, requisitos OLIST-03–05, 11, 22–25 e 48 da
 [RFC 050](../rfc/050-geracao-assistida-de-pedidos-no-olist.md), sobre as
 [guardas da Fase 3](olist-phase3.md#t10--guardas-comerciais-e-recuperação).
-T11 iniciou a Fase 4; T12 concluída na continuação abaixo. T13/T25 pendentes. A geração real
+T11 iniciou a Fase 4; T12, T25 e T13 concluídas nas seções abaixo. A geração real
 permanece desligada. Não há deploy, habilitação de operadora, conexão real,
 cadastro, venda ou piloto como parte desta entrega.
 
@@ -279,3 +279,100 @@ o hash do artefato no approval-v7. A conferência visual do layout é do PO.
 
 Reverter a entrega de rótulos e os arquivos v7 em conjunto. Nenhum dado ou
 snapshot é alterado; pedidos continuam imprimindo na v6.
+
+## T13 — progresso, recuperação e cancelamento local (08/11/2026)
+
+OLIST-16–18, 22–25, 30 e 45–47. Mesma worktree/branch `codex/olist-phase4-t11`.
+Somente interface e testes: nenhuma alteração de backend, flag, migration,
+credencial, conta ou deploy; geração real segue desligada.
+
+### Contrato entregue
+
+- **Progresso** (qualquer usuário que vê o painel): Cliente → Produto e variações
+  → Venda, derivado da projeção do CRM (`operation.state/stage/number/errorCode`).
+  Todo estado tem texto (concluída, em andamento, aguardando, bloqueada por
+  incerteza, rejeitada, invalidada), nunca só cor. O `number` da projeção é a
+  venda ERP; o do recibo `/export` continua sendo o Pedido CRM. O backend não
+  publica evento Olist: o estado vem do reload, de "Atualizar progresso" e de
+  releitura limitada do CRM enquanto a operação está em curso (4, 8, 15, 30 e
+  60 s, reiniciada a cada mudança). Nenhum polling do ERP. `aria-live` anuncia
+  só a mudança relevante.
+- **Incerteza e rejeição**: etapa bloqueada com motivo fixo e a orientação "não
+  repita a geração". Não existe `/retry` no backend e nenhuma ação criadora é
+  oferecida. Enviado/vinculado, reservado ou incerto (inclusive incerteza por
+  código com estado `rejected`) não oferecem editar, cancelar, reabrir nem gerar.
+- **Administração** (somente `COMMERCIAL_ADMIN`, independente do checkbox Olist;
+  usuário apenas habilitado só lê e não chama `administration`, `reconcile`,
+  `links` nem `existing`): contagens de cadastros concluídos (relidas a cada
+  poll), histórico de tentativas com aviso de truncamento (sem payload/token),
+  "Conferir no Olist" por recurso/etapa (motivo, versão do alvo, chave
+  idempotente; 202 seguido de leitura persistida) e "Vincular venda existente" em
+  dois gestos (conferir, depois motivo e vínculo). Vínculo e conferência da venda
+  só são oferecidos onde o servidor os aceita (queued/resolving/ready para vínculo;
+  reserved/uncertain para a venda). Motivo é normalizado no cliente (quebra de
+  linha/tab/controle vira espaço), pois o servidor recusa controles.
+- **Falha incerta** (rede/5xx) em vincular ou conferir relê diagnóstico e
+  projeção e diz que o resultado é incerto; se o vínculo foi gravado, a tela o
+  mostra. Uma nova tentativa após edição do motivo usa nova chave: no vínculo o
+  servidor converge (idempotente) e na conferência é só leitura.
+- **Estabilidade**: reset de SSE, refresh de sessão ou nova revisão do pedido não
+  desmontam diálogo aberto nem descartam POST em andamento; só a troca de pedido
+  zera o estado. Admin sem checkbox continua vendo progresso/recuperação, sem
+  prévia nem geração. Com operação existente, eventos de outros pedidos são
+  ignorados sem alerta.
+- **Cancelar pedido** (`POST /api/v1/orders/:id/cancel`, contrato T23, sem mudança):
+  aparece só com ACL comercial (responsável/Admin; o checkbox não concede), pedido
+  ativo, sem trava Olist e, para loja, só Admin. Diálogo com motivo obrigatório
+  (1–1000, normalizado), aviso de impacto (vendas, receita, afazeres, filas
+  de produção/entrega e financeira; histórico, pagamento e snapshots continuam
+  consultáveis; não é exclusão, estorno nem cancelamento no ERP; aviso extra para
+  pago/loja; não incluir dados pessoais), `expectedVersion` capturada ao abrir,
+  um único envio por acionamento e reenvio incerto com a mesma chave/corpo. 409 de
+  versão conserva o texto. `ORDER_CANCELLATION_BLOCKED` fecha o diálogo e relê o
+  estado, sem retry. Sucesso: situação **Cancelado** (terminal), foco no título
+  "Cancelado no CRM" e um único anúncio. Resposta 2xx malformada é tratada como
+  resultado incerto (relê o pedido). O backend não distingue 403 de permissão,
+  CSRF ou sessão: a tela não afirma "sem permissão", mantém o diálogo e relê.
+- Pedido cancelado: painel Olist e recuperação ocultam prévia/geração/vínculo/
+  conferência e mostram "Pedido cancelado. A geração está bloqueada."; progresso e
+  histórico seguem em leitura.
+
+### Limites conhecidos
+
+- A projeção Olist (`OlistOrderProjection`) não traz o estado cancelado: em
+  `/olist?pedido=<uuid>` aberto direto, sem a busca, o painel não sabe do
+  cancelamento e a API recusa com `ORDER_CANCELLED`. Resolver de vez exige o campo
+  na projeção (backend, fora desta entrega).
+- O backend não expõe a origem created/linked: só `linked` indica vínculo.
+- Recurso `rejected` ainda oferece "Conferir no Olist"; o servidor o recusa
+  (`OLIST_RESOURCE_RECONCILIATION_REQUIRED`) e a tela explica. Decisão pendente.
+- Lista de leituras solicitadas mostra até 20 de 100 sem aviso de truncamento.
+- O motivo de cancelamento é devolvido a quem consulta o pedido (contrato T23);
+  restringi-lo a Admin/responsável seria mudança de backend.
+
+### Verificação
+
+Dados e provedores exclusivamente sintéticos; nenhuma chamada ao ERP, conta
+habilitada, credencial ou migration. Node 24.20.0, `fnm exec --using 24.20.0 npm.cmd ...`.
+Revisão independente de QA/Segurança/Privacidade/A11y (somente leitura): nenhum
+crítico/alto; sete médios (normalização do motivo, estabilidade do painel, contagens
+obsoletas, vínculo em `rejected`, foco, eventos alheios, pedido cancelado) e
+baixos foram corrigidos, com testes que falham sem a correção (verificado por
+mutação). Os resultados dos gates finais estão na tabela abaixo.
+
+| Gate                                         | Resultado                                                                                                                                                                                                                                                    |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run validate`                           | Aprovado: 2012 testes, 0 falhas/cancelamentos, 26 skips condicionais; tipos, lint, fronteiras, tokens, validadores e build. Uma rodada anterior cancelou `chat-media-upload-lifetime` por timeout de 3 s sob carga (passa isolado 3/3 e na suíte ociosa 2/2) |
+| E2E integral (porta isolada)                 | 646 aprovados, 7 skips previstos, 0 falhas/flakes; 2 workers, porta 4189, build fresco                                                                                                                                                                       |
+| E2E focado T13 + T12 + phase2 + pedidos/loja | 287 aprovados, 0 falhas, 0 flaky (porta 4193, 2 workers)                                                                                                                                                                                                     |
+| Testes unitários T13                         | 50/50 (progresso, cancelamento, formatação)                                                                                                                                                                                                                  |
+| axe 320/390/1366, teclado, reflow            | Zero violações nos cenários exercitados                                                                                                                                                                                                                      |
+
+Não houve ensaio PostgreSQL live nem homologação no ERP/EasyPanel; nada aqui
+equivale a piloto ou ampliação.
+
+### Rollback T13
+
+Reverter a entrega de interface e testes em conjunto. Não alterar dados, ledger
+nem flags; nenhum cancelamento local é desfeito (é terminal por contrato) e
+nenhuma venda ou cadastro ERP é afetado.
