@@ -163,7 +163,9 @@ export function createSubjectService(database) {
         database.query(
           `SELECT subject.id, subject.kind, subject.order_id, subject.position,
                   subject.is_current, subject.selected_source, subject.version,
-                  orders.number AS order_number, orders.status AS order_status
+                  orders.number AS order_number,
+                  CASE WHEN orders.cancelled_at IS NOT NULL THEN 'cancelado'
+                       ELSE orders.status END AS order_status
            FROM crm.conversation_subjects subject
            LEFT JOIN crm.orders orders ON orders.id=subject.order_id
            WHERE subject.conversation_id=$1
@@ -178,7 +180,8 @@ export function createSubjectService(database) {
                WHERE contact_identity_id=$3 AND target_contact_id=$1
                  AND status='active'))
              AND ($2='' OR position(lower($2) in lower(number))>0)
-           ORDER BY (status='pendente') DESC, created_at DESC, id DESC
+           ORDER BY (status='pendente' AND cancelled_at IS NULL) DESC,
+                    created_at DESC, id DESC
            LIMIT 101`,
           [contactId, query, identityId],
         ),
@@ -247,7 +250,10 @@ export function createSubjectService(database) {
           let subjectContactId = conversation.contact_id;
           if (orderId) {
             const order = await transaction.query(
-              `SELECT number, status, contact_id FROM crm.orders
+              `SELECT number, contact_id,
+                      CASE WHEN cancelled_at IS NOT NULL THEN 'cancelado'
+                           ELSE status END AS status
+               FROM crm.orders
                WHERE id=$1 AND origin='atendimento'
                  AND (contact_id=$2 OR contact_id IN (
                    SELECT source_contact_id FROM crm.identity_links

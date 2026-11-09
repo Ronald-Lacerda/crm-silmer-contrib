@@ -13,6 +13,8 @@ const BRL_AMOUNT = /^(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d{2}|\d))?$/u;
 const ORDER_STATUS_LABELS = Object.freeze({
   confirmado: 'Confirmado',
   pendente: 'Pendente',
+  // OLIST-19: subject summaries report a locally cancelled order as 'cancelado'.
+  cancelado: 'Cancelado',
 });
 
 export const PAYMENT_CONDITION_OPTIONS = Object.freeze([

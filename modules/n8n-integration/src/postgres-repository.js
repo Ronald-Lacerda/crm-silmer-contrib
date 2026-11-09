@@ -1342,7 +1342,8 @@ export class PostgresN8nIntegrationRepository {
       const order = (
         await client.query(
           `SELECT id FROM crm.orders WHERE id = $1 AND contact_id = $2
-             AND status = 'pendente' AND origin = 'atendimento'`,
+             AND status = 'pendente' AND cancelled_at IS NULL
+             AND origin = 'atendimento'`,
           [orderId, conversation.current_contact_id],
         )
       ).rows[0];
@@ -1623,7 +1624,8 @@ export class PostgresN8nIntegrationRepository {
     const subjects = (
       await client.query(
         `SELECT subject.id, subject.order_id, orders.number AS order_number,
-                orders.status AS order_status,
+                CASE WHEN orders.cancelled_at IS NOT NULL THEN 'cancelado'
+                     ELSE orders.status END AS order_status,
                 subject.kind, subject.is_current,
                 subject.selected_source, subject.position, briefing.version,
                 briefing.envelope, briefing.legacy_conversation_id
@@ -1773,6 +1775,7 @@ export class PostgresN8nIntegrationRepository {
                   OR origin_identity.current_contact_id = $1)
                 AND orders.conversation_id IS DISTINCT FROM $2
                 AND NOT orders.is_test
+                AND orders.cancelled_at IS NULL
                 AND NOT EXISTS (
                   SELECT 1 FROM crm.conversation_subjects AS subject
                   WHERE subject.conversation_id = $2
@@ -1844,6 +1847,7 @@ export class PostgresN8nIntegrationRepository {
            AND subject.contact_id = identity.current_contact_id
            AND orders.contact_id = identity.current_contact_id
            AND orders.origin = 'atendimento' AND orders.status = 'pendente'
+           AND orders.cancelled_at IS NULL
            AND (identity.channel <> 'site_chat'
                 OR orders.conversation_id = subject.conversation_id)
          FOR SHARE OF subject, orders`,
@@ -2004,7 +2008,8 @@ export class PostgresN8nIntegrationRepository {
            LEFT JOIN crm.subject_briefings AS briefing
              ON briefing.subject_id = subject.id
            WHERE subject.conversation_id = $1 AND subject.is_current
-             AND orders.conversation_id = $1 AND orders.status = 'pendente'`,
+             AND orders.conversation_id = $1 AND orders.status = 'pendente'
+             AND orders.cancelled_at IS NULL`,
           [conversation.id],
         )
       ).rows[0];

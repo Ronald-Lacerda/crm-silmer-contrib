@@ -495,6 +495,9 @@ Implantar esta versão do CRM e a migration `0039_subject_briefings` antes de
 ativar o workflow novo. O inbound devolve `subjects` com `subject_id`,
 `order_id`, `order_number`, `order_status`, `is_current`, `selected_source`, `briefing` e
 `briefing_version` por Assunto, mais `source_subject_ids` da mensagem atual.
+`order_status` é `pendente`, `confirmado` ou `cancelado` (cancelamento local do
+Pedido, OLIST-19): cancelado nunca é Pedido pendente elegível, não conta em
+`previous_orders_count` e como alvo explícito responde `SUBJECT_TARGET_INVALID`.
 O briefing por Assunto é cifrado. O campo `briefing` no nível da Conversa
 permanece para o workflow legado durante a transição.
 
