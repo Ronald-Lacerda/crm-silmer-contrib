@@ -3,7 +3,7 @@
   "promote_threshold": 2,
   "window_days": 45,
   "quarantine_threshold": 2,
-  "next_id": 9,
+  "next_id": 12,
   "lessons": [
     {
       "id": "L-001",
@@ -12,9 +12,7 @@
       "signal": "gate_fail",
       "scope": "test",
       "status": "candidate",
-      "features": [
-        "production-readiness"
-      ],
+      "features": ["production-readiness"],
       "recurrence": 1,
       "harmful": 0,
       "evidence": [
@@ -30,9 +28,7 @@
       "signal": "ac_gap",
       "scope": "docs",
       "status": "candidate",
-      "features": [
-        "production-readiness"
-      ],
+      "features": ["production-readiness"],
       "recurrence": 1,
       "harmful": 0,
       "evidence": [
@@ -48,9 +44,7 @@
       "signal": "ac_gap",
       "scope": "inbox-ui",
       "status": "candidate",
-      "features": [
-        "inbox-media-rustfs"
-      ],
+      "features": ["inbox-media-rustfs"],
       "recurrence": 1,
       "harmful": 0,
       "evidence": [
@@ -66,9 +60,7 @@
       "signal": "gate_fail",
       "scope": "runtime-image",
       "status": "candidate",
-      "features": [
-        "inbox-media-rustfs"
-      ],
+      "features": ["inbox-media-rustfs"],
       "recurrence": 1,
       "harmful": 0,
       "evidence": [
@@ -84,9 +76,7 @@
       "signal": "surviving_mutant",
       "scope": "media-integrity",
       "status": "candidate",
-      "features": [
-        "inbound-media-inbox"
-      ],
+      "features": ["inbound-media-inbox"],
       "recurrence": 1,
       "harmful": 0,
       "evidence": [
@@ -102,9 +92,7 @@
       "signal": "ac_gap",
       "scope": "transient-media",
       "status": "candidate",
-      "features": [
-        "inbound-media-inbox"
-      ],
+      "features": ["inbound-media-inbox"],
       "recurrence": 1,
       "harmful": 0,
       "evidence": [
@@ -120,9 +108,7 @@
       "signal": "ac_gap",
       "scope": "transient-media",
       "status": "candidate",
-      "features": [
-        "inbound-media-inbox"
-      ],
+      "features": ["inbound-media-inbox"],
       "recurrence": 1,
       "harmful": 0,
       "evidence": [
@@ -138,9 +124,7 @@
       "signal": "ac_gap",
       "scope": "inbox",
       "status": "candidate",
-      "features": [
-        "order-billing"
-      ],
+      "features": ["order-billing"],
       "recurrence": 1,
       "harmful": 0,
       "evidence": [
@@ -148,6 +132,48 @@
       ],
       "created": "2026-11-06T04:38:09Z",
       "last_seen": "2026-11-06T04:38:09Z"
+    },
+    {
+      "id": "L-009",
+      "key": "ac_gap::apos conflito de versao recarregue pedido e conversa e exija nova revisao explicita antes de criar outra chave de comando",
+      "text": "Após conflito de versão, recarregue pedido e conversa e exija nova revisão explícita antes de criar outra chave de comando.",
+      "signal": "ac_gap",
+      "scope": "billing",
+      "status": "candidate",
+      "features": ["order-billing-completion"],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": ["BFUI-05 (billing)"],
+      "created": "2026-11-09T01:18:44Z",
+      "last_seen": "2026-11-09T01:18:44Z"
+    },
+    {
+      "id": "L-010",
+      "key": "ac_gap::a elegibilidade de reversao de recebimento externo depende da reversao registrada nao da validade de aplicacao do credito",
+      "text": "A elegibilidade de reversão de recebimento externo depende da reversão registrada, não da validade de aplicação do crédito.",
+      "signal": "ac_gap",
+      "scope": "billing",
+      "status": "candidate",
+      "features": ["order-billing-completion"],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": ["BFUI-04 (billing)"],
+      "created": "2026-11-09T01:18:44Z",
+      "last_seen": "2026-11-09T01:18:44Z"
+    },
+    {
+      "id": "L-011",
+      "key": "ac_gap::teste selecao financeira tanto com pedido diretamente vinculado a conversa quanto com pedido associado por assunto",
+      "text": "Teste seleção financeira tanto com pedido diretamente vinculado à conversa quanto com pedido associado por assunto.",
+      "signal": "ac_gap",
+      "scope": "inbox",
+      "status": "candidate",
+      "features": ["order-billing-completion"],
+      "recurrence": 1,
+      "harmful": 0,
+      "evidence": ["BFUI-01 (inbox)"],
+      "created": "2026-11-09T01:18:44Z",
+      "last_seen": "2026-11-09T01:18:44Z"
     }
   ]
 }
