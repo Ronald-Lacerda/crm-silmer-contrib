@@ -131,6 +131,7 @@ export function createOlistDispatchRuntime({
   const repository = createOlistRepository(database, {
     envelopeKey: config.envelopeKey,
     hmacKey: config.hmacKey,
+    pilotUserIds: config.pilotUserIds,
     clock,
   });
   return Object.freeze({

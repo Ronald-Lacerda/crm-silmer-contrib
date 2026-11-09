@@ -113,6 +113,15 @@ async function setup(page, options = {}) {
           creationEnabled: false,
         });
       if (path === `${base}/complete`) return json(current);
+      if (path === `${base}/creation`) {
+        current = {
+          ...current,
+          creationActive: body.enabled,
+          creationEnabled: body.enabled,
+          version: current.version + 1,
+        };
+        return json(current);
+      }
       if (path === `${base}/lookups`)
         return json({
           items: options.catalogItems ?? [
@@ -228,6 +237,114 @@ test('enabled Financeiro searches exactly by keyboard with a minimum projection 
   });
   await page.goto('/inbox');
   await expect(page).toHaveURL('/financeiro');
+});
+
+test('T17 admin activates and stops the restricted pilot with an explicit reason', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { calls } = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    initialStatus: { pilotConfigured: true, recoveryRequired: false },
+  });
+  await page.goto('/olist');
+  await page.getByText('Geração no piloto', { exact: true }).click();
+  const enable = page.getByRole('button', {
+    name: 'Ativar geração no piloto',
+    exact: true,
+  });
+  await expect(enable).toBeDisabled();
+  await page
+    .getByLabel('Motivo da alteração')
+    .fill('Iniciar amostra controlada aprovada');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.screenshot({ path: 'var/olist-pilot-mobile.png', fullPage: true });
+  await enable.focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    page.getByRole('heading', { name: 'Olist', exact: true }),
+  ).toBeFocused();
+  await expect(
+    page.getByText('Geração ativada.', { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel('Motivo da alteração')
+    .fill('Encerrar amostra para conferência');
+  await page
+    .getByRole('button', { name: 'Desativar geração', exact: true })
+    .click();
+  await expect(
+    page.getByText('Geração desativada.', { exact: true }),
+  ).toBeVisible();
+  const writes = calls.filter((call) => call.path === `${base}/creation`);
+  expect(writes.map((call) => call.body)).toEqual([
+    {
+      enabled: true,
+      expectedVersion: 3,
+      reason: 'Iniciar amostra controlada aprovada',
+    },
+    {
+      enabled: false,
+      expectedVersion: 4,
+      reason: 'Encerrar amostra para conferência',
+    },
+  ]);
+});
+
+test('T17 recovery blocks activation while stopping remains available', async ({
+  page,
+}) => {
+  await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    initialStatus: {
+      pilotConfigured: true,
+      recoveryRequired: true,
+    },
+  });
+  await page.goto('/olist');
+  await page.getByText('Geração no piloto', { exact: true }).click();
+  await page.getByLabel('Motivo da alteração').fill('Conferência em andamento');
+  await expect(
+    page.getByRole('button', { name: 'Ativar geração no piloto', exact: true }),
+  ).toBeDisabled();
+});
+
+test('T17 admin stops an active pilot even when its connection is unavailable', async ({
+  page,
+}) => {
+  const { calls } = await setup(page, {
+    profile: 'admin',
+    enabled: false,
+    initialStatus: {
+      creationActive: true,
+      creationEnabled: false,
+      connected: false,
+      reconnectRequired: true,
+      pilotConfigured: false,
+      recoveryRequired: true,
+    },
+  });
+  await page.goto('/olist');
+  await page.getByText('Geração no piloto', { exact: true }).click();
+  await page
+    .getByLabel('Motivo da alteração')
+    .fill('Interromper durante a reconexão');
+  await page
+    .getByRole('button', { name: 'Desativar geração', exact: true })
+    .click();
+  expect(
+    calls
+      .filter((call) => call.path === `${base}/creation`)
+      .map((call) => call.body),
+  ).toEqual([
+    {
+      enabled: false,
+      expectedVersion: 3,
+      reason: 'Interromper durante a reconexão',
+    },
+  ]);
 });
 
 test('lookup refuses incomplete numbers and remains usable on a phone', async ({

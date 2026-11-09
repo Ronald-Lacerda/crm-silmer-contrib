@@ -145,6 +145,7 @@ export function registerOlistRoutes(api, runtime, contextFor) {
     complete: ['code', 'state'],
     disconnect: ['expectedVersion', 'reason'],
     settings: ['expectedVersion', 'reason', 'settings'],
+    creation: ['expectedVersion', 'enabled', 'reason'],
     'order-lookup': ['query'],
     lookups: ['kind'],
     mappings: ['resourceId'],

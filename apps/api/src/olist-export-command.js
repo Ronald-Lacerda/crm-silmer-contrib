@@ -4,6 +4,7 @@ import {
 } from '@crm-silmer/integration-reliability';
 import {
   createOlistRepository,
+  assertOlistPilotActor,
   lockOlistActor,
   identityHash,
   OlistError,
@@ -25,6 +26,7 @@ export function createOlistExportCommand(
   const repository = createOlistRepository(database, {
     envelopeKey: config.envelopeKey,
     hmacKey: config.hmacKey,
+    pilotUserIds: config.pilotUserIds,
     clock,
   });
   /** Tokens carry only server-owned data. Random IVs, actors, sessions and
@@ -71,12 +73,13 @@ export function createOlistExportCommand(
       number,
       state: row.state,
       stage: row.stage,
-      creationEnabled: false,
+      creationEnabled: true,
     };
   }
   return Object.freeze({
     /** @param {any} input */
     async exportOrder(input) {
+      assertOlistPilotActor(config.pilotUserIds, input);
       if (!config.configured || key.length !== 32)
         throw new OlistError('OLIST_NOT_CONFIGURED', 503);
       if (

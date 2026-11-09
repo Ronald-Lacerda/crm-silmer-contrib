@@ -104,7 +104,7 @@ else
       await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
       await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
       await migrate(pool, { migrations: await loadMigrations() });
-      /** @param {{status?:string,subtotal?:number,legacy?:boolean,missingSeller?:boolean,changeDuringFetch?:()=>Promise<void>}} [patch] */
+      /** @param {{status?:string,subtotal?:number,legacy?:boolean,missingSeller?:boolean,expiredAccess?:boolean,changeDuringFetch?:()=>Promise<void>}} [patch] */
       async function fixture(patch = {}) {
         await pool.query('TRUNCATE crm.olist_accounts CASCADE');
         let current = new Date(NOW);
@@ -190,7 +190,7 @@ else
                 config.contextKey,
               ),
             ),
-            new Date(NOW.getTime() + 3600000),
+            new Date(NOW.getTime() + (patch.expiredAccess ? -1000 : 3600000)),
           ],
         );
         const orderId = randomUUID(),
@@ -408,6 +408,25 @@ else
         const fetcher = /** @type {typeof fetch} */ (
           async (url, init) => {
             calls.push({ url: String(url), method: init?.method ?? 'GET' });
+            if (
+              patch.expiredAccess &&
+              String(url).endsWith('/protocol/openid-connect/token')
+            ) {
+              assert.equal(init?.method, 'POST');
+              return new globalThis.Response(
+                JSON.stringify({
+                  access_token: 'synthetic-renewed',
+                  refresh_token: 'synthetic-renewed-refresh',
+                  expires_in: 3600,
+                }),
+                { headers: { 'content-type': 'application/json' } },
+              );
+            }
+            if (patch.expiredAccess && String(url).endsWith('/info'))
+              return new globalThis.Response(
+                JSON.stringify({ cpfCnpj: config.expectedDocument }),
+                { headers: { 'content-type': 'application/json' } },
+              );
             if (patch.changeDuringFetch && !changed) {
               changed = true;
               await patch.changeDuringFetch();
@@ -448,7 +467,12 @@ else
           return { actor: user.actor };
         };
         const runtime = createOlistApiRuntime(database, {
-          environment,
+          environment: {
+            ...environment,
+            ...(patch.expiredAccess
+              ? { OLIST_PILOT_USER_IDS: actors.finance.actor.id }
+              : {}),
+          },
           access: {
             authorizeRead: async (/** @type {any} */ input) =>
               authenticate(input, false),
@@ -490,6 +514,47 @@ else
           );
         return result;
       }
+      await t.test(
+        'OLIST-T17: expired access refreshes before the first preview receipt and keeps the enabled pilot usable',
+        async () => {
+          const f = await fixture({ expiredAccess: true });
+          await pool.query(
+            'UPDATE crm.olist_accounts SET creation_enabled=true,recovery_required=false WHERE account_key=$1',
+            [config.accountKey],
+          );
+          const initial = await f.runtime.project(f.input);
+          assert.equal(initial.creationEnabled, true);
+          const preview = await f.runtime.preview(f.input);
+          assert.equal(preview.eligible, true, JSON.stringify(preview.issues));
+          assert.equal(preview.creationEnabled, true);
+          assert.equal(
+            f.calls.filter((call) => call.method === 'POST').length,
+            1,
+            'only one OAuth refresh, no entity/sale POST',
+          );
+          assert.ok(
+            f.calls
+              .find((call) => call.method === 'POST')
+              ?.url.endsWith('/protocol/openid-connect/token'),
+          );
+          const checked = await f.runtime.checkPreview({
+            ...f.input,
+            previewToken: preview.previewToken,
+          });
+          assert.equal(checked.valid, true);
+          assert.equal(checked.creationEnabled, true);
+          const accepted = await f.runtime.exportOrder({
+            ...f.input,
+            previewToken: preview.previewToken,
+            idempotencyKey: 'expired-access-export',
+          });
+          assert.equal(accepted.state, 'queued');
+          assert.equal(
+            f.calls.filter((call) => call.method === 'POST').length,
+            1,
+          );
+        },
+      );
       await t.test(
         'LIVENESS API reads wait briefly for a busy shared quota window instead of failing the request (preview)',
         async () => {

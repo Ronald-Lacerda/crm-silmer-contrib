@@ -50,9 +50,15 @@ export function createOlistApiRuntime(database, options) {
             settings: input.settings,
             reason: input.reason,
           }
-        : name === 'disconnect'
-          ? { expectedVersion: input.expectedVersion, reason: input.reason }
-          : {};
+        : name === 'creation'
+          ? {
+              expectedVersion: input.expectedVersion,
+              enabled: input.enabled,
+              reason: input.reason,
+            }
+          : name === 'disconnect'
+            ? { expectedVersion: input.expectedVersion, reason: input.reason }
+            : {};
     // Include the session so a stored authorize URL cannot cross sessions.
     const fingerprint = identityHash(config.hmacKey, 'command', [
       name,
@@ -85,7 +91,9 @@ export function createOlistApiRuntime(database, options) {
         correlationId: input.correlationId,
       },
       (client) =>
-        connection[/** @type {'authorize'|'disconnect'|'settings'} */ (name)]({
+        connection[
+          /** @type {'authorize'|'disconnect'|'settings'|'creation'} */ (name)
+        ]({
           ...input,
           transaction: client,
         }),
@@ -121,17 +129,35 @@ export function createOlistApiRuntime(database, options) {
         [config.accountKey, order.id],
       );
       const operation = exports.rows[0];
+      const availability = (
+        await client.query(
+          'SELECT a.creation_enabled,a.recovery_required,c.token_envelope IS NOT NULL AS connected,c.reconnect_required,c.expires_at,c.refresh_nonce,c.exchange_nonce FROM crm.olist_accounts a JOIN crm.olist_connections c USING(account_key) WHERE a.account_key=$1 AND c.context_key=$2',
+          [config.accountKey, config.contextKey],
+        )
+      ).rows[0];
+      const creationEnabled = Boolean(
+        config.configured &&
+        actor.olistEnabled &&
+        config.pilotUserIds.includes(actor.id) &&
+        availability?.creation_enabled &&
+        !availability?.recovery_required &&
+        availability?.connected &&
+        !availability?.exchange_nonce &&
+        !availability?.reconnect_required,
+      );
       return {
         orderId: order.id,
         number: order.number,
         status: order.status,
-        creationEnabled: false,
-        pendingFields: [
-          {
-            code: 'OLIST_CREATION_DISABLED',
-            label: 'Geração Olist ainda indisponível.',
-          },
-        ],
+        creationEnabled,
+        pendingFields: creationEnabled
+          ? []
+          : [
+              {
+                code: 'OLIST_CREATION_DISABLED',
+                label: 'Geração Olist ainda indisponível.',
+              },
+            ],
         operation: operation
           ? {
               state: operation.state,
@@ -164,6 +190,7 @@ export function createOlistApiRuntime(database, options) {
     /** @param {any} input */ disconnect: (input) =>
       mutate(input, 'disconnect'),
     /** @param {any} input */ settings: (input) => mutate(input, 'settings'),
+    /** @param {any} input */ creation: (input) => mutate(input, 'creation'),
     preview: preview.preview,
     checkPreview: preview.checkPreview,
     ...createOlistExportCommand(database, {

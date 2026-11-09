@@ -182,6 +182,21 @@ export function createOlistPreview(database, options) {
         !row.reconnect_required &&
         !row.refresh_nonce &&
         !row.exchange_nonce;
+      const account = (
+        await tx.query(
+          'SELECT creation_enabled,recovery_required FROM crm.olist_accounts WHERE account_key=$1 FOR SHARE',
+          [config.accountKey],
+        )
+      ).rows[0];
+      const creationEnabled = Boolean(
+        config.configured &&
+        config.pilotUserIds?.includes(actor.id) &&
+        account?.creation_enabled &&
+        !account?.recovery_required &&
+        row?.token_envelope &&
+        !row?.reconnect_required &&
+        !row?.exchange_nonce,
+      );
       const binding = {
         actorId: actor.id,
         authorizationVersion: actor.olistAuthorizationVersion,
@@ -215,6 +230,7 @@ export function createOlistPreview(database, options) {
         operation,
         order: { id: order.id, number: order.number, status: order.status },
         connected,
+        creationEnabled,
         sourceVersions: {
           contactId: buyerContactId,
           contactVersion: buyerVersion,
@@ -242,22 +258,42 @@ export function createOlistPreview(database, options) {
     /** @param {any} input */
     async preview(input) {
       const startedAt = clock();
-      const before = await snapshot(input);
-      const plan = buildOlistPreviewPlan({
+      let before = await snapshot(input);
+      let plan = buildOlistPreviewPlan({
         source: before.source,
         buyer: before.buyer,
         settings: before.settings,
         now: startedAt,
       });
+      const preparationIssues = [];
+      // A normal token refresh changes the connection version. Prepare it
+      // before capturing the receipt's source, rather than making this preview
+      // stale through its own first GET. No entity/sale effect happens here.
+      if (plan.issues.length === 0 && before.connected) {
+        try {
+          await connection.credentials(input, 'olist.export');
+        } catch (error) {
+          const candidate = /** @type {any} */ (error);
+          if (!SAFE_LOOKUP_ERRORS.has(candidate.code)) throw error;
+          preparationIssues.push({ code: candidate.code, field: 'connection' });
+        }
+        before = await snapshot(input);
+        plan = buildOlistPreviewPlan({
+          source: before.source,
+          buyer: before.buyer,
+          settings: before.settings,
+          now: startedAt,
+        });
+      }
       if (
         before.binding.proposedDay &&
         plan.commercial.orderDate &&
         before.binding.proposedDay !== plan.commercial.orderDate
       )
         throw new OlistError('OLIST_PREVIEW_STALE', 409);
-      const issues = [...plan.issues];
+      const issues = [...plan.issues, ...preparationIssues];
       plan.productFiscal = before.settings?.productFiscal ?? null;
-      if (!before.connected)
+      if (!before.connected && preparationIssues.length === 0)
         issues.push({ code: 'OLIST_RECONNECT_REQUIRED', field: 'connection' });
       if (before.operation)
         issues.push({ code: 'OLIST_OPERATION_EXISTS', field: 'operation' });
@@ -355,7 +391,7 @@ export function createOlistPreview(database, options) {
         number: before.order.number,
         status: before.order.status,
         eligible,
-        creationEnabled: false,
+        creationEnabled: before.creationEnabled,
         issues,
         commercial: plan.commercial,
         customer: plan.customer
@@ -391,7 +427,7 @@ export function createOlistPreview(database, options) {
       validateFresh(current, receipt);
       return {
         valid: true,
-        creationEnabled: false,
+        creationEnabled: current.creationEnabled,
         expiresAt: receipt.expiresAt,
       };
     },

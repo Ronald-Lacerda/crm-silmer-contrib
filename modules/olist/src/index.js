@@ -7,7 +7,7 @@ export {
   EMPTY_OLIST_SETTINGS,
   normalizeDocument,
 } from './configuration.js';
-export { lockOlistActor } from './access.js';
+export { lockOlistActor, assertOlistPilotActor } from './access.js';
 export { createOlistConnection } from './connection.js';
 export {
   createOlistQuota,

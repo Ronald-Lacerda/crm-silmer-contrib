@@ -22,6 +22,16 @@ export function olistConfiguration(env) {
   const clientId = env.OLIST_CLIENT_ID ?? '';
   const clientSecret = env.OLIST_CLIENT_SECRET ?? '';
   const redirectUri = env.OLIST_REDIRECT_URI ?? '';
+  // Private, explicit IDs only. Missing/malformed allowlists never enable writes.
+  const rawPilotIds = (env.OLIST_PILOT_USER_IDS ?? '')
+    .split(',')
+    .map((id) => id.trim());
+  const pilotUserIds = Object.freeze(
+    rawPilotIds.length <= 16 &&
+      rawPilotIds.every((id) => /^[A-Za-z0-9:_-]{1,200}$/u.test(id))
+      ? [...new Set(rawPilotIds)]
+      : [],
+  );
   let accountKey = '';
   let expectedDocument = '';
   let validRedirect = false;
@@ -29,8 +39,14 @@ export function olistConfiguration(env) {
     expectedDocument = normalizeDocument(env.OLIST_EXPECTED_ACCOUNT_DOCUMENT);
     accountKey = identityHash(hmacKey, 'account', expectedDocument);
     const url = new URL(redirectUri);
+    // Identity accepts a comma-separated list and canonicalizes every entry
+    // with URL.origin. Use that same set; one invalid entry fails closed.
+    const allowedOrigins = (env.APP_ORIGIN ?? '')
+      .split(',')
+      .map((candidate) => new URL(candidate).origin);
     validRedirect =
-      url.origin === env.APP_ORIGIN &&
+      allowedOrigins.every((origin) => origin.startsWith('https://')) &&
+      allowedOrigins.includes(url.origin) &&
       url.protocol === 'https:' &&
       url.pathname === '/olist' &&
       !url.username &&
@@ -72,6 +88,8 @@ export function olistConfiguration(env) {
     clientSecret,
     redirectUri,
     contextKey,
+    pilotUserIds,
+    // Environment alone never activates account creation.
     creationEnabled: false,
     environment: 'production',
   });

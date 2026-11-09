@@ -114,6 +114,7 @@ function fixture(patch = {}) {
     'complete',
     'disconnect',
     'settings',
+    'creation',
     'lookup',
     'lookups',
     'mappings',
@@ -208,6 +209,44 @@ test('Olist writes forward the current actor, CSRF, origin, correlation and idem
     calls[0].input.correlationId,
     response.headers['x-correlation-id'],
   );
+});
+
+test('OLIST-T17 creation switch is admin-only, session/CSRF-bound and rejects extra authority', async (t) => {
+  const f = fixture();
+  t.after(() => f.api.close());
+  const payload = {
+    expectedVersion: 0,
+    enabled: true,
+    reason: 'Synthetic activation',
+  };
+  const accepted = await f.api.inject({
+    method: 'POST',
+    url: `${prefix}/creation`,
+    headers,
+    payload,
+  });
+  assert.equal(accepted.statusCode, 200);
+  assert.equal(f.calls[0].method, 'creation');
+  assert.equal(f.authCalls[0].input.action, 'olist.manage');
+  assert.equal(f.calls[0].input.enabled, true);
+  assert.equal(f.calls[0].input.idempotencyKey, headers['idempotency-key']);
+  const injected = await f.api.inject({
+    method: 'POST',
+    url: `${prefix}/creation`,
+    headers,
+    payload: { ...payload, recoveryRequired: false },
+  });
+  assert.equal(injected.statusCode, 400);
+  const outsider = fixture({ capabilities: [], olistEnabled: true });
+  t.after(() => outsider.api.close());
+  const denied = await outsider.api.inject({
+    method: 'POST',
+    url: `${prefix}/creation`,
+    headers,
+    payload,
+  });
+  assert.equal(denied.statusCode, 403);
+  assert.deepEqual(outsider.calls, []);
 });
 
 test('each Olist command accepts only its explicit fields and dispatches its closed runtime method', async (t) => {

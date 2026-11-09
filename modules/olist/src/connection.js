@@ -76,8 +76,8 @@ export function createOlistConnection(database, options) {
       ],
     );
   }
-  /** @param {any} row @param {any} settings */
-  function statusOf(row, settings) {
+  /** @param {any} row @param {any} settings @param {any} [account] */
+  function statusOf(row, settings, account) {
     const stalled = Boolean(
       row?.refresh_started_at &&
       clock().getTime() - new Date(row.refresh_started_at).getTime() >= 60_000,
@@ -94,7 +94,20 @@ export function createOlistConnection(database, options) {
         ? new Date(row.expires_at).toISOString()
         : null,
       accountConfigured: Boolean(config.expectedDocument),
-      creationEnabled: false,
+      // Administrative switch is independent of transient token availability.
+      creationActive: account?.creation_enabled === true,
+      creationEnabled: Boolean(
+        config.configured &&
+        config.pilotUserIds.length &&
+        account?.creation_enabled &&
+        !account?.recovery_required &&
+        row?.token_envelope &&
+        !row?.exchange_nonce &&
+        !row?.reconnect_required &&
+        !stalled,
+      ),
+      recoveryRequired: account?.recovery_required !== false,
+      pilotConfigured: config.pilotUserIds.length > 0,
       settingsVersion: Number(settings?.version ?? 0),
       settings: settings?.settings_envelope
         ? open(
@@ -113,7 +126,11 @@ export function createOlistConnection(database, options) {
       'SELECT * FROM crm.olist_settings WHERE account_key=$1',
       [config.accountKey],
     );
-    return statusOf(row, rows[0]);
+    const account = await client.query(
+      'SELECT creation_enabled,recovery_required FROM crm.olist_accounts WHERE account_key=$1',
+      [config.accountKey],
+    );
+    return statusOf(row, rows[0], account.rows[0]);
   }
   /** @param {any} client @param {any} input @param {any} row @param {string} code */
   async function invalidate(client, input, row, code) {
@@ -275,6 +292,71 @@ export function createOlistConnection(database, options) {
   return Object.freeze({
     quota,
     status,
+    /** Local administrative switch; recovery remains an independent gate.
+     * @param {any} input */
+    async creation(input) {
+      requireConfigured();
+      integer(input.expectedVersion, true);
+      text(input.reason, 500);
+      if (typeof input.enabled !== 'boolean')
+        throw new OlistError('INVALID_REQUEST', 400);
+      return transaction(input, async (/** @type {any} */ client) => {
+        await lockOlistActor(client, input, 'olist.manage', clock());
+        const row = await lockConnection(client);
+        const account = (
+          await client.query(
+            'SELECT * FROM crm.olist_accounts WHERE account_key=$1 FOR UPDATE',
+            [config.accountKey],
+          )
+        ).rows[0];
+        if (Number(row.version) !== input.expectedVersion)
+          throw new OlistError('VERSION_CONFLICT');
+        if (input.enabled) {
+          if (!config.pilotUserIds.length || account.recovery_required)
+            throw new OlistError('OLIST_CREATION_DISABLED');
+          if (
+            !row.token_envelope ||
+            row.reconnect_required ||
+            row.refresh_nonce ||
+            row.exchange_nonce ||
+            !row.expires_at ||
+            new Date(row.expires_at) <= clock()
+          )
+            throw new OlistError('OLIST_RECONNECT_REQUIRED');
+          const settings = (
+            await client.query(
+              'SELECT settings_envelope FROM crm.olist_settings WHERE account_key=$1 FOR SHARE',
+              [config.accountKey],
+            )
+          ).rows[0];
+          if (!settings?.settings_envelope)
+            throw new OlistError('OLIST_ORDER_INCOMPLETE');
+          const pilots = await client.query(
+            'SELECT id FROM crm.users WHERE id=ANY($1::text[]) AND disabled_at IS NULL AND olist_enabled=true FOR SHARE',
+            [config.pilotUserIds],
+          );
+          if (pilots.rows.length !== config.pilotUserIds.length)
+            throw new OlistError('OLIST_CREATION_DISABLED');
+        }
+        await client.query(
+          'UPDATE crm.olist_accounts SET creation_enabled=$2 WHERE account_key=$1',
+          [config.accountKey, input.enabled],
+        );
+        const saved = (
+          await client.query(
+            'UPDATE crm.olist_connections SET version=version+1,updated_at=$2 WHERE context_key=$1 RETURNING *',
+            [config.contextKey, clock()],
+          )
+        ).rows[0];
+        await event(
+          client,
+          input,
+          input.enabled ? 'OLIST_CREATION_ENABLED' : 'OLIST_CREATION_DISABLED',
+          Number(saved.version),
+        );
+        return projection(client, saved);
+      });
+    },
     /** @param {any} input */
     async authorize(input) {
       requireConfigured();

@@ -445,7 +445,10 @@ else
           /** @type {any} */ overrides = {},
         ) =>
           createOlistApiRuntime(targetDatabase, {
-            environment,
+            environment: {
+              ...environment,
+              OLIST_PILOT_USER_IDS: actors.finance.actor.id,
+            },
             access: {
               authorizeRead: async (/** @type {any} */ input) =>
                 authenticate(input, false),
@@ -498,6 +501,34 @@ else
         };
       }
       await t.test(
+        'OLIST-48/T17: allowlist deny and revocation override checkbox and a valid receipt before SQL effects',
+        async () => {
+          const f = await fixture();
+          const input = await command(f);
+          const before = await counts();
+          const disabled = f.runtimeFor(database, { environment });
+          await assert.rejects(disabled.exportOrder(input), {
+            code: 'FORBIDDEN',
+          });
+          const wrongPilot = f.runtimeFor(database, {
+            environment: {
+              ...environment,
+              OLIST_PILOT_USER_IDS: f.actors.owner.actor.id,
+            },
+          });
+          await assert.rejects(wrongPilot.exportOrder(input), {
+            code: 'FORBIDDEN',
+          });
+          assert.deepEqual(await counts(), before);
+          const accepted = await f.runtime.exportOrder(input);
+          assert.equal(accepted.state, 'queued');
+          await assert.rejects(disabled.exportOrder(input), {
+            code: 'FORBIDDEN',
+          });
+          assert.equal((await counts()).exports, before.exports + 1);
+        },
+      );
+      await t.test(
         'enabled Financeiro accepts another owner pending order without ERP HTTP or changing the CRM order',
         async () => {
           const f = await fixture();
@@ -518,7 +549,7 @@ else
             'state',
           ]);
           assert.equal(result.orderId, f.orderId);
-          assert.equal(result.creationEnabled, false);
+          assert.equal(result.creationEnabled, true);
           assert.equal(result.state, 'queued');
           assert.equal(result.stage, 'customer');
           assert.equal(
@@ -983,7 +1014,7 @@ else
               payload: { previewToken: input.previewToken },
             });
             assert.equal(accepted.statusCode, 202, accepted.body);
-            assert.equal(accepted.json().creationEnabled, false);
+            assert.equal(accepted.json().creationEnabled, true);
             assert.equal(
               accepted.headers['cache-control'],
               'private, no-store',

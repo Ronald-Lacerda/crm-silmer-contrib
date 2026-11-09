@@ -395,6 +395,25 @@ function projectionHarness(exportRows) {
   const base = w.database.query;
   /** @param {string} sql @param {any[]} args */
   const query = async (sql, args = []) => {
+    if (
+      sql.includes('FROM crm.olist_accounts a JOIN crm.olist_connections c')
+    ) {
+      assert.deepEqual(args, [config.accountKey, config.contextKey]);
+      // Generation history remains readable while account creation is off.
+      return {
+        rows: [
+          {
+            creation_enabled: false,
+            recovery_required: true,
+            connected: false,
+            reconnect_required: false,
+            expires_at: null,
+            refresh_nonce: null,
+            exchange_nonce: null,
+          },
+        ],
+      };
+    }
     if (sql.includes('FROM crm.orders o LEFT JOIN crm.conversations c'))
       return {
         rows: [
@@ -469,6 +488,7 @@ test('L1 project shows the active generation, not the archived one, regardless o
   const projection = await runtime.project(projectInput);
   assert.equal(projection.operation?.state, 'queued');
   assert.equal(projection.operation?.stage, 'customer');
+  assert.equal(projection.creationEnabled, false);
   assert.equal('errorCode' in (projection.operation ?? {}), false);
 });
 

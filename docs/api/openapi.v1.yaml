@@ -417,7 +417,7 @@ paths:
                 required: [valid, creationEnabled, expiresAt]
                 properties:
                   valid: { const: true }
-                  creationEnabled: { const: false }
+                  creationEnabled: { type: boolean }
                   expiresAt: { type: string, format: date-time }
         '400': { $ref: '#/components/responses/OlistFailure' }
         '403': { $ref: '#/components/responses/OlistFailure' }
@@ -545,6 +545,44 @@ paths:
       responses:
         '200':
           description: Estado desconectado persistido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistStatus' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
+  /integrations/olist/creation:
+    post:
+      operationId: setOlistCreation
+      summary: Ativar ou desativar a geração da conta no piloto privado
+      description: >-
+        Administrador ativo. expectedVersion compara a versão da conexão;
+        toda alteração incrementa essa versão e invalida prévias antigas.
+        Ativar exige conexão válida, parâmetros, recovery_required falso e
+        allowlist privada não vazia com usuários ativos habilitados. Não limpa
+        o gate de recuperação. Desativar é local mesmo com ERP desconectado.
+        Não cria cadastros nem vendas; guarda idempotência e auditoria sem
+        copiar o motivo livre ou IDs privados para logs.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion, enabled, reason]
+              properties:
+                expectedVersion: { type: integer, minimum: 0 }
+                enabled: { type: boolean }
+                reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200':
+          description: Estado e nova versão da conexão
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OlistStatus' }
@@ -3802,7 +3840,7 @@ components:
       properties:
         orderId: { type: string }
         eligible: { const: true }
-        creationEnabled: { const: false }
+        creationEnabled: { type: boolean }
         sale:
           type: object
           additionalProperties: false
@@ -3837,7 +3875,7 @@ components:
             type: string,
             description: Número ERP conferido; nenhum link compartilhável é inferido.,
           }
-        creationEnabled: { const: false }
+        creationEnabled: { type: boolean }
     OlistInvalidation:
       type: object
       description: Recibo da invalidação local; somente IDs, estado e versão, nunca o motivo.
@@ -3848,7 +3886,11 @@ components:
         orderId: { type: string }
         state: { const: invalidated }
         version:
-          { type: integer, minimum: 2, description: Versão da operação após invalidar. }
+          {
+            type: integer,
+            minimum: 2,
+            description: Versão da operação após invalidar.,
+          }
         replayed:
           {
             const: true,
@@ -3973,7 +4015,7 @@ components:
               ],
           }
         stage: { enum: [customer, product, variation, sale, complete] }
-        creationEnabled: { const: false }
+        creationEnabled: { type: boolean }
     OlistPreviewResolution:
       type: object
       additionalProperties: false
@@ -4004,7 +4046,7 @@ components:
         number: { type: string }
         status: { enum: [pendente, confirmado] }
         eligible: { type: boolean }
-        creationEnabled: { const: false }
+        creationEnabled: { type: boolean }
         issues:
           type: array
           items:
@@ -4212,11 +4254,12 @@ components:
         generation: { type: integer, minimum: 0 }
         expiresAt: { type: [string, 'null'], format: date-time }
         accountConfigured: { type: boolean }
-        creationEnabled:
-          {
-            const: false,
-            description: Inclusões ERP permanecem desligadas na fase 2.,
-          }
+        creationEnabled: { type: boolean }
+        creationActive:
+          type: boolean
+          description: Flag administrativa da conta; permite desligar mesmo com conexão indisponível.
+        recoveryRequired: { type: boolean }
+        pilotConfigured: { type: boolean }
         settingsVersion: { type: integer, minimum: 0 }
         settings: { $ref: '#/components/schemas/OlistSettings' }
     OlistOrderProjection:
@@ -4228,7 +4271,7 @@ components:
         orderId: { type: string }
         number: { type: string }
         status: { enum: [pendente, confirmado] }
-        creationEnabled: { const: false }
+        creationEnabled: { type: boolean }
         pendingFields:
           type: array
           items:
@@ -4364,7 +4407,15 @@ components:
       type: object
       additionalProperties: false
       required:
-        [userId, name, active, firstResponse, claim, unansweredNow, unansweredEpisodes]
+        [
+          userId,
+          name,
+          active,
+          firstResponse,
+          claim,
+          unansweredNow,
+          unansweredEpisodes,
+        ]
       properties:
         userId: { type: string }
         name: { type: [string, 'null'] }
@@ -4395,8 +4446,7 @@ components:
     DashboardServiceMetrics:
       type: object
       additionalProperties: false
-      required:
-        [from, to, days, scope, generatedAt, businessHours, rows]
+      required: [from, to, days, scope, generatedAt, businessHours, rows]
       properties:
         from: { type: string, format: date }
         to: { type: string, format: date }
@@ -4447,7 +4497,12 @@ components:
         - type: object
           additionalProperties: false
           required:
-            [outcome, reasonCode, expectedConversationVersion, expectedOutcomeVersion]
+            [
+              outcome,
+              reasonCode,
+              expectedConversationVersion,
+              expectedOutcomeVersion,
+            ]
           properties:
             outcome: { type: string, const: lost }
             reasonCode: { $ref: '#/components/schemas/LeadLossReason' }
@@ -4462,7 +4517,8 @@ components:
             expectedOutcomeVersion: { type: integer, minimum: 0 }
         - type: object
           additionalProperties: false
-          required: [outcome, expectedConversationVersion, expectedOutcomeVersion]
+          required:
+            [outcome, expectedConversationVersion, expectedOutcomeVersion]
           properties:
             outcome: { type: string, const: reopened }
             expectedConversationVersion: { type: integer, minimum: 1 }
@@ -4471,7 +4527,16 @@ components:
       type: object
       additionalProperties: false
       required:
-        [conversationId, outcome, outcomeVersion, reasonCode, hasNote, ownerId, markedBy, markedAt]
+        [
+          conversationId,
+          outcome,
+          outcomeVersion,
+          reasonCode,
+          hasNote,
+          ownerId,
+          markedBy,
+          markedAt,
+        ]
       properties:
         conversationId: { type: string }
         outcome: { type: string, enum: [lost, reopened] }
@@ -4488,7 +4553,15 @@ components:
       type: object
       additionalProperties: false
       required:
-        [state, outcomeVersion, reasonCode, ownerId, markedBy, markedAt, reopenedAt]
+        [
+          state,
+          outcomeVersion,
+          reasonCode,
+          ownerId,
+          markedBy,
+          markedAt,
+          reopenedAt,
+        ]
       properties:
         state:
           type: string
@@ -4532,7 +4605,14 @@ components:
             type: object
             additionalProperties: false
             required:
-              [userId, name, active, lostCount, reopenedByCustomerCount, byReason]
+              [
+                userId,
+                name,
+                active,
+                lostCount,
+                reopenedByCustomerCount,
+                byReason,
+              ]
             properties:
               userId: { type: string }
               name: { type: [string, 'null'] }

@@ -965,6 +965,13 @@ comprovados, amostra de ficha aprovada antes da troca, runbook executável.
       variações/venda/replay. OLIST-01–50. Dono Operação/DevOps. Depende T16.
       Evidência: uma entidade por identidade, uma venda, cada subtotal correto;
       não simular falha destrutiva com dados reais.
+      Preparação técnica em 09/11/2026: allowlist privada por ID revalidada
+      na API e em cada reserva do worker; ativação administrativa local,
+      versionada, idempotente e auditada, sem remover a trava de recuperação.
+      Projeção e interface leem a disponibilidade real. Ensaio sintético
+      T15 com 76/76 cenários aprovado; configuração do alvo inicialmente com
+      despacho desligado e allowlist vazia. [Runbook e limites](../runbooks/olist-phase6.md).
+      Essas evidências não encerram T16/T17 nem comprovam piloto real.
 - [ ] **OLIST-T18** Avaliar piloto/pendências e registrar aceite/ampliação,
       release/digest/migrações/amostra v7 e operadores. OLIST-25–31, 48–50.
       Dono Tech Lead/PO. Depende T17. Evidência: critérios atendidos e decisão de

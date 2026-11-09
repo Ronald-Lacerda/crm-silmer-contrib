@@ -140,6 +140,173 @@ if (connectionString) {
         return { actors, runtime, calls, access, fetcher };
       }
 
+      await t.test(
+        'OLIST-48/T17: audited pilot activation, replay, recovery and immediate disable',
+        async () => {
+          const f = await fixture();
+          const runtime = createOlistApiRuntime(database, {
+            access: f.access,
+            environment: {
+              ...environment,
+              OLIST_PILOT_USER_IDS: f.actors.seller.actor.id,
+            },
+            fetch: async () => {
+              throw new Error('Creation switch must not call ERP');
+            },
+            clock: () => NOW,
+          });
+          await runtime.settings({
+            ...f.actors.admin,
+            idempotencyKey: 'pilot-settings',
+            expectedVersion: 0,
+            settings: EMPTY_OLIST_SETTINGS,
+            reason: 'Synthetic settings',
+          });
+          const enable = {
+            ...f.actors.admin,
+            idempotencyKey: 'pilot-enable',
+            expectedVersion: 0,
+            enabled: true,
+            reason: 'Synthetic pilot',
+          };
+          await assert.rejects(runtime.creation(enable), {
+            code: 'OLIST_CREATION_DISABLED',
+          });
+          await pool.query(
+            'UPDATE crm.olist_accounts SET recovery_required=false WHERE account_key=$1',
+            [config.accountKey],
+          );
+          await assert.rejects(
+            runtime.creation({ ...enable, idempotencyKey: 'pilot-no-token' }),
+            { code: 'OLIST_RECONNECT_REQUIRED' },
+          );
+          await pool.query(
+            'UPDATE crm.olist_connections SET token_envelope=$2::jsonb,expires_at=$3 WHERE context_key=$1',
+            [
+              config.contextKey,
+              JSON.stringify(
+                seal(
+                  {
+                    accessToken: 'synthetic',
+                    refreshToken: 'synthetic-refresh',
+                  },
+                  config.envelopeKey,
+                  'tokens',
+                  config.accountKey,
+                  config.contextKey,
+                ),
+              ),
+              new Date(NOW.getTime() + 3600_000),
+            ],
+          );
+          await assert.rejects(
+            runtime.creation({
+              ...f.actors.finance,
+              idempotencyKey: 'pilot-not-admin',
+              expectedVersion: 0,
+              enabled: true,
+              reason: 'Synthetic',
+            }),
+            { code: 'FORBIDDEN' },
+          );
+          const activated = await runtime.creation({
+            ...enable,
+            idempotencyKey: 'pilot-enable-valid',
+          });
+          assert.equal(activated.creationEnabled, true);
+          assert.equal(activated.recoveryRequired, false);
+          assert.equal(activated.pilotConfigured, true);
+          assert.equal(activated.version, 1);
+          await pool.query(
+            'UPDATE crm.olist_connections SET expires_at=$2 WHERE context_key=$1',
+            [config.contextKey, new Date(NOW.getTime() - 1)],
+          );
+          assert.equal(
+            (await runtime.status(f.actors.admin)).creationEnabled,
+            true,
+          );
+          assert.equal(
+            (await runtime.status(f.actors.admin)).creationActive,
+            true,
+          );
+          await pool.query(
+            'UPDATE crm.olist_connections SET expires_at=$2 WHERE context_key=$1',
+            [config.contextKey, new Date(NOW.getTime() + 3600_000)],
+          );
+          assert.deepEqual(
+            await runtime.creation({
+              ...enable,
+              idempotencyKey: 'pilot-enable-valid',
+            }),
+            activated,
+          );
+          assert.equal(
+            (
+              await pool.query(
+                "SELECT count(*)::int AS count FROM crm.olist_events WHERE event_code='OLIST_CREATION_ENABLED'",
+              )
+            ).rows[0].count,
+            1,
+          );
+          await assert.rejects(
+            runtime.creation({ ...enable, idempotencyKey: 'pilot-stale' }),
+            { code: 'VERSION_CONFLICT' },
+          );
+          const concurrent = await Promise.allSettled(
+            ['a', 'b'].map((suffix) =>
+              runtime.creation({
+                ...enable,
+                idempotencyKey: 'pilot-race-' + suffix,
+                expectedVersion: 1,
+                enabled: false,
+              }),
+            ),
+          );
+          assert.equal(
+            concurrent.filter((entry) => entry.status === 'fulfilled').length,
+            1,
+          );
+          const rejected = concurrent.find(
+            (entry) => entry.status === 'rejected',
+          );
+          assert.equal(
+            rejected?.status === 'rejected' && rejected.reason.code,
+            'VERSION_CONFLICT',
+          );
+          await runtime.creation({
+            ...enable,
+            idempotencyKey: 'pilot-reenable',
+            expectedVersion: 2,
+          });
+          await pool.query(
+            'UPDATE crm.olist_connections SET reconnect_required=true,token_envelope=NULL,expires_at=NULL,refresh_expires_at=NULL WHERE context_key=$1',
+            [config.contextKey],
+          );
+          const offline = await runtime.status(f.actors.admin);
+          assert.equal(offline.creationEnabled, false);
+          // The switch remains visible, so an administrator can still turn it off.
+          assert.equal(offline.creationActive, true);
+          const disabled = await runtime.creation({
+            ...enable,
+            idempotencyKey: 'pilot-disable',
+            expectedVersion: 3,
+            enabled: false,
+          });
+          assert.equal(disabled.creationEnabled, false);
+          assert.equal(disabled.version, 4);
+          assert.equal(
+            (
+              await pool.query(
+                'SELECT recovery_required,creation_enabled FROM crm.olist_accounts WHERE account_key=$1',
+                [config.accountKey],
+              )
+            ).rows[0].creation_enabled,
+            false,
+          );
+          assert.equal(f.calls.length, 0);
+        },
+      );
+
       /** Seed a confirmed legacy order owned by someone other than Financeiro.
        * Its encrypted ficha contains sentinels that must never reach projection.
        * @param {any} owner */

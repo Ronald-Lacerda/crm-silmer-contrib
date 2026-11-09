@@ -94,6 +94,7 @@
           "ORDER_BILLING_N8N_URL",
           "OLIST_ENABLED",
           "OLIST_DISPATCH_ENABLED",
+          "OLIST_PILOT_USER_IDS",
           "OLIST_CLIENT_ID",
           "OLIST_CLIENT_SECRET",
           "OLIST_REDIRECT_URI",

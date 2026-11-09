@@ -54,7 +54,11 @@ const lookupBusy = ref(false);
 const lookupError = ref('');
 const accountError = ref('');
 const accountMessage = ref('');
+const creationReason = ref('');
 const status = ref(null);
+const accountCreationActive = computed(
+  () => status.value?.creationActive ?? status.value?.creationEnabled ?? false,
+);
 const loading = ref(false);
 const accountBusy = ref(false);
 const settingsEditing = ref(false);
@@ -253,7 +257,7 @@ async function cancelSettingsEdit() {
   await focus(settingsEditButton);
 }
 
-/** @param {'authorize'|'complete'|'disconnect'|'settings'} action @param {Record<string, unknown>} body */
+/** @param {'authorize'|'complete'|'disconnect'|'settings'|'creation'} action @param {Record<string, unknown>} body */
 async function accountAction(action, body) {
   if (!canManage.value || accountBusy.value || loading.value) return;
   if (settingsEditing.value && action !== 'settings') return;
@@ -292,7 +296,12 @@ async function accountAction(action, body) {
         ? 'Conta Olist conectada.'
         : action === 'settings'
           ? 'Parâmetros comerciais salvos.'
-          : 'Conta Olist desconectada do CRM.';
+          : action === 'creation'
+            ? accountCreationActive.value
+              ? 'Geração Olist ativada para o piloto.'
+              : 'Geração Olist desativada.'
+            : 'Conta Olist desconectada do CRM.';
+    if (action === 'creation') creationReason.value = '';
     props.announce(accountMessage.value);
     await focus(heading);
   } catch (cause) {
@@ -570,6 +579,65 @@ onBeforeUnmount(() => {
             Desconectar Olist
           </button>
         </div>
+        <details v-if="status?.configured" class="olist-settings">
+          <summary>Geração no piloto</summary>
+          <p role="status">
+            {{
+              accountCreationActive ? 'Geração ativada.' : 'Geração desativada.'
+            }}
+          </p>
+          <p id="olist-creation-help" class="field-help">
+            Somente a operadora designada e habilitada pode gerar vendas.
+            Desativar preserva vendas e cadastros já registrados e permite sua
+            conferência.
+          </p>
+          <p v-if="status.recoveryRequired" class="field-help">
+            A geração aguarda a conferência da recuperação pela operação.
+          </p>
+          <p v-else-if="!status.pilotConfigured" class="field-help">
+            A operação precisa configurar a identidade da operadora do piloto.
+          </p>
+          <form
+            @submit.prevent="
+              accountAction('creation', {
+                expectedVersion: status.version,
+                enabled: !accountCreationActive,
+                reason: creationReason.trim(),
+              })
+            "
+          >
+            <div class="olist-field">
+              <label for="olist-creation-reason">Motivo da alteração</label>
+              <input
+                id="olist-creation-reason"
+                v-model="creationReason"
+                required
+                maxlength="200"
+                :disabled="accountBusy || loading || settingsEditing"
+                aria-describedby="olist-creation-help"
+              />
+            </div>
+            <button
+              type="submit"
+              :disabled="
+                accountBusy ||
+                loading ||
+                settingsEditing ||
+                !creationReason.trim() ||
+                (!accountCreationActive &&
+                  (!status.connected ||
+                    status.recoveryRequired ||
+                    !status.pilotConfigured))
+              "
+            >
+              {{
+                accountCreationActive
+                  ? 'Desativar geração'
+                  : 'Ativar geração no piloto'
+              }}
+            </button>
+          </form>
+        </details>
         <details v-if="status" class="olist-settings">
           <summary>Parâmetros comerciais</summary>
           <p class="field-help">

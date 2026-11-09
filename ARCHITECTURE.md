@@ -1,5 +1,15 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Preparação do piloto Olist (09/11/2026)
+
+OLIST-T17/OLIST-48 implementa a restrição individual da ADR 057/RFC 050 por
+`OLIST_PILOT_USER_IDS` privado na API e no worker. Lista vazia ou inválida nega
+efeitos; checkbox e versão atuais continuam obrigatórios em cada reserva.
+Administrador ativa/desativa criação por comando local auditado, idempotente e
+versionado, sem remover a trava de recuperação. A interface lê a disponibilidade
+real. O ensaio T15 exercita recuperação sintética; publicação, vínculo existente
+e piloto real são evidências separadas no [runbook](docs/runbooks/olist-phase6.md).
+
 ## Olist T27/T28 — invalidação administrativa e quota (09/11/2026)
 
 [ADR 069](docs/adr/069-olist-invalidacao-administrativa-de-export.md) e

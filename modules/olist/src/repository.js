@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { OlistError, integer, text, object } from './errors.js';
 import { seal, open, identityHash } from './crypto.js';
 import { normalizeDocument } from './configuration.js';
-import { lockOlistActor } from './access.js';
+import { lockOlistActor, assertOlistPilotActor } from './access.js';
 /** Shared canonical identity for read-only plans and durable reservations.
  * Existing valid identities keep exactly the same normalization and hashes.
  * Public audience is optional; a combination of fabrics is not truncated.
@@ -69,7 +69,7 @@ function requestPayload(value) {
   return normalized;
 }
 /** Server-only persistence port. Every returned ID is account scoped.
- * @param {any} database @param {{envelopeKey:Buffer,hmacKey:Buffer,clock?:()=>Date}} options */
+ * @param {any} database @param {{envelopeKey:Buffer,hmacKey:Buffer,clock?:()=>Date,pilotUserIds?:readonly string[]}} options */
 export function createOlistRepository(database, options) {
   const clock = options.clock ?? (() => new Date());
   /** @param {any} client @param {any} input @param {string} code @param {number} version @param {string|null} [exportId] @param {string|null} [resourceId] */
@@ -97,6 +97,7 @@ export function createOlistRepository(database, options) {
   }
   /** @param {any} client @param {any} input */
   async function effectGuard(client, input) {
+    assertOlistPilotActor(options.pilotUserIds, input);
     await lockOlistActor(client, input, 'olist.export', clock());
     const { rows } = await client.query(
       'SELECT c.*,a.creation_enabled,a.recovery_required FROM crm.olist_connections c JOIN crm.olist_accounts a USING(account_key) WHERE c.context_key=$1 AND c.account_key=$2 FOR SHARE OF c,a',
@@ -117,6 +118,7 @@ export function createOlistRepository(database, options) {
    * before an existing operation is returned through a new idempotency key.
    * @param {any} client @param {any} input */
   async function exportCommandGuard(client, input) {
+    assertOlistPilotActor(options.pilotUserIds, input);
     await lockOlistActor(client, input, 'olist.export', clock());
     const connection = (
       await client.query(

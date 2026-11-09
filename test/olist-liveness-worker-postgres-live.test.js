@@ -727,6 +727,47 @@ else
         },
       );
       await t.test(
+        'OLIST-48/T17: real worker refuses a queued actor removed from the private pilot before any provider effect',
+        async () => {
+          for (const pilot of ['', 'other-synthetic-operator']) {
+            const f = await fixture();
+            let requests = 0;
+            const runtime = createOlistDispatchRuntime({
+              database: db,
+              environment: {
+                ...workerEnvironment,
+                OLIST_PILOT_USER_IDS: pilot,
+              },
+              fetch: async () => {
+                requests++;
+                throw new Error('Out-of-pilot job must not call provider');
+              },
+              clock: () => NOW,
+            });
+            const result = await runtime.dispatch(
+              { exportId: f.operation.id },
+              {
+                heartbeat: async () => true,
+                markEffectStarted: async () => true,
+              },
+            );
+            assert.equal(result.outcome, 'failed');
+            assert.equal(result.errorCode, 'FORBIDDEN');
+            assert.equal(result.retryable, false);
+            assert.equal(requests, 0);
+            assert.equal(
+              (
+                await pool.query(
+                  'SELECT count(*)::int AS count FROM crm.olist_attempts WHERE export_id=$1',
+                  [f.operation.id],
+                )
+              ).rows[0].count,
+              0,
+            );
+          }
+        },
+      );
+      await t.test(
         '(8) the real worker composition renews an expired token first and waits for a blocked quota with a lease beat, then defers instead of failing',
         async () => {
           const f = await fixture();
@@ -782,7 +823,10 @@ else
           let beats = 0;
           const runtime = createOlistDispatchRuntime({
             database: db,
-            environment: workerEnvironment,
+            environment: {
+              ...workerEnvironment,
+              OLIST_PILOT_USER_IDS: f.owner,
+            },
             fetch: fetcher,
             clock: () => NOW,
           });

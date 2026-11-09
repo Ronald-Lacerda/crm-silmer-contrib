@@ -1,5 +1,13 @@
 import { authorize } from '@crm-silmer/identity-access';
 import { OlistError } from './errors.js';
+/** Server-owned allowlist, independent of checkbox/role/ownership.
+ * Undefined is reserved for isolated persistence-port test injection; real
+ * runtimes always supply the parsed list, including an empty deny-all list.
+ * @param {readonly string[]|undefined} pilotUserIds @param {any} input */
+export function assertOlistPilotActor(pilotUserIds, input) {
+  if (pilotUserIds !== undefined && !pilotUserIds.includes(input.actor?.id))
+    throw new OlistError('FORBIDDEN', 403);
+}
 /** Lock the real current user/session; a supplied actor or old job is never authority.
  * @param {any} client @param {any} input @param {string} action @param {Date} now */
 export async function lockOlistActor(client, input, action, now) {
