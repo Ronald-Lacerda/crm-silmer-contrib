@@ -10,6 +10,7 @@ import {
 import { parseBrl } from '../../lib/order-format.js';
 import { dateTimeBR } from '../../lib/format.js';
 import OrderSheetHead from './OrderSheetHead.vue';
+import OrderBillingWorkspace from './OrderBillingWorkspace.vue';
 
 // COB-T04: the seller creates a link; only the verified gateway callback
 // records a payment. Card details and installments stay in InfinitePay.
@@ -78,6 +79,8 @@ const canShareActive = computed(
     !uncertain.value &&
     !billing.value?.reviewRequired &&
     active.value?.status === 'waiting' &&
+    active.value?.amountCents <= balance.value &&
+    balance.value > 0 &&
     Number.isFinite(Date.parse(active.value?.validUntil ?? '')) &&
     !activeExpired.value &&
     Boolean(billingUrl(active.value?.checkoutUrl)),
@@ -586,6 +589,20 @@ onBeforeUnmount(() => {
             <dd>{{ billingMoney(balance) }}</dd>
           </div>
         </dl>
+        <OrderBillingWorkspace
+          v-if="
+            billing.chatSendEnabled !== undefined ||
+            billing.externalReceipts !== undefined
+          "
+          :order="order"
+          :initial-billing="billing"
+          :disabled="busy || Boolean(otherEditing)"
+          compact
+          @changed="
+            load(true);
+            emit('changed');
+          "
+        />
         <p v-if="!billing.enabled" class="op-hint">
           {{ billingReason('BILLING_DISABLED') }}
         </p>
@@ -599,12 +616,20 @@ onBeforeUnmount(() => {
             ['unknown', 'review'].includes(active.status) || undefined
           "
         >
-          <strong>{{
+          <strong v-if="active.amountCents > balance"
+            >Link anterior em circulação</strong
+          >
+          <strong v-else>{{
             activeExpired && active.status === 'waiting'
               ? 'Link vencido'
               : chargeStatus(active)
           }}</strong>
-          <p v-if="active.status === 'unknown'">
+          <p v-if="active.amountCents > balance">
+            O recebido mudou e este link cobra mais que o saldo atual. Não o
+            envie ao cliente. O link não foi cancelado na InfinitePay; um
+            pagamento posterior precisará de conferência.
+          </p>
+          <p v-else-if="active.status === 'unknown'">
             Precisamos conferir se o link foi criado. Não gere outra cobrança
             para substituir esta emissão.
           </p>
@@ -621,8 +646,8 @@ onBeforeUnmount(() => {
             cobrança antes de encerrar esta emissão ou gerar outra.
           </p>
           <p v-else>
-            O recebido só muda depois da confirmação do pagamento pela
-            InfinitePay.
+            O recebido acompanha os pagamentos confirmados pela InfinitePay e os
+            recebimentos externos registrados no pedido.
           </p>
         </div>
         <div v-else-if="paid" class="billing-state" data-success="true">
@@ -846,6 +871,18 @@ onBeforeUnmount(() => {
                   rel="noopener noreferrer"
                   referrerpolicy="no-referrer"
                   >Comprovante InfinitePay</a
+                >
+                <a
+                  v-if="
+                    canInspectPrivate &&
+                    charge.id !== active?.id &&
+                    billingUrl(charge.checkoutUrl)
+                  "
+                  :href="billingUrl(charge.checkoutUrl)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  referrerpolicy="no-referrer"
+                  >Abrir link anterior para conferência</a
                 >
               </div>
               <strong class="op-num">{{
