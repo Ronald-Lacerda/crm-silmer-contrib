@@ -74,6 +74,55 @@ Produção exige HTTPS e não segue redirects no transporte financeiro.
 
 ## Workflow n8n — preparar antes de ativar
 
+### Desenvolvimento isolado antes da produção
+
+O perfil de desenvolvimento usa o mesmo gerador/grafo financeiro com caminhos
+`silmer/order-billing-dev/create` e `silmer/order-billing-dev/paid`, credenciais
+sintéticas e destinos HTTP locais validados. Gerar export inativo:
+
+```powershell
+node ops/n8n/workflows/create-order-billing-dev-workflow.mjs var/billing-dev-workflow.json
+```
+
+O comando recusa sobrescrever o destino. Não importar esse arquivo no n8n de
+produção nem vincular credenciais reais. A exportação de produção abaixo
+continua independente e inativa por padrão. A configuração DEV não aceita
+domínio remoto, InfiniteTag real, expressão ou credencial embutida.
+
+O ensaio completo da fronteira financeira roda em containers exclusivos:
+
+```powershell
+$env:RUN_BILLING_LOCAL_SMOKE = 'yes'
+node scripts/billing-development-smoke.mjs
+```
+
+Requer Docker local, dependências do projeto e a versão Node fixada em
+`.node-version`. Usa n8n 2.38.7, runtime/rotas/worker financeiros reais e
+PostgreSQL 17 dedicado. A rede Docker é interna, sem saída externa; nenhuma
+porta é publicada. O runner controla HTTP por `docker exec` dentro da rede
+isolada e cria seus próprios recursos. Não reaproveita nem reseta o banco DEV
+persistente ou containers existentes.
+O estado do n8n é descartável e separado do n8n de atendimento.
+
+O simulador HTTP verifica os pedidos de `/links` e `/payment_check`; o
+pagamento só muda quando o roteiro de teste o confirma. As URLs devolvidas
+são fixtures no formato HTTPS aceito pelo domínio financeiro, não checkouts
+locais nem links para abrir. Nenhuma chamada InfinitePay ou WhatsApp real
+pertence a esse roteiro. Relatórios sintéticos ficam em
+`var/billing-development-*/report.json`; verificar o veredito e os cenários,
+não apenas a subida dos containers. Recursos Docker próprios são removidos
+ao final, inclusive em falha; os artefatos de diagnóstico locais permanecem.
+
+O ensaio não é um servidor DEV permanente nem prova de login/sessão ou UI.
+O adaptador de sessão humana é sintético; autenticação técnica, rotas,
+reserva, persistência e worker financeiro usam a implementação do projeto.
+Mensagem na outbox comprova composição, não execução do transporte. O ensaio
+do workflow humano/preflight/envio simulado, a matriz completa de correção e
+a interface pós-redesign continuam no plano da RFC 047. Homologação real
+segue COB-OPS-01. Não habilitar flags remotas por ter aprovado o simulador.
+
+### Exportação para o candidato de produção
+
 Gerador reproduzível, sem segredos, produz um export **inativo**:
 
 ```powershell
@@ -223,5 +272,8 @@ instância compatível até concluir todos os recebimentos pendentes.
 Os testes de domínio/rotas, PostgreSQL real sintético, worker/workflow e
 E2E/axe distinguem implementação local de estado operacional. A fixture
 executa código e expressões do export com respostas sintéticas; não comprova
-importação/execução no n8n real. Registros de gates e pendências ficam em
+importação/execução no n8n real. O runner de desenvolvimento acrescenta essa
+prova local: importa/publica exclusivamente no container efêmero e percorre
+o motor n8n por HTTP, com simulador e PostgreSQL dedicados. Isso não comprova
+transporte WhatsApp, login/UI ou operação remota. Registros de gates e pendências ficam em
 [tasks](../../.specs/features/order-billing/tasks.md).

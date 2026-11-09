@@ -140,9 +140,9 @@ O workflow publicado da loja foi inspecionado; sua existência não homologa
 cobranças sobre pedido existente. Manter conta/instância n8n e separar rotas
 e IDs financeiros, sem alterar o checkout atual.
 
-- [ ] COB-DEV-01/02: perfil DEV, simulador e n8n real contra API/PostgreSQL
+- [x] COB-DEV-01/02: perfil DEV, simulador e n8n real contra API/PostgreSQL
       sintéticos, conforme [tarefas DEV](../order-billing-development/tasks.md).
-- [ ] COB-READY-01: contrato frontend atualizado e limites de teste registrados.
+- [x] COB-READY-01: contrato frontend atualizado e limites de teste registrados.
 - [ ] COB-DEV-03: ensaio integrado do transporte DEV, cinco comandos,
       correção e callbacks tardios, incluindo recuperação e rollback por flag.
 - [x] COB-API-READY: projetar IDs de correção/retry antes de reproduzir a
