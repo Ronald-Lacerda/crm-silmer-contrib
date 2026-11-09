@@ -37,7 +37,7 @@ reabertura ou revisão podem invalidar quitação e check financeiro.
 ## Consulta e proveniência
 
 `GET /billing` acrescenta `payments`, `externalReceipts`, `paymentChecks` e
-`chatSendEnabled`. Pagamentos possuem origem explícita; nota/motivo e detalhes
+`chatSendEnabled` e `paymentCheckEnabled`. Pagamentos possuem origem explícita; nota/motivo e detalhes
 privados respeitam a permissão de gestão. A interface consulta as duas telas
 pela mesma API, não soma crédito a partir de uma página de histórico.
 
@@ -57,6 +57,9 @@ underscore/hífen, de 1 a 128 caracteres. Eles são candidatos, nunca prova de
 pagamento. Ficam cifrados e a consulta durável usa job `billing.payment.check`.
 O worker envia `{schema_version:"1.0",check_id}` ao webhook privado configurado
 por `ORDER_BILLING_CHECK_N8N_URL`, sem enviar dados financeiros arbitrários.
+Essa configuração deve ser compartilhada pela API e pelo worker. Sem ela,
+nova conferência é recusada com `BILLING_CHECK_DISABLED`, sem criar job;
+recebimento externo permanece independente dessa disponibilidade.
 
 O workflow dedicado autentica a chamada e consulta o candidato no CRM:
 

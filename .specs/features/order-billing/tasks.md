@@ -143,12 +143,16 @@ e IDs financeiros, sem alterar o checkout atual.
 - [x] COB-DEV-01/02: perfil DEV, simulador e n8n real contra API/PostgreSQL
       sintéticos, conforme [tarefas DEV](../order-billing-development/tasks.md).
 - [x] COB-READY-01: contrato frontend atualizado e limites de teste registrados.
-- [ ] COB-DEV-03: ensaio integrado do transporte DEV, cinco comandos,
+- [x] COB-DEV-03: ensaio integrado do transporte DEV, cinco comandos,
       correção e callbacks tardios, incluindo recuperação e rollback por flag.
 - [x] COB-API-READY: projetar IDs de correção/retry antes de reproduzir a
       associação explícita entre cobranças do protótipo na UI real.
-- [ ] COB-CHAT-UI/QA: frontend definitivo após redesign e jornada integrada.
+- [x] COB-CHAT-UI/QA: frontend definitivo após redesign e jornada integrada.
 - [ ] COB-OPS-01: publicação e homologação reais continuam abertas.
+
+Frontend, recebimentos externos, conferência e DEV interativo implementados
+na [continuação integrada](../order-billing-completion/tasks.md).
+A avaliação humana visual e a homologação remota permanecem abertas.
 
 Nenhuma autorização nova para cobranças/envios reais ou publicação remota.
 

@@ -1,5 +1,15 @@
 # Cobranças InfinitePay — operação e recuperação
 
+## Continuação de 08/11/2026
+
+Recebimentos externos, conferência de pagamento e interface real no redesign
+foram autorizados na [ADR067](../adr/067-recebimentos-externos-e-conciliacao-de-cobrancas.md).
+Contrato em [pagamentos](../api/order-billing-payments.md); ambiente local em
+[DEV interativo](billing-development.md); requisitos e evidências em
+[order-billing-completion](../../.specs/features/order-billing-completion/spec.md).
+As seções históricas abaixo descrevem as entregas anteriores. Nenhuma delas
+nem a nova implementação habilitam produção ou transações reais.
+
 ## Backend do envio integrado, B01–B05 (06/11/2026)
 
 Migração expand `0063_order_billing_send_intents` cria intenções, snapshots
@@ -57,15 +67,16 @@ Table da loja ou publicar mudanças no workflow de atendimento.
 
 ## Configuração
 
-| Processo | Variável                                                   | Uso                                                                            |
-| -------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| API      | `ORDER_BILLING_ENABLED=true`                               | Configuração e novas emissões; implica receber callbacks.                      |
-| API      | `ORDER_BILLING_RECEIVE_ENABLED=true`                       | Mantém leitura, callbacks e conciliação quando emissão está desligada.         |
-| Worker   | `ORDER_BILLING_ENABLED=true`                               | Inicia consumidor da fila `billing`.                                           |
-| Worker   | `ORDER_BILLING_N8N_URL`                                    | URL HTTPS privada do webhook de emissão do workflow dedicado.                  |
-| API      | `N8N_INTEGRATION_ENVELOPE_KEY`, `IDEMPOTENCY_ENVELOPE_KEY` | Chaves existentes, válidas, de 32 bytes em base64. Nunca versionar.            |
-| API      | `CRM_AUTOMATION_CLIENT_ID/SECRET`                          | Credencial Basic existente do n8n → CRM, com capacidades técnicas específicas. |
-| Worker   | `N8N_COMMAND_CLIENT_ID/SECRET`                             | Credencial Basic existente do CRM → n8n.                                       |
+| Processo   | Variável                                                   | Uso                                                                                                                     |
+| ---------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| API        | `ORDER_BILLING_ENABLED=true`                               | Configuração e novas emissões; implica receber callbacks.                                                               |
+| API        | `ORDER_BILLING_RECEIVE_ENABLED=true`                       | Mantém leitura, callbacks e conciliação quando emissão está desligada.                                                  |
+| Worker     | `ORDER_BILLING_ENABLED=true`                               | Inicia consumidor da fila `billing`.                                                                                    |
+| Worker     | `ORDER_BILLING_N8N_URL`                                    | URL HTTPS privada do webhook de emissão do workflow dedicado.                                                           |
+| API/Worker | `ORDER_BILLING_CHECK_N8N_URL`                              | URL privada da conferência; publicar o workflow dedicado e configurar nas duas aplicações antes de oferecer a consulta. |
+| API        | `N8N_INTEGRATION_ENVELOPE_KEY`, `IDEMPOTENCY_ENVELOPE_KEY` | Chaves existentes, válidas, de 32 bytes em base64. Nunca versionar.                                                     |
+| API        | `CRM_AUTOMATION_CLIENT_ID/SECRET`                          | Credencial Basic existente do n8n → CRM, com capacidades técnicas específicas.                                          |
+| Worker     | `N8N_COMMAND_CLIENT_ID/SECRET`                             | Credencial Basic existente do CRM → n8n.                                                                                |
 
 Sem flags, as rotas e a seção ficam desabilitadas. Não habilitar emissão
 sem ter configurado e conferido o workflow/conta. Em desenvolvimento somente,
@@ -173,7 +184,8 @@ resolver a duplicidade antes de prosseguir, sem descartar recebimentos.
 1. Gates locais/CI, revisão e commit da entrega. Confirmar imagem/digest da
    versão aprovada; o push de branch por si só não comprova publicação.
 2. Aplicar as migrações da versão, incluindo expand `0055_order_billing`,
-   `0063_order_billing_send_intents` e `0064_billing_send_transport`, no ambiente
+   `0063_order_billing_send_intents`, `0064_billing_send_transport` e
+   `0065_billing_external_receipts_and_checks`, no ambiente
    alvo **antes de habilitar flags**; conferir checksum e readiness. Não editar migrações
    anteriores nem copiar um banco sintético para o remoto.
 3. Publicar API/worker/edge da mesma entrega, inicialmente sem emissão.
@@ -218,7 +230,7 @@ da primeira emissão. Não contornar a API com SQL de ajuste em produção.
 
 ### Envio integrado pela conversa (COB-CHAT-B03/B04)
 
-Aplicar as migrações expand 0063 e 0064 antes da imagem compatível; conferir
+Aplicar as migrações expand 0063, 0064 e 0065 antes da imagem compatível; conferir
 checksums. `ORDER_BILLING_CHAT_SEND_ENABLED` permanece ausente/false por
 padrão na API e no worker e exige também `ORDER_BILLING_ENABLED=true`.
 Configuração true sem banco, autorização ou outbox funcional impede startup
@@ -256,7 +268,8 @@ falha de entrega com ID externo não satisfaz essa condição. Callback tardio
 da execução original pode completar o resultado sem duplicar o recebimento.
 
 Nenhuma publicação remota, flag real ou transação financeira foi executada
-por esta entrega. Frontend aguarda o redesign; homologação segue COB-OPS-01.
+por esta entrega. Frontend integrado ao redesign na continuação de 08/11/2026;
+homologação segue COB-OPS-01.
 
 ### Emissão financeira
 

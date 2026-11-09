@@ -3,7 +3,7 @@
 COB-CHAT-B01–B05 e COB-API-READY / BAPI-01–11, [RFC 047](../rfc/047-enviar-cobranca-pela-conversa.md),
 [ADR 066](../adr/066-intencoes-de-cobranca-e-envio-transacional.md),
 [OpenAPI](order-billing-chat.v1.json). Backend autorizado em 06/11/2026.
-Frontend adiado para o redesign. O contrato independe de tela e compositor.
+Frontend autorizado no redesign atual em 08/11/2026. O contrato independe de tela e compositor.
 
 ## Disponibilidade desta entrega
 
@@ -21,9 +21,9 @@ isso não comprova publicação ou funcionamento financeiro remoto.
 link ou tentar novamente um envio seguro não emite outro checkout. O retorno
 202 confirma a intenção persistida, nunca envio, entrega ou pagamento.
 
-A escrita continua desligada por padrão. A implementação real da nova
-interface depende do redesign; o protótipo usa fixtures isoladas e não conecta
-essas rotas. A inspeção do workflow da loja publicado em 08/11/2026 não
+A escrita continua desligada por padrão. A interface integrada usa o contrato
+real; o protótipo anterior continua com fixtures isoladas. A inspeção do
+workflow da loja publicado em 08/11/2026 não
 homologa as cobranças de pedidos existentes nem habilita flags nesta entrega.
 Preparação, teste do workflow dedicado e ativação seguem o
 [runbook](../runbooks/order-billing.md). O handoff para a interface está em
