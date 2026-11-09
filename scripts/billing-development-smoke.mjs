@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { createOrderBillingDevelopmentWorkflow } from '../ops/n8n/workflows/create-order-billing-workflow.mjs';
 import { DEVELOPMENT_CREDENTIALS } from './billing-development-service.mjs';
+import { createBillingDevelopmentTransportWorkflow } from '../ops/n8n/workflows/create-order-billing-transport-dev-workflow.mjs';
 
 const execute = promisify(execFile);
 const IMAGE = 'n8nio/n8n:2.38.7';
@@ -14,7 +15,9 @@ const IMAGE = 'n8nio/n8n:2.38.7';
 /** Real n8n + HTTP CRM routes + PostgreSQL. All containers belong to this run;
  * no production URL, credential, existing database or WhatsApp is used.
  */
-export async function runBillingDevelopmentSmoke() {
+export async function runBillingDevelopmentSmoke(
+  options = { transport: false },
+) {
   if (process.env.RUN_BILLING_LOCAL_SMOKE !== 'yes')
     throw new Error('RUN_BILLING_LOCAL_SMOKE=yes is required');
   const root = resolve(import.meta.dirname, '..');
@@ -32,6 +35,17 @@ export async function runBillingDevelopmentSmoke() {
   const started = [];
   const workflow = /** @type {any} */ (createOrderBillingDevelopmentWorkflow());
   workflow.id = 'SyntheticBillingDev';
+  const transport = createBillingDevelopmentTransportWorkflow(
+    JSON.parse(
+      await readFile(
+        join(
+          root,
+          'ops/n8n/workflows/k7tI6T4RhQPyJkn9-mvp-simple.sanitized.json',
+        ),
+        'utf8',
+      ),
+    ),
+  );
   const credentials = [
     {
       id: 'synthetic-billing-worker',
@@ -58,7 +72,7 @@ export async function runBillingDevelopmentSmoke() {
       data: { name: 'X-Api-Key', value: DEVELOPMENT_CREDENTIALS.gatewayKey },
     },
   ];
-  for (const node of workflow.nodes)
+  for (const node of [...workflow.nodes, ...transport.nodes])
     for (const [kind, reference] of Object.entries(node.credentials ?? {})) {
       const credential = credentials.find(
         (candidate) => candidate.name === reference.name,
@@ -66,9 +80,13 @@ export async function runBillingDevelopmentSmoke() {
       assert.ok(credential, 'development credential must be synthetic');
       node.credentials[kind] = { id: credential.id, name: credential.name };
     }
-  await writeFile(join(directory, 'workflow.json'), JSON.stringify(workflow), {
-    mode: 0o600,
-  });
+  await writeFile(
+    join(directory, 'workflow.json'),
+    JSON.stringify([workflow, transport]),
+    {
+      mode: 0o600,
+    },
+  );
   await writeFile(
     join(directory, 'credentials.json'),
     JSON.stringify(credentials),
@@ -81,7 +99,13 @@ export async function runBillingDevelopmentSmoke() {
     scenarios: /** @type {string[]} */ ([]),
     limitations: [
       'Human session adapter is synthetic; login/CSRF have separate tests.',
-      'WhatsApp transport is not executed; durable Inbox outbox composition is asserted.',
+      ...(options.transport
+        ? [
+            'WhatsApp provider is a synthetic sink; reservation, final preflight and result callbacks run in real n8n.',
+          ]
+        : [
+            'WhatsApp transport is not executed; durable Inbox outbox composition is asserted.',
+          ]),
       'No InfinitePay, production n8n or EasyPanel operation is certified.',
     ],
   };
@@ -231,7 +255,7 @@ export async function runBillingDevelopmentSmoke() {
       '/bin/sh',
       IMAGE,
       '-ec',
-      'n8n import:credentials --input=/smoke/credentials.json >/tmp/credentials.log 2>&1; n8n import:workflow --input=/smoke/workflow.json >/tmp/import.log 2>&1; n8n publish:workflow --id=SyntheticBillingDev >/tmp/publish.log 2>&1; exec n8n start',
+      'n8n import:credentials --input=/smoke/credentials.json >/tmp/credentials.log 2>&1; n8n import:workflow --input=/smoke/workflow.json >/tmp/import.log 2>&1; n8n publish:workflow --id=SyntheticBillingDev >/tmp/publish.log 2>&1; n8n publish:workflow --id=SyntheticBillingTransportDev >>/tmp/publish.log 2>&1; exec n8n start',
     ]);
     await waitUntil(async () => {
       try {
@@ -380,6 +404,237 @@ export async function runBillingDevelopmentSmoke() {
     report.scenarios.push(
       'created callback failure remains uncertain; replay does not create a second gateway link',
     );
+    if (options.transport) {
+      const transportRun = () =>
+        post(crmBase, '/__billing-development/run-transport', {});
+      const sendIntent = async (
+        /** @type {string} */ id,
+        /** @type {any} */ fields,
+      ) =>
+        post(
+          crmBase,
+          '/__billing-development/submit',
+          { orderId: id, ...fields },
+          false,
+        );
+      const fault = async (
+        /** @type {string} */ id,
+        /** @type {string} */ kind,
+      ) =>
+        post(crmBase, '/__billing-development/transport/fault', {
+          intentId: id,
+          fault: kind,
+        });
+      const deliveryOrder = await seed();
+      const delivered = await issue(deliveryOrder);
+      await transportRun();
+      let delivery = await state(deliveryOrder);
+      assert.equal(delivery.intents[0].state, 'delivered');
+      assert.equal(
+        delivery.transportEffects[delivery.intents[0].command_id],
+        1,
+      );
+      const existingOrder = await seed();
+      const existingCharge = (
+        await post(crmBase, '/__billing-development/legacy-issue', {
+          orderId: existingOrder,
+        })
+      ).body.chargeId;
+      await post(crmBase, '/__billing-development/run-worker', {});
+      const linksBeforeExisting = (await state(existingOrder)).effects.links;
+      const existing = await sendIntent(existingOrder, {
+        action: 'send_existing',
+        chargeId: existingCharge,
+      });
+      assert.equal(existing.status, 202);
+      await transportRun();
+      delivery = await state(existingOrder);
+      assert.equal(
+        delivery.intents.filter(
+          (/** @type {any} */ i) => i.state === 'delivered',
+        ).length,
+        1,
+      );
+      assert.equal(delivery.effects.links, linksBeforeExisting);
+      report.scenarios.push(
+        'real n8n human reservation/preflight/sent/delivered; existing link reuses checkout with a new reviewed send',
+      );
+      assert.equal((await notify(await pay(delivered.chargeId))).status, 200);
+      const deliveredBalance = await issue(deliveryOrder, 'balance');
+      assert.equal(deliveredBalance.amountCents, 7000);
+      await transportRun();
+      const balanceDelivery = await state(deliveryOrder);
+      assert.equal(
+        balanceDelivery.intents.find(
+          (/** @type {any} */ i) => i.id === deliveredBalance.id,
+        ).state,
+        'delivered',
+      );
+      assert.equal(
+        (
+          await notify(
+            await pay(deliveredBalance.chargeId, {
+              method: 'credit_card',
+              installments: 3,
+            }),
+          )
+        ).status,
+        200,
+      );
+      assert.equal(
+        (await state(deliveryOrder)).view.billing.balanceAmountCents,
+        0,
+      );
+      report.scenarios.push(
+        'reviewed remaining balance is delivered through the real transport workflow and settles exactly once',
+      );
+      const safeOrder = await seed();
+      const safe = await issue(safeOrder);
+      await fault(safe.id, 'before_send');
+      await transportRun();
+      let failed = await state(safeOrder);
+      assert.equal(failed.intents[0].state, 'failed');
+      assert.equal(
+        failed.transportEffects[failed.intents[0].command_id],
+        undefined,
+      );
+      const retry = await sendIntent(safeOrder, {
+        action: 'retry',
+        intentId: safe.id,
+        expectedIntentVersion: Number(failed.intents[0].version),
+      });
+      assert.equal(retry.status, 202);
+      await transportRun();
+      failed = await state(safeOrder);
+      assert.equal(
+        failed.intents.find((/** @type {any} */ i) => i.id === retry.body.id)
+          .state,
+        'delivered',
+      );
+      report.scenarios.push(
+        'safe pre-send failure produces zero provider effects; explicit retry delivers the same valid checkout once',
+      );
+      const unknownOrder = await seed();
+      const unknown = await issue(unknownOrder);
+      await fault(unknown.id, 'unknown');
+      await transportRun();
+      const uncertainSend = await state(unknownOrder);
+      assert.equal(uncertainSend.intents[0].state, 'unknown');
+      assert.equal(
+        uncertainSend.transportEffects[uncertainSend.intents[0].command_id],
+        1,
+      );
+      assert.equal(
+        (
+          await sendIntent(unknownOrder, {
+            action: 'retry',
+            intentId: unknown.id,
+            expectedIntentVersion: Number(uncertainSend.intents[0].version),
+          })
+        ).status,
+        409,
+      );
+      await transportRun();
+      assert.equal(
+        (await state(unknownOrder)).transportEffects[
+          uncertainSend.intents[0].command_id
+        ],
+        1,
+      );
+      report.scenarios.push(
+        'unknown provider outcome records one effect and forbids blind retry',
+      );
+      const ownerOrder = await seed();
+      const owner = await issue(ownerOrder);
+      await fault(owner.id, 'owner');
+      await transportRun();
+      const changed = await state(ownerOrder);
+      assert.equal(changed.intents[0].state, 'blocked');
+      assert.equal(
+        changed.transportEffects[changed.intents[0].command_id],
+        undefined,
+      );
+      report.scenarios.push(
+        'owner changes after reservation; final preflight blocks the provider call',
+      );
+      const paidOrder = await seed();
+      const paid = await issue(paidOrder);
+      assert.equal((await notify(await pay(paid.chargeId))).status, 200);
+      await transportRun();
+      const paidBeforeSend = await state(paidOrder);
+      assert.equal(paidBeforeSend.intents[0].state, 'blocked');
+      assert.equal(
+        paidBeforeSend.transportEffects[paidBeforeSend.intents[0].command_id],
+        undefined,
+      );
+      report.scenarios.push(
+        'payment before transport blocks queued send without losing the financial receipt',
+      );
+      const flagOrder = await seed();
+      const flagIntent = await issue(flagOrder);
+      await post(crmBase, '/__billing-development/send-enabled', {
+        enabled: false,
+      });
+      const flagNewOrder = await seed();
+      assert.equal(
+        (await sendIntent(flagNewOrder, { action: 'issue', percent: 30 }))
+          .status,
+        503,
+      );
+      await transportRun();
+      const disabled = await state(flagOrder);
+      assert.equal(disabled.intents[0].state, 'blocked');
+      assert.equal(
+        disabled.transportEffects[disabled.intents[0].command_id],
+        undefined,
+      );
+      assert.equal((await notify(await pay(flagIntent.chargeId))).status, 200);
+      assert.equal(
+        (await state(flagOrder)).view.billing.receivedAmountCents,
+        3000,
+      );
+      await post(crmBase, '/__billing-development/send-enabled', {
+        enabled: true,
+      });
+      report.scenarios.push(
+        'send flag off blocks admissions/reservations while financial callbacks remain active',
+      );
+      const correctionOrder = await seed();
+      const predecessor = await issue(correctionOrder);
+      await post(crmBase, '/__billing-development/advance-clock', {
+        hours: 25,
+      });
+      await post(crmBase, '/__billing-development/close-unpaid', {
+        orderId: correctionOrder,
+      });
+      const corrected = await sendIntent(correctionOrder, {
+        action: 'correct',
+        chargeId: predecessor.chargeId,
+        amountCents: 2500,
+        confirmedAgreement: true,
+        confirmedProviderReview: true,
+      });
+      assert.equal(corrected.status, 202);
+      await post(crmBase, '/__billing-development/run-worker', {});
+      await transportRun();
+      await transportRun();
+      const correction = await state(correctionOrder);
+      assert.equal(
+        correction.intents.find(
+          (/** @type {any} */ i) => i.id === corrected.body.id,
+        ).state,
+        'delivered',
+      );
+      assert.equal(correction.view.billing.charges.length, 2);
+      assert.equal((await notify(await pay(predecessor.chargeId))).status, 200);
+      assert.equal(
+        (await state(correctionOrder)).view.billing.reviewRequired,
+        true,
+      );
+      report.scenarios.push(
+        'expired reviewed predecessor is corrected and delivered; its late receipt remains visible in review',
+      );
+    }
     const logs = await docker(['logs', names.n8n]);
     const serviceLogs = await docker(['logs', names.service]);
     for (const content of [
@@ -534,4 +789,6 @@ function dockerHttp(container) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
-  await runBillingDevelopmentSmoke();
+  await runBillingDevelopmentSmoke({
+    transport: process.argv.includes('--transport'),
+  });

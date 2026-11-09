@@ -89,7 +89,13 @@ Where: scripts/billing-development-smoke.mjs
 Tests: BDEV2-01/02; reserva/preflight/sink/callback, duplicidade, mudança de contexto, recebido antes/depois, safe retry vs unknown e flagoff.
 Gate: Development
 Done when: mensagem não é considerada enviada apenas por estar na outbox; transporte n8n/sink é comprovado.
-Status: Pending
+Status: Complete
+
+Motor n8n real aprovou17 cenários financeiros/transporte no relatório
+`var/billing-development-M5xsI8/report.json`, com `resourcesRemoved:true`.
+Reserva/preflight/sent/delivered e sink local, cinco ações, saldo enviado,
+retry seguro, unknown sem retry, proprietário/pagamento alterados, flag off
+e correção com recebimento tardio foram exercitados. Nenhum WhatsApp real.
 
 ### T5: Disponibilizar ambiente DEV interativo isolado
 
