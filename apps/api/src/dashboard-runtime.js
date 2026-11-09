@@ -126,7 +126,7 @@ export async function readDashboardPerformance(database, input) {
   const result = await database.query(
     `WITH sales AS (
        SELECT * FROM crm.orders
-       WHERE status = 'confirmado' AND NOT is_test
+       WHERE status = 'confirmado' AND NOT is_test AND cancelled_at IS NULL
          AND order_date BETWEEN $1::date AND $2::date
      ), sold AS (
        SELECT sales_owner_id AS user_id, count(*)::integer confirmed_count,
@@ -493,7 +493,7 @@ export function createDashboardRuntime(database, options) {
              LEFT JOIN crm.contact_identities identity ON identity.id=c.contact_identity_id
              LEFT JOIN crm.contacts contact ON contact.id=coalesce(o.contact_id,identity.current_contact_id)
              LEFT JOIN crm.dashboard_action_decisions d ON d.user_id=$1 AND d.action_id='order:' || o.id
-             WHERE o.origin='atendimento' AND NOT o.is_test
+             WHERE o.origin='atendimento' AND NOT o.is_test AND o.cancelled_at IS NULL
                AND (o.manual_owner_id=$1 OR c.assigned_user_id=$1)
                AND (o.status='pendente' OR (o.status='confirmado' AND
                     (o.paid_on IS NULL OR o.finance_payment_review_required OR o.delivered_on IS NULL)))
@@ -688,6 +688,9 @@ export function createDashboardRuntime(database, options) {
               targetType === 'order'
                 ? row.origin === 'atendimento' &&
                   !row.is_test &&
+                  // OLIST-19/45: a cancelled order is terminal and generates
+                  // no chore, so there is nothing to snooze or resume.
+                  !row.cancelled_at &&
                   (row.status === 'pendente' ||
                     (row.status === 'confirmado' &&
                       (!row.paid_on ||

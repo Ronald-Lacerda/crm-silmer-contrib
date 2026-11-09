@@ -298,6 +298,7 @@ export function createLeadOutcomeRuntime(database, options) {
                 await client.query(
                   `SELECT
                      EXISTS (SELECT 1 FROM crm.orders o WHERE o.conversation_id = $1
+                             AND o.cancelled_at IS NULL
                              AND o.status IN ('pendente','confirmado')) AS has_order,
                      $2::timestamptz IS NOT NULL AND NOT EXISTS (
                        SELECT 1 FROM crm.messages r WHERE r.conversation_id = $1
