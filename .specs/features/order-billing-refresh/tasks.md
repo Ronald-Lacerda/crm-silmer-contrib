@@ -12,6 +12,7 @@ Nova branch com histórico linear preserva a branch anterior já publicada.
 | T1     | REFRESH-01    | ancestralidade, typecheck/lint/build, regressão API e PostgreSQL |
 | T2     | REFRESH-02–05 | interação, teclado, responsividade, captura visual e axe         |
 | T3     | REFRESH-06    | diagrama conferido contra contratos e código atual               |
+| T4     | REFRESH-07–10 | navegação chat/Pedido, sincronização, histórico e acessibilidade |
 
 ## Gate Check Commands
 
@@ -68,3 +69,21 @@ Diagrama em `docs/diagrams/order-billing-infinitepay.md`, preparado para
 exibição em Mermaid. Fluxo e recuperação conferidos contra os serviços,
 guardas e workflows locais: geração, transporte e pagamento separados;
 saldo/correção conservam histórico e recebimentos. Flags reais desligadas.
+
+### T4: Incluir o Pedido no protótipo compartilhado
+
+Depends on: T2
+Where: docs/prototypes/BillingOrderPreview.vue
+Tests: abrir Pedido atual, mostrar cobrança e pagamento criados no chat, corrigir mantendo link anterior, saldo e comprovantes iguais nas duas telas, sincronização em duas abas, teclado/mobile/axe e bloqueio de APIs reais.
+Gate: Prototype
+Done when: tela de Pedido atual permite avaliar detalhes e histórico financeiro usando o mesmo estado simulado do chat, com navegação de ida e volta e sem efeitos externos.
+Status: Complete
+
+Seção substituída somente em memória pelo preview Vite em OrderView. Pagamentos
+e eventos pertencem à mesma fixture da conversa; comprovantes são fictícios.
+Oito E2E aprovados (cinco existentes e três novos): duas abas sincronizadas,
+recibo/foco, correção com links preservados, saldo e quitação, retorno ao
+rascunho e axe claro/escuro em 1440/390/320 px. A ida e volta detectou e corrigiu
+a seleção de sinal após pagamento: o diálogo passa a oferecer saldo restante,
+coerente com o backend. Typecheck, lint e formatação aprovados. Sem alterações
+na aplicação real, workflows, credenciais ou flags.

@@ -265,3 +265,278 @@ test('REFRESH-02: preview rejects real API writes and never forwards unknown end
   const unknown = await request.get(`${base}/api/v1/not-implemented`);
   expect(unknown.status()).toBe(404);
 });
+
+/** @param {import('@playwright/test').Page} page */
+const orderBilling = (page) =>
+  page.getByRole('region', { name: 'Cobranças e pagamentos', exact: true });
+const orderUrl = () =>
+  `${new URL(preview.url).origin}/pedidos/billing-preview-order?conversa=billing-preview#cobrancas`;
+
+test('REFRESH-07/08/09: order and chat share live receipts, totals, history and the preserved draft', async ({
+  page,
+  context,
+}) => {
+  const draft = page.getByRole('textbox', { name: 'Responder', exact: true });
+  await draft.fill('Rascunho preservado ao consultar o pedido.');
+  await page
+    .getByRole('button', { name: 'Gerar e enviar cobrança', exact: true })
+    .click();
+  await dialog(page)
+    .getByRole('button', { name: 'Revisar cobrança', exact: true })
+    .click();
+  await dialog(page)
+    .getByRole('button', { name: 'Gerar e enviar cobrança', exact: true })
+    .click();
+  await expect(
+    dialog(page).getByRole('status').filter({ hasText: 'Entregue' }),
+  ).toBeVisible({ timeout: 8000 });
+  const orderPage = await context.newPage();
+  await orderPage.goto(orderUrl());
+  await expect(
+    orderPage.getByRole('heading', { name: 'Pedido 24-CRM', exact: true }),
+  ).toBeVisible();
+  const region = orderBilling(orderPage);
+  await expect(
+    region.getByRole('list', { name: 'Cobranças do pedido', exact: true }),
+  ).toContainText('R$ 360,00');
+  await expect(region).toContainText('Nenhum pagamento confirmado');
+  await dialog(page)
+    .getByText('Controles da avaliação', { exact: true })
+    .click();
+  await dialog(page)
+    .getByRole('button', { name: 'Simular pagamento confirmado' })
+    .click();
+  const totals = region.locator('dl[aria-label="Valores do pedido"]');
+  await expect(totals).toContainText('R$ 360,00');
+  await expect(totals).toContainText('R$ 840,00');
+  const receipt = region.getByRole('button', {
+    name: 'Ver comprovante do pagamento 01',
+    exact: true,
+  });
+  await receipt.click();
+  const artifact = region
+    .getByRole('status')
+    .filter({ hasText: 'Comprovante de demonstração' });
+  await expect(artifact).toContainText('R$ 360,00');
+  await expect(artifact).toContainText('Pix');
+  await expect(artifact).toContainText('transacao-demonstracao-1');
+  await region
+    .getByRole('button', { name: 'Fechar detalhes', exact: true })
+    .click();
+  await expect(receipt).toBeFocused();
+  await expect(
+    region
+      .getByRole('list', {
+        name: 'Pagamentos confirmados do pedido',
+        exact: true,
+      })
+      .getByRole('listitem'),
+  ).toHaveCount(1);
+  const timeline = region.getByRole('list', {
+    name: 'Histórico de cobranças e pagamentos',
+    exact: true,
+  });
+  await expect(timeline).toContainText('Entrega confirmada');
+  await expect(timeline).toContainText('Pagamento confirmado');
+  await expect(timeline.getByRole('listitem').last()).toContainText(
+    'Pagamento confirmado',
+  );
+  await orderPage.close();
+  await page.keyboard.press('Escape');
+  await page
+    .getByRole('link', { name: 'Abrir pedido 24-CRM, confirmado', exact: true })
+    .click();
+  await expect(
+    orderBilling(page).locator('dl[aria-label="Valores do pedido"]'),
+  ).toContainText('R$ 840,00');
+  await orderBilling(page)
+    .getByRole('link', { name: 'Voltar à conversa', exact: true })
+    .click();
+  await expect(
+    page.getByRole('textbox', { name: 'Responder', exact: true }),
+  ).toHaveValue('Rascunho preservado ao consultar o pedido.');
+  expect(preview.fixtures.view().payments).toHaveLength(1);
+});
+
+test('REFRESH-07/08/09: order correction preserves both links and shared payment history through full settlement', async ({
+  page,
+}) => {
+  preview.fixtures.action('scenario', { scenario: 'existing' });
+  await page.goto(orderUrl());
+  let region = orderBilling(page);
+  await region
+    .getByRole('button', { name: 'Gerenciar cobranças', exact: true })
+    .click();
+  await dialog(page)
+    .getByRole('button', { name: 'Corrigir cobrança', exact: true })
+    .click();
+  await expect(dialog(page).getByRole('alert')).toContainText(
+    'ainda está válido',
+  );
+  await dialog(page)
+    .getByRole('button', { name: 'Simular vencimento e encerramento' })
+    .click();
+  await dialog(page)
+    .getByLabel('Novo valor combinado (R$)', { exact: true })
+    .fill('240,00');
+  await dialog(page)
+    .getByRole('checkbox', { name: 'Combinei este novo valor com o cliente.' })
+    .check();
+  await dialog(page)
+    .getByRole('checkbox', { name: /Conferi na InfinitePay/ })
+    .check();
+  await dialog(page)
+    .getByRole('button', { name: 'Revisar correção', exact: true })
+    .click();
+  await dialog(page)
+    .getByRole('button', { name: 'Gerar e enviar cobrança', exact: true })
+    .click();
+  await expect(
+    dialog(page).getByRole('status').filter({ hasText: 'Entregue' }),
+  ).toBeVisible({ timeout: 8000 });
+  await dialog(page)
+    .getByText('Controles da avaliação', { exact: true })
+    .click();
+  await dialog(page)
+    .getByRole('button', { name: 'Simular pagamento confirmado' })
+    .click();
+  await page.keyboard.press('Escape');
+  const charges = region.getByRole('list', {
+    name: 'Cobranças do pedido',
+    exact: true,
+  });
+  await expect(charges.getByRole('listitem')).toHaveCount(2);
+  await region
+    .getByRole('button', { name: 'Ver link anterior 01', exact: true })
+    .click();
+  await expect(
+    region.getByRole('status').filter({ hasText: 'Link anterior 01' }),
+  ).toContainText('/cobranca/1');
+  await region
+    .getByRole('button', { name: 'Ver link da cobrança 02', exact: true })
+    .click();
+  await expect(
+    region.getByRole('status').filter({ hasText: 'Link da cobrança 02' }),
+  ).toContainText('/cobranca/2');
+  await region
+    .getByRole('list', {
+      name: 'Histórico de cobranças e pagamentos',
+      exact: true,
+    })
+    .getByText('Cobrança corrigida', { exact: true })
+    .scrollIntoViewIfNeeded();
+  await expect(
+    region.getByRole('list', {
+      name: 'Histórico de cobranças e pagamentos',
+      exact: true,
+    }),
+  ).toContainText('Anterior: cobrança 01, preservada.');
+  await region
+    .getByRole('link', { name: 'Voltar à conversa', exact: true })
+    .click();
+  await page
+    .getByRole('button', { name: 'Gerar e enviar cobrança', exact: true })
+    .click();
+  await expect(dialog(page)).toContainText('R$ 960,00');
+  await dialog(page)
+    .getByRole('button', { name: 'Revisar cobrança', exact: true })
+    .click();
+  await dialog(page)
+    .getByRole('button', { name: 'Gerar e enviar cobrança', exact: true })
+    .click();
+  await expect(
+    dialog(page).getByRole('status').filter({ hasText: 'Entregue' }),
+  ).toBeVisible({ timeout: 8000 });
+  await dialog(page)
+    .getByText('Controles da avaliação', { exact: true })
+    .click();
+  await dialog(page)
+    .getByRole('button', { name: 'Simular pagamento confirmado' })
+    .click();
+  await page.keyboard.press('Escape');
+  await page.goto(orderUrl());
+  region = orderBilling(page);
+  await expect(region).toContainText('Pedido integralmente pago.');
+  await expect(
+    region
+      .getByRole('list', {
+        name: 'Pagamentos confirmados do pedido',
+        exact: true,
+      })
+      .getByRole('listitem'),
+  ).toHaveCount(2);
+  await expect(
+    region
+      .getByRole('list', {
+        name: 'Histórico de cobranças e pagamentos',
+        exact: true,
+      })
+      .getByText('Pagamento confirmado', { exact: true }),
+  ).toHaveCount(2);
+  expect(preview.fixtures.view().receivedAmountCents).toBe(120000);
+  expect(preview.fixtures.view().balanceAmountCents).toBe(0);
+});
+
+test('REFRESH-07/10: current order keeps accessible billing, receipt focus and bounded phone layouts', async ({
+  page,
+}) => {
+  preview.fixtures.action('scenario', { scenario: 'existing' });
+  preview.fixtures.action('pay', { method: 'credit_card', installments: 3 });
+  await page.goto(orderUrl());
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: width === 1440 ? 1000 : 844 });
+    for (const theme of ['light', 'dark']) {
+      await page.evaluate(
+        (value) =>
+          globalThis.document.documentElement.setAttribute('data-theme', value),
+        theme,
+      );
+      const region = orderBilling(page);
+      await expect(
+        region.getByRole('button', {
+          name: 'Ver comprovante do pagamento 01',
+          exact: true,
+        }),
+      ).toBeVisible();
+      expect(
+        await region.evaluate((node) => node.scrollWidth <= node.clientWidth),
+      ).toBe(true);
+      expect(
+        await page.evaluate(
+          () =>
+            globalThis.document.documentElement.scrollWidth <=
+            globalThis.innerWidth,
+        ),
+      ).toBe(true);
+      const receipt = region.getByRole('button', {
+        name: 'Ver comprovante do pagamento 01',
+        exact: true,
+      });
+      await receipt.focus();
+      await page.keyboard.press('Enter');
+      await expect(
+        region
+          .getByRole('status')
+          .filter({ hasText: 'Comprovante de demonstração' }),
+      ).toBeFocused();
+      await expect(
+        region
+          .getByRole('status')
+          .filter({ hasText: 'Comprovante de demonstração' }),
+      ).toContainText('R$ 360,00');
+      await expect(
+        region
+          .getByRole('status')
+          .filter({ hasText: 'Comprovante de demonstração' }),
+      ).toContainText('Cartão de crédito · 3x');
+      await region
+        .getByRole('button', { name: 'Fechar detalhes', exact: true })
+        .click();
+      await expect(receipt).toBeFocused();
+      const results = await new AxeBuilder({ page })
+        .include('.billing-order-preview')
+        .analyze();
+      expect(results.violations).toEqual([]);
+    }
+  }
+});
