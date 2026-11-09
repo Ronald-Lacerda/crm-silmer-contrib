@@ -58,7 +58,12 @@ test('OLIST-T19: checkbox is independent of role and never grants commercial or 
           { code: 'FORBIDDEN' },
         );
       }
-      for (const action of ['olist.manage', 'olist.link', 'olist.reconcile']) {
+      for (const action of [
+        'olist.manage',
+        'olist.link',
+        'olist.reconcile',
+        'olist.invalidate',
+      ]) {
         if (functionName === 'Vendedor' && admin)
           assert.doesNotThrow(() => authorize(actor, action));
         else

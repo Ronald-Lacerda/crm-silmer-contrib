@@ -5,7 +5,17 @@ import {
   OlistError,
   olistResourceIdentityHash,
 } from '../modules/olist/src/index.js';
-import { createOlistResourceResolver } from '../modules/olist/src/resource-resolver.js';
+import { createOlistClient } from '../modules/olist/src/client.js';
+import { OLIST_API } from '../modules/olist/src/configuration.js';
+import {
+  createOlistQuota,
+  olistReadWait,
+  OLIST_WRITE_READBACKS,
+} from '../modules/olist/src/quota.js';
+import {
+  createOlistExecutionReads,
+  createOlistResourceResolver,
+} from '../modules/olist/src/resource-resolver.js';
 
 const config = {
   accountKey: 'a'.repeat(64),
@@ -338,24 +348,31 @@ function fixture(settings = {}) {
     },
   };
   const client = {
-    async findCustomer(/** @type {string} */ document) {
-      reads.push({ kind: 'findCustomer', document });
+    async findCustomer(
+      /** @type {string} */ document,
+      /** @type {any} */ opts,
+    ) {
+      reads.push({
+        kind: 'findCustomer',
+        document,
+        patient: opts?.patient === true,
+      });
       return structuredClone(
         [...contacts.values()].find((v) => v.cpfCnpj === document) ?? null,
       );
     },
-    async contact(/** @type {number} */ id) {
-      reads.push({ kind: 'contact', id });
+    async contact(/** @type {number} */ id, /** @type {any} */ opts) {
+      reads.push({ kind: 'contact', id, patient: opts?.patient === true });
       return structuredClone(contacts.get(Number(id)) ?? null);
     },
-    async findProduct(/** @type {string} */ sku) {
-      reads.push({ kind: 'findProduct', sku });
+    async findProduct(/** @type {string} */ sku, /** @type {any} */ opts) {
+      reads.push({ kind: 'findProduct', sku, patient: opts?.patient === true });
       return structuredClone(
         [...products.values()].find((v) => v.sku === sku) ?? null,
       );
     },
-    async product(/** @type {number} */ id) {
-      reads.push({ kind: 'product', id });
+    async product(/** @type {number} */ id, /** @type {any} */ opts) {
+      reads.push({ kind: 'product', id, patient: opts?.patient === true });
       if (
         settings.failReadBackVariation &&
         writes.at(-1)?.kind === 'variation'
@@ -804,4 +821,358 @@ test('T22 missing remote fiscal origin cannot be coerced into the approved zero 
     await assert.rejects(f.resolver.resolve(input));
     assert.equal(f.writes.length, 0);
   }
+});
+
+test('L2 confirmation reads that follow a POST wait patiently; first discovery reads do not', async () => {
+  const f = fixture(),
+    input = f.operation();
+  await f.resolver.resolve(input);
+  const patient = f.reads.filter((read) => read.patient);
+  const plain = f.reads.filter((read) => !read.patient);
+  // Discovery before any ticket: buyer search, parent search.
+  assert.deepEqual(
+    plain.map((read) => read.kind),
+    ['findCustomer', 'findProduct'],
+  );
+  // Every read after the customer POST and the composite product POST: the
+  // product verification plus two reads per variation (children hold tickets).
+  assert.deepEqual(
+    patient.map((read) => read.kind),
+    ['contact', 'product', 'product', 'product', 'product', 'product'],
+  );
+  // A replay finds only confirmed durable rows: no ticket in hand, plain reads.
+  f.reads.length = 0;
+  await f.resolver.resolve(input);
+  assert.ok(f.reads.length > 0);
+  assert.ok(f.reads.every((read) => read.patient === false));
+});
+
+// ---------------------------------------------------------------------------
+// M4: identical reads inside ONE execution are made once (never across runs).
+// ---------------------------------------------------------------------------
+const SIX = ['P', 'M', 'G', 'GG', 'XG', 'XXG'];
+/** Several groups, each with its own colour (so its own V parent).
+ * @param {number} groups @param {string[]} sizes */
+function snapshotGroups(groups, sizes) {
+  const base = snapshot(sizes);
+  const colors = ['Azul', 'Preto', 'Verde', 'Vermelho'];
+  base.commercial.groups = Array.from({ length: groups }, (_, index) => {
+    const group = structuredClone(base.commercial.groups[0]);
+    group.groupId = randomUUID();
+    group.attributes.color = colors[index];
+    group.lines = group.lines.map((/** @type {any} */ line) => ({
+      ...line,
+      groupId: group.groupId,
+      lineId: randomUUID(),
+    }));
+    return group;
+  });
+  base.commercial.totalCents = groups * sizes.length * 300;
+  return base;
+}
+/** A resolver over the same stateful fixture whose client and writer leave an
+ * ordered trace of what really reached the "network".
+ * @param {ReturnType<typeof fixture>} f */
+function traced(f) {
+  /** @type {string[]} */ const trace = [];
+  const names = ['contact', 'product', 'findCustomer', 'findProduct'];
+  const client = Object.fromEntries(
+    names.map((name) => [
+      name,
+      (/** @type {any} */ id, /** @type {any} */ opts) => {
+        trace.push(`GET:${name}${opts?.patient ? '!' : ''}`);
+        return /** @type {any} */ (f.client)[name](id, opts);
+      },
+    ]),
+  );
+  const writer = {
+    dispatch: (/** @type {any} */ input) => {
+      trace.push(`POST:${input.kind}`);
+      return f.writer.dispatch(input);
+    },
+  };
+  const resolver = createOlistResourceResolver({
+    repository: f.repository,
+    client,
+    writer,
+    config,
+  });
+  return { resolver, trace };
+}
+const kinds = (/** @type {any[]} */ reads, /** @type {string} */ kind) =>
+  reads.filter((read) => read.kind === kind);
+
+test('M4 a re-execution with everything confirmed reads each customer, parent and variation once', async () => {
+  for (const [
+    groups,
+    sizes,
+    ceiling,
+  ] of /** @type {[number,string[],number][]} */ ([
+    [2, SIX, 17],
+    [1, SIX.slice(0, 5), 9],
+  ])) {
+    const f = fixture(),
+      input = f.operation(snapshotGroups(groups, sizes)),
+      variations = groups * sizes.length;
+    await f.resolver.resolve(input);
+    const posts = f.writes.length;
+    f.reads.length = 0;
+    assert.equal((await f.resolver.resolve(input)).resolved, true);
+    // Before the fix: 2 contact + P + 2V reads.
+    assert.equal(kinds(f.reads, 'contact').length, 1);
+    assert.equal(kinds(f.reads, 'product').length, groups + variations);
+    assert.equal(
+      new Set(f.reads.map((read) => `${read.kind}:${read.id}`)).size,
+      f.reads.length,
+      'no identical read is repeated inside the execution',
+    );
+    assert.equal(kinds(f.reads, 'findCustomer').length, 0);
+    assert.equal(kinds(f.reads, 'findProduct').length, 0);
+    // Plus the dispatcher's two findOrder: 3 + P + V.
+    assert.equal(f.reads.length + 2, 3 + groups + variations);
+    assert.ok(f.reads.length + 2 <= ceiling);
+    assert.ok(f.reads.every((read) => read.patient === false));
+    assert.equal(f.writes.length, posts, 'a re-execution never POSTs');
+  }
+});
+
+test('M4 a clean run with creation never serves a readback from the cache and reads no more than before', async () => {
+  const f = fixture(),
+    { resolver, trace } = traced(f);
+  await resolver.resolve(f.operation());
+  assert.deepEqual(trace, [
+    'GET:findCustomer',
+    'GET:findProduct',
+    'POST:customer',
+    'GET:contact!',
+    'POST:product',
+    'GET:product!',
+    'GET:product!',
+    'GET:product!',
+    'GET:product!',
+    'GET:product!',
+  ]);
+  // Nothing was added or dropped by the cache.
+  assert.equal(f.reads.length, 8);
+  // Zero in a search never became "absent" for later reads: the search ran
+  // once per entity and every read after the POST reached the client.
+  assert.equal(kinds(f.reads, 'findCustomer').length, 1);
+  assert.equal(kinds(f.reads, 'findProduct').length, 1);
+});
+
+test('M4 a POST of a variation drops the parent: the next plain read of it reaches the client', async () => {
+  const f = fixture();
+  await f.resolver.resolve(f.operation(snapshot(['M'])));
+  const { resolver, trace } = traced(f);
+  await resolver.resolve(f.operation(snapshot(['M', 'G', 'P'])));
+  assert.deepEqual(trace, [
+    'GET:contact',
+    'GET:product', // parent, first read of the execution
+    'GET:product', // detail of M (the parent is served by the cache)
+    'POST:variation', // G (parent served by the cache before the POST)
+    'GET:product!', // parent readback
+    'GET:product!', // child readback
+    'GET:product', // P: parent re-read after the POST, not the stale entry
+    'POST:variation',
+    'GET:product!',
+    'GET:product!',
+  ]);
+});
+
+test('M4 the first read of each entity in an execution still detects divergence, and nothing leaks between executions', async () => {
+  const f = fixture(),
+    input = f.operation(snapshotGroups(1, ['M', 'G']));
+  await f.resolver.resolve(input);
+  await f.resolver.resolve(input);
+  const [contactId] = [...f.contacts.keys()];
+  const parent = [...f.products.values()].find((v) => v.tipoVariacao === 'P');
+  const child = [...f.products.values()].find((v) => v.tipoVariacao === 'V');
+  // A product edited at the ERP after a successful execution is seen at once by
+  // the next execution, which cannot reuse the earlier read.
+  const description = parent.descricao;
+  parent.descricao = 'Outra descrição';
+  await assert.rejects(f.resolver.resolve(input), {
+    code: 'OLIST_PRODUCT_DIVERGENT',
+  });
+  parent.descricao = description;
+  assert.equal((await f.resolver.resolve(input)).resolved, true);
+  const name = f.contacts.get(contactId).nome;
+  f.contacts.get(contactId).nome = 'Outro comprador';
+  await assert.rejects(f.resolver.resolve(input), {
+    code: 'OLIST_CUSTOMER_DIVERGENT',
+  });
+  f.contacts.get(contactId).nome = name;
+  // The parent is cached from its first read, but the detail of a variation is
+  // a first read of its own and still compares with the link.
+  child.sku = 'SKU-EDITADO';
+  await assert.rejects(f.resolver.resolve(input), {
+    code: 'OLIST_VARIATION_DIVERGENT',
+  });
+  assert.equal(f.writes.length, 2, 'divergence never authorizes a POST');
+});
+
+test('M4 the read cache is a private copy per execution', async () => {
+  /** @type {any[]} */ const calls = [];
+  const remote = { id: 7, variacoes: [{ id: 8 }] };
+  const client = {
+    product: async (/** @type {number} */ id, /** @type {any} */ opts) => {
+      calls.push(['product', id, opts?.patient === true]);
+      return structuredClone(remote);
+    },
+    contact: async (/** @type {number} */ id) => {
+      calls.push(['contact', id, false]);
+      return { id };
+    },
+  };
+  const reads = createOlistExecutionReads(client);
+  const first = await reads.product(7);
+  first.variacoes.push({ id: 99 });
+  const second = await reads.product(7);
+  second.variacoes.length = 0;
+  assert.deepEqual(await reads.product(7), remote, 'mutations never leak');
+  assert.equal(calls.length, 1);
+  // A second execution has its own, empty, memory.
+  await createOlistExecutionReads(client).product(7);
+  assert.equal(calls.length, 2);
+  // A value that cannot be copied is simply never cached.
+  const odd = createOlistExecutionReads({
+    product: async () => {
+      calls.push(['odd', 0, false]);
+      return { id: 1, fn: () => 1 };
+    },
+  });
+  await odd.product(1);
+  await odd.product(1);
+  assert.equal(calls.filter((call) => call[0] === 'odd').length, 2);
+});
+
+test('M4 errors and empty answers are not cached, tickets bypass, a POST invalidates by family', async () => {
+  /** @type {string[]} */ const calls = [];
+  /** @type {any[]} */ const script = [];
+  const answer = async (
+    /** @type {string} */ kind,
+    /** @type {number} */ id,
+    /** @type {any} */ opts,
+  ) => {
+    calls.push(`${kind}:${id}${opts?.patient ? '!' : ''}`);
+    const next = script.length ? script.shift() : { id };
+    if (next instanceof Error) throw next;
+    return next;
+  };
+  const reads = createOlistExecutionReads({
+    product: (/** @type {number} */ id, /** @type {any} */ opts) =>
+      answer('product', id, opts),
+    contact: (/** @type {number} */ id, /** @type {any} */ opts) =>
+      answer('contact', id, opts),
+  });
+  script.push(new OlistError('OLIST_UNAVAILABLE', 503));
+  await assert.rejects(reads.product(1), { code: 'OLIST_UNAVAILABLE' });
+  await reads.product(1); // not served from a remembered failure
+  await reads.product(1); // now a hit
+  assert.deepEqual(calls, ['product:1', 'product:1']);
+  calls.length = 0;
+  script.push(null);
+  assert.equal(await reads.product(2), null);
+  await reads.product(2); // a null is never remembered
+  await reads.product(2);
+  assert.deepEqual(calls, ['product:2', 'product:2']);
+  // A read with a ticket in hand neither reads nor fills the cache.
+  calls.length = 0;
+  await reads.product(3, { patient: true });
+  await reads.product(3);
+  await reads.product(3, { patient: true });
+  await reads.product(3);
+  assert.deepEqual(calls, ['product:3!', 'product:3', 'product:3!']);
+  // A POST drops the products, not the customer.
+  await reads.contact(4);
+  calls.length = 0;
+  reads.invalidate('product');
+  await reads.product(3);
+  await reads.contact(4);
+  assert.deepEqual(calls, ['product:3']);
+});
+
+test('M4 capacity: with the real quota the re-execution of 12 variations and 2 parents leaves room for the sale', async () => {
+  const f = fixture(),
+    input = f.operation(snapshotGroups(2, SIX));
+  await f.resolver.resolve(input);
+  const now = { value: Date.parse('2026-11-09T12:00:00.000Z') };
+  const state = { used: 0, windowStart: now.value, sleeps: 0 };
+  /** @param {string} sql @param {any[]} values */
+  const query = async (sql, values) => {
+    if (/pg_advisory_xact_lock|^INSERT INTO crm\.olist_quotas/u.test(sql))
+      return { rows: [] };
+    if (/^SELECT \*,now\(\)/u.test(sql))
+      return {
+        rows: [
+          {
+            database_now: new Date(now.value),
+            window_started_at: new Date(state.windowStart),
+            used: state.used,
+            remaining: null,
+            blocked_until: null,
+          },
+        ],
+      };
+    if (/^UPDATE crm\.olist_quotas SET window_started_at/u.test(sql)) {
+      state.windowStart = new Date(values[1]).getTime();
+      state.used = values[2];
+      return { rows: [] };
+    }
+    throw new Error('unexpected SQL: ' + sql);
+  };
+  const quota = createOlistQuota(
+    { query, transaction: (/** @type {any} */ work) => work({ query }) },
+    config.accountKey,
+  );
+  const apiPath = new URL(OLIST_API).pathname;
+  let gets = 0;
+  const fetchFake = async (/** @type {string} */ url) => {
+    gets++;
+    const path = new URL(url).pathname.slice(apiPath.length);
+    const json = (/** @type {any} */ body) =>
+      new globalThis.Response(JSON.stringify(body), {
+        headers: { 'content-type': 'application/json' },
+      });
+    if (path === '/pedidos')
+      return json({ itens: [], paginacao: { total: 0, offset: 0, limit: 50 } });
+    const [, collection, id] =
+      /^\/(contatos|produtos)\/(\d+)$/u.exec(path) ?? [];
+    const body = (collection === 'contatos' ? f.contacts : f.products).get(
+      Number(id),
+    );
+    if (!body) throw new Error('unexpected GET ' + path);
+    return json(body);
+  };
+  const client = createOlistClient({
+    credentials: async () => ({ token: 'synthetic-token', version: 1 }),
+    quota,
+    readWait: olistReadWait('worker', {
+      sleep: async (/** @type {number} */ ms) => {
+        state.sleeps++;
+        now.value += ms;
+      },
+    }),
+    fetch: /** @type {any} */ (fetchFake),
+  });
+  const resolver = createOlistResourceResolver({
+    repository: f.repository,
+    client,
+    writer: {
+      dispatch: async () => {
+        assert.fail('everything is confirmed: no cadastro POST');
+      },
+    },
+    config,
+  });
+  const reference = 'CRM-synthetic-m4';
+  await client.findOrder(reference);
+  await resolver.resolve(input);
+  await client.findOrder(reference);
+  // Before the fix this took 30 reads (4 + P + 2V) and filled the window.
+  assert.equal(gets, 17);
+  assert.equal(state.used, 17);
+  assert.equal(state.sleeps, 0, 'no read had to wait for the window');
+  await quota.reserveWrite({ readbacks: OLIST_WRITE_READBACKS.sale });
+  assert.equal(state.used, 18, 'the sale may reserve its POST and readbacks');
 });

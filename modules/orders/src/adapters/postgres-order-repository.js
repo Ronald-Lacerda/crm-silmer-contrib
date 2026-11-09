@@ -1087,9 +1087,11 @@ export class PostgresOrderRepository {
       if (order.version !== input.expectedVersion)
         throw new OrderConflictError('Order changed');
       // Lock every account's operation after the order: no account switch bypass.
+      // A generation already archived as `invalidated` (administrative
+      // invalidation, ADR 069) is history: it neither blocks nor is rewritten.
       const exports = (
         await tx.query(
-          'SELECT * FROM crm.olist_exports WHERE order_id=$1 ORDER BY id FOR UPDATE',
+          "SELECT * FROM crm.olist_exports WHERE order_id=$1 AND state<>'invalidated' ORDER BY id FOR UPDATE",
           [order.id],
         )
       ).rows;
@@ -1130,7 +1132,7 @@ export class PostgresOrderRepository {
       // operation cannot reserve another resource or sale, even on an old job.
       for (const operation of exports) {
         await tx.query(
-          "UPDATE crm.olist_exports SET state='invalidated',version=version+1,updated_at=$2,last_error_code='ORDER_CANCELLED' WHERE id=$1",
+          "UPDATE crm.olist_exports SET state='invalidated',version=version+1,updated_at=$2,last_error_code='ORDER_CANCELLED' WHERE id=$1 AND state<>'invalidated'",
           [operation.id, input.now],
         );
         await tx.query(

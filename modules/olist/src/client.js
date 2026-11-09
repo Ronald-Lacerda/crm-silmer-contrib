@@ -2,6 +2,7 @@ import { URLSearchParams } from 'node:url';
 import { normalizeDocument, OLIST_API } from './configuration.js';
 import { OlistError, integer, text } from './errors.js';
 import { olistJson } from './transport.js';
+import { OLIST_QUOTA_LIMIT, OLIST_READ_WAIT } from './quota.js';
 const CATALOGS = Object.freeze({
   sellers: '/vendedores',
   warehouses: '/depositos',
@@ -27,13 +28,63 @@ function remoteText(value, max = 128) {
     throw new OlistError('OLIST_INVALID_RESPONSE', 502);
   }
 }
+/** Optional per-call read profile: `patient` is for confirmation reads made
+ * while a durable ticket is in hand (longer wait than a plain read).
+ * @typedef {{patient?:boolean}} OlistReadOptions */
+/** Wait profile of the reads of one client (see `olistReadWait`). Without it
+ * a read never waits and an exhausted quota fails at once, as before.
+ * `cumulative`: `maxWaitMs` is the budget for all the reads of this client
+ * (the API builds one client per request), so the waits add up instead of each
+ * read getting its own `maxWaitMs`; the remaining balance is what each read may
+ * still wait, and an overrun fails as OLIST_RATE_LIMITED with `retryAfterMs`.
+ * @typedef {{maxWaitMs:number,cumulative?:boolean,patientMaxWaitMs?:number,ceiling?:number,beat?:()=>Promise<unknown>|unknown,sleep?:(ms:number)=>Promise<unknown>}} OlistReadWait */
 /** Fixed official host/routes only. No generic HTTP or arbitrary payload port.
- * @param {{credentials:()=>Promise<{token:string,version:number}>, quota:any, fetch?:typeof fetch, timeoutMs?:number, onAuthFailure?:(version:number)=>Promise<unknown>}} options */
+ * Only GETs wait for quota (`readWait`); there is no write here.
+ * @param {{credentials:()=>Promise<{token:string,version:number}>, quota:any, fetch?:typeof fetch, timeoutMs?:number, readWait?:OlistReadWait, onAuthFailure?:(version:number)=>Promise<unknown>}} options */
 export function createOlistClient(options) {
-  /** @param {string} path @param {boolean} [raw] */
-  async function get(path, raw = false) {
-    const credentials = await options.credentials();
-    await options.quota.reserve();
+  const readWait = options.readWait;
+  /** Waited so far by the reads of this client (cumulative profiles only). */
+  let spentMs = 0;
+  if (
+    readWait &&
+    (!Number.isSafeInteger(readWait.maxWaitMs) ||
+      readWait.maxWaitMs < 0 ||
+      readWait.maxWaitMs > 600_000 ||
+      (readWait.patientMaxWaitMs !== undefined &&
+        (!Number.isSafeInteger(readWait.patientMaxWaitMs) ||
+          readWait.patientMaxWaitMs < 0 ||
+          readWait.patientMaxWaitMs > 600_000)) ||
+      (readWait.ceiling !== undefined &&
+        (!Number.isSafeInteger(readWait.ceiling) ||
+          readWait.ceiling < 1 ||
+          readWait.ceiling > OLIST_QUOTA_LIMIT)))
+  )
+    throw new OlistError('INVALID_REQUEST', 400);
+  /** @param {string} path @param {boolean} [raw] @param {boolean} [patient] */
+  async function get(path, raw = false, patient = false) {
+    /** @type {{token:string,version:number}} */
+    let credentials;
+    if (readWait && typeof options.quota.reserveRead === 'function') {
+      // Quota first: a token read before a long wait could expire during it.
+      const perRead = patient
+        ? (readWait.patientMaxWaitMs ?? OLIST_READ_WAIT.patient.maxWaitMs)
+        : readWait.maxWaitMs;
+      const reserved = await options.quota.reserveRead({
+        maxWaitMs:
+          readWait.cumulative === true
+            ? Math.max(0, Math.min(perRead, readWait.maxWaitMs - spentMs))
+            : perRead,
+        ceiling: readWait.ceiling,
+        beat: readWait.beat,
+        sleep: readWait.sleep,
+      });
+      if (readWait.cumulative === true && Number.isFinite(reserved?.waitedMs))
+        spentMs += Number(reserved.waitedMs);
+      credentials = await options.credentials();
+    } else {
+      credentials = await options.credentials();
+      await options.quota.reserve();
+    }
     try {
       const response = await olistJson(OLIST_API + path, {
         token: credentials.token,
@@ -51,16 +102,16 @@ export function createOlistClient(options) {
       throw error;
     }
   }
-  /** @param {string} path @param {number} id */
-  async function detail(path, id) {
+  /** @param {string} path @param {number} id @param {boolean} [patient] */
+  async function detail(path, id, patient = false) {
     integer(id);
-    const body = await get(path + '/' + id);
+    const body = await get(path + '/' + id, false, patient);
     if (body?.id !== id) throw new OlistError('OLIST_INVALID_RESPONSE', 502);
     return body;
   }
   /** Complete bounded enumeration or explicit incomplete; never prove absence from a truncated page.
-   * @param {string} path @param {Record<string,string>} filters */
-  async function pages(path, filters) {
+   * @param {string} path @param {Record<string,string>} filters @param {boolean} [patient] */
+  async function pages(path, filters, patient = false) {
     const items = [];
     const ids = new Set();
     let total = null;
@@ -70,7 +121,7 @@ export function createOlistClient(options) {
         limit: '50',
         offset: String(offset),
       });
-      const body = await get(path + '?' + query);
+      const body = await get(path + '?' + query, false, patient);
       const page = body?.paginacao;
       if (
         !Array.isArray(body?.itens) ||
@@ -106,35 +157,54 @@ export function createOlistClient(options) {
   };
   return Object.freeze({
     info: () => get('/info'),
-    /** @param {number} id */ contact: (id) => detail('/contatos', id),
-    /** @param {number} id */ product: (id) => detail('/produtos', id),
-    /** @param {number} id */ order: (id) => detail('/pedidos', id),
+    /** @param {number} id @param {OlistReadOptions} [opts] */ contact: (
+      id,
+      opts,
+    ) => detail('/contatos', id, opts?.patient === true),
+    /** @param {number} id @param {OlistReadOptions} [opts] */ product: (
+      id,
+      opts,
+    ) => detail('/produtos', id, opts?.patient === true),
+    /** @param {number} id @param {OlistReadOptions} [opts] */ order: (
+      id,
+      opts,
+    ) => detail('/pedidos', id, opts?.patient === true),
     /** Raw numeric lexemes for exact sale reconciliation; no JSON Number money.
-     * @param {number} id */ orderRaw: async (id) =>
-      get('/pedidos/' + integer(id), true),
-    /** @param {string} document */
-    async findCustomer(document) {
+     * @param {number} id @param {OlistReadOptions} [opts] */ orderRaw: async (
+      id,
+      opts,
+    ) => get('/pedidos/' + integer(id), true, opts?.patient === true),
+    /** @param {string} document @param {OlistReadOptions} [opts] */
+    async findCustomer(document, opts) {
       const normalized = normalizeDocument(document);
-      return exact(await pages('/contatos', { cpfCnpj: normalized }), (row) => {
-        try {
-          return normalizeDocument(row.cpfCnpj) === normalized;
-        } catch {
-          return false;
-        }
-      });
+      return exact(
+        await pages(
+          '/contatos',
+          { cpfCnpj: normalized },
+          opts?.patient === true,
+        ),
+        (row) => {
+          try {
+            return normalizeDocument(row.cpfCnpj) === normalized;
+          } catch {
+            return false;
+          }
+        },
+      );
     },
-    /** @param {string} sku */
-    async findProduct(sku) {
+    /** @param {string} sku @param {OlistReadOptions} [opts] */
+    async findProduct(sku, opts) {
       const value = text(sku, 100);
       return exact(
-        await pages('/produtos', { codigo: value }),
+        await pages('/produtos', { codigo: value }, opts?.patient === true),
         (row) => row.sku === value,
       );
     },
     /** Complete search over all documented states and document formats. Repeated
      * sightings of one ID are one entity; distinct exact identities are ambiguous.
-     * @param {string} document */
-    async findCustomerAcrossStates(document) {
+     * @param {string} document @param {OlistReadOptions} [opts] */
+    async findCustomerAcrossStates(document, opts) {
+      const patient = opts?.patient === true;
       const value = normalizeDocument(document);
       const masked =
         value.length === 11
@@ -143,7 +213,11 @@ export function createOlistClient(options) {
       const matches = new Map();
       for (const situacao of ['A', 'B', 'I', 'E'])
         for (const cpfCnpj of [value, masked]) {
-          for (const row of await pages('/contatos', { cpfCnpj, situacao })) {
+          for (const row of await pages(
+            '/contatos',
+            { cpfCnpj, situacao },
+            patient,
+          )) {
             if (typeof row.cpfCnpj !== 'string')
               throw new OlistError('OLIST_INCOMPLETE_LOOKUP');
             if (normalizeDocument(row.cpfCnpj) === value)
@@ -152,35 +226,46 @@ export function createOlistClient(options) {
         }
       return exact([...matches.values()], () => true);
     },
-    /** @param {string} sku */
-    async findProductAcrossStates(sku) {
+    /** @param {string} sku @param {OlistReadOptions} [opts] */
+    async findProductAcrossStates(sku, opts) {
+      const patient = opts?.patient === true;
       const value = text(sku, 100);
       const matches = new Map();
       for (const situacao of ['A', 'I', 'E'])
-        for (const row of await pages('/produtos', {
-          codigo: value,
-          situacao,
-        })) {
+        for (const row of await pages(
+          '/produtos',
+          {
+            codigo: value,
+            situacao,
+          },
+          patient,
+        )) {
           if (typeof row.sku !== 'string')
             throw new OlistError('OLIST_INCOMPLETE_LOOKUP');
           if (row.sku === value) matches.set(row.id, row);
         }
       return exact([...matches.values()], () => true);
     },
-    /** @param {string} reference */
-    async findOrder(reference) {
+    /** @param {string} reference @param {OlistReadOptions} [opts] */
+    async findOrder(reference, opts) {
+      const patient = opts?.patient === true;
       const value = text(reference, 100);
       if (!/^CRM-[A-Za-z0-9-]+$/u.test(value))
         throw new OlistError('INVALID_REQUEST', 400);
-      const candidates = await pages('/pedidos', {
-        numeroPedidoEcommerce: value,
-      });
+      const candidates = await pages(
+        '/pedidos',
+        {
+          numeroPedidoEcommerce: value,
+        },
+        patient,
+      );
       // List responses may omit the reference; detail must independently confirm.
       const matches = [];
       for (const candidate of candidates) {
         const valueOfOrder = await detail(
           '/pedidos',
           remoteInteger(candidate.id),
+          patient,
         );
         if (typeof valueOfOrder.ecommerce?.numeroPedidoEcommerce !== 'string')
           throw new OlistError('OLIST_INCOMPLETE_LOOKUP');

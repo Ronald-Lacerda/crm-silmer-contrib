@@ -696,6 +696,129 @@ if (connectionString) {
       );
 
       await t.test(
+        'L2 concurrent writes keep headroom for their readbacks and never wait; reads stop at the API ceiling',
+        async () => {
+          const f = await fixture();
+          const replicas = Array.from({ length: 3 }, () =>
+            createOlistQuota(database, f.accountKey, 30),
+          );
+          await replicas[0].reserve();
+          await pool.query(
+            'UPDATE crm.olist_quotas SET used=20,remaining=NULL WHERE account_key=$1',
+            [f.accountKey],
+          );
+          const writes = await Promise.allSettled(
+            Array.from({ length: 12 }, (_, index) =>
+              replicas[index % 3].reserveWrite({ readbacks: 3 }),
+            ),
+          );
+          // used+1+3<=30 admits exactly the writes taking used from 20 to 27.
+          assert.equal(
+            writes.filter((w) => w.status === 'fulfilled').length,
+            7,
+          );
+          for (const write of writes)
+            if (write.status === 'rejected')
+              assert.equal(write.reason.code, 'OLIST_RATE_LIMITED');
+          assert.equal(
+            (
+              await pool.query(
+                'SELECT used FROM crm.olist_quotas WHERE account_key=$1',
+                [f.accountKey],
+              )
+            ).rows[0].used,
+            27,
+          );
+          // The three units left are exactly what the readbacks are owed.
+          const reads = await Promise.allSettled(
+            Array.from({ length: 6 }, (_, index) =>
+              replicas[index % 3].reserveRead({
+                maxWaitMs: 0,
+                sleep: async () => assert.fail('must not sleep with 0 budget'),
+              }),
+            ),
+          );
+          assert.equal(reads.filter((r) => r.status === 'fulfilled').length, 3);
+          // The API ceiling of 24 keeps 6 units per window for the worker.
+          await pool.query(
+            'UPDATE crm.olist_quotas SET used=0,remaining=NULL,window_started_at=now() WHERE account_key=$1',
+            [f.accountKey],
+          );
+          const api = await Promise.allSettled(
+            Array.from({ length: 30 }, (_, index) =>
+              replicas[index % 3].reserveRead({ maxWaitMs: 0, ceiling: 24 }),
+            ),
+          );
+          assert.equal(api.filter((r) => r.status === 'fulfilled').length, 24);
+        },
+      );
+
+      await t.test(
+        'L2 a read waits across replicas until the block ends, holding no transaction or row lock while it sleeps',
+        async () => {
+          const f = await fixture();
+          const reader = createOlistQuota(database, f.accountKey, 30);
+          const other = createOlistQuota(database, f.accountKey, 30);
+          await reader.reserve();
+          await other.block(1_000);
+          /** @type {number[]} */
+          const slices = [];
+          let beats = 0;
+          const waited = await reader.reserveRead({
+            maxWaitMs: 5_000,
+            random: () => 0,
+            beat: async () => {
+              beats += 1;
+            },
+            sleep: async (ms) => {
+              slices.push(ms);
+              // A concurrent writer must get the quota row at once: no lock is held.
+              await withTransaction(pool, async (client) => {
+                await client.query("SET LOCAL lock_timeout='1s'");
+                await client.query(
+                  'UPDATE crm.olist_quotas SET blocked_until=NULL WHERE account_key=$1',
+                  [f.accountKey],
+                );
+              });
+              const idle = await pool.query(
+                "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=current_database() AND state='idle in transaction'",
+              );
+              assert.equal(idle.rows[0].n, 0);
+            },
+          });
+          assert.equal(slices.length, 1);
+          assert.ok(slices[0] >= 250 && slices[0] <= 1_000);
+          assert.equal(beats, 1);
+          assert.equal(waited.waitedMs, slices[0]);
+          assert.equal(
+            (
+              await pool.query(
+                'SELECT used FROM crm.olist_quotas WHERE account_key=$1',
+                [f.accountKey],
+              )
+            ).rows[0].used,
+            2,
+          );
+          // A 429 Retry-After block longer than the budget fails with retryAfterMs.
+          await other.block(60_000);
+          await assert.rejects(
+            reader.reserveRead({
+              maxWaitMs: 8_000,
+              sleep: async () => assert.fail('no useless wait'),
+            }),
+            (error) => {
+              const value = /** @type {any} */ (error);
+              assert.equal(value.code, 'OLIST_RATE_LIMITED');
+              assert.ok(
+                value.retryAfterMs > 50_000 && value.retryAfterMs <= 60_000,
+              );
+              return true;
+            },
+          );
+        },
+      );
+
+      await t.test(
         'upstream remaining=0 and Retry-After block prevent every HTTP call across replicas',
         async () => {
           const f = await fixture();

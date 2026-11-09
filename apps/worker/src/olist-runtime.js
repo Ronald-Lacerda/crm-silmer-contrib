@@ -7,8 +7,18 @@ import {
   createOlistSaleWriter,
   createOlistDispatcher,
   olistConfiguration,
+  olistReadWait,
   OlistError,
 } from '@crm-silmer/olist';
+
+/** Failures that are safe to retry only when the dispatcher also reports
+ * `retryable` and `retrySafe` (nothing was sent: no sale ticket and nothing
+ * reserved or uncertain). The handler never invents a retry on its own. */
+const RETRYABLE_CODES = new Set([
+  'OLIST_RATE_LIMITED',
+  'OLIST_UNAVAILABLE',
+  'OLIST_REFRESH_IN_PROGRESS',
+]);
 
 /** @param {any} value */
 function safeCode(value) {
@@ -32,6 +42,9 @@ function safeCode(value) {
     'OLIST_SALE_REQUEST_CHANGED',
     'OLIST_RESOURCE_RECONCILIATION_REQUIRED',
     'OLIST_RATE_LIMITED',
+    'OLIST_UNAVAILABLE',
+    'OLIST_REFRESH_IN_PROGRESS',
+    'OLIST_EXPORT_UNAVAILABLE',
     'OLIST_DISPATCH_FAILED',
   ]);
   return codes.has(value?.code) ? value.code : 'OLIST_DISPATCH_FAILED';
@@ -76,17 +89,25 @@ export function createOlistJobHandler({
         !['sent', 'failed', 'outcome_unknown'].includes(response.outcome)
       )
         throw new OlistError('OLIST_DISPATCH_FAILED');
+      const errorCode = response.errorCode
+        ? safeCode({ code: response.errorCode })
+        : undefined;
+      // A retry is granted only to a plain pre-effect failure; `sent` and
+      // `outcome_unknown` can never be retried, whatever the flags say.
+      const retry =
+        response.outcome === 'failed' &&
+        response.retryable === true &&
+        response.retrySafe === true &&
+        RETRYABLE_CODES.has(errorCode ?? '');
       return {
         outcome: response.outcome,
-        ...(response.errorCode
-          ? { errorCode: safeCode({ code: response.errorCode }) }
-          : {}),
+        ...(errorCode ? { errorCode } : {}),
         ...(typeof response.providerExternalId === 'string' &&
         /^[1-9][0-9]{0,18}$/u.test(response.providerExternalId)
           ? { providerExternalId: response.providerExternalId }
           : {}),
-        retryable: false,
-        retrySafe: false,
+        retryable: retry,
+        retrySafe: retry,
       };
     } catch (error) {
       return {
@@ -153,6 +174,11 @@ export function createOlistDispatchRuntime({
         quota: connection.quota,
         fetch: guardedFetch,
         onAuthFailure,
+        // Reads wait for quota; `beat` keeps the job lease alive meanwhile and
+        // a lost lease aborts the wait (writes never wait).
+        readWait: olistReadWait('worker', {
+          beat: async () => context.heartbeat(),
+        }),
       });
       const writer = createOlistResourceWriter({
         credentials,
@@ -180,6 +206,10 @@ export function createOlistDispatchRuntime({
         resourceResolver: resolver,
         saleWriter,
         config,
+        // Renews an expired access token before the dispatcher's local guard.
+        prepare: async () => {
+          await credentials();
+        },
       }).dispatch(input);
     },
   });

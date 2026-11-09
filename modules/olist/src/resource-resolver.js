@@ -8,6 +8,63 @@ import {
   productDescription,
 } from './resource-payloads.js';
 
+/** Confirmation reads made while an unresolved durable ticket exists (just
+ * created, or an earlier reserved/uncertain attempt being recovered) use the patient wait profile of the client:
+ * failing them for quota would turn a known effect into an uncertain one.
+ * Before any ticket the client's ordinary read profile applies. */
+const PATIENT = Object.freeze({ patient: true });
+/** @param {any} row */
+const ticketed = (row) =>
+  ['reserved', 'uncertain'].includes(row?.latestAttempt?.outcome)
+    ? PATIENT
+    : undefined;
+/** Read deduplication scoped to ONE `resolve()` call. The same customer detail,
+ * parent product and variation detail are otherwise read again and again by the
+ * confirmation steps of a single execution, which on a large order spends the
+ * whole provider window before the sale can reserve its own quota. Rules:
+ * - only plain reads (no ticket in hand) are served from here; the first read of
+ *   each entity still goes to the ERP and is verified against the local link,
+ *   and a repeat is verified again on its own (copied) value;
+ * - a read made with a durable ticket (`patient`) is a confirmation of an
+ *   effect: it always goes to the network and never reads or fills the cache;
+ * - after any POST the entries of that resource family are dropped, and the
+ *   readbacks of that POST use the client directly, never this object;
+ * - only successful, non-empty results are kept (errors and "not found" are
+ *   read again), as a private copy, and a hit returns another copy;
+ * - searches by reference or document are never cached here.
+ * The object lives and dies with its `resolve()` call: no process-wide, job-wide
+ * or cross-execution memory.
+ * @param {any} client */
+export function createOlistExecutionReads(client) {
+  /** @type {Map<string,any>} */
+  const entries = new Map();
+  /** @param {'contact'|'product'} method @param {number} id @param {{patient?:boolean}} [opts] */
+  async function read(method, id, opts) {
+    if (opts?.patient === true) return client[method](id, opts);
+    const key = method + ':' + String(id);
+    if (entries.has(key)) return structuredClone(entries.get(key));
+    const value = await client[method](id, opts);
+    if (value !== null && value !== undefined)
+      try {
+        entries.set(key, structuredClone(value));
+      } catch {
+        /* Not copyable: never cached. */
+      }
+    return value;
+  }
+  return {
+    /** @param {number} id @param {{patient?:boolean}} [opts] */
+    contact: (id, opts) => read('contact', id, opts),
+    /** @param {number} id @param {{patient?:boolean}} [opts] */
+    product: (id, opts) => read('product', id, opts),
+    /** A POST of this kind may have changed what the ERP answers.
+     * @param {'contact'|'product'} method */
+    invalidate(method) {
+      for (const key of [...entries.keys()])
+        if (key.startsWith(method + ':')) entries.delete(key);
+    },
+  };
+}
 /** @param {any} value */
 const normalized = (value) =>
   String(value ?? '')
@@ -142,6 +199,7 @@ export function createOlistResourceResolver({
 }) {
   /** @param {any} input */
   async function resolve(input) {
+    const reads = createOlistExecutionReads(client);
     const operation = await repository.readExport({
       ...input,
       accountKey: config.accountKey,
@@ -305,25 +363,31 @@ export function createOlistResourceResolver({
         throw new OlistError('OLIST_RESOURCE_RECONCILIATION_REQUIRED');
       let reservation;
       try {
-        const response = await writer.dispatch({
-          kind,
-          payload,
-          parentRemoteId,
-          reserve: async (
-            /** @type {any} */ requestPayload,
-            /** @type {any} */ credentials,
-          ) => {
-            reservation = await repository.reserveResourceEffect({
-              ...base,
-              resourceId: row.id,
-              expectedVersion: Number(row.version),
-              connectionVersion: credentials.connectionVersion,
-              dependentResourceIds: children.map((child) => child.id),
-              requestPayload,
-            });
-            return reservation;
-          },
-        });
+        /** @type {any} */ let response;
+        try {
+          response = await writer.dispatch({
+            kind,
+            payload,
+            parentRemoteId,
+            reserve: async (
+              /** @type {any} */ requestPayload,
+              /** @type {any} */ credentials,
+            ) => {
+              reservation = await repository.reserveResourceEffect({
+                ...base,
+                resourceId: row.id,
+                expectedVersion: Number(row.version),
+                connectionVersion: credentials.connectionVersion,
+                dependentResourceIds: children.map((child) => child.id),
+                requestPayload,
+              });
+              return reservation;
+            },
+          });
+        } finally {
+          // The POST may have changed the ERP, even when its answer was lost.
+          reads.invalidate(kind === 'customer' ? 'contact' : 'product');
+        }
         // Persist an observed ID before any follow-up read, including the parent
         // ID returned by the provider's variation endpoint.
         await repository.recordObservedResourceId({
@@ -371,11 +435,12 @@ export function createOlistResourceResolver({
       }
       return bindFound(row, id);
     }
-    /** @param {string} method @param {any} identity */
-    async function find(method, identity) {
+    /** @param {string} method @param {any} identity @param {{patient:boolean}} [opts] */
+    async function find(method, identity, opts) {
       return (client[method + 'AcrossStates'] ?? client[method]).call(
         client,
         identity,
+        opts,
       );
     }
     let buyerRow = await repository.bindResource({
@@ -439,11 +504,14 @@ export function createOlistResourceResolver({
     }
     buyerRow = await current(buyerRow);
     let buyerRemote = observed(buyerRow)
-      ? await client.contact(remoteNumber(observed(buyerRow)))
-      : await find('findCustomer', customer.cpfCnpj);
+      ? await reads.contact(
+          remoteNumber(observed(buyerRow)),
+          ticketed(buyerRow),
+        )
+      : await find('findCustomer', customer.cpfCnpj, ticketed(buyerRow));
     if (buyerRemote)
       buyerRemote = verifyCustomer(
-        await client.contact(remoteNumber(buyerRemote.id)),
+        await reads.contact(remoteNumber(buyerRemote.id), ticketed(buyerRow)),
         customer,
       );
     if (!buyerRemote && !canCreate(buyerRow))
@@ -454,10 +522,10 @@ export function createOlistResourceResolver({
       node.row = await current(node.row);
       const candidate = observed(node.row)
         ? { id: observed(node.row) }
-        : await find('findProduct', node.row.reference);
+        : await find('findProduct', node.row.reference, ticketed(node.row));
       if (candidate)
         node.remote = verifyProduct(
-          await client.product(remoteNumber(candidate.id)),
+          await reads.product(remoteNumber(candidate.id), ticketed(node.row)),
           node,
           fiscal,
         );
@@ -479,7 +547,7 @@ export function createOlistResourceResolver({
       );
       try {
         buyerRemote = verifyCustomer(
-          await client.contact(remoteNumber(response.remoteId)),
+          await client.contact(remoteNumber(response.remoteId), PATIENT),
           customer,
         );
         buyerRow = await finish(buyerRow, buyerRemote.id, response.reservation);
@@ -509,7 +577,7 @@ export function createOlistResourceResolver({
         );
         try {
           node.remote = verifyProduct(
-            await client.product(remoteNumber(response.remoteId)),
+            await client.product(remoteNumber(response.remoteId), PATIENT),
             node,
             fiscal,
           );
@@ -530,7 +598,7 @@ export function createOlistResourceResolver({
         let response = null;
         try {
           let parent = verifyProduct(
-            await client.product(parentId),
+            await reads.product(parentId, ticketed(child.row)),
             node,
             fiscal,
           );
@@ -561,7 +629,7 @@ export function createOlistResourceResolver({
           }
           if (response) {
             parent = verifyProduct(
-              await client.product(parentId),
+              await client.product(parentId, PATIENT),
               node,
               fiscal,
             );
@@ -579,7 +647,9 @@ export function createOlistResourceResolver({
               fence: child.row.latestAttempt.fence,
               remoteId: String(id),
             });
-          const detail = await client.product(id);
+          const detail = response
+            ? await client.product(id, PATIENT)
+            : await reads.product(id, ticketed(child.row));
           if (
             detail.id !== id ||
             detail.produtoPai?.id !== parentId ||

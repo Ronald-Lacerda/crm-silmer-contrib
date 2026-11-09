@@ -698,6 +698,7 @@ export function createOlistRepository(database, options) {
         'OLIST_RECONNECT_REQUIRED',
         'OLIST_RATE_LIMITED',
         'OLIST_UNAVAILABLE',
+        'OLIST_REFRESH_IN_PROGRESS',
         'OLIST_RESOURCE_UNCERTAIN',
         'OLIST_RESOURCE_RECONCILIATION_REQUIRED',
         'OLIST_SALE_UNCERTAIN',
@@ -729,10 +730,10 @@ export function createOlistRepository(database, options) {
           )
         ).rows[0];
         if (!row) throw new OlistError('OLIST_EXPORT_UNAVAILABLE');
+        // A terminal row is never annotated: `invalidated` keeps the code that
+        // closed it (ORDER_CANCELLED or OLIST_EXPORT_INVALIDATED).
         if (
-          ['confirmed', 'linked'].includes(row.state) ||
-          (row.state === 'invalidated' &&
-            row.last_error_code === 'ORDER_CANCELLED') ||
+          ['confirmed', 'linked', 'invalidated'].includes(row.state) ||
           row.last_error_code === code
         )
           return row;
@@ -826,6 +827,49 @@ export function createOlistRepository(database, options) {
             : null,
         };
       });
+    },
+    /** Pre-effect retry gate for the worker: true only when no POST of this
+     * export can have left the process. Read-only and lock-free (the caller owns
+     * the job lease); any failure answers false, i.e. the job stays terminal.
+     * Requires state queued/resolving/ready, no sale attempt of any outcome, no
+     * remote/observed sale ID and no resource of the export reserved/uncertain
+     * (by resource state or by attempt outcome). A `reserved` attempt always
+     * blocks; an `uncertain` attempt blocks only while its resource is not
+     * `confirmed` with a remote ID (an immutable attempt stays `uncertain`
+     * after /reconcile confirmed the resource, and a confirmed resource is
+     * never posted again).
+     * @param {{exportId:string,accountKey:string,contextKey?:string}} input
+     * @returns {Promise<boolean>} */
+    async assertRetrySafe(input) {
+      try {
+        const row = (
+          await database.transaction((/** @type {any} */ client) =>
+            client.query(
+              `SELECT e.state,(e.remote_id IS NOT NULL OR e.observed_sale_id IS NOT NULL) AS sale_id,
+                EXISTS (SELECT 1 FROM crm.olist_attempts a WHERE a.export_id=e.id AND a.stage='sale') AS sale_attempt,
+                EXISTS (SELECT 1 FROM crm.olist_export_resources x JOIN crm.olist_resources r ON r.id=x.resource_id AND r.account_key=x.account_key
+                  WHERE x.export_id=e.id AND r.state IN ('reserved','uncertain')) AS resource_open,
+                EXISTS (SELECT 1 FROM crm.olist_export_resources x JOIN crm.olist_attempts a ON a.resource_id=x.resource_id AND a.account_key=x.account_key
+                  JOIN crm.olist_resources r ON r.id=a.resource_id AND r.account_key=a.account_key
+                  WHERE x.export_id=e.id AND (a.outcome='reserved'
+                    OR (a.outcome='uncertain' AND NOT (r.state='confirmed' AND r.remote_id IS NOT NULL)))) AS attempt_open
+               FROM crm.olist_exports e
+               WHERE e.id=$1 AND e.account_key=$2 AND ($3::text IS NULL OR e.context_key=$3)`,
+              [input.exportId, input.accountKey, input.contextKey ?? null],
+            ),
+          )
+        ).rows[0];
+        return (
+          !!row &&
+          ['queued', 'resolving', 'ready'].includes(row.state) &&
+          !row.sale_id &&
+          !row.sale_attempt &&
+          !row.resource_open &&
+          !row.attempt_open
+        );
+      } catch {
+        return false;
+      }
     },
     /** @param {any} input */
     async validateDispatch(input) {
@@ -1554,7 +1598,7 @@ export function createOlistRepository(database, options) {
         if (order.rows[0].cancelled_at) throw new OlistError('ORDER_CANCELLED');
         const row = (
           await client.query(
-            'SELECT * FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2',
+            "SELECT * FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2 AND state<>'invalidated'",
             [input.accountKey, input.orderId],
           )
         ).rows[0];
@@ -1612,7 +1656,7 @@ export function createOlistRepository(database, options) {
         if (order.rows[0].cancelled_at) throw new OlistError('ORDER_CANCELLED');
         const existing = (
           await client.query(
-            'SELECT * FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2',
+            "SELECT * FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2 AND state<>'invalidated'",
             [input.accountKey, input.orderId],
           )
         ).rows[0];

@@ -50,6 +50,17 @@ const commands = [
     },
     status: 202,
   },
+  {
+    path: '/invalidate',
+    method: 'invalidate',
+    action: 'olist.invalidate',
+    payload: {
+      operationId: resourceId,
+      expectedVersion: 3,
+      reason: 'Synthetic invalidation',
+    },
+    status: 200,
+  },
 ];
 /** @type {Array<{path:string,method:string,action:string}>} */
 const reads = [
@@ -141,6 +152,13 @@ function fixture(patch = {}) {
           state: 'pending',
           creationEnabled: false,
         };
+      if (method === 'invalidate')
+        return {
+          operationId: input.operationId,
+          orderId: input.orderId,
+          state: 'invalidated',
+          version: input.expectedVersion + 1,
+        };
       if (method === 'administration')
         return {
           orderId: input.orderId,
@@ -181,7 +199,7 @@ function privateHeaders(response) {
   assert.equal(response.headers.vary, 'Origin, Cookie');
 }
 
-test('T09 administrator without export checkbox can use only the dedicated link/reconciliation commands', async (t) => {
+test('T09 administrator without export checkbox can use only the dedicated link/reconciliation/invalidation commands', async (t) => {
   const f = fixture();
   t.after(() => f.api.close());
   for (const command of commands) {
@@ -212,7 +230,7 @@ test('T09 administrator without export checkbox can use only the dedicated link/
     for (const [key, value] of Object.entries(command.payload))
       assert.deepEqual(call?.input[key], value);
   }
-  assert.equal(f.calls.length, 3);
+  assert.equal(f.calls.length, 4);
   assert.doesNotMatch(JSON.stringify(f.calls), new RegExp(session, 'u'));
 });
 
@@ -448,4 +466,168 @@ test('T14 payload and parent refusals keep their own 409 code and a fixed body i
     privateHeaders(response);
     assert.doesNotMatch(response.body, /PRIVATE_/u);
   }
+});
+
+const invalidation = {
+  operationId: resourceId,
+  expectedVersion: 3,
+  reason: 'PRIVATE_INVALIDATION_REASON_CANARY',
+};
+
+test('L1 invalidate answers 200 (not 202) with the administrator action and forwards the strict body', async (t) => {
+  const f = fixture();
+  t.after(() => f.api.close());
+  const response = await f.api.inject({
+    method: 'POST',
+    url: prefix + '/invalidate',
+    headers,
+    payload: invalidation,
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  privateHeaders(response);
+  assert.deepEqual(response.json(), {
+    operationId: resourceId,
+    orderId,
+    state: 'invalidated',
+    version: 4,
+  });
+  assert.equal(f.authCalls.at(-1)?.write, true);
+  assert.equal(f.authCalls.at(-1)?.input.action, 'olist.invalidate');
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].method, 'invalidate');
+  assert.equal(f.calls[0].input.orderId, orderId);
+  assert.equal(f.calls[0].input.operationId, resourceId);
+  assert.equal(f.calls[0].input.expectedVersion, 3);
+  assert.equal(f.calls[0].input.reason, invalidation.reason);
+  assert.equal(f.calls[0].input.idempotencyKey, headers['idempotency-key']);
+  assert.equal(
+    f.calls[0].input.sessionBinding,
+    createHash('sha256').update(session).digest('hex'),
+  );
+  assert.doesNotMatch(
+    response.body + f.logs.join(''),
+    /PRIVATE_|synthetic-olist-administration-session/u,
+  );
+});
+
+test('L1 invalidate needs Vendedor + COMMERCIAL_ADMIN whatever the Olist checkbox says', async (t) => {
+  for (const [patch, status] of /** @type {const} */ ([
+    [{ olistEnabled: false }, 200],
+    [{ olistEnabled: true }, 200],
+    [{ capabilities: [], olistEnabled: true }, 403],
+    [{ functionName: 'Financeiro', capabilities: [], olistEnabled: true }, 403],
+    [{ disabledAt: '2026-11-06T12:00:00Z' }, 403],
+    [{ kind: 'assistant', olistEnabled: true }, 403],
+  ])) {
+    const f = fixture(/** @type {any} */ (patch));
+    t.after(() => f.api.close());
+    const response = await f.api.inject({
+      method: 'POST',
+      url: prefix + '/invalidate',
+      headers,
+      payload: invalidation,
+    });
+    assert.equal(response.statusCode, status, JSON.stringify(patch));
+    assert.equal(f.calls.length, status === 200 ? 1 : 0);
+  }
+});
+
+test('L1 invalidate refusals keep their own 409 code and a fixed body without the reason', async (t) => {
+  for (const [code, statusCode] of /** @type {const} */ ([
+    ['OLIST_INVALIDATION_BLOCKED', 409],
+    ['OLIST_EXPORT_IN_FLIGHT', 409],
+    ['OLIST_RESOURCE_RECONCILIATION_REQUIRED', 409],
+    ['OLIST_EXPORT_UNAVAILABLE', 409],
+    ['VERSION_CONFLICT', 409],
+    ['ORDER_CANCELLED', 409],
+    ['ORDER_NOT_FOUND', 404],
+    ['IDEMPOTENCY_KEY_REUSED', 409],
+  ])) {
+    const f = fixture();
+    t.after(() => f.api.close());
+    f.runtime.invalidate = async () => {
+      throw Object.assign(new OlistError(code, statusCode), {
+        detail: 'PRIVATE_REMOTE_BODY',
+      });
+    };
+    const response = await f.api.inject({
+      method: 'POST',
+      url: prefix + '/invalidate',
+      headers,
+      payload: invalidation,
+    });
+    assert.equal(response.statusCode, statusCode, code);
+    assert.deepEqual(response.json(), {
+      type: 'about:blank',
+      title: code,
+      status: statusCode,
+      code,
+    });
+    privateHeaders(response);
+    assert.doesNotMatch(
+      response.body + f.logs.join(''),
+      /PRIVATE_|synthetic-olist-administration-session/u,
+    );
+  }
+  // A refusal thrown without its own status still reaches the client as 409,
+  // and an unknown failure never leaks as anything but a 503.
+  const f = fixture();
+  t.after(() => f.api.close());
+  f.runtime.invalidate = async () => {
+    throw Object.assign(new Error('PRIVATE_INTERNAL'), {
+      code: 'OLIST_INVALIDATION_BLOCKED',
+    });
+  };
+  const bare = await f.api.inject({
+    method: 'POST',
+    url: prefix + '/invalidate',
+    headers,
+    payload: invalidation,
+  });
+  assert.equal(bare.statusCode, 409);
+  assert.equal(bare.json().code, 'OLIST_INVALIDATION_BLOCKED');
+  f.runtime.invalidate = async () => {
+    throw new Error('PRIVATE_INTERNAL');
+  };
+  const unknown = await f.api.inject({
+    method: 'POST',
+    url: prefix + '/invalidate',
+    headers,
+    payload: invalidation,
+  });
+  assert.equal(unknown.statusCode, 503);
+  assert.equal(unknown.json().code, 'SERVICE_UNAVAILABLE');
+  assert.doesNotMatch(unknown.body, /PRIVATE_/u);
+});
+
+test('L1 invalidate is rate limited at ten commands per minute', async (t) => {
+  const f = fixture();
+  t.after(() => f.api.close());
+  /** @type {number[]} */ const statuses = [];
+  for (let index = 0; index < 14; index++) {
+    const response = await f.api.inject({
+      method: 'POST',
+      url: prefix + '/invalidate',
+      headers,
+      payload: invalidation,
+    });
+    statuses.push(response.statusCode);
+  }
+  assert.deepEqual(statuses.slice(0, 10), Array(10).fill(200));
+  assert.deepEqual(statuses.slice(10), Array(4).fill(429));
+  assert.equal(f.calls.length, 10);
+});
+
+test('L1 invalidate is a POST only: no GET, PUT or DELETE route exists', async (t) => {
+  const f = fixture();
+  t.after(() => f.api.close());
+  for (const method of /** @type {const} */ (['GET', 'PUT', 'DELETE'])) {
+    const response = await f.api.inject({
+      method,
+      url: prefix + '/invalidate',
+      headers,
+    });
+    assert.equal(response.statusCode, 404, method);
+  }
+  assert.deepEqual(f.calls, []);
 });

@@ -56,6 +56,10 @@ const CODES = new Set([
   'OLIST_PAYMENT_DUE_REQUIRED',
   'OLIST_SALE_EXACT_CENT_REQUIRED',
   'OLIST_SALE_PLAN_INVALID',
+  // L1: local administrative invalidation of an export generation. Both are
+  // 409 refusals the operator can act on; neither carries remote or reason data.
+  'OLIST_INVALIDATION_BLOCKED',
+  'OLIST_EXPORT_IN_FLIGHT',
 ]);
 /** @param {any} reply @param {()=>Promise<any>} work */
 async function respond(reply, work) {
@@ -213,6 +217,13 @@ export function registerOlistRoutes(api, runtime, contextFor) {
       'reconcile',
       ['stage', 'resourceId', 'expectedVersion', 'reason'],
       'olist.reconcile',
+    ],
+    // L1: synchronous and local (200, no ERP call, no connection health needed).
+    [
+      '/invalidate',
+      'invalidate',
+      ['operationId', 'expectedVersion', 'reason'],
+      'olist.invalidate',
     ],
   ]) {
     api.post(

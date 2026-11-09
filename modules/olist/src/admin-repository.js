@@ -44,6 +44,7 @@ function semantic(snapshot) {
     ),
   );
 }
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 const SAFE = new Set([
   'FORBIDDEN',
   'OLIST_JOB_LEASE_LOST',
@@ -93,6 +94,26 @@ export function createOlistAdminRepository(database, options) {
   /** @param {any} value @param {string} purpose @param {string} account @param {string} id */
   const encrypted = (value, purpose, account, id) =>
     JSON.stringify(seal(value, options.envelopeKey, purpose, account, id));
+  /** Local-only variant for commands/reads that never call the ERP (the
+   * administrative diagnostic): the human actor, session, ACL and
+   * authorization version are revalidated under lock and the account/context
+   * connection row must exist and be locked FOR SHARE, but a broken, expired
+   * or refreshing connection (reconnect_required, no token, exchange/refresh
+   * nonce, other generation/version) is NOT an error: the administrator must be
+   * able to read the state and invalidate while the ERP is disconnected.
+   * Every command that makes HTTP keeps using `guard`.
+   * @param {any} tx @param {any} input @param {string} [action] */
+  async function guardLocal(tx, input, action = 'olist.reconcile') {
+    const actor = await lockOlistActor(tx, input, action, clock());
+    const connection = (
+      await tx.query(
+        'SELECT * FROM crm.olist_connections WHERE context_key=$1 AND account_key=$2 FOR SHARE',
+        [input.contextKey, input.accountKey],
+      )
+    ).rows[0];
+    if (!connection) throw new OlistError('OLIST_CONNECTION_CHANGED');
+    return { actor, connection };
+  }
   /** @param {any} tx @param {any} input @param {string} [action] */
   async function guard(tx, input, action = 'olist.link') {
     const actor = await lockOlistActor(tx, input, action, clock());
@@ -116,8 +137,17 @@ export function createOlistAdminRepository(database, options) {
       throw new OlistError('OLIST_CONNECTION_CHANGED');
     return { actor, connection };
   }
-  /** @param {any} tx @param {any} input @param {boolean} [exclusive] */
-  async function operation(tx, input, exclusive = false) {
+  /** One ACTIVE generation per order/account (migration 0071). The active row
+   * always wins; an archived (`invalidated`) generation is returned only for a
+   * cancelled order, with `input.includeInvalidated`, or when pinned by id, so
+   * the order reads as "no operation" after an administrative invalidation.
+   * @param {any} tx @param {any} input @param {boolean} [exclusive] @param {string|null} [pinnedExportId] */
+  async function operation(
+    tx,
+    input,
+    exclusive = false,
+    pinnedExportId = null,
+  ) {
     let order = (
       await tx.query(
         'SELECT id,number,version,conversation_id FROM crm.orders WHERE id=$1',
@@ -136,14 +166,21 @@ export function createOlistAdminRepository(database, options) {
         [order.id],
       )
     ).rows[0];
-    const row =
+    let row =
       (
         await tx.query(
-          'SELECT * FROM crm.olist_exports WHERE order_id=$1 AND account_key=$2 AND context_key=$3 FOR ' +
+          "SELECT * FROM crm.olist_exports WHERE order_id=$1 AND account_key=$2 AND context_key=$3 AND ($4::uuid IS NULL OR id=$4) ORDER BY (state='invalidated'),created_at DESC,id DESC LIMIT 1 FOR " +
             (exclusive ? 'UPDATE' : 'SHARE'),
-          [order.id, input.accountKey, input.contextKey],
+          [order.id, input.accountKey, input.contextKey, pinnedExportId],
         )
       ).rows[0] ?? null;
+    if (
+      row?.state === 'invalidated' &&
+      !pinnedExportId &&
+      !order.cancelled_at &&
+      input.includeInvalidated !== true
+    )
+      row = null;
     return { order, row };
   }
   /** @param {any} tx @param {any} row */
@@ -789,10 +826,13 @@ export function createOlistAdminRepository(database, options) {
         // outcome after grant/lease loss. Positive evidence still needs the
         // current administrator and connection, below, before target writes.
         if (input.matched === true) await guard(tx, input, 'olist.reconcile');
+        // The frozen request belongs to ONE generation: never re-target it at
+        // a newer export of the same order after an invalidation.
         const { row } = await operation(
           tx,
           { ...input, orderId: request.order_id },
           true,
+          request.export_id,
         );
         let target = row;
         if (request.resource_id)
@@ -986,10 +1026,252 @@ export function createOlistAdminRepository(database, options) {
         return requestView(saved);
       });
     },
+    /** Administrative L1 invalidation (ADR 069): archives a pre-sale export
+     * generation as `invalidated` so a NEW generation can be prepared. Purely
+     * local: zero HTTP, no health check of the ERP connection, nothing in the
+     * ERP is touched. One transaction; lock order is the existing one (actor,
+     * connection SHARE, conversation SHARE, order UPDATE, export UPDATE,
+     * resources SHARE, job UPDATE), so it serializes against the dispatcher.
+     *
+     * Input has the same shape as `reconcile`/`linkExisting` plus the command:
+     * `{actor:{id,kind:'human'}, sessionBinding, authorizationVersion?,
+     *   accountKey, contextKey, orderId, correlationId, transaction?,
+     *   operationId, expectedVersion, reason}`. `operationId` is the export id
+     * (diagnostic `operation.id`), `expectedVersion` its version. The actor is
+     * revalidated under lock for `olist.invalidate` (Vendedor + COMMERCIAL_ADMIN),
+     * also on replay. `reason` is sealed (AES-GCM) and never logged.
+     *
+     * Resolves `{operationId, orderId, state:'invalidated', version, replayed?}`
+     * (never the reason). Errors: FORBIDDEN 403, ORDER_NOT_FOUND 404,
+     * INVALID_REQUEST 400, ORDER_CANCELLED, OLIST_EXPORT_UNAVAILABLE (order has
+     * no operation), VERSION_CONFLICT (stale/unknown operationId or version),
+     * OLIST_INVALIDATION_BLOCKED (state not queued/resolving/ready, any sale
+     * attempt, remote/observed sale ID), OLIST_RESOURCE_RECONCILIATION_REQUIRED
+     * (a resource reserved/uncertain, or a reserved attempt, or an uncertain
+     * attempt whose resource is not yet confirmed: /reconcile that resource first), OLIST_EXPORT_IN_FLIGHT
+     * (job processing with a LIVE lease; an expired lease is retired).
+     * @param {any} input */
+    invalidateExport(input) {
+      text(input.orderId, 200);
+      const correlationId = text(input.correlationId, 128);
+      const reason = text(input.reason, 1000);
+      const exportId = text(input.operationId, 36);
+      if (!UUID.test(exportId)) throw new OlistError('INVALID_REQUEST', 400);
+      const expectedVersion = integer(input.expectedVersion);
+      return transaction(input, async (/** @type {any} */ tx) => {
+        const actor = await lockOlistActor(
+          tx,
+          input,
+          'olist.invalidate',
+          clock(),
+        );
+        // Only the lock: invalidation is local and must work with a broken or
+        // reconnecting ERP connection (OLIST_CONNECTION_CHANGED, reconnect).
+        await tx.query(
+          'SELECT 1 FROM crm.olist_connections WHERE context_key=$1 AND account_key=$2 FOR SHARE',
+          [input.contextKey, input.accountKey],
+        );
+        const found = (
+          await tx.query(
+            'SELECT id,conversation_id FROM crm.orders WHERE id=$1',
+            [input.orderId],
+          )
+        ).rows[0];
+        if (!found) throw new OlistError('ORDER_NOT_FOUND', 404);
+        if (found.conversation_id)
+          await tx.query(
+            'SELECT id FROM crm.conversations WHERE id=$1 FOR SHARE',
+            [found.conversation_id],
+          );
+        const order = (
+          await tx.query(
+            'SELECT id,cancelled_at FROM crm.orders WHERE id=$1 FOR UPDATE',
+            [found.id],
+          )
+        ).rows[0];
+        if (order.cancelled_at) throw new OlistError('ORDER_CANCELLED');
+        // FOR NO KEY UPDATE, not FOR UPDATE: it still conflicts with every
+        // FOR SHARE / FOR UPDATE / FOR NO KEY UPDATE taker (the dispatch and
+        // resolution guards, trigger (a)/(c), cancel), so the sale race stays
+        // serialized, but it does NOT conflict with the FOR KEY SHARE that an
+        // `olist_events` INSERT (FK to the export) takes. A resource-result
+        // writer (attempt FOR UPDATE -> resource UPDATE -> event INSERT) and
+        // this command (export lock -> resources FOR SHARE) could otherwise
+        // wait on each other forever.
+        const row = (
+          await tx.query(
+            'SELECT * FROM crm.olist_exports WHERE id=$1 AND order_id=$2 AND account_key=$3 AND context_key=$4 FOR NO KEY UPDATE',
+            [exportId, order.id, input.accountKey, input.contextKey],
+          )
+        ).rows[0];
+        if (!row) {
+          // A stale id of an order that still has operations is a version
+          // conflict (the UI must reload); an order with none is unavailable.
+          const known = (
+            await tx.query(
+              'SELECT 1 FROM crm.olist_exports WHERE order_id=$1 AND account_key=$2 AND context_key=$3 LIMIT 1',
+              [order.id, input.accountKey, input.contextKey],
+            )
+          ).rows[0];
+          throw new OlistError(
+            known ? 'VERSION_CONFLICT' : 'OLIST_EXPORT_UNAVAILABLE',
+          );
+        }
+        if (row.state === 'invalidated') {
+          const receipt = (
+            await tx.query(
+              'SELECT id FROM crm.olist_export_invalidations WHERE export_id=$1 AND account_key=$2',
+              [row.id, row.account_key],
+            )
+          ).rows[0];
+          if (receipt)
+            return {
+              operationId: row.id,
+              orderId: order.id,
+              state: 'invalidated',
+              version: Number(row.version),
+              replayed: true,
+            };
+        }
+        if (Number(row.version) !== expectedVersion)
+          throw new OlistError('VERSION_CONFLICT');
+        if (!['queued', 'resolving', 'ready'].includes(row.state))
+          throw new OlistError('OLIST_INVALIDATION_BLOCKED');
+        if (
+          row.remote_id ||
+          row.observed_sale_id ||
+          (
+            await tx.query(
+              "SELECT 1 FROM crm.olist_attempts WHERE export_id=$1 AND stage='sale' LIMIT 1",
+              [row.id],
+            )
+          ).rows[0]
+        )
+          throw new OlistError('OLIST_INVALIDATION_BLOCKED');
+        const resources = (
+          await tx.query(
+            'SELECT r.id,r.state FROM crm.olist_resources r JOIN crm.olist_export_resources x ON x.resource_id=r.id AND x.account_key=r.account_key WHERE x.export_id=$1 AND r.account_key=$2 ORDER BY r.id FOR SHARE OF r',
+            [row.id, row.account_key],
+          )
+        ).rows;
+        // A `reserved` attempt always blocks (a POST may be in flight). An
+        // `uncertain` attempt is immutable history: it blocks only while its
+        // RESOURCE is not confirmed with a remote ID. Once /reconcile (or a
+        // verified lookup) made the resource `confirmed`, that resource is never
+        // posted again (the resolver and `reserveResourceEffect` only create a
+        // `pending` resource with no attempt at all), so the old attempt is no
+        // longer a reason to keep the generation alive. The resources above are
+        // locked FOR SHARE, so their states cannot change under this check.
+        if (
+          resources.some((/** @type {any} */ resource) =>
+            ['reserved', 'uncertain'].includes(resource.state),
+          ) ||
+          (resources.length > 0 &&
+            (
+              await tx.query(
+                `SELECT 1 FROM crm.olist_attempts a JOIN crm.olist_resources r ON r.id=a.resource_id AND r.account_key=a.account_key
+                 WHERE a.account_key=$1 AND a.resource_id=ANY($2::uuid[])
+                   AND (a.outcome='reserved'
+                     OR (a.outcome='uncertain' AND NOT (r.state='confirmed' AND r.remote_id IS NOT NULL))) LIMIT 1`,
+                [
+                  row.account_key,
+                  resources.map((/** @type {any} */ resource) => resource.id),
+                ],
+              )
+            ).rows[0])
+        )
+          throw new OlistError('OLIST_RESOURCE_RECONCILIATION_REQUIRED');
+        const job = (
+          await tx.query(
+            "SELECT id,status,locked_until FROM crm.outbox_jobs WHERE olist_export_id=$1 AND job_type='olist.export' FOR UPDATE",
+            [row.id],
+          )
+        ).rows[0];
+        const now = clock();
+        // In flight only while the lease is alive; an expired `processing`
+        // lease is an orphaned job (its worker died) and is retired like any
+        // other queued job. The effect guards above already exclude a possible
+        // POST, and a late worker is refused by the export lock/state.
+        if (
+          job?.status === 'processing' &&
+          job.locked_until &&
+          new Date(job.locked_until).getTime() >= now.getTime()
+        )
+          throw new OlistError('OLIST_EXPORT_IN_FLIGHT');
+        const saved = (
+          await tx.query(
+            "UPDATE crm.olist_exports SET state='invalidated',last_error_code='OLIST_EXPORT_INVALIDATED',version=version+1,updated_at=$2 WHERE id=$1 RETURNING *",
+            [row.id, now],
+          )
+        ).rows[0];
+        // Retire the queued job without redelivery: the claim only takes
+        // pending/retry, and the open reconciliation item is settled with it.
+        if (job) {
+          await tx.query(
+            "UPDATE crm.outbox_jobs SET status='completed',locked_by=NULL,locked_until=NULL,heartbeat_at=NULL,updated_at=greatest(updated_at,$2),completed_at=$2,last_error_code=COALESCE(last_error_code,'OLIST_EXPORT_INVALIDATED') WHERE id=$1 AND status IN ('pending','retry','dead_letter','outcome_unknown','processing')",
+            [job.id, now],
+          );
+          await tx.query(
+            "UPDATE crm.reconciliation_items SET status='resolved',resolved_at=greatest(created_at,$2) WHERE job_id=$1 AND status='open'",
+            [job.id, now],
+          );
+        }
+        const invalidationId = randomUUID();
+        await tx.query(
+          'INSERT INTO crm.olist_export_invalidations(id,account_key,export_id,actor_id,authorization_version,expected_version,reason_envelope,correlation_id,created_at) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9)',
+          [
+            invalidationId,
+            row.account_key,
+            row.id,
+            actor.id,
+            actor.olistAuthorizationVersion,
+            expectedVersion,
+            encrypted(
+              reason,
+              'export-invalidation',
+              row.account_key,
+              invalidationId,
+            ),
+            correlationId,
+            now,
+          ],
+        );
+        await tx.query(
+          "INSERT INTO crm.olist_events(id,account_key,export_id,resource_id,actor_id,event_code,version,correlation_id,occurred_at) VALUES($1,$2,$3,NULL,$4,'OLIST_EXPORT_INVALIDATED',$5,$6,$7)",
+          [
+            randomUUID(),
+            row.account_key,
+            row.id,
+            actor.id,
+            Number(saved.version),
+            correlationId,
+            now,
+          ],
+        );
+        await tx.query(
+          "INSERT INTO crm.audit_events(id,actor_id,action,target_type,target_id,version,reason,correlation_id,occurred_at) VALUES($1,$2,'olist.invalidate','olist-export',$3,$4,'OLIST_EXPORT_INVALIDATED',$5,$6)",
+          [
+            randomUUID(),
+            actor.id,
+            row.id,
+            String(saved.version),
+            correlationId,
+            now,
+          ],
+        );
+        return {
+          operationId: saved.id,
+          orderId: order.id,
+          state: 'invalidated',
+          version: Number(saved.version),
+        };
+      });
+    },
     /** @param {any} input */
     diagnostic(input) {
       return transaction(input, async (/** @type {any} */ tx) => {
-        await guard(tx, input, 'olist.reconcile');
+        // Reads only the database (zero HTTP): works with a broken connection.
+        await guardLocal(tx, input, 'olist.reconcile');
         const { row } = await operation(tx, input);
         if (!row)
           return {

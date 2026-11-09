@@ -14,6 +14,7 @@ import {
 } from '../../lib/olist-feedback.js';
 import {
   OLIST_FOLLOW_DELAYS_MS,
+  isAdminInvalidated,
   isOperationInProgress,
 } from '../../lib/olist-progress.js';
 import OrderOlistProgress from './OrderOlistProgress.vue';
@@ -38,6 +39,7 @@ const isAdmin = computed(() =>
 const administration = ref(null);
 const loadStamp = ref(0);
 const progressRef = ref(null);
+const conferButton = ref(null);
 const projection = ref(null);
 const preview = ref(null);
 const busy = ref(false);
@@ -62,7 +64,13 @@ let expiration = 0;
 const base = computed(
   () => `/api/v1/orders/${encodeURIComponent(props.orderId)}/olist`,
 );
-const hasOperation = computed(() => Boolean(projection.value?.operation));
+// A projeção pode trazer a geração invalidada por um administrador (a mais
+// recente). Ela segue visível no progresso, mas não é uma operação ativa: o
+// Pedido volta a poder conferir uma nova prévia e gerar (ADR 069).
+const showOperation = computed(() => Boolean(projection.value?.operation));
+const hasOperation = computed(
+  () => showOperation.value && !isAdminInvalidated(projection.value.operation),
+);
 const generationAllowed = computed(
   () =>
     canOperate.value &&
@@ -242,7 +250,13 @@ async function recoveryChanged(change) {
   await load(false);
   if (change?.focus) {
     await nextTick();
-    if (!disposed) progressRef.value?.focus();
+    if (disposed) return;
+    // Geração invalidada: o próximo passo é a nova prévia, e o botão que tinha
+    // o foco saiu da tela.
+    (!hasOperation.value && conferButton.value
+      ? conferButton.value
+      : progressRef.value
+    )?.focus();
   }
 }
 async function confer() {
@@ -728,7 +742,7 @@ onBeforeUnmount(() => {
           </p>
         </template>
       </div>
-      <template v-if="hasOperation && !denied">
+      <template v-if="showOperation && !denied">
         <OrderOlistProgress
           ref="progressRef"
           :order-id="orderId"
@@ -736,7 +750,7 @@ onBeforeUnmount(() => {
           :operation="projection.operation"
           :resources="isAdmin ? (administration?.resources ?? null) : null"
         />
-        <p class="field-help">
+        <p v-if="hasOperation" class="field-help">
           Não repita a geração. A conferência e a recuperação da operação são
           administrativas.
         </p>
@@ -767,6 +781,7 @@ onBeforeUnmount(() => {
             !hasOperation &&
             exportState === 'idle'
           "
+          ref="conferButton"
           type="button"
           :disabled="busy || disabled"
           @click="confer"

@@ -1,5 +1,23 @@
 # TDD — CRM Silmer MVP
 
+## OLIST-T27/T28 — invalidação administrativa e quota (09/11/2026)
+
+[ADR 069](docs/adr/069-olist-invalidacao-administrativa-de-export.md) e
+[ADR 070](docs/adr/070-olist-quota-com-espera-de-leitura-e-folga.md), OLIST-51/52.
+`POST /api/v1/orders/:orderId/olist/invalidate` (ação `olist.invalidate`, só Admin,
+200 síncrono) revalida o ator sob lock, trava conexão, conversa, Pedido, export,
+recursos e job na ordem existente e recusa com qualquer tentativa de venda,
+recurso `reserved`/`uncertain` ou job em execução. A migração 0071 troca a
+unicidade por `UNIQUE(account_key, order_id) WHERE state <> 'invalidated'`, cria
+o recibo append-only (motivo só em envelope AES-GCM) e três triggers. Quota:
+`attempt` único sob advisory lock; `reserveRead` espera fora de transação
+(worker 90 s, conferência 180 s, API 8 s e teto 24/30, `verifyAccount` 15 s),
+`reserveWrite` exige folga para as leituras do POST e nunca espera. Retry
+pré-efeito de `OLIST_RATE_LIMITED`, `OLIST_UNAVAILABLE` e
+`OLIST_REFRESH_IN_PROGRESS` com backoff de 15 s a 300 s e 8 tentativas.
+Sem rollback de código depois da primeira invalidação.
+[Runbook](docs/runbooks/olist-phase5.md#invalidação-administrativa-e-quota).
+
 ## Ordem de Responder — INBOX-VEZ-08 (08/11/2026)
 
 [ADR 066](docs/adr/066-responder-por-mensagem-mais-recente.md), PCX-19e:

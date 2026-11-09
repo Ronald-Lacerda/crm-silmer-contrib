@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  canOfferInvalidate,
   canOfferLink,
   countResources,
   deriveOlistProgress,
+  isAdminInvalidated,
   isOperationInProgress,
   isOperationUncertain,
   olistOperationHeadline,
@@ -401,5 +403,202 @@ test('reasons and recovery failures are fixed Portuguese copy', () => {
       detail: 'provider-canary',
     }),
     /provider-canary/u,
+  );
+});
+
+const invalidatedByAdmin = () =>
+  operation('invalidated', 'customer', {
+    id: 'op-1',
+    version: 8,
+    errorCode: 'OLIST_EXPORT_INVALIDATED',
+  });
+
+test('an administrative invalidation says nothing was sold and asks for a new preview', () => {
+  const progress = derive(invalidatedByAdmin());
+  assert.equal(progress.kind, 'invalidated');
+  assert.equal(progress.headline, 'Operação Olist invalidada');
+  assert.deepEqual(progress.guidance, [
+    'Esta geração foi invalidada antes de qualquer venda. Gere uma nova prévia; cadastros já criados no Olist foram preservados.',
+  ]);
+  assert.doesNotMatch(
+    progress.guidance.join(' '),
+    /conferência administrativa|Tentar novamente|Repetir geração/u,
+  );
+  assert.match(progress.reason, /antes de qualquer venda/u);
+  assert.deepEqual(statuses(progress), ['invalidated', 'waiting', 'waiting']);
+  // Neither uncertain nor underway: no bounded re-read, no reconcile target.
+  assert.equal(isOperationUncertain(invalidatedByAdmin()), false);
+  assert.equal(isOperationInProgress(invalidatedByAdmin()), false);
+  assert.equal(isAdminInvalidated(invalidatedByAdmin()), true);
+  assert.deepEqual(
+    reconcileTargets({ operation: invalidatedByAdmin(), resources: [] }),
+    [],
+  );
+  assert.match(
+    progressAnnouncement(derive(operation('ready', 'sale')), progress),
+    /invalidada/u,
+  );
+});
+
+test('a cancellation or any other invalidation keeps the conference guidance', () => {
+  for (const errorCode of ['ORDER_CANCELLED', undefined, 'OLIST_UPSTREAM']) {
+    const input = operation('invalidated', 'product', { errorCode });
+    assert.equal(isAdminInvalidated(input), false);
+    assert.match(
+      derive(input).guidance.join(' '),
+      /peça a conferência administrativa/u,
+    );
+  }
+  // The error code alone, without the state, is not an invalidation.
+  assert.equal(
+    isAdminInvalidated(
+      operation('ready', 'sale', { errorCode: 'OLIST_EXPORT_INVALIDATED' }),
+    ),
+    false,
+  );
+  assert.equal(isAdminInvalidated(null), false);
+});
+
+test('an administratively invalidated generation counts as no active operation for the manual link', () => {
+  assert.equal(canOfferLink(invalidatedByAdmin()), true);
+  assert.equal(canOfferLink(operation('invalidated', 'customer')), false);
+  assert.equal(
+    canOfferLink(
+      operation('invalidated', 'customer', { errorCode: 'ORDER_CANCELLED' }),
+    ),
+    false,
+  );
+});
+
+test('invalidation is offered only before any sale attempt or uncertain resource', () => {
+  const base = { id: 'op-1', version: 7 };
+  const offered = (/** @type {Record<string, any>} */ input) =>
+    canOfferInvalidate(
+      /** @type {any} */ ({
+        operation: operation('ready', 'sale', base),
+        attempts: [],
+        resources: [],
+        ...input,
+      }),
+    );
+  assert.equal(offered({}), true);
+  for (const state of ['queued', 'resolving', 'ready'])
+    assert.equal(
+      offered({ operation: operation(state, 'customer', base) }),
+      true,
+      state,
+    );
+  for (const state of [
+    'reserved',
+    'uncertain',
+    'confirmed',
+    'linked',
+    'rejected',
+    'invalidated',
+  ])
+    assert.equal(
+      offered({ operation: operation(state, 'sale', base) }),
+      false,
+      state,
+    );
+  // A sale attempt, whatever its outcome, closes the door.
+  for (const outcome of ['reserved', 'uncertain', 'confirmed', 'rejected'])
+    assert.equal(
+      offered({
+        attempts: [
+          { id: 'a', stage: 'customer', outcome: 'confirmed' },
+          { id: 'b', stage: 'sale', outcome },
+        ],
+      }),
+      false,
+      outcome,
+    );
+  // Attempts of other stages do not.
+  assert.equal(
+    offered({
+      attempts: [{ id: 'a', stage: 'variation', outcome: 'rejected' }],
+    }),
+    true,
+  );
+  for (const state of ['reserved', 'uncertain'])
+    assert.equal(
+      offered({
+        resources: [
+          { id: 'r1', kind: 'customer', state: 'confirmed' },
+          { id: 'r2', kind: 'variation', state },
+        ],
+      }),
+      false,
+      state,
+    );
+  for (const state of ['pending', 'confirmed', 'rejected'])
+    assert.equal(
+      offered({ resources: [{ id: 'r', kind: 'product', state }] }),
+      true,
+      state,
+    );
+  assert.equal(offered({ cancelled: true }), false);
+  assert.equal(offered({ operation: null }), false);
+  // Without the diagnostic id and version there is no command to send.
+  assert.equal(offered({ operation: operation('ready', 'sale') }), false);
+  assert.equal(
+    offered({
+      operation: operation('ready', 'sale', { id: 'op', version: 0 }),
+    }),
+    false,
+  );
+  assert.equal(
+    canOfferInvalidate({ operation: operation('ready', 'sale', base) }),
+    true,
+  );
+});
+
+test('invalidation failures are fixed Portuguese copy and never echo the server', () => {
+  /** @type {Array<[any, RegExp]>} */
+  const failures = [
+    [
+      { status: 409, code: 'OLIST_INVALIDATION_BLOCKED' },
+      /não pode ser invalidada.*Nada foi alterado/u,
+    ],
+    [
+      { status: 409, code: 'OLIST_EXPORT_IN_FLIGHT' },
+      /em execução agora.*Nada foi alterado/u,
+    ],
+    [
+      { status: 409, code: 'OLIST_RESOURCE_RECONCILIATION_REQUIRED' },
+      /ainda sem resultado confirmado.*Conferir no Olist nesse cadastro.*poderá ser invalidada/u,
+    ],
+    [{ status: 409, code: 'VERSION_CONFLICT' }, /estado da etapa mudou/u],
+    [
+      { status: 409, code: 'OLIST_EXPORT_UNAVAILABLE' },
+      /não está mais disponível/u,
+    ],
+    [{ status: 409, code: 'ORDER_CANCELLED' }, /pedido foi cancelado/u],
+    [{ status: 403 }, /acesso mudou/u],
+    [{ status: 401 }, /acesso mudou/u],
+    [{ status: 503 }, /pode não ter sido registrada.*reenvio/u],
+    [{ status: 0 }, /pode não ter sido registrada/u],
+    [{ status: 400 }, /não pode ter quebra de linha/u],
+  ];
+  for (const [cause, pattern] of failures)
+    assert.match(olistRecoveryFailure(cause, 'invalidate'), pattern);
+  assert.doesNotMatch(
+    olistRecoveryFailure(
+      { status: 409, code: 'OLIST_INVALIDATION_BLOCKED', detail: 'canary' },
+      'invalidate',
+    ),
+    /canary/u,
+  );
+  // The same codes keep their other meanings outside this action.
+  assert.doesNotMatch(
+    olistRecoveryFailure(
+      { status: 409, code: 'OLIST_INVALIDATION_BLOCKED' },
+      'reconcile',
+    ),
+    /invalidada/u,
+  );
+  assert.match(
+    olistOperationReason('OLIST_EXPORT_INVALIDATED'),
+    /antes de qualquer venda/u,
   );
 });

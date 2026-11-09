@@ -100,6 +100,8 @@ if (connectionString) {
           );
         let now = NOW;
         let activeTransactions = 0;
+        /** @type {(ms:number) => Promise<unknown>} */
+        let sleeper = (ms) => new Promise((done) => setTimeout(done, ms));
         /** @type {Array<{url:string,grant:string|null}>} */
         const calls = [];
         const config = options.config ?? olistConfiguration(environment);
@@ -156,11 +158,15 @@ if (connectionString) {
           config,
           fetch: fetcher,
           clock: () => now,
+          sleep: (ms) => sleeper(ms),
+          random: () => 0,
         });
         const replica = createOlistConnection(database, {
           config,
           fetch: fetcher,
           clock: () => now,
+          sleep: (ms) => sleeper(ms),
+          random: () => 0,
         });
         const input = {
           actor: { id: userId, kind: 'human' },
@@ -202,6 +208,9 @@ if (connectionString) {
           authorize,
           connect,
           row,
+          setSleep: (/** @type {typeof sleeper} */ next) => {
+            sleeper = next;
+          },
           setTime: (/** @type {Date} */ next) => {
             now = next;
           },
@@ -320,6 +329,80 @@ if (connectionString) {
           assert.equal(row.token_envelope, null);
           assert.equal(row.reconnect_required, true);
           assert.equal((await f.connection.status(f.input)).connected, false);
+        },
+      );
+
+      await t.test(
+        'L2: an exhausted shared quota makes the account check wait instead of invalidating the new connection',
+        async () => {
+          const f = await fixture();
+          const state = await f.authorize();
+          await pool.query(
+            "INSERT INTO crm.olist_quotas(account_key,blocked_until) VALUES($1,now()+interval '3 seconds')",
+            [f.config.accountKey],
+          );
+          /** @type {number[]} */
+          const sleeps = [];
+          f.setSleep(async (ms) => {
+            sleeps.push(ms);
+            // Nothing may hold the quota row or a transaction while it waits.
+            await withTransaction(pool, async (client) => {
+              await client.query("SET LOCAL lock_timeout='1s'");
+              await client.query(
+                'UPDATE crm.olist_quotas SET blocked_until=NULL WHERE account_key=$1',
+                [f.config.accountKey],
+              );
+            });
+          });
+          const status = await f.connection.complete({
+            ...f.input,
+            state,
+            code: 'synthetic-code',
+          });
+          assert.equal(status.connected, true);
+          assert.equal(sleeps.length, 1);
+          assert.ok(sleeps[0] > 0 && sleeps[0] <= 3_000, String(sleeps[0]));
+          const row = await f.row();
+          assert.ok(row.token_envelope);
+          assert.equal(row.reconnect_required, false);
+          assert.deepEqual(
+            f.calls.map((call) => call.url.split('/').pop()),
+            ['token', 'info'],
+          );
+        },
+      );
+
+      await t.test(
+        'L2: the account-check wait is capped at 15 s; a longer block still ends in reconnect without any wait',
+        async () => {
+          const f = await fixture();
+          const state = await f.authorize();
+          await pool.query(
+            "INSERT INTO crm.olist_quotas(account_key,blocked_until) VALUES($1,now()+interval '5 minutes')",
+            [f.config.accountKey],
+          );
+          /** @type {number[]} */
+          const sleeps = [];
+          f.setSleep(async (ms) => {
+            sleeps.push(ms);
+          });
+          await assert.rejects(
+            f.connection.complete({
+              ...f.input,
+              state,
+              code: 'synthetic-code',
+            }),
+            { code: 'OLIST_RATE_LIMITED' },
+          );
+          assert.deepEqual(sleeps, []);
+          assert.deepEqual(
+            f.calls.map((call) => call.url.split('/').pop()),
+            ['token'],
+            'the quota stops the /info call, never the other way round',
+          );
+          const row = await f.row();
+          assert.equal(row.token_envelope, null);
+          assert.equal(row.reconnect_required, true);
         },
       );
 

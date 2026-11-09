@@ -150,6 +150,8 @@ export function olistOperationReason(code, state = '') {
     OLIST_INVALID_RESPONSE: 'O Olist devolveu uma resposta inválida.',
     OLIST_CREATION_DISABLED: 'A geração de vendas está desativada.',
     ORDER_CANCELLED: 'O pedido foi cancelado antes da etapa de venda.',
+    OLIST_EXPORT_INVALIDATED:
+      'Invalidada por uma pessoa administradora antes de qualquer venda.',
   });
   if (known[value]) return known[value];
   if (state === 'rejected')
@@ -165,9 +167,9 @@ export function olistOperationReason(code, state = '') {
 }
 
 /**
- * Falha de uma ação administrativa de recuperação (conferir, vincular).
- * Mensagem fixa em português; o corpo do provedor nunca é exibido.
- * @param {any} cause @param {'reconcile'|'preview'|'link'|'read'|'load'} [action]
+ * Falha de uma ação administrativa de recuperação (conferir, vincular,
+ * invalidar). Mensagem fixa em português; o corpo do provedor nunca é exibido.
+ * @param {any} cause @param {'reconcile'|'preview'|'link'|'invalidate'|'read'|'load'} [action]
  */
 export function olistRecoveryFailure(cause, action = 'load') {
   const status = Number(cause?.status);
@@ -180,6 +182,20 @@ export function olistRecoveryFailure(cause, action = 'load') {
     return 'O resultado do vínculo é incerto e pode ter sido gravado. O diagnóstico foi atualizado: confira o progresso antes de tentar de novo.';
   if ((status === 0 || status >= 500) && action === 'reconcile')
     return 'O resultado da solicitação é incerto e pode ter sido registrado. O diagnóstico foi atualizado: confira Conferências solicitadas antes de tentar de novo.';
+  // Invalidar é um comando local e idempotente: nada é lido nem escrito no
+  // Olist, e reenviar com a mesma chave é seguro.
+  if ((status === 0 || status >= 500) && action === 'invalidate')
+    return 'Não foi possível confirmar a invalidação: ela pode não ter sido registrada. O diagnóstico foi atualizado. Se a geração continuar ativa, envie de novo; o reenvio não duplica o registro.';
+  if (action === 'invalidate') {
+    if (code === 'OLIST_INVALIDATION_BLOCKED')
+      return 'Esta geração não pode ser invalidada: ela já passou da preparação ou teve uma tentativa de venda. Nada foi alterado. Use Conferir no Olist para esclarecer a venda.';
+    if (code === 'OLIST_EXPORT_IN_FLIGHT')
+      return 'A geração está em execução agora. Aguarde alguns instantes, atualize o diagnóstico e tente invalidar de novo. Nada foi alterado.';
+    if (code === 'OLIST_RESOURCE_RECONCILIATION_REQUIRED')
+      return 'Há um cadastro ainda sem resultado confirmado. Use Conferir no Olist nesse cadastro; quando ele ficar confirmado, a geração poderá ser invalidada. Nada foi alterado.';
+    if (code === 'OLIST_EXPORT_UNAVAILABLE')
+      return 'Esta geração não está mais disponível. Atualize o diagnóstico antes de continuar.';
+  }
   if (status === 429 || code === 'OLIST_RATE_LIMITED')
     return 'Limite de consultas atingido. Aguarde um momento antes de tentar de novo.';
   if (code === 'VERSION_CONFLICT')
@@ -236,7 +252,10 @@ export function olistRecoveryFailure(cause, action = 'load') {
       : 'Recurso ou pedido não encontrado. Atualize o diagnóstico.';
   if (status === 422)
     return 'Os dados não permitem esta ação. Confira o pedido e a venda informada.';
-  if (status === 400 && (action === 'reconcile' || action === 'link'))
+  if (
+    status === 400 &&
+    (action === 'reconcile' || action === 'link' || action === 'invalidate')
+  )
     return 'Confira os dados informados. O motivo não pode ter quebra de linha nem caracteres de controle: escreva em uma linha só e tente de novo.';
   if (status === 400) return 'Confira os dados informados e tente novamente.';
   if (status === 409)

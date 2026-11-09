@@ -16,6 +16,7 @@ import {
   seal,
   identityHash,
   createOlistClient,
+  olistReadWait,
   olistSettings,
 } from '@crm-silmer/olist';
 import { buildOlistPreviewPlan } from './olist-preview-plan.js';
@@ -155,10 +156,13 @@ export function createOlistPreview(database, options) {
             )
           ).rows
         : [];
+      // Only an ACTIVE export blocks a new preview (OLIST_OPERATION_EXISTS):
+      // an administratively invalidated generation is archived history. At most
+      // one active row exists per account/order (partial unique index).
       const operation =
         (
           await tx.query(
-            'SELECT state,stage,version,remote_number FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2',
+            "SELECT state,stage,version,remote_number FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2 AND state<>'invalidated' ORDER BY created_at DESC,id DESC LIMIT 1",
             [config.accountKey, order.id],
           )
         ).rows[0] ?? null;
@@ -265,6 +269,7 @@ export function createOlistPreview(database, options) {
         const client = createOlistClient({
           credentials: () => connection.credentials(input, 'olist.export'),
           quota: connection.quota,
+          readWait: olistReadWait('api'),
           fetch: async (url, init) => {
             if ((init?.method ?? 'GET') !== 'GET' || ++httpReads > 64)
               throw new OlistError('OLIST_INCOMPLETE_LOOKUP', 409);

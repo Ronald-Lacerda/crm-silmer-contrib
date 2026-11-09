@@ -4,6 +4,7 @@ import {
   createOlistClient,
   createOlistConnection,
   olistConfiguration,
+  olistReadWait,
   OlistError,
 } from '@crm-silmer/olist';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u;
@@ -85,6 +86,7 @@ export function createOlistReconciliationRuntime(options) {
         if (!(await context.heartbeat()))
           throw new OlistError('OLIST_JOB_LEASE_LOST');
       };
+      const wait = olistReadWait('worker', { beat: heartbeat });
       try {
         await heartbeat();
         await repository.guard(base, 'olist.reconcile');
@@ -109,6 +111,12 @@ export function createOlistReconciliationRuntime(options) {
             return connection.credentials(base, 'olist.reconcile');
           },
           quota: connection.quota,
+          // Every reconciliation read concerns an export that already has a
+          // durable ticket, so all of them use the patient wait; `heartbeat`
+          // keeps the lease alive and aborts the wait if it is lost. It lives
+          // here, not in a per-call option, because the inspector's evidence
+          // digest hashes every call argument.
+          readWait: { ...wait, maxWaitMs: wait.patientMaxWaitMs },
           fetch: async (url, init) => {
             if ((init?.method ?? 'GET') !== 'GET' || ++reads > 64)
               throw new OlistError('OLIST_INCOMPLETE_LOOKUP');

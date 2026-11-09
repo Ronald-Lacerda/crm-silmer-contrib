@@ -1,5 +1,18 @@
 # Arquitetura — baseline do CRM Silmer
 
+## Olist T27/T28 — invalidação administrativa e quota (09/11/2026)
+
+[ADR 069](docs/adr/069-olist-invalidacao-administrativa-de-export.md) e
+[ADR 070](docs/adr/070-olist-quota-com-espera-de-leitura-e-folga.md), OLIST-51/52:
+passa a valer **uma operação ativa por Pedido/conta**; uma geração de export
+parada antes da venda é arquivada como `invalidated` por um Admin
+(`POST /api/v1/orders/:orderId/olist/invalidate`, comando local sem HTTP ERP) e
+a próxima prévia é uma nova linha, com os cadastros confirmados reaproveitados. A
+quota por conta espera somente em leitura e reserva folga para a leitura
+pós-venda; escrita nunca espera nem repete, e falha pré-efeito é repetida só sem
+ticket (`assertRetrySafe`). Sem serviço ou infraestrutura nova; migração 0071
+expand-only. [Operação e limitações](docs/runbooks/olist-phase5.md#invalidação-administrativa-e-quota).
+
 ## Recência em Responder (08/11/2026)
 
 [ADR 066](docs/adr/066-responder-por-mensagem-mais-recente.md) /

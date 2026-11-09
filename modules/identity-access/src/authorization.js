@@ -93,6 +93,9 @@ export const OLIST_ACTIONS = Object.freeze(
     'olist.manage',
     'olist.link',
     'olist.reconcile',
+    // Local administrative command (never an ERP call): same rule as
+    // olist.link/olist.reconcile, independent of the Olist checkbox.
+    'olist.invalidate',
   ]),
 );
 

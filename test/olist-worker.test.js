@@ -280,3 +280,197 @@ test('T08 unexpected provider exceptions are bounded and never become a safe ret
     /PRIVATE_|buyer@example|Bearer/u,
   );
 });
+
+test('LIVENESS the handler grants a retry only to a plain pre-effect failure with a retryable code and both flags', async () => {
+  /** @param {any} response */
+  async function run(response) {
+    const handler = createOlistJobHandler({
+      environment,
+      dispatcher: { dispatch: async () => response },
+    });
+    return handler(job(), {
+      async markEffectStarted() {
+        return true;
+      },
+      async heartbeat() {
+        return true;
+      },
+    });
+  }
+  for (const code of [
+    'OLIST_RATE_LIMITED',
+    'OLIST_UNAVAILABLE',
+    'OLIST_REFRESH_IN_PROGRESS',
+  ]) {
+    const granted = await run({
+      outcome: 'failed',
+      errorCode: code,
+      retryable: true,
+      retrySafe: true,
+    });
+    assert.deepEqual(granted, {
+      outcome: 'failed',
+      errorCode: code,
+      retryable: true,
+      retrySafe: true,
+    });
+  }
+  /** @type {any[]} */
+  const denied = [
+    // One flag is not enough.
+    { outcome: 'failed', errorCode: 'OLIST_RATE_LIMITED', retryable: true },
+    { outcome: 'failed', errorCode: 'OLIST_RATE_LIMITED', retrySafe: true },
+    // Neither is a code outside the set, however flagged.
+    {
+      outcome: 'failed',
+      errorCode: 'OLIST_SALE_ALREADY_EXISTS',
+      retryable: true,
+      retrySafe: true,
+    },
+    {
+      outcome: 'failed',
+      errorCode: 'ORDER_CANCELLED',
+      retryable: true,
+      retrySafe: true,
+    },
+    {
+      outcome: 'failed',
+      errorCode: 'PRIVATE_UNKNOWN_CODE',
+      retryable: true,
+      retrySafe: true,
+    },
+    { outcome: 'failed', retryable: true, retrySafe: true },
+    // An uncertain or successful effect is never retried.
+    {
+      outcome: 'outcome_unknown',
+      errorCode: 'OLIST_RATE_LIMITED',
+      retryable: true,
+      retrySafe: true,
+    },
+    {
+      outcome: 'outcome_unknown',
+      errorCode: 'OLIST_SALE_UNCERTAIN',
+      retryable: true,
+      retrySafe: true,
+    },
+    {
+      outcome: 'sent',
+      providerExternalId: '401',
+      retryable: true,
+      retrySafe: true,
+    },
+    // Truthy is not true.
+    {
+      outcome: 'failed',
+      errorCode: 'OLIST_UNAVAILABLE',
+      retryable: 1,
+      retrySafe: 'yes',
+    },
+  ];
+  for (const response of denied) {
+    const result = await run(response);
+    assert.equal(result.retryable, false, JSON.stringify(response));
+    assert.equal(result.retrySafe, false, JSON.stringify(response));
+  }
+  const unknown = await run({
+    outcome: 'failed',
+    errorCode: 'PRIVATE_UNKNOWN_CODE',
+    retryable: true,
+    retrySafe: true,
+  });
+  assert.equal(unknown.errorCode, 'OLIST_DISPATCH_FAILED');
+});
+
+test('LIVENESS the handler maps the new codes through and a thrown retryable code stays uncertain and terminal', async () => {
+  const handler = createOlistJobHandler({
+    environment,
+    dispatcher: {
+      async dispatch() {
+        throw Object.assign(new Error('PRIVATE_CANARY'), {
+          code: 'OLIST_RATE_LIMITED',
+        });
+      },
+    },
+  });
+  const result = await handler(job(), {
+    async markEffectStarted() {
+      return true;
+    },
+    async heartbeat() {
+      return true;
+    },
+  });
+  assert.deepEqual(result, {
+    outcome: 'outcome_unknown',
+    errorCode: 'OLIST_RATE_LIMITED',
+    retryable: false,
+    retrySafe: false,
+  });
+  const unavailable = createOlistJobHandler({
+    environment,
+    dispatcher: {
+      async dispatch() {
+        return {
+          outcome: 'failed',
+          errorCode: 'OLIST_EXPORT_UNAVAILABLE',
+          retryable: false,
+          retrySafe: false,
+        };
+      },
+    },
+  });
+  const archived = await unavailable(job(), {
+    async markEffectStarted() {
+      return true;
+    },
+    async heartbeat() {
+      return true;
+    },
+  });
+  assert.equal(archived.errorCode, 'OLIST_EXPORT_UNAVAILABLE');
+  assert.equal(archived.retryable, false);
+});
+
+test('LIVENESS the worker settles a granted retry as retryable and retrySafe', async () => {
+  /** @type {any[]} */ const settled = [];
+  let claimed = false;
+  const worker = createOlistWorkerRuntime({
+    database: {},
+    environment,
+    logger,
+    queue: {
+      async claim() {
+        if (claimed) return [];
+        claimed = true;
+        return [job()];
+      },
+      async heartbeat() {
+        return true;
+      },
+      async markEffectStarted() {
+        return true;
+      },
+      async settle(/** @type {any} */ input) {
+        settled.push(input);
+        return true;
+      },
+    },
+    dispatcher: {
+      async dispatch() {
+        return {
+          outcome: 'failed',
+          errorCode: 'OLIST_RATE_LIMITED',
+          retryable: true,
+          retrySafe: true,
+        };
+      },
+    },
+  });
+  assert.ok(worker);
+  assert.equal(await worker.runOnce(), 1);
+  assert.equal(settled.length, 1);
+  assert.equal(settled[0].outcome, 'failed');
+  assert.equal(settled[0].errorCode, 'OLIST_RATE_LIMITED');
+  assert.equal(settled[0].retryable, true);
+  assert.equal(settled[0].retrySafe, true);
+});

@@ -251,6 +251,51 @@ if (connectionString) {
       );
 
       await t.test(
+        'OLIST-LIVENESS 0071 relaxes one uniqueness rule and installs the invalidation guards over the master upgrade path',
+        async () => {
+          const unique = (
+            await pool.query(
+              "SELECT conname FROM pg_constraint WHERE conrelid='crm.olist_exports'::regclass AND contype='u' ORDER BY conname",
+            )
+          ).rows.map((row) => row.conname);
+          // One operation per order is now one ACTIVE operation (partial index);
+          // the reference stays unique and the remote ID index is untouched.
+          assert.deepEqual(unique, [
+            'olist_exports_account_key_reference_key',
+            'olist_exports_id_account_key_key',
+          ]);
+          const indexes = Object.fromEntries(
+            (
+              await pool.query(
+                "SELECT indexname,indexdef FROM pg_indexes WHERE schemaname='crm' AND tablename='olist_exports'",
+              )
+            ).rows.map((row) => [row.indexname, row.indexdef]),
+          );
+          assert.match(indexes.olist_exports_active_order_key, /UNIQUE/);
+          assert.match(
+            indexes.olist_exports_active_order_key,
+            /\(account_key, order_id\).*state <> 'invalidated'/,
+          );
+          assert.match(indexes.olist_exports_remote_key, /UNIQUE.*remote_id/);
+          const triggers = (
+            await pool.query(
+              "SELECT tgname FROM pg_trigger WHERE NOT tgisinternal AND tgrelid IN ('crm.olist_exports'::regclass,'crm.olist_attempts'::regclass,'crm.olist_export_invalidations'::regclass)",
+            )
+          ).rows.map((row) => row.tgname);
+          for (const name of [
+            'olist_export_invalidations_append_only',
+            'olist_export_invalidations_guard',
+            'olist_exports_invalidated_terminal',
+            'olist_attempts_no_sale_after_invalidation',
+            'olist_exports_snapshot_immutable',
+            'olist_sale_evidence_immutable',
+            'olist_attempts_durable',
+          ])
+            assert.ok(triggers.includes(name), name);
+        },
+      );
+
+      await t.test(
         'the composed migration is applied once without changing preserved jobs on replay',
         async () => {
           assert.deepEqual((await migrate(pool, { migrations })).applied, []);

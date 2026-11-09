@@ -189,6 +189,58 @@ paths:
         '422': { $ref: '#/components/responses/OlistFailure' }
         '429': { $ref: '#/components/responses/OlistThrottled' }
         '503': { $ref: '#/components/responses/OlistFailure' }
+  /orders/{orderId}/olist/invalidate:
+    post:
+      operationId: invalidateOlistExport
+      summary: Invalidar uma geração de export antes de qualquer venda
+      description: >-
+        Admin atual (Vendedor com COMMERCIAL_ADMIN), independente do checkbox
+        Olist; sessão, CSRF, Origin e Idempotency-Key obrigatórios. Comando local
+        e síncrono: zero HTTP ERP e não exige conexão saudável (funciona com
+        OLIST_CONNECTION_CHANGED). Retira a geração identificada por operationId,
+        que deve ser a operação atual na versão informada; nada do ERP é apagado
+        e cadastros confirmados são reaproveitados por identidade na próxima
+        geração. Recusa com OLIST_INVALIDATION_BLOCKED quando a operação não está
+        em queued/resolving/ready, tem ID/número de venda ou qualquer tentativa de
+        venda (qualquer desfecho); com OLIST_RESOURCE_RECONCILIATION_REQUIRED quando
+        há cadastro reservado/incerto (conferir antes em /reconcile); com
+        OLIST_EXPORT_IN_FLIGHT quando o worker segura o job (tentar depois);
+        VERSION_CONFLICT com versão divergente; ORDER_CANCELLED e
+        OLIST_EXPORT_UNAVAILABLE quando não há geração a invalidar. Mesma chave e
+        corpo repete o recibo com acesso atual; geração já invalidada devolve o
+        recibo com replayed=true. O motivo fica somente em envelope cifrado e
+        nunca no recibo, evento, auditoria ou log. Depois da invalidação o Pedido
+        aceita nova prévia/exportação como nova operação. Dez comandos/minuto,
+        270000 bytes; no-store/no-referrer.
+      security: [{ sessionCookie: [], csrfHeader: [], idempotencyKey: [] }]
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+        - $ref: '#/components/parameters/Origin'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [operationId, expectedVersion, reason]
+              properties:
+                operationId: { type: string, format: uuid }
+                expectedVersion: { type: integer, minimum: 1 }
+                reason: { type: string, minLength: 1, maxLength: 1000 }
+      responses:
+        '200':
+          description: Geração invalidada (ou já invalidada, com replayed=true); recibo sem motivo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OlistInvalidation' }
+        '400': { $ref: '#/components/responses/OlistFailure' }
+        '401': { $ref: '#/components/responses/OlistFailure' }
+        '403': { $ref: '#/components/responses/OlistFailure' }
+        '404': { $ref: '#/components/responses/OlistFailure' }
+        '409': { $ref: '#/components/responses/OlistFailure' }
+        '429': { $ref: '#/components/responses/OlistThrottled' }
+        '503': { $ref: '#/components/responses/OlistFailure' }
   /orders/{orderId}/olist/administration:
     get:
       operationId: readOlistAdministration
@@ -3786,6 +3838,22 @@ components:
             description: Número ERP conferido; nenhum link compartilhável é inferido.,
           }
         creationEnabled: { const: false }
+    OlistInvalidation:
+      type: object
+      description: Recibo da invalidação local; somente IDs, estado e versão, nunca o motivo.
+      additionalProperties: false
+      required: [operationId, orderId, state, version]
+      properties:
+        operationId: { type: string, format: uuid }
+        orderId: { type: string }
+        state: { const: invalidated }
+        version:
+          { type: integer, minimum: 2, description: Versão da operação após invalidar. }
+        replayed:
+          {
+            const: true,
+            description: Presente quando a geração já estava invalidada.,
+          }
     OlistReadRequest:
       type: object
       additionalProperties: false
@@ -7651,7 +7719,7 @@ components:
         application/problem+json:
           schema: { $ref: '#/components/schemas/OlistProblem' }
     OlistThrottled:
-      description: Limite local de requests ou quota compartilhada do provedor; não repetir automaticamente.
+      description: Limite local de requests ou quota compartilhada do provedor; não repetir automaticamente. A API de leitura espera até 8 s por uma unidade de quota (teto 24 de 30 por janela, com seis reservadas ao worker) antes de responder 429; escrita nunca espera.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/OlistBoundaryError' }

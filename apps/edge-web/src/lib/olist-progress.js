@@ -74,6 +74,9 @@ const UNCERTAIN_CODE =
 const IN_PROGRESS = ['queued', 'resolving', 'reserved', 'ready'];
 const SAFE_CODE = /^[A-Z][A-Z0-9_]{0,63}$/u;
 const SAFE_REMOTE_ID = /^[A-Za-z0-9._:-]{1,64}$/u;
+/** Código que o servidor grava ao invalidar uma geração por decisão de um
+ * administrador (antes de qualquer venda). */
+export const OLIST_INVALIDATED_CODE = 'OLIST_EXPORT_INVALIDATED';
 
 /** @param {string|undefined} stage */
 export function olistStageLabel(stage) {
@@ -100,6 +103,16 @@ export function safeCode(code) {
  * @param {unknown} id */
 export function safeRemoteId(id) {
   return typeof id === 'string' && SAFE_REMOTE_ID.test(id) ? id : null;
+}
+
+/** Geração invalidada por um administrador: a operação fica arquivada e o
+ * Pedido volta a poder gerar uma nova prévia (ADR 069).
+ * @param {any} operation */
+export function isAdminInvalidated(operation) {
+  return (
+    operation?.state === 'invalidated' &&
+    operation?.errorCode === OLIST_INVALIDATED_CODE
+  );
 }
 
 /** @param {any} operation */
@@ -286,7 +299,9 @@ export function deriveOlistProgress(operation, resources = null) {
     );
   if (kind === 'invalidated')
     guidance.push(
-      'A operação foi invalidada antes de concluir. Nenhum cadastro já criado foi removido; peça a conferência administrativa.',
+      isAdminInvalidated(operation)
+        ? 'Esta geração foi invalidada antes de qualquer venda. Gere uma nova prévia; cadastros já criados no Olist foram preservados.'
+        : 'A operação foi invalidada antes de concluir. Nenhum cadastro já criado foi removido; peça a conferência administrativa.',
     );
   const saleNumber =
     typeof operation.number === 'string' && operation.number
@@ -407,13 +422,43 @@ export function resourceLabel(resource, index = 1, total = 1) {
  * reservada (queued, resolving, ready): commitLink recusa qualquer outro
  * estado com OLIST_RESOURCE_RECONCILIATION_REQUIRED, e a prévia recusa
  * reservada, incerta e invalidada. Rejeitada não oferece ação, e uma operação
- * incerta por código também não, mesmo com outro estado.
+ * incerta por código também não, mesmo com outro estado. Uma geração invalidada
+ * por um administrador conta como sem operação ativa.
  * @param {any} operation */
 export function canOfferLink(operation) {
   return (
     !operation ||
+    isAdminInvalidated(operation) ||
     (['queued', 'resolving', 'ready'].includes(operation.state) &&
       !isOperationUncertain(operation))
+  );
+}
+
+/** A invalidação administrativa só é oferecida enquanto a geração ainda não
+ * chegou à venda: operação em queued, resolving ou ready, nenhuma tentativa de
+ * venda (qualquer desfecho) e nenhum cadastro reservado ou incerto. O servidor
+ * é a autoridade e repete cada regra sob lock; aqui só se evita oferecer o que
+ * será recusado. Sem `id` e `version` do diagnóstico não há comando possível.
+ * @param {{operation: any, attempts?: any[]|null, resources?: any[]|null, cancelled?: boolean}} input */
+export function canOfferInvalidate({
+  operation,
+  attempts,
+  resources,
+  cancelled = false,
+}) {
+  if (cancelled || !operation) return false;
+  if (!['queued', 'resolving', 'ready'].includes(operation.state)) return false;
+  if (typeof operation.id !== 'string' || !operation.id) return false;
+  if (!Number.isInteger(Number(operation.version)) || !operation.version)
+    return false;
+  if (
+    (Array.isArray(attempts) ? attempts : []).some(
+      (attempt) => attempt?.stage === 'sale',
+    )
+  )
+    return false;
+  return !(Array.isArray(resources) ? resources : []).some((resource) =>
+    ['reserved', 'uncertain'].includes(resource?.state),
   );
 }
 

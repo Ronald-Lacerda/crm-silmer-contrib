@@ -7,9 +7,11 @@ import {
   createOlistAdminRepository,
   createOlistReadonlyInspector,
   createOlistClient,
+  olistReadWait,
   identityHash,
   seal,
   open,
+  lockOlistActor,
   OlistError,
 } from '@crm-silmer/olist';
 import { buildOlistPreviewPlan } from './olist-preview-plan.js';
@@ -60,6 +62,9 @@ export function createOlistAdministration(database, options) {
     const client = createOlistClient({
       credentials: () => connection.credentials(input, action),
       quota: connection.quota,
+      // One request waits at most 8 s for quota and stays under 24/30 per
+      // window; past that it fails as OLIST_RATE_LIMITED (429).
+      readWait: olistReadWait('api'),
       timeoutMs: options.timeoutMs,
       fetch: async (url, init) => {
         if ((init?.method ?? 'GET') !== 'GET' || ++reads > 64)
@@ -145,8 +150,8 @@ export function createOlistAdministration(database, options) {
       throw new OlistError('OLIST_PREVIEW_STALE');
     return current;
   }
-  /** @param {any} input @param {string} name @param {string} action @param {any} command */
-  function storeFor(input, name, action, command) {
+  /** @param {any} input @param {string} name @param {string} action @param {any} command @param {{local?:boolean, version?:number}} [options] `local`: the command makes no ERP call, so it must NOT require a healthy connection (`repository.guard` throws OLIST_CONNECTION_CHANGED); the human actor, session, ACL and authorization version are still revalidated under lock, replay included. */
+  function storeFor(input, name, action, command, options = {}) {
     if (
       typeof input.idempotencyKey !== 'string' ||
       !/^[A-Za-z0-9._:-]{1,128}$/u.test(input.idempotencyKey)
@@ -156,7 +161,8 @@ export function createOlistAdministration(database, options) {
       query: database.query.bind(database),
       transaction: (/** @type {any} */ work) =>
         database.transaction(async (/** @type {any} */ tx) => {
-          await repository.guard({ ...input, transaction: tx }, action);
+          if (options.local) await lockOlistActor(tx, input, action, clock());
+          else await repository.guard({ ...input, transaction: tx }, action);
           return work(tx);
         }),
     };
@@ -177,11 +183,13 @@ export function createOlistAdministration(database, options) {
         actor: input.actor.id,
         action,
         target: { type: 'order', id: input.orderId },
-        version: 0,
+        version: options.version ?? 0,
         reason:
           name === 'link'
             ? 'OLIST_EXISTING_LINK'
-            : 'OLIST_RECONCILIATION_REQUESTED',
+            : name === 'invalidate'
+              ? 'OLIST_EXPORT_INVALIDATED'
+              : 'OLIST_RECONCILIATION_REQUESTED',
         correlationId: input.correlationId,
       },
     };
@@ -397,6 +405,46 @@ export function createOlistAdministration(database, options) {
       return store.execute(identity, async (tx) =>
         repository.createReadRequest({ ...input, reason, transaction: tx }),
       );
+    },
+    /** L1: retire one export generation before any sale attempt. Local and
+     * synchronous: zero HTTP, no `repository.guard` (works with a changed or
+     * disconnected ERP connection), actor/session/ACL revalidated under lock.
+     * The receipt is allowlisted here so the reason never leaves the sealed
+     * envelope and no repository field can leak into the response.
+     * @param {any} raw */
+    async invalidate(raw) {
+      const input = base(raw);
+      const reason = text(input.reason, 1000);
+      if (
+        typeof input.operationId !== 'string' ||
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(
+          input.operationId,
+        ) ||
+        !Number.isSafeInteger(input.expectedVersion) ||
+        input.expectedVersion < 1
+      )
+        throw new OlistError('INVALID_REQUEST', 400);
+      const { store, identity } = storeFor(
+        input,
+        'invalidate',
+        'olist.invalidate',
+        [input.operationId, input.expectedVersion, reason],
+        { local: true, version: input.expectedVersion },
+      );
+      return store.execute(identity, async (tx) => {
+        const receipt = await repository.invalidateExport({
+          ...input,
+          reason,
+          transaction: tx,
+        });
+        return {
+          operationId: receipt.operationId,
+          orderId: receipt.orderId,
+          state: 'invalidated',
+          version: receipt.version,
+          ...(receipt.replayed === true ? { replayed: true } : {}),
+        };
+      });
     },
     /** @param {any} raw */
     administration: (raw) => repository.diagnostic(base(raw)),

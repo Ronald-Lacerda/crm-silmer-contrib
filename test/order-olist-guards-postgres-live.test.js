@@ -387,10 +387,16 @@ else
               [g.operation.id, '9102'],
             );
             await assert.rejects(repo.saveSection(g.order, options), isLocked);
-            const h = await fixture(true, state);
+            // Migration 0071 forbids a NEW sale attempt on an invalidated export,
+            // so the surviving attempt is recorded before the row is archived.
+            const h = await fixture(true, 'queued');
             await pool.query(
               "INSERT INTO crm.olist_attempts(id,account_key,export_id,stage,fence,generation) VALUES($1,$2,$3,'sale',$4,0)",
               [randomUUID(), h.input.accountKey, h.operation.id, randomUUID()],
+            );
+            await pool.query(
+              'UPDATE crm.olist_exports SET state=$2 WHERE id=$1',
+              [h.operation.id, state],
             );
             await assert.rejects(repo.saveSection(h.order, options), isLocked);
           }

@@ -1,5 +1,13 @@
 # Request for Comments
 
+## Emenda de 09/11/2026
+
+- [050 — Geração assistida de pedidos de venda no Olist](050-geracao-assistida-de-pedidos-no-olist.md),
+  emendada com OLIST-51/52 e T27/T28, decididas nas ADRs
+  [069](../adr/069-olist-invalidacao-administrativa-de-export.md) (invalidação
+  administrativa de export) e [070](../adr/070-olist-quota-com-espera-de-leitura-e-folga.md)
+  (quota com espera de leitura e folga); D1, D2 e D5 da ADR 069 a confirmar pelo proprietário.
+
 ## Decisão de 08/11/2026
 
 - [053 — Responder por mensagem mais recente](053-responder-por-mensagem-mais-recente.md),

@@ -9,7 +9,14 @@ export {
 } from './configuration.js';
 export { lockOlistActor } from './access.js';
 export { createOlistConnection } from './connection.js';
-export { createOlistQuota } from './quota.js';
+export {
+  createOlistQuota,
+  olistReadWait,
+  OLIST_QUOTA_LIMIT,
+  OLIST_READ_WAIT,
+  OLIST_WAIT_SLICE_MS,
+  OLIST_WRITE_READBACKS,
+} from './quota.js';
 export { createOlistClient } from './client.js';
 export {
   createOlistRepository,

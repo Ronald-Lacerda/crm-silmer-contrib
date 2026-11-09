@@ -302,7 +302,15 @@ export function createOlistWorkerRuntime(options) {
     },
     queueName: 'olist',
     queue:
-      options.queue ?? new PostgresJobQueue({ database: options.database }),
+      options.queue ??
+      // Pre-effect "not now" failures retry with a slower start than the
+      // default (15 s, doubling to 5 min): 8 attempts span about 17 minutes
+      // before dead_letter, where an administrator can invalidate.
+      new PostgresJobQueue({
+        database: options.database,
+        retryBaseMs: 15_000,
+        retryMaxMs: 300_000,
+      }),
     logger: options.logger,
     metrics: options.metrics,
     workerId: options.workerId ?? 'olist-' + process.pid,

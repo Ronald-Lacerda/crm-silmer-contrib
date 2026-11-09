@@ -9,6 +9,7 @@ import {
 } from '../../lib/olist-feedback.js';
 import {
   OLIST_RECONCILE_FOLLOW_MS,
+  canOfferInvalidate,
   canOfferLink,
   olistOperationHeadline,
   olistRequestStatusLabel,
@@ -76,6 +77,20 @@ let lkKey = '';
 let lkSettled = false;
 let lkKeyReason = '';
 
+// Invalidar esta geração (ADR 069): comando local e idempotente.
+const ivOpen = ref(false);
+const ivDialog = ref(null);
+const ivTarget = ref(
+  /** @type {{operationId: string, expectedVersion: number}|null} */ (null),
+);
+const ivReason = ref('');
+const ivError = ref('');
+const ivAlert = ref(null);
+const ivReasonField = ref(null);
+let ivKey = '';
+let ivSettled = false;
+let ivKeyToken = '';
+
 const operation = computed(() => data.value?.operation ?? null);
 const resources = computed(() => data.value?.resources ?? []);
 const targets = computed(() => reconcileTargets(data.value));
@@ -131,6 +146,16 @@ const linkOffered = computed(
   () =>
     Boolean(data.value) && !props.cancelled && canOfferLink(operation.value),
 );
+const invalidateOffered = computed(
+  () =>
+    Boolean(data.value) &&
+    canOfferInvalidate({
+      operation: operation.value,
+      attempts: data.value?.attempts,
+      resources: data.value?.resources,
+      cancelled: props.cancelled,
+    }),
+);
 const operationHeadline = computed(() =>
   operation.value ? olistOperationHeadline(operation.value) : '',
 );
@@ -140,6 +165,7 @@ function loseAccess(cause) {
   data.value = null;
   rcOpen.value = false;
   lkOpen.value = false;
+  ivOpen.value = false;
   clearFollow();
   emit('administration', null);
   // Os controles saem da tela: o foco vai ao título, que explica o motivo.
@@ -319,13 +345,21 @@ watch(
     if (!cancelled || busy.value) return;
     if (rcOpen.value) await closeReconcile();
     if (lkOpen.value) await closeLink();
+    if (ivOpen.value) await closeInvalidate();
   },
 );
 
 /* Conferir no Olist ------------------------------------------------------ */
 let rcTrigger = null;
 async function openReconcile(target, event) {
-  if (busy.value || props.disabled || rcOpen.value || lkOpen.value) return;
+  if (
+    busy.value ||
+    props.disabled ||
+    rcOpen.value ||
+    lkOpen.value ||
+    ivOpen.value
+  )
+    return;
   rcTrigger = event.currentTarget;
   const trigger = rcTrigger;
   rcTarget.value = target;
@@ -428,7 +462,14 @@ async function submitReconcile() {
 /* Vincular venda existente ----------------------------------------------- */
 let lkTrigger = null;
 async function openLink(event) {
-  if (busy.value || props.disabled || rcOpen.value || lkOpen.value) return;
+  if (
+    busy.value ||
+    props.disabled ||
+    rcOpen.value ||
+    lkOpen.value ||
+    ivOpen.value
+  )
+    return;
   lkTrigger = event.currentTarget;
   const trigger = lkTrigger;
   lkStep.value = 'sale';
@@ -619,6 +660,182 @@ async function submitLink() {
   }
 }
 
+/* Invalidar esta geração -------------------------------------------------- */
+let ivTrigger = null;
+async function openInvalidate(event) {
+  if (
+    busy.value ||
+    props.disabled ||
+    props.cancelled ||
+    rcOpen.value ||
+    lkOpen.value ||
+    ivOpen.value ||
+    !invalidateOffered.value
+  )
+    return;
+  ivTrigger = event.currentTarget;
+  const trigger = ivTrigger;
+  // O que a pessoa viu ao abrir é o que o comando confirma: se o estado mudar
+  // antes do envio, o servidor recusa pela versão.
+  ivTarget.value = {
+    operationId: operation.value.id,
+    expectedVersion: Number(operation.value.version),
+  };
+  ivReason.value = '';
+  ivError.value = '';
+  ivKey = commandKey();
+  ivKeyToken = '';
+  ivSettled = false;
+  ivOpen.value = true;
+  await nextTick();
+  if (disposed || !ivDialog.value) return;
+  openDialog(ivDialog.value, trigger);
+  ivReasonField.value?.focus();
+}
+async function closeInvalidate() {
+  await closeDialogElement(ivDialog.value);
+  ivOpen.value = false;
+  await restoreFocus(ivTrigger);
+}
+async function cancelInvalidate() {
+  if (busy.value) return;
+  await closeInvalidate();
+}
+/** A geração alvo deixou de estar ativa: foi invalidada aqui, em outra aba ou
+ * por um reenvio que o servidor já tinha gravado.
+ * @param {{operationId: string}} target */
+function targetNoLongerActive(target) {
+  if (!data.value) return false;
+  const current = data.value.operation;
+  return (
+    !current ||
+    current.id !== target.operationId ||
+    current.state === 'invalidated'
+  );
+}
+/** Encerra o diálogo depois de a invalidação constar no servidor. */
+async function finishInvalidate(message, reload) {
+  resultMessage.value = message;
+  ivSettled = true;
+  busy.value = false;
+  await closeInvalidate();
+  if (reload) await loadAdministration();
+  // O acionador saiu da tela: o painel leva o foco a "Conferir prévia Olist"
+  // (ou ao progresso) depois de reler a projeção.
+  emit('refresh', { focus: true });
+}
+async function submitInvalidate() {
+  if (busy.value || ivSettled || !ivOpen.value || !ivTarget.value) return;
+  if (props.cancelled) {
+    ivError.value = olistRecoveryFailure(
+      { code: 'ORDER_CANCELLED' },
+      'invalidate',
+    );
+    await focusElement(ivAlert);
+    return;
+  }
+  // Mesma regra de conferir e vincular: quebras e tabs viram um espaço.
+  const reason = normalizeReasonText(ivReason.value);
+  if (!reason || reason.length > 1000) {
+    ivError.value = reason
+      ? 'O motivo pode ter no máximo 1000 caracteres.'
+      : 'Informe o motivo da invalidação.';
+    await focusElement(ivReasonField);
+    return;
+  }
+  const target = ivTarget.value;
+  // Um reenvio idêntico (mesmo alvo, versão e motivo) usa a mesma chave; mudar
+  // o motivo ou o alvo é outro comando e recebe outra chave.
+  const token = `${target.operationId}:${target.expectedVersion}:${reason}`;
+  if (ivKeyToken !== token) {
+    ivKey = commandKey();
+    ivKeyToken = token;
+  }
+  const id = props.orderId;
+  busy.value = true;
+  ivError.value = '';
+  try {
+    const response = await request(`${base.value}/invalidate`, {
+      method: 'POST',
+      body: {
+        operationId: target.operationId,
+        expectedVersion: target.expectedVersion,
+        reason,
+      },
+      idempotencyKey: ivKey,
+    });
+    if (disposed || props.orderId !== id) return;
+    const receipt = response.data;
+    if (
+      receipt?.state !== 'invalidated' ||
+      receipt?.operationId !== target.operationId
+    ) {
+      // A resposta não prova o resultado: lê o diagnóstico antes de afirmar.
+      await loadAdministration();
+      if (disposed || props.orderId !== id) return;
+      if (targetNoLongerActive(target)) {
+        await finishInvalidate(
+          'A invalidação consta no diagnóstico, apesar de a resposta não ter confirmado. Gere uma nova prévia.',
+          false,
+        );
+        return;
+      }
+      emit('refresh', { focus: false });
+      ivError.value =
+        'A resposta não confirmou a invalidação. O diagnóstico foi atualizado; confira antes de tentar de novo.';
+      await focusElement(ivAlert);
+      return;
+    }
+    await finishInvalidate(
+      receipt.replayed === true
+        ? 'Esta geração já estava invalidada. Nada mudou; gere uma nova prévia.'
+        : 'Geração invalidada antes de qualquer venda. Cadastros já criados no Olist foram preservados. Gere uma nova prévia.',
+      true,
+    );
+  } catch (cause) {
+    if (disposed || props.orderId !== id) return;
+    if ([401, 403].includes(Number(cause?.status))) {
+      await closeDialogElement(ivDialog.value);
+      loseAccess(cause);
+      return;
+    }
+    ivError.value = olistRecoveryFailure(cause, 'invalidate');
+    if (cause?.code === 'VERSION_CONFLICT') {
+      await loadAdministration();
+      if (disposed || props.orderId !== id) return;
+      if (invalidateOffered.value && operation.value) {
+        // Segue com o estado atual: a versão nova gera outra chave.
+        ivTarget.value = {
+          operationId: operation.value.id,
+          expectedVersion: Number(operation.value.version),
+        };
+      } else if (data.value) {
+        ivError.value = olistRecoveryFailure(
+          { status: 409, code: 'OLIST_INVALIDATION_BLOCKED' },
+          'invalidate',
+        );
+      }
+    } else if (uncertainFailure(cause)) {
+      // Sem resposta ou 5xx: a invalidação pode ter sido gravada. Relê o
+      // diagnóstico e a projeção; se ela consta, o diálogo se encerra. Senão,
+      // o reenvio usa a mesma chave (comando local e idempotente).
+      await loadAdministration();
+      if (disposed || props.orderId !== id) return;
+      if (targetNoLongerActive(target)) {
+        await finishInvalidate(
+          'A invalidação foi registrada, apesar da falha na resposta. Gere uma nova prévia.',
+          false,
+        );
+        return;
+      }
+      emit('refresh', { focus: false });
+    } else if (cause?.status === 409) void loadAdministration();
+    await focusElement(ivAlert);
+  } finally {
+    busy.value = false;
+  }
+}
+
 defineExpose({ focus: () => heading.value?.focus() });
 onBeforeUnmount(() => {
   disposed = true;
@@ -638,7 +855,7 @@ onBeforeUnmount(() => {
     <p class="field-help">
       Conferir lê o Olist e vincular usa uma venda que já existe. Nenhuma das
       duas ações cria cliente, produto ou venda, e nenhuma libera repetir a
-      geração.
+      geração. Invalidar descarta uma geração que ainda não chegou à venda.
     </p>
     <p v-if="accessMessage" role="alert" class="inline-error">
       {{ accessMessage }}
@@ -775,6 +992,20 @@ onBeforeUnmount(() => {
             confere cliente, itens e total antes de vincular.
           </p>
         </div>
+        <div v-if="invalidateOffered" class="olist-recovery-link">
+          <button
+            type="button"
+            :disabled="busy || disabled"
+            @click="openInvalidate"
+          >
+            Invalidar esta geração
+          </button>
+          <p class="field-help">
+            Descarta a geração atual, que ainda não chegou à venda, para
+            preparar uma nova. Cadastros já criados no Olist são preservados;
+            nada é apagado nem cancelado no Olist.
+          </p>
+        </div>
       </template>
     </template>
 
@@ -834,6 +1065,66 @@ onBeforeUnmount(() => {
             :aria-busy="busy || undefined"
           >
             {{ busy ? 'Solicitando…' : 'Solicitar conferência' }}
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog
+      v-if="ivOpen"
+      ref="ivDialog"
+      class="op-dialog olist-dialog"
+      aria-modal="true"
+      :aria-labelledby="`olist-iv-title-${orderId}`"
+      :aria-describedby="`olist-iv-desc-${orderId}`"
+      @cancel.prevent="cancelInvalidate"
+    >
+      <h2 :id="`olist-iv-title-${orderId}`">Invalidar esta geração?</h2>
+      <p :id="`olist-iv-desc-${orderId}`">
+        A geração atual é descartada antes de qualquer venda. Os cadastros já
+        criados no Olist são preservados e nada é apagado nem cancelado no
+        Olist. Depois será preciso gerar uma nova prévia.
+      </p>
+      <form novalidate @submit.prevent="submitInvalidate">
+        <div class="olist-dialog-field">
+          <label :for="`olist-iv-reason-${orderId}`"
+            >Motivo da invalidação (obrigatório)</label
+          >
+          <textarea
+            :id="`olist-iv-reason-${orderId}`"
+            ref="ivReasonField"
+            v-model="ivReason"
+            rows="3"
+            maxlength="1000"
+            required
+            :aria-invalid="ivError ? 'true' : undefined"
+            :aria-describedby="`olist-iv-help-${orderId}`"
+          ></textarea>
+          <p :id="`olist-iv-help-${orderId}`" class="field-help">
+            Fica cifrado na auditoria. Não inclua dados pessoais do cliente.
+            Quebras de linha viram espaço.
+          </p>
+        </div>
+        <p
+          v-if="ivError"
+          ref="ivAlert"
+          role="alert"
+          class="inline-error"
+          tabindex="-1"
+        >
+          {{ ivError }}
+        </p>
+        <div class="op-dialog-actions">
+          <button type="button" :disabled="busy" @click="cancelInvalidate">
+            Voltar
+          </button>
+          <button
+            type="submit"
+            class="primary"
+            :disabled="busy"
+            :aria-busy="busy || undefined"
+          >
+            {{ busy ? 'Invalidando…' : 'Invalidar geração' }}
           </button>
         </div>
       </form>

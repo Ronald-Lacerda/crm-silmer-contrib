@@ -9,6 +9,7 @@ import {
   createOlistConnection,
   createOlistClient,
   olistConfiguration,
+  olistReadWait,
   lockOlistActor,
   OlistError,
   identityHash,
@@ -112,8 +113,11 @@ export function createOlistApiRuntime(database, options) {
         order.assigned_user_id !== actor.id
       )
         throw new OlistError('FORBIDDEN', 403);
+      // One ACTIVE export per order/account; older generations stay as
+      // `invalidated` history. Prefer the active row, else the latest
+      // invalidated one (the panel explains why a new preview is possible).
       const exports = await client.query(
-        'SELECT state,stage,remote_number,last_error_code FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2',
+        "SELECT state,stage,remote_number,last_error_code FROM crm.olist_exports WHERE account_key=$1 AND order_id=$2 ORDER BY (state='invalidated'),created_at DESC,id DESC LIMIT 1",
         [config.accountKey, order.id],
       );
       const operation = exports.rows[0];
@@ -207,6 +211,7 @@ export function createOlistApiRuntime(database, options) {
       const client = createOlistClient({
         credentials: () => connection.credentials(input),
         quota: connection.quota,
+        readWait: olistReadWait('api'),
         fetch: options.fetch,
         timeoutMs: options.timeoutMs,
         onAuthFailure: (version) => connection.authFailure(input, version),

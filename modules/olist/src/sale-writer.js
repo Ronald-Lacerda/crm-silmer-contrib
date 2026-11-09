@@ -1,6 +1,7 @@
 import { OLIST_API } from './configuration.js';
 import { OlistError, integer, text } from './errors.js';
 import { assertOlistSalePlan } from './sale-payload.js';
+import { OLIST_WRITE_READBACKS } from './quota.js';
 import {
   parseOlistLosslessJson,
   olistIdentifierFromJson,
@@ -30,7 +31,14 @@ export function createOlistSaleWriter(options) {
         token = text(credentials.token, 4096);
       integer(credentials.version, true);
       if (/\s/u.test(token)) throw new OlistError('OLIST_AUTH', 409);
-      await options.quota.reserve();
+      // One unit for the POST plus headroom for its readbacks, checked BEFORE the
+      // durable ticket: without room the job is deferred with no ticket and no
+      // POST. Never waits. A quota without `reserveWrite` keeps the old reserve.
+      if (typeof options.quota.reserveWrite === 'function')
+        await options.quota.reserveWrite({
+          readbacks: OLIST_WRITE_READBACKS.sale,
+        });
+      else await options.quota.reserve();
       const reservation = await input.reserve(plan.encoded, {
         connectionVersion: credentials.version,
       });

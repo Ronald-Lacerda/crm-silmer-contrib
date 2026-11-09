@@ -1,5 +1,15 @@
 # Architecture Decision Records
 
+## Decisão de 09/11/2026
+
+- [070 — Olist: quota com espera de leitura e folga](070-olist-quota-com-espera-de-leitura-e-folga.md),
+  RFC 050 / OLIST-T28, OLIST-52: só leitura espera quota, escrita nunca espera e
+  só começa com folga para a leitura pós-venda; `verifyAccount` espera 15 s.
+- [069 — Olist: invalidação administrativa de export](069-olist-invalidacao-administrativa-de-export.md),
+  RFC 050 / OLIST-T27, OLIST-51: Admin arquiva a geração antes de qualquer venda
+  (comando local, nova geração é nova linha, uma operação ativa por Pedido),
+  com retry pré-efeito; D1, D2 e D5 a confirmar pelo proprietário.
+
 ## Decisão de 08/11/2026
 
 - [066 — Responder por mensagem mais recente](066-responder-por-mensagem-mais-recente.md),

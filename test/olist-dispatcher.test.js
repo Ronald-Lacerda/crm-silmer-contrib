@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { createOlistDispatcher } from '../modules/olist/src/dispatcher.js';
 import { OlistError } from '../modules/olist/src/errors.js';
+import { createOlistSaleWriter } from '../modules/olist/src/sale-writer.js';
 
 const config = {
   configured: true,
@@ -166,6 +167,8 @@ function fixture(options = {}) {
   /** @type {any[]} */ const events = [];
   /** @type {any[]} */ const posts = [];
   /** @type {any[]} */ const reads = [];
+  /** @type {any[]} */ const patience = [];
+  /** @type {any[]} */ const retryChecks = [];
   let enabled = true,
     currentSettings = 1,
     currentGeneration = 0,
@@ -305,6 +308,17 @@ function fixture(options = {}) {
       events.push('uncertain');
       return { outcome: 'uncertain' };
     },
+    /** Same contract as the real gate: queued/resolving/ready, no sale
+     * attempt, no sale id and nothing reserved or uncertain. */
+    async assertRetrySafe(/** @type {any} */ input) {
+      retryChecks.push(input);
+      if (options.retrySafe !== undefined) return options.retrySafe;
+      return (
+        ['queued', 'resolving', 'ready'].includes(operation.state) &&
+        !operation.saleAttempt &&
+        !operation.remote_id
+      );
+    },
     async recordDispatchStop(/** @type {any} */ input) {
       operation.last_error_code = input.code ?? input.errorCode;
       events.push('stop');
@@ -328,18 +342,25 @@ function fixture(options = {}) {
     },
   };
   const client = {
-    async findOrder(/** @type {string} */ reference) {
+    async findOrder(/** @type {string} */ reference, /** @type {any} */ opts) {
       reads.push(['find', reference]);
+      patience.push(['find', opts?.patient === true]);
       events.push('find');
+      const failure = options.findFails?.shift();
+      if (failure) throw new OlistError(failure);
       if (options.searchAbsent) return null;
       return providerSale || options.preexistingSale
         ? { id: 401, numeroPedido: 401, numeroPedidoEcommerce: REFERENCE }
         : null;
     },
-    async orderRaw(/** @type {number} */ id) {
+    async orderRaw(/** @type {number} */ id, /** @type {any} */ opts) {
       assert.equal(id, 401);
       reads.push(['raw', id]);
+      patience.push(['raw', opts?.patient === true]);
       events.push('get');
+      // A read that does not ask for patience gives up when the quota is busy.
+      if (options.rawBusyUnlessPatient && opts?.patient !== true)
+        throw new OlistError('OLIST_RATE_LIMITED', 429);
       assert.equal(operation.saleAttempt.observedRemoteId, '401');
       assert.equal(operation.saleAttempt.observedNumber, '401');
       if (options.readErrorOnce) {
@@ -359,7 +380,7 @@ function fixture(options = {}) {
       return structuredClone(resolved);
     },
   };
-  const saleWriter = {
+  const saleWriter = options.saleWriter ?? {
     async dispatch(/** @type {any} */ input) {
       options.beforeReserve?.();
       const reservation = await input.reserve(input.plan.encoded, {
@@ -391,6 +412,7 @@ function fixture(options = {}) {
       resourceResolver,
       saleWriter,
       config,
+      ...(options.prepare ? { prepare: options.prepare } : {}),
     });
   return {
     snapshot,
@@ -399,6 +421,8 @@ function fixture(options = {}) {
     events,
     posts,
     reads,
+    patience,
+    retryChecks,
     dispatcher,
     repository,
     client,
@@ -695,4 +719,303 @@ test('T08 sale reference is checked again after registrations and before reservi
   assert.equal(f.operation.saleAttempt, null);
   assert.equal(f.posts.length, 0);
   noRetry(result);
+});
+
+const RETRY_CODES = [
+  'OLIST_RATE_LIMITED',
+  'OLIST_UNAVAILABLE',
+  'OLIST_REFRESH_IN_PROGRESS',
+];
+/** @param {any} result */
+function retryable(result) {
+  assert.equal(result.outcome, 'failed');
+  assert.equal(result.retryable, true);
+  assert.equal(result.retrySafe, true);
+}
+
+test('LIVENESS a "not now" failure before any ticket is a safe retry: RATE_LIMITED, UNAVAILABLE and REFRESH_IN_PROGRESS', async () => {
+  for (const code of RETRY_CODES) {
+    for (const where of ['lookup', 'resources']) {
+      const f = fixture(
+        where === 'lookup' ? { findFails: [code] } : { resourceError: code },
+      );
+      const result = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+      retryable(result);
+      assert.equal(result.errorCode, code, where);
+      assert.equal(f.posts.length, 0);
+      assert.equal(f.operation.saleAttempt, null);
+      assert.equal(f.events.includes('reserve'), false);
+      assert.equal(f.events.includes('uncertain'), false);
+      assert.equal(f.retryChecks.length, 1, 'the database gate decides');
+      assert.deepEqual(f.retryChecks[0], {
+        exportId: EXPORT_ID,
+        accountKey: config.accountKey,
+        contextKey: config.contextKey,
+      });
+      // The stop is still recorded as a safe code for the administrator.
+      assert.equal(f.operation.last_error_code, code);
+    }
+  }
+});
+
+test('LIVENESS the retry needs assertRetrySafe: without it behavior is exactly the current one', async () => {
+  for (const code of RETRY_CODES) {
+    const f = fixture({ findFails: [code], retrySafe: false });
+    const result = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+    assert.equal(
+      result.outcome,
+      code === 'OLIST_RATE_LIMITED' ? 'failed' : 'outcome_unknown',
+      code,
+    );
+    assert.equal(result.errorCode, code);
+    noRetry(result);
+    assert.equal(f.retryChecks.length, 1);
+    assert.equal(f.posts.length, 0);
+  }
+  // A gate that throws is not a green light either.
+  const broken = fixture({ findFails: ['OLIST_UNAVAILABLE'] });
+  broken.repository.assertRetrySafe = async () => {
+    throw new Error('PRIVATE_DATABASE_CANARY');
+  };
+  const result = await broken.dispatcher().dispatch({ exportId: EXPORT_ID });
+  noRetry(result);
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE_/u);
+});
+
+test('LIVENESS other lookup and resource failures never become a retry and never reach the gate', async () => {
+  for (const code of [
+    'OLIST_INCOMPLETE_LOOKUP',
+    'OLIST_AMBIGUOUS_MATCH',
+    'OLIST_RESOURCE_UNAVAILABLE',
+    'OLIST_RESOURCE_UNCERTAIN',
+    'OLIST_AUTH',
+  ]) {
+    const f = fixture({ findFails: [code] });
+    const result = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+    assert.equal(result.outcome, 'outcome_unknown', code);
+    noRetry(result);
+    assert.equal(f.retryChecks.length, 0, code);
+  }
+});
+
+test('LIVENESS with a sale ticket nothing is retried, whatever the code', async () => {
+  for (const code of RETRY_CODES) {
+    const f = fixture({
+      saleWriter: {
+        async dispatch(/** @type {any} */ input) {
+          const reservation = await input.reserve(input.plan.encoded, {
+            connectionVersion: 3,
+          });
+          throw Object.assign(new OlistError(code, 429), { reservation });
+        },
+      },
+    });
+    const result = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+    assert.equal(result.outcome, 'outcome_unknown', code);
+    noRetry(result);
+    assert.equal(f.operation.state, 'uncertain');
+    assert.equal(f.retryChecks.length, 0, 'a ticket never reaches the gate');
+  }
+});
+
+test('LIVENESS a recovery of an existing sale attempt is never a retry, even when the gate would say yes', async () => {
+  for (const code of RETRY_CODES) {
+    const f = fixture({ timeoutOnce: true });
+    await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+    assert.ok(f.operation.saleAttempt);
+    // The earlier attempt left no observed id: the lookup must run again.
+    f.operation.saleAttempt.observedRemoteId = null;
+    f.operation.saleAttempt.observed_remote_id = null;
+    f.options.findFails = [code];
+    f.options.retrySafe = true;
+    const posts = f.posts.length;
+    const result = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+    assert.equal(result.outcome, 'outcome_unknown', code);
+    noRetry(result);
+    assert.equal(f.retryChecks.length, 0);
+    assert.equal(f.posts.length, posts);
+  }
+});
+
+test('LIVENESS no quota room for the sale and its readbacks defers with no ticket and no POST', async () => {
+  let fetches = 0;
+  const f = fixture({
+    saleWriter: createOlistSaleWriter({
+      credentials: async () => ({ token: 'synthetic-token', version: 3 }),
+      quota: {
+        reserve: async () => {
+          assert.fail('the old reserve must not run when reserveWrite exists');
+        },
+        reserveWrite: async (/** @type {any} */ input) => {
+          assert.equal(input.readbacks, 2, 'a sale needs two readbacks');
+          throw Object.assign(new OlistError('OLIST_RATE_LIMITED', 429), {
+            retryAfterMs: 30_000,
+          });
+        },
+        observe: async () => {},
+      },
+      fetch: async () => {
+        fetches += 1;
+        throw new Error('no HTTP without quota room');
+      },
+    }),
+  });
+  const result = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+  retryable(result);
+  assert.equal(result.errorCode, 'OLIST_RATE_LIMITED');
+  assert.equal(fetches, 0);
+  assert.equal(f.operation.saleAttempt, null, 'no ticket was created');
+  assert.equal(f.events.includes('reserve'), false);
+  assert.equal(f.events.includes('post'), false);
+  assert.equal(f.operation.state, 'ready', 'resources stay resolved');
+});
+
+test('LIVENESS the readback after the POST asks for the patient wait instead of turning a busy window into an uncertain sale', async () => {
+  const f = fixture({ rawBusyUnlessPatient: true });
+  const result = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+  assert.equal(result.outcome, 'sent');
+  noRetry(result);
+  assert.equal(f.posts.length, 1);
+  assert.equal(f.operation.state, 'confirmed');
+  assert.deepEqual(
+    f.patience.filter(([kind]) => kind === 'raw'),
+    [['raw', true]],
+  );
+  // Reads made before any ticket exists keep the common profile.
+  assert.deepEqual(
+    f.patience.filter(([kind]) => kind === 'find'),
+    [
+      ['find', false],
+      ['find', false],
+    ],
+  );
+});
+
+test('LIVENESS recovery reads of a ticketed sale are patient', async () => {
+  const f = fixture({ timeoutOnce: true, rawBusyUnlessPatient: true });
+  await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+  f.patience.length = 0;
+  f.operation.saleAttempt.observedRemoteId = null;
+  f.operation.saleAttempt.observed_remote_id = null;
+  const result = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+  assert.equal(result.outcome, 'sent');
+  assert.deepEqual(f.patience, [
+    ['find', true],
+    ['raw', true],
+  ]);
+  assert.equal(f.posts.length, 1);
+});
+
+test('LIVENESS an invalidated export never dispatches, whatever code closed it', async () => {
+  for (const code of [
+    'OLIST_EXPORT_INVALIDATED',
+    'ORDER_CANCELLED',
+    'OLIST_RATE_LIMITED',
+    'OLIST_SALE_UNCERTAIN',
+    undefined,
+  ]) {
+    const f = fixture({ findFails: ['OLIST_RATE_LIMITED'] });
+    f.operation.state = 'invalidated';
+    f.operation.last_error_code = code;
+    const result = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+    assert.equal(result.outcome, 'failed', String(code));
+    assert.equal(
+      result.errorCode,
+      code === 'ORDER_CANCELLED'
+        ? 'ORDER_CANCELLED'
+        : 'OLIST_EXPORT_UNAVAILABLE',
+    );
+    noRetry(result);
+    assert.equal(f.posts.length, 0);
+    assert.equal(f.reads.length, 0, 'no HTTP at all');
+    assert.equal(f.retryChecks.length, 0);
+    for (const event of [
+      'guard',
+      'resources',
+      'reserve',
+      'post',
+      'stage:customer',
+    ])
+      assert.equal(f.events.includes(event), false, event);
+  }
+});
+
+test('LIVENESS prepare renews the token before the local guard that would end the job as CONNECTION_CHANGED', async () => {
+  let renewed = false;
+  /** @param {any} f */
+  function expiring(f) {
+    const guarded = f.repository.validateDispatch;
+    f.repository.validateDispatch = async (/** @type {any} */ input) => {
+      if (!renewed) throw new OlistError('OLIST_CONNECTION_CHANGED');
+      return guarded(input);
+    };
+  }
+  const old = fixture();
+  expiring(old);
+  const stale = await old.dispatcher().dispatch({ exportId: EXPORT_ID });
+  assert.equal(stale.outcome, 'failed');
+  assert.equal(stale.errorCode, 'OLIST_CONNECTION_CHANGED');
+  assert.equal(old.posts.length, 0);
+
+  const f = fixture({
+    prepare: async (/** @type {any} */ base) => {
+      assert.equal(base.exportId, EXPORT_ID);
+      assert.equal(base.accountKey, config.accountKey);
+      renewed = true;
+    },
+  });
+  expiring(f);
+  const result = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+  assert.equal(result.outcome, 'sent');
+  assert.equal(f.posts.length, 1);
+  // The guard only passes once renewed, so prepare necessarily ran before it.
+  assert.equal(renewed, true);
+  assert.ok(f.events.includes('guard'));
+});
+
+test('LIVENESS a refresh in progress during prepare is a retry, and nothing else ran', async () => {
+  const f = fixture({
+    prepare: async () => {
+      throw new OlistError('OLIST_REFRESH_IN_PROGRESS', 503);
+    },
+  });
+  const result = await f.dispatcher().dispatch({ exportId: EXPORT_ID });
+  retryable(result);
+  assert.equal(result.errorCode, 'OLIST_REFRESH_IN_PROGRESS');
+  assert.equal(f.events.includes('guard'), false);
+  assert.equal(f.reads.length, 0);
+  assert.equal(f.posts.length, 0);
+  const reconnect = fixture({
+    prepare: async () => {
+      throw new OlistError('OLIST_RECONNECT_REQUIRED');
+    },
+  });
+  const terminal = await reconnect
+    .dispatcher()
+    .dispatch({ exportId: EXPORT_ID });
+  assert.equal(terminal.outcome, 'failed');
+  assert.equal(terminal.errorCode, 'OLIST_RECONNECT_REQUIRED');
+  noRetry(terminal);
+});
+
+test('M4 the dispatcher keeps no read memory: findOrder and the sale readback always reach the client, also across dispatches of one instance', async () => {
+  const f = fixture({ failFinishOnce: true });
+  const dispatcher = f.dispatcher();
+  const first = await dispatcher.dispatch({ exportId: EXPORT_ID });
+  assert.equal(first.outcome, 'outcome_unknown');
+  // Both reference searches ran before the POST; the proof read came after it.
+  assert.deepEqual(f.reads, [
+    ['find', REFERENCE],
+    ['find', REFERENCE],
+    ['raw', 401],
+  ]);
+  assert.equal(f.posts.length, 1);
+  f.reads.length = 0;
+  f.patience.length = 0;
+  // The same instance recovers: the sale proof is read again, never reused.
+  const second = await dispatcher.dispatch({ exportId: EXPORT_ID });
+  assert.equal(second.outcome, 'sent');
+  assert.deepEqual(f.reads, [['raw', 401]]);
+  assert.deepEqual(f.patience, [['raw', true]]);
+  assert.equal(f.posts.length, 1);
 });

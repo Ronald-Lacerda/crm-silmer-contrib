@@ -604,3 +604,50 @@ test('T08 raw sale client keeps numeric lexemes, bounded official route and quot
   assert.deepEqual(events, ['credentials', 'quota', 'GET', 'observe']);
   await assert.rejects(client.orderRaw(0), { code: 'INVALID_REQUEST' });
 });
+
+test('L2 sale POST reserves write headroom (2 readbacks) BEFORE the ticket; without it there is no ticket and no POST', async () => {
+  const { plan } = fixture();
+  /** @type {string[]} */
+  const events = [];
+  /** @type {any[]} */
+  const writes = [];
+  const make = (/** @type {boolean} */ refuse) =>
+    createOlistSaleWriter({
+      credentials: async () => {
+        events.push('credentials');
+        return { token: 'synthetic-token', version: 4 };
+      },
+      quota: {
+        reserve: async () => {
+          events.push('reserve-legacy');
+        },
+        reserveWrite: async (/** @type {any} */ input) => {
+          events.push('reserveWrite');
+          writes.push(input);
+          if (refuse)
+            throw Object.assign(new Error('OLIST_RATE_LIMITED'), {
+              code: 'OLIST_RATE_LIMITED',
+              retryAfterMs: 20_000,
+            });
+        },
+        observe: async () => {},
+      },
+      fetch: async () => {
+        events.push('POST');
+        return json({ id: 401, numeroPedido: 99 });
+      },
+    });
+  const reserve = async () => {
+    events.push('ticket');
+    return TICKET;
+  };
+  await make(false).dispatch({ plan, reserve });
+  assert.deepEqual(events, ['credentials', 'reserveWrite', 'ticket', 'POST']);
+  assert.deepEqual(writes, [{ readbacks: 2 }]);
+  events.length = 0;
+  await assert.rejects(make(true).dispatch({ plan, reserve }), {
+    code: 'OLIST_RATE_LIMITED',
+    retryAfterMs: 20_000,
+  });
+  assert.deepEqual(events, ['credentials', 'reserveWrite']);
+});

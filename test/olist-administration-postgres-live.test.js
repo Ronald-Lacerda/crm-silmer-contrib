@@ -546,6 +546,28 @@ else
       }
 
       await t.test(
+        'LIVENESS API reads wait briefly for a busy shared quota window instead of failing the request (administration)',
+        async () => {
+          const f = await fixture();
+          await pool.query(
+            "INSERT INTO crm.olist_quotas(account_key,blocked_until) VALUES($1,now()+interval '1300 milliseconds') ON CONFLICT (account_key) DO UPDATE SET blocked_until=EXCLUDED.blocked_until",
+            [config.accountKey],
+          );
+          const started = Date.now();
+          const result = await f.runtime.existingPreview({
+            ...f.input,
+            saleId: '401',
+          });
+          assert.equal(result.eligible, true);
+          assert.ok(
+            Date.now() - started >= 900,
+            'the request waited for quota',
+          );
+          assert.ok(Date.now() - started < 8000);
+        },
+      );
+
+      await t.test(
         'admin without checkbox links a legacy sale without reference/line marker and preserves the CRM order',
         async () => {
           const f = await fixture();
@@ -915,6 +937,14 @@ else
             fetch: f.fetcher,
             clock: () => NOW,
           });
+          // The shared window turns busy for ~1.3 s: the read worker waits for
+          // it (beating the lease) instead of ending the read as RATE_LIMITED.
+          await pool.query(
+            "INSERT INTO crm.olist_quotas(account_key,blocked_until) VALUES($1,now()+interval '1300 milliseconds') ON CONFLICT (account_key) DO UPDATE SET blocked_until=EXCLUDED.blocked_until",
+            [config.accountKey],
+          );
+          let beats = 0;
+          const waitStart = Date.now();
           const result = await createOlistReconciliationHandler({ dispatcher })(
             {
               jobType: 'olist.reconcile',
@@ -923,9 +953,16 @@ else
               olistExportId: linked.operationId,
               actor: { id: 'forged' },
             },
-            { heartbeat: async () => true },
+            {
+              heartbeat: async () => {
+                beats += 1;
+                return true;
+              },
+            },
           );
           assert.equal(result.outcome, 'sent', JSON.stringify(result));
+          assert.ok(Date.now() - waitStart >= 900, 'the read waited for quota');
+          assert.ok(beats >= 3, 'the lease was beaten while waiting: ' + beats);
           assert.ok(f.calls.length > before);
           const saved = await f.runtime.readReconciliation({
             ...f.input,
@@ -1253,6 +1290,101 @@ else
             await api.close();
           }
           noWrites(f);
+        },
+      );
+
+      await t.test(
+        'LIVENESS the administrative diagnostic is local: a broken ERP connection still serves Admin (200) and refuses everyone else (403), while HTTP commands keep requiring a healthy connection',
+        async () => {
+          const f = await fixture();
+          const linked = await f.runtime.linkExisting(await command(f));
+          const row = (
+            await pool.query(
+              'SELECT version FROM crm.olist_exports WHERE id=$1',
+              [linked.operationId],
+            )
+          ).rows[0];
+          const api = createApi(
+            {},
+            {
+              olist: f.runtime,
+              logger: /** @type {any} */ ({ info() {}, warn() {}, error() {} }),
+            },
+          );
+          /** @param {string} role */
+          const headers = (role) => ({
+            cookie: 'crm_session=' + f.actors[role].token,
+            origin: environment.APP_ORIGIN,
+            'x-csrf-token': 'synthetic-csrf',
+          });
+          const url = '/api/v1/orders/' + f.orderId + '/olist/administration';
+          const before = f.calls.length;
+          try {
+            for (const broken of [
+              'reconnect_required=true,token_envelope=NULL,expires_at=NULL,generation=9',
+            ]) {
+              await pool.query('UPDATE crm.olist_connections SET ' + broken);
+              const admin = await api.inject({
+                method: 'GET',
+                url,
+                headers: headers('admin'),
+              });
+              assert.equal(admin.statusCode, 200, broken + ' ' + admin.body);
+              const body = admin.json();
+              assert.equal(body.operation.id, linked.operationId);
+              assert.equal(body.operation.version, Number(row.version));
+              assert.ok(Array.isArray(body.resources));
+              assert.ok(Array.isArray(body.attempts));
+              for (const role of ['owner', 'finance']) {
+                const denied = await api.inject({
+                  method: 'GET',
+                  url,
+                  headers: headers(role),
+                });
+                assert.equal(denied.statusCode, 403, role);
+                assert.equal(denied.json().code, 'FORBIDDEN');
+              }
+              // Everything that would call the ERP is still gated by the
+              // connection state.
+              const reconcile = await api.inject({
+                method: 'POST',
+                url: '/api/v1/orders/' + f.orderId + '/olist/reconcile',
+                headers: {
+                  ...headers('admin'),
+                  'idempotency-key': 'broken-' + randomUUID(),
+                },
+                payload: {
+                  stage: 'sale',
+                  resourceId: null,
+                  expectedVersion: Number(row.version),
+                  reason: 'PRIVATE_READ_REASON',
+                },
+              });
+              assert.equal(reconcile.statusCode, 409, reconcile.body);
+              assert.equal(reconcile.json().code, 'OLIST_CONNECTION_CHANGED');
+            }
+            // The local command is not gated by it: it answers on its own
+            // merits (a linked sale is not invalidable), never as a
+            // connection error.
+            const invalidate = await api.inject({
+              method: 'POST',
+              url: '/api/v1/orders/' + f.orderId + '/olist/invalidate',
+              headers: {
+                ...headers('admin'),
+                'idempotency-key': 'broken-invalidate-' + randomUUID(),
+              },
+              payload: {
+                operationId: linked.operationId,
+                expectedVersion: Number(row.version),
+                reason: 'PRIVATE_INVALIDATE_REASON',
+              },
+            });
+            assert.equal(invalidate.statusCode, 409, invalidate.body);
+            assert.equal(invalidate.json().code, 'OLIST_INVALIDATION_BLOCKED');
+          } finally {
+            await api.close();
+          }
+          assert.equal(f.calls.length, before, 'no ERP call at all');
         },
       );
     } finally {

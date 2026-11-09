@@ -549,3 +549,114 @@ test('T22 mutable caller payload cannot change the serialized body between valid
   });
   assert.equal(JSON.parse(serialized).nome, 'Comprador sintético');
 });
+
+/** @param {{refuse?:boolean,legacy?:boolean}} [config] */
+function writeQuotaFixture(config = {}) {
+  /** @type {string[]} */
+  const events = [];
+  /** @type {any[]} */
+  const writes = [];
+  let posts = 0;
+  const writer = createOlistResourceWriter({
+    credentials: async () => {
+      events.push('credentials');
+      return { token: 'synthetic-token', version: 7 };
+    },
+    quota: {
+      reserve: async () => {
+        events.push('reserve-legacy');
+      },
+      ...(config.legacy
+        ? {}
+        : {
+            reserveWrite: async (/** @type {any} */ input) => {
+              events.push('reserveWrite');
+              writes.push(input);
+              if (config.refuse)
+                throw Object.assign(new Error('OLIST_RATE_LIMITED'), {
+                  code: 'OLIST_RATE_LIMITED',
+                  retryAfterMs: 30_000,
+                });
+            },
+          }),
+      observe: async () => {},
+    },
+    fetch: async () => {
+      posts += 1;
+      events.push('POST');
+      return json({ id: 701 });
+    },
+  });
+  const reserve = async () => {
+    events.push('ticket');
+    return RESERVATION;
+  };
+  return { writer, events, writes, reserve, posts: () => posts };
+}
+/** @param {string} kind */
+function payloadFor(kind) {
+  if (kind === 'customer')
+    return { payload: buildCustomerPayload(customer(), REFERENCE) };
+  if (kind === 'product')
+    return {
+      payload: buildProductPayload({
+        attributes: ATTRIBUTES,
+        sku: REFERENCE,
+        fiscal: FISCAL,
+        variations: [{ size: 'M', sku: 'CRM-V-M' }],
+      }),
+    };
+  return {
+    parentRemoteId: 88,
+    payload: buildVariationPayload({ size: 'G', sku: 'CRM-V-G' }),
+  };
+}
+
+test('L2 resource POST reserves write headroom per kind BEFORE the durable ticket and never waits', async () => {
+  for (const [kind, readbacks] of /** @type {Array<[string, number]>} */ ([
+    ['customer', 2],
+    ['product', 2],
+    ['variation', 3],
+  ])) {
+    const f = writeQuotaFixture();
+    await f.writer.dispatch({
+      kind,
+      ...payloadFor(kind),
+      reserve: f.reserve,
+    });
+    assert.deepEqual(f.writes, [{ readbacks }]);
+    assert.deepEqual(f.events, [
+      'credentials',
+      'reserveWrite',
+      'ticket',
+      'POST',
+    ]);
+  }
+});
+
+test('L2 resource POST without write headroom creates no ticket and sends no POST', async () => {
+  for (const kind of ['customer', 'product', 'variation']) {
+    const f = writeQuotaFixture({ refuse: true });
+    await assert.rejects(
+      f.writer.dispatch({ kind, ...payloadFor(kind), reserve: f.reserve }),
+      { code: 'OLIST_RATE_LIMITED', retryAfterMs: 30_000 },
+    );
+    assert.deepEqual(f.events, ['credentials', 'reserveWrite']);
+    assert.equal(f.posts(), 0);
+  }
+});
+
+test('L2 a quota without reserveWrite keeps the legacy single reserve', async () => {
+  const f = writeQuotaFixture({ legacy: true });
+  await f.writer.dispatch({
+    kind: 'customer',
+    ...payloadFor('customer'),
+    reserve: f.reserve,
+  });
+  assert.deepEqual(f.events, [
+    'credentials',
+    'reserve-legacy',
+    'ticket',
+    'POST',
+  ]);
+});

@@ -789,3 +789,193 @@ test('Olist order detail without the documented reference cannot prove absence o
     });
   }
 });
+
+/** @param {{readWait?:any,reserveRead?:any,handler?:(url:URL)=>Response}} [config] */
+function waitingHarness(config = {}) {
+  /** @type {string[]} */
+  const events = [];
+  /** @type {any[]} */
+  const reads = [];
+  /** @type {number[]} */
+  const blockedFor = [];
+  const handler = config.handler ?? (() => json({ company: 'Synthetic' }));
+  const client = createOlistClient({
+    credentials: async () => {
+      events.push('credentials');
+      return { token: 'synthetic-access-token', version: 3 };
+    },
+    readWait: config.readWait,
+    quota: {
+      async reserve() {
+        events.push('reserve');
+      },
+      ...(config.reserveRead === false
+        ? {}
+        : {
+            async reserveRead(/** @type {any} */ input) {
+              events.push('reserveRead');
+              reads.push(input);
+              return config.reserveRead?.(input);
+            },
+          }),
+      async observe() {
+        events.push('observe');
+      },
+      async block(/** @type {number} */ ms) {
+        blockedFor.push(ms);
+      },
+    },
+    fetch: async (url) => {
+      events.push('fetch');
+      return handler(new URL(String(url)));
+    },
+  });
+  return { client, events, reads, blockedFor };
+}
+
+test('Olist reads with a wait profile wait for quota first, then take credentials, then fetch', async () => {
+  const beat = async () => {};
+  const sleep = async () => {};
+  const { client, events, reads } = waitingHarness({
+    readWait: { maxWaitMs: 90_000, ceiling: 30, beat, sleep },
+  });
+  await client.info();
+  assert.deepEqual(events, ['reserveRead', 'credentials', 'fetch', 'observe']);
+  assert.deepEqual(reads, [{ maxWaitMs: 90_000, ceiling: 30, beat, sleep }]);
+});
+
+test('Olist patient reads use the longer wait and the plain ones keep the ordinary profile', async () => {
+  const { client, reads } = waitingHarness({
+    readWait: { maxWaitMs: 8_000, ceiling: 24 },
+    handler: (url) =>
+      url.pathname.endsWith('/pedidos')
+        ? page([], 0)
+        : json({ id: Number(url.pathname.split('/').pop()) }),
+  });
+  await client.contact(5);
+  await client.contact(5, { patient: true });
+  await client.product(6, { patient: true });
+  await client.order(7, { patient: false });
+  await client.findOrder('CRM-order-a', { patient: true });
+  assert.deepEqual(
+    reads.map((read) => [read.maxWaitMs, read.ceiling]),
+    [
+      [8_000, 24],
+      [180_000, 24],
+      [180_000, 24],
+      [8_000, 24],
+      [180_000, 24],
+    ],
+  );
+  const custom = waitingHarness({
+    readWait: { maxWaitMs: 90_000, patientMaxWaitMs: 120_000 },
+  });
+  await custom.client.info();
+  await custom.client.orderRaw(1, { patient: true }).catch(() => {});
+  assert.deepEqual(
+    custom.reads.map((read) => read.maxWaitMs),
+    [90_000, 120_000],
+  );
+});
+
+test('Olist read that cannot get quota in time never reaches credentials or the network', async () => {
+  const { client, events } = waitingHarness({
+    readWait: { maxWaitMs: 8_000 },
+    reserveRead: async () => {
+      throw Object.assign(new Error('OLIST_RATE_LIMITED'), {
+        code: 'OLIST_RATE_LIMITED',
+        retryAfterMs: 60_000,
+      });
+    },
+  });
+  await assert.rejects(client.info(), { code: 'OLIST_RATE_LIMITED' });
+  assert.deepEqual(events, ['reserveRead']);
+});
+
+test('Olist reads without a wait profile, or on a quota without reserveRead, behave as before', async () => {
+  const plain = waitingHarness({
+    handler: () => json({ id: 1, company: 'Synthetic' }),
+  });
+  await plain.client.info();
+  await plain.client.contact(1, { patient: true });
+  assert.deepEqual(plain.reads, []);
+  assert.deepEqual(plain.events.slice(0, 4), [
+    'credentials',
+    'reserve',
+    'fetch',
+    'observe',
+  ]);
+  const legacy = waitingHarness({
+    readWait: { maxWaitMs: 90_000 },
+    reserveRead: false,
+  });
+  await legacy.client.info();
+  assert.deepEqual(legacy.events, [
+    'credentials',
+    'reserve',
+    'fetch',
+    'observe',
+  ]);
+});
+
+test('Olist 429 with Retry-After is still honoured under a wait profile and the GET is not retried', async () => {
+  let fetches = 0;
+  const { client, blockedFor, reads } = waitingHarness({
+    readWait: { maxWaitMs: 90_000 },
+    handler: () => {
+      fetches += 1;
+      return json({}, { status: 429, headers: { 'retry-after': '7' } });
+    },
+  });
+  await assert.rejects(client.info(), { code: 'OLIST_RATE_LIMITED' });
+  assert.deepEqual(blockedFor, [7000]);
+  assert.equal(fetches, 1);
+  assert.equal(reads.length, 1);
+});
+
+test('Olist client rejects a malformed wait profile at construction', () => {
+  for (const readWait of [
+    { maxWaitMs: -1 },
+    { maxWaitMs: 1.5 },
+    { maxWaitMs: 700_000 },
+    { maxWaitMs: 1, patientMaxWaitMs: -5 },
+    { maxWaitMs: 1, ceiling: 0 },
+    { maxWaitMs: 1, ceiling: 31 },
+  ])
+    assert.throws(
+      () =>
+        createOlistClient({
+          credentials: async () => ({ token: 't', version: 1 }),
+          quota: {},
+          readWait,
+        }),
+      { code: 'INVALID_REQUEST' },
+    );
+});
+
+test('Olist cumulative wait profile hands each read only the balance left of the budget', async () => {
+  const { client, reads } = waitingHarness({
+    readWait: { maxWaitMs: 8_000, ceiling: 24, cumulative: true },
+    reserveRead: async () => ({ waitedMs: 3_000 }),
+  });
+  await client.info();
+  await client.info();
+  await client.info();
+  await client.info();
+  assert.deepEqual(
+    reads.map((read) => read.maxWaitMs),
+    [8_000, 5_000, 2_000, 0],
+  );
+  const perRead = waitingHarness({
+    readWait: { maxWaitMs: 8_000, ceiling: 24 },
+    reserveRead: async () => ({ waitedMs: 3_000 }),
+  });
+  await perRead.client.info();
+  await perRead.client.info();
+  await perRead.client.info();
+  assert.deepEqual(
+    perRead.reads.map((read) => read.maxWaitMs),
+    [8_000, 8_000, 8_000],
+    'without `cumulative` every read keeps its own maxWaitMs',
+  );
+});

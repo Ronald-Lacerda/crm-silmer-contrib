@@ -33,34 +33,48 @@ const SAFE = new Set([
   'OLIST_RESOURCE_PERSISTENCE_FAILED',
   'OLIST_PERSISTENCE_FAILED',
   'OLIST_UNAVAILABLE',
+  'OLIST_REFRESH_IN_PROGRESS',
   'OLIST_INCOMPLETE_LOOKUP',
   'OLIST_AMBIGUOUS_MATCH',
   'OLIST_EFFECT_ALREADY_RESERVED',
   'OLIST_DISPATCH_FAILED',
 ]);
+/** Causes that, before any durable effect ticket exists, only mean "not now":
+ * the provider quota had no room, the provider was unreachable, or another
+ * process was renewing the token. `INCOMPLETE_LOOKUP` and
+ * `RESOURCE_UNAVAILABLE` are deliberately absent (they can follow a resource
+ * POST whose result we did not see). */
+const PRE_EFFECT_RETRY = new Set([
+  'OLIST_RATE_LIMITED',
+  'OLIST_UNAVAILABLE',
+  'OLIST_REFRESH_IN_PROGRESS',
+]);
 /** @param {any} error */
 function codeOf(error) {
   return SAFE.has(error?.code) ? error.code : 'OLIST_DISPATCH_FAILED';
 }
-/** @param {'sent'|'failed'|'outcome_unknown'} outcome @param {string|undefined} errorCode @param {string|undefined} providerExternalId */
-function result(outcome, errorCode, providerExternalId) {
+/** @param {'sent'|'failed'|'outcome_unknown'} outcome @param {string|undefined} errorCode @param {string|undefined} providerExternalId @param {boolean} [retry] */
+function result(outcome, errorCode, providerExternalId, retry = false) {
   return {
     outcome,
     ...(errorCode ? { errorCode } : {}),
     ...(providerExternalId ? { providerExternalId } : {}),
-    retryable: false,
-    retrySafe: false,
+    retryable: retry,
+    retrySafe: retry,
   };
 }
 /** Snapshot-only orchestration. Each mutation has its own durable ticket;
  * an expired job lease or an empty lookup can never authorize a second sale.
- * @param {{repository:any,client:any,resourceResolver:any,saleWriter:any,config:{accountKey:string,contextKey:string}}} options */
+ * `prepare` renews the access token before the first local guard, which needs
+ * a token that is still valid.
+ * @param {{repository:any,client:any,resourceResolver:any,saleWriter:any,config:{accountKey:string,contextKey:string},prepare?:(base:any)=>Promise<unknown>}} options */
 export function createOlistDispatcher({
   repository,
   client,
   resourceResolver,
   saleWriter,
   config,
+  prepare,
 }) {
   /** @param {any} operation */
   function baseFor(operation) {
@@ -101,6 +115,21 @@ export function createOlistDispatcher({
       ),
     };
   }
+  /** `assertRetrySafe` never throws; a fake that does is not safe either.
+   * @param {any} operation */
+  async function retrySafe(operation) {
+    try {
+      return (
+        (await repository.assertRetrySafe({
+          exportId: operation.id,
+          accountKey: config.accountKey,
+          contextKey: config.contextKey,
+        })) === true
+      );
+    } catch {
+      return false;
+    }
+  }
   return Object.freeze({
     /** @param {{exportId:string}} input */
     async dispatch(input) {
@@ -114,11 +143,15 @@ export function createOlistDispatcher({
           contextKey: config.contextKey,
         });
         base = baseFor(operation);
-        if (
-          operation.state === 'invalidated' &&
-          operation.last_error_code === 'ORDER_CANCELLED'
-        )
-          throw new OlistError('ORDER_CANCELLED');
+        // An invalidated generation never dispatches, whatever closed it:
+        // cancellation keeps its code, an administrative invalidation reads as
+        // an unavailable export.
+        if (operation.state === 'invalidated')
+          throw new OlistError(
+            operation.last_error_code === 'ORDER_CANCELLED'
+              ? 'ORDER_CANCELLED'
+              : 'OLIST_EXPORT_UNAVAILABLE',
+          );
         if (['confirmed', 'linked'].includes(operation.state))
           return result('sent', undefined, String(operation.remote_id));
         if (operation.saleAttempt) {
@@ -140,7 +173,9 @@ export function createOlistDispatcher({
           let id =
             attempt.observedRemoteId ?? attempt.observed_remote_id ?? null;
           if (!id) {
-            const found = await client.findOrder(operation.reference);
+            const found = await client.findOrder(operation.reference, {
+              patient: true,
+            });
             if (!found) throw new OlistError('OLIST_SALE_UNCERTAIN');
             id = String(found.id);
             await repository.persistSaleObservedId({
@@ -152,7 +187,7 @@ export function createOlistDispatcher({
                 : undefined,
             });
           }
-          const raw = await client.orderRaw(Number(id));
+          const raw = await client.orderRaw(Number(id), { patient: true });
           const proof = reconcileOlistSale(plan, raw, String(id));
           await repository.finishSale({
             ...base,
@@ -164,6 +199,10 @@ export function createOlistDispatcher({
           });
           return result('sent', undefined, String(id));
         }
+        // Renew an expired access token first: the local guard below requires
+        // `expires_at > now` and would otherwise end the job as a terminal
+        // CONNECTION_CHANGED for a token that is merely old.
+        await prepare?.(base);
         await repository.validateDispatch(base);
         buildOlistSalePayload({
           snapshot: operation.snapshot,
@@ -213,7 +252,11 @@ export function createOlistDispatcher({
         });
         if (response.quotaObservationFailed || response.invalidResponse)
           throw new OlistError('OLIST_SALE_UNCERTAIN');
-        const raw = await client.orderRaw(Number(response.remoteId));
+        // The POST already happened: wait for quota rather than turn a busy
+        // window into an uncertain sale.
+        const raw = await client.orderRaw(Number(response.remoteId), {
+          patient: true,
+        });
         const proof = reconcileOlistSale(plan, raw, response.remoteId);
         await repository.finishSale({
           ...base,
@@ -260,6 +303,17 @@ export function createOlistDispatcher({
             /* No retry or untrusted error text crosses this boundary. */
           }
         }
+        // Nothing left the process: no sale ticket, no sale attempt (even an
+        // old one) and nothing reserved or uncertain in the database. Only then
+        // is "not now" a retry, never an uncertain or terminal outcome.
+        if (
+          !ticket &&
+          operation &&
+          !operation.saleAttempt &&
+          PRE_EFFECT_RETRY.has(safeCode) &&
+          (await retrySafe(operation))
+        )
+          return result('failed', safeCode, undefined, true);
         const unknown = Boolean(ticket) || !STOP.has(safeCode);
         return result(
           unknown ? 'outcome_unknown' : 'failed',

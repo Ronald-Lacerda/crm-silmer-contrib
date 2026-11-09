@@ -491,6 +491,25 @@ else
         return result;
       }
       await t.test(
+        'LIVENESS API reads wait briefly for a busy shared quota window instead of failing the request (preview)',
+        async () => {
+          const f = await fixture({ status: 'pendente' });
+          await pool.query(
+            "INSERT INTO crm.olist_quotas(account_key,blocked_until) VALUES($1,now()+interval '1300 milliseconds') ON CONFLICT (account_key) DO UPDATE SET blocked_until=EXCLUDED.blocked_until",
+            [config.accountKey],
+          );
+          const started = Date.now();
+          const result = await f.runtime.preview(f.input);
+          assert.equal(result.eligible, true, JSON.stringify(result.issues));
+          assert.ok(
+            Date.now() - started >= 900,
+            'the request waited for quota',
+          );
+          assert.ok(Date.now() - started < 8000);
+        },
+      );
+
+      await t.test(
         'complete pending and confirmed orders of another owner are previewed by enabled Financeiro without effects or private notes',
         async () => {
           for (const status of ['pendente', 'confirmado']) {
@@ -1258,6 +1277,247 @@ else
           } finally {
             await api.close();
           }
+        },
+      );
+      /** L1 helper: one export generation row for the fixture order, with a
+       * controllable state/age (a direct INSERT: archived rows are history).
+       * @param {{orderId:string,input:any}} f @param {string} state @param {Date} createdAt @param {string|null} code @param {boolean} [withJob] */
+      async function seedGeneration(
+        f,
+        state,
+        createdAt,
+        code,
+        withJob = false,
+      ) {
+        const id = randomUUID();
+        await pool.query(
+          "INSERT INTO crm.olist_exports(id,account_key,context_key,connection_generation,order_id,order_version,settings_version,actor_id,authorization_version,reference,state,stage,snapshot_envelope,last_error_code,created_at) VALUES($1,$2,$3,1,$4,1,1,$5,1,$6,$7,'customer',$8::jsonb,$9,$10)",
+          [
+            id,
+            config.accountKey,
+            config.contextKey,
+            f.orderId,
+            f.input.actor.id,
+            'CRM-' + id,
+            state,
+            JSON.stringify(
+              seal(
+                {},
+                config.envelopeKey,
+                'export-snapshot',
+                config.accountKey,
+                id,
+              ),
+            ),
+            code,
+            createdAt,
+          ],
+        );
+        if (withJob)
+          await pool.query(
+            "INSERT INTO crm.outbox_jobs(id,job_type,idempotency_key,olist_export_id,status,queue,effect_policy,available_at,created_at,updated_at) VALUES($1,'olist.export',$2,$3,'pending','olist','queryable',$4,$4,$4)",
+            [randomUUID(), id, id, createdAt],
+          );
+        return id;
+      }
+      await t.test(
+        'L1: an invalidated generation is archived history; only the ACTIVE one blocks a new preview and fills the projection',
+        async () => {
+          const f = await fixture();
+          const projectInput = {
+            ...f.input,
+            action: 'olist.read',
+          };
+          // Only an archived generation: the order reads as "no operation" for
+          // a new preview, while the projection explains the archived one.
+          await seedGeneration(
+            f,
+            'invalidated',
+            new Date(NOW.getTime() - 60000),
+            'OLIST_EXPORT_INVALIDATED',
+          );
+          const clean = await f.runtime.preview(f.input);
+          assert.equal(clean.eligible, true, JSON.stringify(clean.issues));
+          assert.ok(
+            !clean.issues.some(
+              (/** @type {any} */ issue) =>
+                issue.code === 'OLIST_OPERATION_EXISTS',
+            ),
+          );
+          assert.deepEqual((await f.runtime.project(projectInput)).operation, {
+            state: 'invalidated',
+            stage: 'customer',
+            number: null,
+            errorCode: 'OLIST_EXPORT_INVALIDATED',
+          });
+          // A newer ACTIVE generation (created before a later archived one, to
+          // prove ordering by state first): blocks the preview, wins the
+          // projection, and never raises on the extra history row.
+          await seedGeneration(
+            f,
+            'queued',
+            new Date(NOW.getTime() - 30000),
+            null,
+          );
+          await seedGeneration(
+            f,
+            'invalidated',
+            new Date(NOW.getTime() + 60000),
+            'OLIST_EXPORT_INVALIDATED',
+          );
+          const blocked = await f.runtime.preview(f.input);
+          assert.equal(blocked.eligible, false);
+          assert.ok(
+            blocked.issues.some(
+              (/** @type {any} */ issue) =>
+                issue.code === 'OLIST_OPERATION_EXISTS',
+            ),
+          );
+          const projection = await f.runtime.project(projectInput);
+          assert.equal(projection.operation?.state, 'queued');
+          assert.equal('errorCode' in (projection.operation ?? {}), false);
+        },
+      );
+      await t.test(
+        'L1: the API command invalidates a pre-sale generation locally (no ERP call, works with a broken connection), keeps the reason sealed and frees the order for a new preview',
+        async () => {
+          const REASON = 'MOTIVO_PRIVADO_SINTETICO_DE_INVALIDACAO';
+          const f = await fixture();
+          const id = await seedGeneration(f, 'queued', NOW, null, true);
+          /** @param {any} [patch] */
+          const command = (patch = {}) => ({
+            ...f.actors.admin,
+            orderId: f.orderId,
+            idempotencyKey: 'invalidate-key-1',
+            operationId: id,
+            expectedVersion: 1,
+            reason: REASON,
+            ...patch,
+          });
+          // The ERP connection needs reconnection: the command is still local.
+          await pool.query(
+            'UPDATE crm.olist_connections SET reconnect_required=true WHERE account_key=$1',
+            [config.accountKey],
+          );
+          // Not the administrator: refused before any effect, for everybody else.
+          for (const who of ['owner', 'finance']) {
+            await assert.rejects(
+              f.runtime.invalidate(command({ ...f.actors[who] })),
+              { code: 'FORBIDDEN', statusCode: 403 },
+              who,
+            );
+          }
+          // Stale version: nothing changes.
+          await assert.rejects(
+            f.runtime.invalidate(command({ expectedVersion: 9 })),
+            { code: 'VERSION_CONFLICT' },
+          );
+          const receipt = await f.runtime.invalidate(command());
+          assert.deepEqual(receipt, {
+            operationId: id,
+            orderId: f.orderId,
+            state: 'invalidated',
+            version: 2,
+          });
+          assert.deepEqual(f.calls, [], 'zero ERP HTTP');
+          const row = (
+            await pool.query(
+              'SELECT state,version,last_error_code FROM crm.olist_exports WHERE id=$1',
+              [id],
+            )
+          ).rows[0];
+          assert.deepEqual(row, {
+            state: 'invalidated',
+            version: 2,
+            last_error_code: 'OLIST_EXPORT_INVALIDATED',
+          });
+          assert.equal(
+            (
+              await pool.query(
+                'SELECT status FROM crm.outbox_jobs WHERE olist_export_id=$1',
+                [id],
+              )
+            ).rows[0].status,
+            'completed',
+          );
+          const audit = await pool.query(
+            "SELECT actor_id,reason FROM crm.audit_events WHERE action='olist.invalidate' AND target_id=$1",
+            [id],
+          );
+          assert.deepEqual(audit.rows, [
+            {
+              actor_id: f.actors.admin.actor.id,
+              reason: 'OLIST_EXPORT_INVALIDATED',
+            },
+          ]);
+          // The reason exists only inside the sealed envelope: no readable
+          // copy in the audit, events, jobs, idempotency records or receipts.
+          for (const table of [
+            'audit_events',
+            'olist_events',
+            'outbox_jobs',
+            'idempotency_records',
+            'olist_export_invalidations',
+          ]) {
+            assert.equal(
+              Number(
+                (
+                  await pool.query(
+                    'SELECT count(*) AS n FROM crm.' +
+                      table +
+                      ' t WHERE t::text LIKE $1',
+                    ['%MOTIVO_PRIVADO%'],
+                  )
+                ).rows[0].n,
+              ),
+              0,
+              table,
+            );
+          }
+          const eventCount = async () =>
+            Number(
+              (
+                await pool.query(
+                  "SELECT count(*) AS n FROM crm.olist_events WHERE export_id=$1 AND event_code='OLIST_EXPORT_INVALIDATED'",
+                  [id],
+                )
+              ).rows[0].n,
+            );
+          assert.equal(await eventCount(), 1);
+          // Same key and body: the stored receipt, no second effect. Another
+          // key on the already invalidated generation: marked as a replay.
+          assert.deepEqual(await f.runtime.invalidate(command()), receipt);
+          assert.deepEqual(
+            await f.runtime.invalidate(
+              command({ idempotencyKey: 'invalidate-key-2' }),
+            ),
+            { ...receipt, replayed: true },
+          );
+          assert.equal(await eventCount(), 1);
+          // Access is revalidated under lock, replay included.
+          await pool.query(
+            'DELETE FROM crm.user_capabilities WHERE user_id=$1',
+            [f.actors.admin.actor.id],
+          );
+          await assert.rejects(f.runtime.invalidate(command()), {
+            code: 'FORBIDDEN',
+          });
+          await pool.query(
+            "INSERT INTO crm.user_capabilities(user_id,capability) VALUES($1,'COMMERCIAL_ADMIN')",
+            [f.actors.admin.actor.id],
+          );
+          // The archived generation no longer blocks the order.
+          await pool.query(
+            'UPDATE crm.olist_connections SET reconnect_required=false WHERE account_key=$1',
+            [config.accountKey],
+          );
+          const next = await f.runtime.preview(f.input);
+          assert.equal(next.eligible, true, JSON.stringify(next.issues));
+          assert.equal(
+            (await f.runtime.project({ ...f.input, action: 'olist.read' }))
+              .operation?.errorCode,
+            'OLIST_EXPORT_INVALIDATED',
+          );
         },
       );
     } finally {

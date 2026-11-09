@@ -139,6 +139,61 @@ preservando ESLint 10.9.1. Versões, compatibilidade, evidências e rollback no
       localmente, com limitação registrada no runbook. Integração e implantação
       acompanhadas na [PR 309](https://github.com/romulosutil/crm-silmer/pull/309).
 
+## OLIST-T27 — invalidação administrativa do export (09/11/2026)
+
+[ADR 069](../../../docs/adr/069-olist-invalidacao-administrativa-de-export.md) /
+[RFC 050](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), OLIST-14, 17, 21,
+26–28, 45–47 e 51. Corrige o alto de liveness da T14 (export parado sem saída).
+
+- [x] Comando local `POST /api/v1/orders/:orderId/olist/invalidate` (ação
+      `olist.invalidate`, só Admin, 200 síncrono, sem HTTP ERP e sem exigir conexão
+      saudável), com replay e ACL revalidada sob lock, também no runtime de identidade real.
+- [x] Migração 0071 expand-only: unicidade parcial "uma operação ativa por
+      Pedido/conta", recibo append-only com motivo só em envelope cifrado e três
+      triggers (recibo só sem venda, `invalidated` terminal, sem venda em export arquivado).
+- [x] Uma transação na ordem de locks existente; um vencedor na corrida com a
+      reserva da venda e de cadastros; job retirado sem reentrega e item de
+      reconciliação resolvido; cadastros confirmados preservados e reaproveitados.
+- [x] Nova prévia/exportação como nova linha; leitores "somente ativo" e
+      cancelamento sem reescrever a geração arquivada.
+- [x] Retry pré-efeito (`OLIST_RATE_LIMITED`, `OLIST_UNAVAILABLE`,
+      `OLIST_REFRESH_IN_PROGRESS`, com `assertRetrySafe`), hook `prepare` de token e
+      backoff 15 s a 300 s, 8 tentativas, depois `dead_letter`.
+- [x] Interface admin: "Invalidar esta geração" com diálogo, motivo, foco e
+      mensagens fixas por código; spec E2E escrito.
+- [x] Testes locais: SQL real 17/17 mais 16 subtestes, `olist:live` 231/231,
+      `orders:live` 38/38 e unitários 178/178.
+- [ ] Gates integrados finais (`npm run validate`, E2E integral): a registrar pelo
+      Tech Lead. D1, D2 e D5 a confirmar pelo proprietário.
+
+Geração real desligada, sem deploy nem piloto; implementação local na branch
+`codex/olist-liveness`, ainda sem commit de integração.
+[Procedimento, códigos e rollback](../../../docs/runbooks/olist-phase5.md#invalidação-administrativa-e-quota).
+
+## OLIST-T28 — quota com espera de leitura e folga (09/11/2026)
+
+[ADR 070](../../../docs/adr/070-olist-quota-com-espera-de-leitura-e-folga.md) /
+[RFC 050](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), OLIST-16, 17, 26 e 52.
+Corrige o alto de liveness da T14 (quota fixa sem espera).
+
+- [x] Núcleo `attempt` na transação com advisory lock; `reserve()` sem espera,
+      agora com `retryAfterMs`.
+- [x] `reserveWrite`: folga para as leituras do POST (cliente 2, produto 2,
+      variação 3, venda 2), antes do ticket; sem folga, adia sem POST.
+- [x] `reserveRead`: só leitura espera, em fatias de 10 s com `heartbeat`;
+      perfis worker 90 s, conferência com ticket 180 s, API 8 s e teto 24/30,
+      `verifyAccount` 15 s.
+- [x] Leitura pós-venda do despachante e da reconciliação espera em vez de virar
+      incerteza; `OLIST_REFRESH_IN_PROGRESS` deixa de virar `outcome_unknown`.
+- [x] Testes locais: unitários de quota, cliente, despachante, worker e
+      escritores; SQL do worker com fila real (dentro do `olist:live` 231/231).
+- [ ] Não feito: cache de catálogos da prévia (backlog); limite real da conta
+      piloto desconhecido (30 por 60 s inferido); gates integrados finais a
+      registrar pelo Tech Lead.
+
+Geração real desligada, sem deploy nem piloto.
+[Parâmetros, o que observar e limitações](../../../docs/runbooks/olist-phase5.md#invalidação-administrativa-e-quota).
+
 ## OLIST-INT — integração com a master (08/11/2026)
 
 Fases 2–4 e T14 parcial reaplicadas, com histórico linear, sobre a `origin/master`
@@ -151,7 +206,7 @@ Fases 2–4 e T14 parcial reaplicadas, com histórico linear, sobre a `origin/ma
 - [x] Gates: validate, E2E (758), auditoria, SQL live em PostgreSQL 17 e upgrade
       da master para a branch.
 - Geração real segue desligada; sem push nem deploy.
-  [Mapa, conflitos e evidências](../../../docs/runbooks/olist-phase5.md#integração-com-a-master).
+  [Mapa, conflitos e evidências](../../../docs/runbooks/olist-phase5.md#integração-com-a-master-08112026).
 
 ## OLIST-T13 — progresso, recuperação e cancelamento local (08/11/2026)
 
@@ -168,7 +223,8 @@ Fases 2–4 e T14 parcial reaplicadas, com histórico linear, sobre a `origin/ma
 
 OLIST-16–18, 22–25, 30 e 45–47. [Contrato, gates e limites](../../../docs/runbooks/olist-phase4.md#t13--progresso-recuperação-e-cancelamento-local-08112026).
 Sem alteração de backend, flag, migration, credencial, conta ou deploy; geração
-real desligada. Fase 5 (T14/T15) e Fase 6 permanecem pendentes.
+real desligada. Fase 5 (T14/T15) e Fase 6 permanecem pendentes; os dois altos de
+liveness da T14 foram tratados em OLIST-T27/T28 (09/11/2026).
 
 ## OLIST-T12 — composição e prévia por Pedido (08/11/2026)
 
@@ -209,7 +265,7 @@ Aprovação da amostra e troca do template pendentes (humanas). Geração real d
 - [x] Teclado/foco/axe, estados negativos e reflow claro/escuro verificados.
 
 OLIST-03–05, 11, 22–25 e 48. [Contrato, evidências e rollback](../../../docs/runbooks/olist-phase4.md).
-T11 iniciou a Fase 4; T12 concluída na continuação acima; T25 e T13 concluídas (ver OLIST-T25 e OLIST-T13). Fase 5 pendente.
+T11 iniciou a Fase 4; T12 concluída na continuação acima; T25 e T13 concluídas (ver OLIST-T25 e OLIST-T13). Fase 5 pendente (liveness: OLIST-T27/T28).
 Geração real desligada,
 sem deploy, habilitação, conexão real homologada ou piloto.
 

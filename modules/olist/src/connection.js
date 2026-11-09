@@ -11,11 +11,12 @@ import {
   OLIST_TOKEN,
 } from './configuration.js';
 import { olistJson } from './transport.js';
-import { createOlistQuota } from './quota.js';
+import { createOlistQuota, OLIST_READ_WAIT } from './quota.js';
 import { lockOlistActor } from './access.js';
 const hash = (/** @type {string} */ value) =>
   createHash('sha256').update(value).digest('hex');
-/** @param {any} database @param {{config:ReturnType<typeof import('./configuration.js').olistConfiguration>,fetch?:typeof fetch,clock?:()=>Date,timeoutMs?:number}} options */
+/** `sleep`/`random` are injection points for the quota wait of `verifyAccount`.
+ * @param {any} database @param {{config:ReturnType<typeof import('./configuration.js').olistConfiguration>,fetch?:typeof fetch,clock?:()=>Date,timeoutMs?:number,sleep?:(ms:number)=>Promise<unknown>,random?:()=>number}} options */
 export function createOlistConnection(database, options) {
   const config = options.config;
   const clock = options.clock ?? (() => new Date());
@@ -161,7 +162,16 @@ export function createOlistConnection(database, options) {
   }
   /** @param {string} accessToken */
   async function verifyAccount(accessToken) {
-    await quota?.reserve();
+    // The new token already exists (and the old refresh token may be spent), so
+    // a momentarily exhausted shared quota must not invalidate the connection:
+    // wait for a unit, bounded below the 60 s abandoned-refresh limit (15 s wait
+    // + one 15 s request stays well under it). Only a wait that cannot fit
+    // fails, and then the caller still reconnects.
+    await quota?.reserveRead({
+      ...OLIST_READ_WAIT.verify,
+      sleep: options.sleep,
+      random: options.random,
+    });
     try {
       const { body, headers } = await olistJson(OLIST_API + '/info', {
         token: accessToken,
