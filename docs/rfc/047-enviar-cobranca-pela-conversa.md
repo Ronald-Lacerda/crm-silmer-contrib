@@ -233,6 +233,12 @@ Essa primeira fatia comprova a fronteira financeira no motor n8n e prepara a
 UI. Não declarar transporte completo apenas porque uma mensagem foi gravada
 na outbox. Não declarar sessão/login real a partir do ator de fixture.
 
+COB-DEV-03 também precisa conectar esses adaptadores ao desenvolvimento
+interativo da API/worker/frontend. O ensaio de T2 sobe e descarta seus próprios
+recursos; não substitui um ambiente permanente para avaliar a futura UI.
+Preparar essa composição preservando o n8n DEV de atendimento existente,
+com simuladores e configuração próprios, antes da integração visual final.
+
 ### Decisões de execução e isolamento
 
 - Containers de teste novos, rede Docker interna sem saída e portas somente
@@ -251,3 +257,13 @@ na outbox. Não declarar sessão/login real a partir do ator de fixture.
 COB-DASH-01 e COB-STORE-01 permanecem separados. Não alterar a central nem o
 domínio Pix da loja para concluir cobranças pelo chat. Aprovação do protótipo
 e disponibilidade do redesign não são inferidas de testes automatizados.
+
+### Primeira fatia implementada
+
+COB-DEV-01/02, COB-READY-01 e COB-API-READY foram implementados nesta worktree.
+Há perfil DEV do mesmo gerador, ensaio financeiro no n8n real e projeção dos
+vínculos de correção/retry persistidos. O ensaio aprovou nove cenários locais;
+o gate integrado aprovou 2.002 testes, com 24 skips condicionais existentes
+e build concluído. A matriz PostgreSQL financeira aprovou 46 cenários.
+Evidências e revisão final ficam nas tarefas/validação de
+`order-billing-development`. Os demais itens da tabela continuam pendentes.

@@ -72,4 +72,11 @@ Where: docs/api/order-billing-frontend-integration.md
 Tests: contrato conferido nos handlers; links e comandos locais; evidência das tarefas técnicas após integração; revisão independente e sensor.
 Gate: Documentation
 Done when: BDEV-07 atendido, documentação obsoleta corrigida, plano completo e evidências distinguem entrega local de ativação e redesign.
-Status: Pending
+Status: Complete
+
+Contrato de intenções atualizado para B01–B05/COB-API-READY; handoff da UI em
+`docs/api/order-billing-frontend-integration.md` e execução DEV no runbook.
+Plano completo na RFC047 mantém transporte/jornada DEV, ambiente interativo,
+frontend pós-redesign, QA e operação real separados. Links locais conferidos,
+diff check e formatação aprovados. Revisão independente final registra a
+validação desta fatia; não conclui a feature operacional.
