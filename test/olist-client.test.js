@@ -87,6 +87,19 @@ function isSafeError(error, code) {
   return true;
 }
 
+/** @param {unknown} error */
+function isSafeRemoteError(error) {
+  const value = /** @type {any} */ (error);
+  assert.equal(value.code, 'OLIST_INVALID_RESPONSE');
+  assert.equal(value.statusCode, 502);
+  assert.equal(value.message, 'OLIST_INVALID_RESPONSE');
+  assert.doesNotMatch(
+    JSON.stringify(value),
+    /sint|synthetic-access-token|private-upstream|xxxx/u,
+  );
+  return true;
+}
+
 test('Olist transport rejects arbitrary origins, credentials, fragments and write methods without fetching', async () => {
   let calls = 0;
   /** @type {typeof fetch} */
@@ -615,10 +628,21 @@ test('Olist catalog allowlist uses only the five supported v3 routes and a valid
           ? json([{ id, nome: 'Opção sintética' }])
           : page([{ id, nome: 'Opção sintética' }], 1),
       );
-      await assert.rejects(invalid.client.catalog(kind), {
-        code: 'INVALID_REQUEST',
-        statusCode: 400,
-      });
+      await assert.rejects(invalid.client.catalog(kind), (error) =>
+        isSafeRemoteError(error),
+      );
+    }
+    // T14: a remote name that is empty, too long or has control characters is
+    // a bad provider response, not the caller's INVALID_REQUEST.
+    for (const name of ['', '   ', 'x'.repeat(121), 'Pix\u0007 sintético']) {
+      const invalid = harness(() =>
+        kind === 'warehouses'
+          ? json([{ id: 23, nome: name }])
+          : page([{ id: 23, nome: name }], 1),
+      );
+      await assert.rejects(invalid.client.catalog(kind), (error) =>
+        isSafeRemoteError(error),
+      );
     }
   }
   const unsupported = harness(() => {
@@ -635,6 +659,45 @@ test('Olist catalog allowlist uses only the five supported v3 routes and a valid
     });
   }
   assert.deepEqual(unsupported.events, []);
+});
+
+test('T14 Olist envelopes fix the GCM geometry before deciphering and reject every bad shape with the same error', () => {
+  const value = { accessToken: 'synthetic-access-token' };
+  const envelope = seal(value, key, 'tokens', 'account-a', 'connection-a');
+  // The sealed shape is exactly what migration 0064 stores: 16-char IV, 22-char tag.
+  assert.match(envelope.iv, /^[A-Za-z0-9_-]{16}$/u);
+  assert.match(envelope.tag, /^[A-Za-z0-9_-]{22}$/u);
+  assert.deepEqual(
+    open(envelope, key, 'tokens', 'account-a', 'connection-a'),
+    value,
+  );
+  const iv = Buffer.from(envelope.iv, 'base64url');
+  const tag = Buffer.from(envelope.tag, 'base64url');
+  /** @param {Buffer} bytes */
+  const encode = (bytes) => bytes.toString('base64url');
+  for (const patch of [
+    { tag: encode(tag.subarray(0, 4)) },
+    { tag: encode(tag.subarray(0, 15)) },
+    { tag: encode(Buffer.concat([tag, Buffer.from([0])])) },
+    { tag: '' },
+    { iv: encode(iv.subarray(0, 8)) },
+    { iv: encode(Buffer.concat([iv, Buffer.alloc(4)])) },
+    { iv: '' },
+    { iv: undefined },
+    { tag: 7 },
+  ]) {
+    assert.throws(
+      () =>
+        open(
+          { ...envelope, ...patch },
+          key,
+          'tokens',
+          'account-a',
+          'connection-a',
+        ),
+      (error) => isSafeError(error, 'OLIST_ENVELOPE_INVALID'),
+    );
+  }
 });
 
 test('T22 absence checks enumerate every customer state and both document formats before returning zero', async () => {

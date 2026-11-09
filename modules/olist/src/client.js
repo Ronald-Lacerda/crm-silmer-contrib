@@ -9,6 +9,24 @@ const CATALOGS = Object.freeze({
   receivingMethods: '/formas-recebimento',
   priceLists: '/listas-precos',
 });
+/** Remote data failing local validation is a bad provider response (502), never
+ * the caller's INVALID_REQUEST; the message stays the fixed code.
+ * @param {unknown} value @param {boolean} [zero] */
+function remoteInteger(value, zero = false) {
+  try {
+    return integer(value, zero);
+  } catch {
+    throw new OlistError('OLIST_INVALID_RESPONSE', 502);
+  }
+}
+/** @param {unknown} value @param {number} [max] */
+function remoteText(value, max = 128) {
+  try {
+    return text(value, max);
+  } catch {
+    throw new OlistError('OLIST_INVALID_RESPONSE', 502);
+  }
+}
 /** Fixed official host/routes only. No generic HTTP or arbitrary payload port.
  * @param {{credentials:()=>Promise<{token:string,version:number}>, quota:any, fetch?:typeof fetch, timeoutMs?:number, onAuthFailure?:(version:number)=>Promise<unknown>}} options */
 export function createOlistClient(options) {
@@ -66,7 +84,7 @@ export function createOlistClient(options) {
         throw new OlistError('OLIST_INCOMPLETE_LOOKUP', 409);
       total = page.total;
       for (const item of body.itens) {
-        integer(item?.id);
+        remoteInteger(item?.id);
         if (ids.has(item.id)) throw new OlistError('OLIST_INCOMPLETE_LOOKUP');
         ids.add(item.id);
         items.push(item);
@@ -160,7 +178,10 @@ export function createOlistClient(options) {
       // List responses may omit the reference; detail must independently confirm.
       const matches = [];
       for (const candidate of candidates) {
-        const valueOfOrder = await detail('/pedidos', integer(candidate.id));
+        const valueOfOrder = await detail(
+          '/pedidos',
+          remoteInteger(candidate.id),
+        );
         if (typeof valueOfOrder.ecommerce?.numeroPedidoEcommerce !== 'string')
           throw new OlistError('OLIST_INCOMPLETE_LOOKUP');
         if (valueOfOrder.ecommerce.numeroPedidoEcommerce === value)
@@ -178,8 +199,8 @@ export function createOlistClient(options) {
       if (!Array.isArray(values) || values.length > 250)
         throw new OlistError('OLIST_INCOMPLETE_LOOKUP');
       return values.map((/** @type {any} */ row) => ({
-        id: integer(row.id),
-        name: text(row.nome ?? row.descricao, 120),
+        id: remoteInteger(row?.id),
+        name: remoteText(row?.nome ?? row?.descricao, 120),
       }));
     },
     // F2 deliberately has no ERP write transport. T22/T08 must add a reserved,

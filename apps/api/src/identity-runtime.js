@@ -55,6 +55,10 @@ const OPERATIONAL_READ_ACTIONS = new Set([
   'shipping.manage',
   'olist.read',
   'olist.manage',
+  // T14: the administrative diagnostics are GETs; authorize() still demands
+  // Vendedor + COMMERCIAL_ADMIN for them, independent of the Olist checkbox.
+  'olist.link',
+  'olist.reconcile',
   'health.errors.read',
 ]);
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { createApi } from '../apps/api/src/app.js';
+import { OlistError } from '../modules/olist/src/errors.js';
 import { authorize } from '../modules/identity-access/src/authorization.js';
 import { createSafeLogger } from '../modules/shared/src/observability.js';
 
@@ -416,4 +417,35 @@ test('T09 administrative ERP reads are rate limited before unlimited runtime wor
   }
   assert.equal(limited, true);
   assert.ok(f.calls.length < 40);
+});
+
+test('T14 payload and parent refusals keep their own 409 code and a fixed body instead of a 503', async (t) => {
+  for (const code of [
+    'OLIST_PARENT_UNRESOLVED',
+    'OLIST_CUSTOMER_INVALID',
+    'OLIST_PAYMENT_DUE_REQUIRED',
+    'OLIST_SALE_EXACT_CENT_REQUIRED',
+    'OLIST_SALE_PLAN_INVALID',
+  ]) {
+    const f = fixture();
+    t.after(() => f.api.close());
+    f.runtime.administration = async () => {
+      throw Object.assign(new OlistError(code, 409), {
+        detail: 'PRIVATE_REMOTE_BODY',
+      });
+    };
+    const response = await f.api.inject({
+      url: prefix + '/administration',
+      headers,
+    });
+    assert.equal(response.statusCode, 409, code);
+    assert.deepEqual(response.json(), {
+      type: 'about:blank',
+      title: code,
+      status: 409,
+      code,
+    });
+    privateHeaders(response);
+    assert.doesNotMatch(response.body, /PRIVATE_/u);
+  }
 });

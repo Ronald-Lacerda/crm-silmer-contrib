@@ -42,15 +42,18 @@ export function open(envelope, key, purpose, account, entity) {
       envelope.version !== 1
     )
       throw new Error();
-    const decipher = createDecipheriv(
-      'aes-256-gcm',
-      key,
-      Buffer.from(envelope.iv, 'base64url'),
-    );
+    // Client-supplied envelopes (review tokens): fix the GCM geometry before
+    // deciphering so a short or long tag/IV never reaches the cipher.
+    const iv = Buffer.from(envelope.iv, 'base64url');
+    const tag = Buffer.from(envelope.tag, 'base64url');
+    if (iv.length !== 12 || tag.length !== 16) throw new Error();
+    const decipher = createDecipheriv('aes-256-gcm', key, iv, {
+      authTagLength: 16,
+    });
     decipher.setAAD(
       Buffer.from(JSON.stringify(['olist', 1, purpose, account, entity])),
     );
-    decipher.setAuthTag(Buffer.from(envelope.tag, 'base64url'));
+    decipher.setAuthTag(tag);
     return JSON.parse(
       Buffer.concat([
         decipher.update(Buffer.from(envelope.ciphertext, 'base64url')),

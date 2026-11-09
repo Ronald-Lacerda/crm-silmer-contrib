@@ -49,6 +49,13 @@ const CODES = new Set([
   'OLIST_EXPORT_UNAVAILABLE',
   'OLIST_SALE_RECONCILIATION_REQUIRED',
   'OLIST_RECONCILE_FAILED',
+  // T14: client/state refusals reachable from the administrative commands;
+  // each is thrown with its own 409 and must not collapse into a 503.
+  'OLIST_PARENT_UNRESOLVED',
+  'OLIST_CUSTOMER_INVALID',
+  'OLIST_PAYMENT_DUE_REQUIRED',
+  'OLIST_SALE_EXACT_CENT_REQUIRED',
+  'OLIST_SALE_PLAN_INVALID',
 ]);
 /** @param {any} reply @param {()=>Promise<any>} work */
 async function respond(reply, work) {
