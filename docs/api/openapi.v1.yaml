@@ -806,6 +806,8 @@ paths:
         Confere vínculo e versão antes e depois do cálculo. Peso e medidas são
         explícitos; não muda total/status nem compra ou envia. Replays usam a
         mesma chave e revalidam o acesso. Dados persistidos são cifrados.
+        Pedido cancelado localmente responde 409 ORDER_CANCELLED, sem chamar o
+        provedor (OLIST-19/46); a leitura por ID do pedido continua disponível.
       security:
         - sessionCookie: []
           csrfHeader: []
@@ -873,7 +875,9 @@ paths:
     post:
       operationId: selectConversationShippingService
       summary: Vincula um serviço retornado como frete estimado do pedido
-      description: Aceita somente ID de serviço retornado pelo provedor; o navegador não define o preço.
+      description: >-
+        Aceita somente ID de serviço retornado pelo provedor; o navegador não
+        define o preço. Pedido cancelado localmente responde 409 ORDER_CANCELLED.
       security:
         - sessionCookie: []
           csrfHeader: []
@@ -4691,6 +4695,8 @@ components:
               subject_id: { type: string }
               order_id: { type: [string, 'null'] }
               order_number: { type: [string, 'null'] }
+              # pendente | confirmado | cancelado (OLIST-19: Pedido cancelado localmente
+              # nunca é pendente elegível; número e vínculo são preservados).
               order_status: { type: [string, 'null'] }
               kind: { type: string }
               is_current: { type: boolean }
@@ -5349,6 +5355,7 @@ components:
         kind: { type: string, enum: [pedido, geral] }
         orderId: { type: [string, 'null'] }
         orderNumber: { type: [string, 'null'] }
+        # pendente | confirmado | cancelado (cancelamento local, OLIST-19).
         orderStatus: { type: [string, 'null'] }
         position: { type: integer, minimum: 1 }
         isCurrent: { type: boolean }

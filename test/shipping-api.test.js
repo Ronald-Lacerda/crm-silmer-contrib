@@ -269,3 +269,34 @@ test('T139 linked estimate read uses order.read and selection rejects client pri
   );
   assert.equal(calls[1].input.quoteId, 'quote-1');
 });
+
+test('OLIST-19/46: a locally cancelled order is refused with its own 409 code, not masked as 503', async (t) => {
+  const { api, runtime } = fixture();
+  t.after(() => api.close());
+  runtime.conversationQuotes.quote = async () => {
+    throw Object.assign(new Error('provider detail'), {
+      code: 'ORDER_CANCELLED',
+      statusCode: 409,
+    });
+  };
+  const response = await api.inject({
+    method: 'POST',
+    url: '/api/v1/conversations/conversation-1/shipping-quotes',
+    headers: { ...HEADERS, 'idempotency-key': 'quote-cancelled' },
+    payload: {
+      subjectId: 'subject-1',
+      orderId: 'order-1',
+      orderVersion: 1,
+      fromPostalCode: '01001000',
+      toPostalCode: '20040020',
+      weightGrams: 1000,
+      widthCm: 20,
+      heightCm: 15,
+      lengthCm: 10,
+      insuranceValueCents: 10000,
+    },
+  });
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().code, 'ORDER_CANCELLED');
+  assert.doesNotMatch(response.body, /provider detail/u);
+});

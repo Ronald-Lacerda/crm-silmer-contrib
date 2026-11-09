@@ -227,3 +227,23 @@ test('COB-01/16: technical capabilities never grant human commercial commands', 
   }
   assert.equal(technical.isActionAllowed('billing.manage'), false);
 });
+
+test('OLIST-19/46: a locally cancelled order is refused with its own 409 code, not masked as 503', async (t) => {
+  const { api, billing } = fixture();
+  t.after(() => api.close());
+  billing.issue = async () => {
+    throw Object.assign(new Error('internal detail'), {
+      code: 'ORDER_CANCELLED',
+      statusCode: 409,
+    });
+  };
+  const response = await api.inject({
+    method: 'POST',
+    url: `${PREFIX}/charges`,
+    headers: HUMAN,
+    payload: PLAN,
+  });
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().code, 'ORDER_CANCELLED');
+  assert.doesNotMatch(response.body, /internal detail/u);
+});

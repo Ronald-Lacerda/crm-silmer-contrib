@@ -125,11 +125,14 @@ export function createConversationShippingRuntime(database, options) {
     if (subjects.rows[0]?.order_id !== identifier(input.orderId))
       throw new ConversationShippingError(409, 'SHIPPING_TARGET_CHANGED');
     const orders = await client.query(
-      `SELECT id,version,total_pieces,origin FROM crm.orders WHERE id=$1 FOR UPDATE`,
+      `SELECT id,version,total_pieces,origin,cancelled_at FROM crm.orders WHERE id=$1 FOR UPDATE`,
       [input.orderId],
     );
     const order = orders.rows[0];
     if (!order) throw new ConversationShippingError(404, 'ORDER_NOT_FOUND');
+    // ADR 068: a cancelled order is terminal; quoting/selecting freight is refused.
+    if (order.cancelled_at)
+      throw new ConversationShippingError(409, 'ORDER_CANCELLED');
     if (order.origin !== 'atendimento')
       throw new ConversationShippingError(409, 'ORDER_LOCKED');
     if (

@@ -35,6 +35,7 @@ function iso(value) {
 function matches(row, snapshot) {
   return (
     row.status === 'confirmado' &&
+    !row.cancelled_at &&
     Number(row.final_amount_cents) ===
       Number(snapshot.order_amount_cents ?? snapshot.final_amount_cents) &&
     iso(row.confirmed_at) === iso(snapshot.confirmed_at) &&
@@ -174,6 +175,8 @@ export function createOrderBillingRuntime(database, options) {
   }
   /** @param {any} order @param {any} plan @param {any[]} charges @param {number} paid */
   function blocked(order, plan, charges, paid) {
+    // ADR 068: a cancelled order is terminal and never gets a new charge.
+    if (order.cancelled_at) return 'ORDER_CANCELLED';
     if (order.origin === 'loja') return 'BILLING_STORE_ORDER';
     if (order.status !== 'confirmado') return 'BILLING_ORDER_NOT_CONFIRMED';
     if (
@@ -353,6 +356,10 @@ export function createOrderBillingRuntime(database, options) {
           correlationId: input.correlationId,
         },
         async () => {
+          // ADR 068/OLIST-45: cancellation is terminal; checked inside the
+          // replay so a receipt issued before the cancellation still replays.
+          if (order.cancelled_at)
+            throw new BillingError(409, 'ORDER_CANCELLED');
           if (
             Number(order.version) !== input.expectedVersion ||
             Number(plan?.version ?? 0) !== input.expectedBillingVersion
@@ -716,7 +723,9 @@ export function createOrderBillingRuntime(database, options) {
           'UPDATE crm.order_billing_plans SET review_required=review_required OR $2,version=version+1,updated_at=$3 WHERE order_id=$1',
           [order.id, !applicable, clock()],
         );
-        await refreshSettlement(client, order.id);
+        // A cancelled order is immutable (migration 0070): the receipt stays
+        // as unapplied evidence for human review, the order row is untouched.
+        if (!order.cancelled_at) await refreshSettlement(client, order.id);
         await automaticAudit(
           client,
           context,
