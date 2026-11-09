@@ -121,3 +121,19 @@ B01–B04 validado, incluindo T5 de recuperação/invalidação. A lição L-008
 permanece candidate, documentando a falha real encontrada na primeira rodada.
 Frontend, homologação remota, aplicação de migrations e ativação real
 continuam gates próprios, fora desta validação.
+
+## Adendo T6/BAPI-11 — 08/11/2026
+
+**Result**: PASS no escopo da projeção de vínculos, commit `e6fd494d`, revisado
+em `5478bf22..270cfd7c`. Histórico deste relatório preservado acima.
+
+`test/order-billing-chat-postgres-live.test.js:422`, `:429`, `:455`, `:521`,
+`:528` e `:536` exigem predecessor/retry persistidos no comando, reload e
+eventos; `:461`–`:462` exigem null onde não existe vínculo. A serialização
+HTTP é conferida por `test/order-billing-chat-routes.test.js:516`.
+Gate independente: PostgreSQL dedicado 16/16 e focal 30/30, zero skips.
+Sensor altera o runtime para retornar predecessor null e é morto precisamente
+pela asserção de `:422`; remoção do campo no schema também é morta pelo HTTP.
+Evidência integral e demais três mutações em
+[validação DEV](../order-billing-development/validation.md).
+Sem aprovação de frontend, redesign, transporte humano ou operação real.
