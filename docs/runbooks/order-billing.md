@@ -1,10 +1,13 @@
 # Cobranças InfinitePay — operação e recuperação
 
-Estado conferido em09/11/2026 após23:06: aplicação e migrações implantadas,
-proteção de envio publicada no atendimento, workflows financeiros inativos
-e três flags financeirasfalse. Seguir o
-[roteiro de ativação coordenada](order-billing-activation.md) antes de
-qualquer habilitação; pagamento e mensagem reais não foram homologados.
+Estado conferido em10/11/2026: workflows financeiros publicados e recebimento/
+conferência habilitados na API e no worker, com ORDER_BILLING_RECEIVE_ENABLED=true,
+ORDER_BILLING_ENABLED=false e ORDER_BILLING_CHAT_SEND_ENABLED=false nos processos
+reais. Proteção de envio preservada no atendimento. A Basic existente foi mantida;
+os clientes financeiros aceitam a credencial legada sem exigir32caracteres.
+Seguir o [roteiro de ativação coordenada](order-billing-activation.md) antes de
+habilitar emissão/envio. Nenhum checkout ou pagamento real foi ensaiado, nem
+mensagem enviada como teste. [Evidência operacional](../qa/order-billing-receive-only-2026-11-10.md).
 
 Integração para implantação em09/11/2026: migrações inéditas de cobrança
 renumeradas de0063/0064/0065 para0073/0074/0075, preservando todas as migrações

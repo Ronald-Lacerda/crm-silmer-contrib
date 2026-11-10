@@ -137,16 +137,27 @@ Where: docs/runbooks/order-billing-activation.md
 Tests: BREL-08/04/05; exports revisados, ausência de backlog, publicação individual, RECEIVEtrue e ENABLED/CHAT_SENDfalse nos processos, health/heartbeat, GET técnico autenticado sem registro financeiro e comparação de filas antes/depois.
 Gate: ReceiveOnly
 Done when: dois workflows publicados e API/worker em modo recebimento/conferência, sem habilitar emissão/envio ou executar teste financeiro real.
-Status: Pending
-Progresso parcial: workflows financeiros publicados nas versoes71a6a9d3 e
+Status: Complete
+Histórico anterior à correção T8: workflows financeiros publicados nas versoes71a6a9d3 e
 d774f29e, mantendo nodes/conexoes/settings aprovados. API com RECEIVEtrue,
 ENABLED/CHAT_SENDfalse e health200. O worker falhou ao iniciar o cliente de
 conferencia porque a senha Basic legada tem13caracteres (minimo32).
 RECEIVE do worker foi restaurado parafalse e o processo recuperou.
-Troca coordenada da credencial compartilhada depende de entrada/salvamento
-pelo proprietario. T7 permanece pendente; nenhuma homologacao financeira
+Foi proposta troca coordenada da credencial, depois dispensada pela autorização
+de compatibilidade T8 em10/11. Nenhuma homologacao financeira
 real foi executada. GETs tecnicos retornaram404 autenticado/401 sem
 autenticacao, sem alteracao das tabelas/fila billing, que permaneceram vazias.
+
+Conclusão operacional em10/11: PR334 integrado por rebase na master631909ea,
+árvore idêntica ao commit08feacd aprovado nos cinco checks de CI. API/worker
+atualizados, hashes de quatro arquivos de runtime exatos; RECEIVEtrue e
+ENABLED/CHAT_SENDfalse nos processos reais e papel correto em cada container.
+Cliente financeiro inicializou com a Basic existente sem transporte; worker
+estável durante a conferência e scanner presente. Live/ready/edge200, GETs
+técnicos404 autenticados/401 sem Basic,71expand/checksums exatos, seis tabelas
+e fila billing vazias antes/depois, heartbeat global4s. Sem migração, troca de
+credencial ou ensaio financeiro. Ver validation-receive-only.md e relatório QA
+order-billing-receive-only-2026-11-10.md; emissão/envios e homologação real continuam desligados/pendentes.
 
 ### T8: Compatibilizar credenciais dos clientes financeiros
 
@@ -161,4 +172,4 @@ T8: dois clientes aceitam Basic legada sem alterar bytes; branco/CRLF/limites
 invalidos recusados. RED2pass/7fail; GREEN37/37 focais; validate2427pass,
 52skips condicionais preexistentes,0fail. Revisao independente28/28,
 typecheck e sensor9/9 regressões detectadas. Ver validation-credential-compatibility.md.
-Ativacao remota continua em T7 e depende do deploy desta correcao.
+Ativação remota foi concluída em T7 após o deploy desta correção.
