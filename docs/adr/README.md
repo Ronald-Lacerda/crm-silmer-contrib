@@ -2,6 +2,11 @@
 
 ## Decisão de 09/11/2026
 
+- [078 — Ficha impressa por item](078-ficha-impressa-por-item.md),
+  RFC 061 / FPI-01–10: uma folha A4 retrato por item, "Modelo" no lugar do nome
+  anterior e Cores da arte fora da ficha; supersede em parte as ADRs 012, 016,
+  017, 019, 020 e 025.
+
 - [075 — Retirada local de vínculo histórico sem liberar duplicata](075-retirada-local-de-vinculo-historico-sem-liberar-duplicata.md), RFC 059; pendência humana com IDs e proteção preservados.
 
 - [073 — Comprador no vínculo histórico com telefone divergente](073-comprador-no-vinculo-historico-com-telefone-divergente.md), RFC 057; exceção exclusiva de T16, sem referência reutilizável.

@@ -81,7 +81,7 @@ function orderKeys(order) {
   ].sort();
 }
 
-/** @param {{readActor?: any, writeActor?: any, pdfRenderer?: (html: string) => Promise<Buffer>}} [options] */
+/** @param {{readActor?: any, writeActor?: any, pdfRenderer?: (html: string) => Promise<Buffer>, fichaRenderer?: (order: any) => string}} [options] */
 function orderHarness(options = {}) {
   /** @type {Record<string, string|null>} */
   const assignments = {
@@ -171,7 +171,11 @@ function orderHarness(options = {}) {
   });
   const api = createApi(
     {},
-    { orders: runtime, orderPdfRenderer: options.pdfRenderer },
+    {
+      orderFichaRenderer: options.fichaRenderer,
+      orderPdfRenderer: options.pdfRenderer,
+      orders: runtime,
+    },
   );
   return {
     api,
@@ -1558,6 +1562,41 @@ test('GET /orders/:orderId/print renders the confirmed order on the printed temp
   assert.match(html, /FAB 01/u);
   assert.match(html, /Vendedora Um/u);
   assert.doesNotMatch(html, /Vendedor Dois/u);
+});
+
+test('FPI-10: a ficha under financial review answers 422 with no download headers', async (t) => {
+  const { api, guards, runtime } = orderHarness({
+    fichaRenderer: () => {
+      const error = new Error('review');
+      Object.assign(error, {
+        code: 'PRINT_FINANCIAL_TEXT_REVIEW_REQUIRED',
+        fields: ['ficha'],
+        statusCode: 422,
+      });
+      throw error;
+    },
+    pdfRenderer: async () => {
+      throw new Error('must not render');
+    },
+  });
+  t.after(() => api.close());
+  const confirmed = await createConfirmed(runtime, 'conversation-1');
+  guards.length = 0;
+  const pdf = await api.inject({
+    headers: readHeaders,
+    method: 'GET',
+    url: `/api/v1/orders/${confirmed.id}/pdf`,
+  });
+  assert.equal(pdf.statusCode, 422);
+  assert.equal(pdf.headers['content-disposition'], undefined);
+  assert.equal(pdf.json().error.code, 'PRINT_FINANCIAL_TEXT_REVIEW_REQUIRED');
+  const page = await api.inject({
+    headers: readHeaders,
+    method: 'GET',
+    url: `/api/v1/orders/${confirmed.id}/print?download=1`,
+  });
+  assert.equal(page.statusCode, 422);
+  assert.equal(page.headers['content-disposition'], undefined);
 });
 
 test('PIM-13: PDF download uses the approved ficha and the same print permission', async (t) => {

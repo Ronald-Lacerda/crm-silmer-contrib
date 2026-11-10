@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "task": "FPI-T01",
+  "adr": "078",
+  "syntheticOnly": true,
+  "snapshotVersion": "synthetic-order-v8",
+  "templateVersion": "ficha-canonical-v8",
+  "generatedAt": "2026-11-09T12:00:00-03:00",
+  "order": {
+    "number": "128-CRM",
+    "version": 9,
+    "fabCode": "01",
+    "status": "confirmado",
+    "orderDate": "2026-11-04",
+    "firstContactAt": "2026-10-30T13:40:00.000Z",
+    "paidOn": "2026-11-04",
+    "deliveredOn": null,
+    "totalPieces": 172,
+    "confirmedBy": { "name": "Ana P." },
+    "ficha": {
+      "summary": {
+        "cliente": "Associação Atlética Exemplo",
+        "data_entrega_confirmada": "2026-11-20",
+        "aplicacao": null,
+        "nome": "Uniformes temporada 2027"
+      },
+      "items": [
+        {
+          "tipo": "Camiseta manga longa",
+          "cor": "Azul-marinho",
+          "estampa": "Escudo no peito e número nas costas",
+          "malhas": ["Dry fit"],
+          "gola": "Redonda",
+          "modelo": "Manga raglan",
+          "cor_frente": "Azul-marinho",
+          "cor_costas": "Azul-marinho",
+          "cor_manga_direita": "Branco",
+          "cor_manga_esquerda": "Branco",
+          "vies_gola": "Branco",
+          "vies_mangas": "Branco",
+          "publico": "masculino",
+          "quantidade_informada": 42,
+          "grade": [
+            { "tamanho": "P", "quantidade": 4 },
+            { "tamanho": "M", "quantidade": 12 },
+            { "tamanho": "G", "quantidade": 14 },
+            { "tamanho": "GG", "quantidade": 6 },
+            { "tamanho": "XG", "quantidade": 3 },
+            { "tamanho": "EG", "quantidade": 1 }
+          ],
+          "tipo_servico": "Silk"
+        },
+        {
+          "tipo": "Baby look",
+          "cor": "Branco",
+          "estampa": "Escudo centralizado",
+          "malhas": ["Poliéster leve"],
+          "gola": "Careca",
+          "modelo": "",
+          "cor_frente": "Branco",
+          "cor_costas": "Branco",
+          "cor_manga_direita": "Branco",
+          "cor_manga_esquerda": "Branco",
+          "vies_gola": "Azul-marinho",
+          "vies_mangas": "",
+          "publico": "feminino",
+          "quantidade_informada": null,
+          "grade": [
+            { "tamanho": "PP", "quantidade": 2 },
+            { "tamanho": "P", "quantidade": 6 },
+            { "tamanho": "M", "quantidade": 7 },
+            { "tamanho": "G", "quantidade": 4 },
+            { "tamanho": "GG", "quantidade": 2 },
+            { "tamanho": "XG", "quantidade": 1 }
+          ],
+          "tipo_servico": "Sublimação"
+        },
+        {
+          "tipo": "Camiseta infantil",
+          "cor": "Amarelo",
+          "estampa": "Número no peito",
+          "malhas": ["Algodão penteado"],
+          "gola": "NAO APLICAVEL",
+          "modelo": "",
+          "cor_frente": "Amarelo",
+          "cor_costas": "Amarelo",
+          "cor_manga_direita": "Amarelo",
+          "cor_manga_esquerda": "Amarelo",
+          "vies_gola": "",
+          "vies_mangas": "",
+          "publico": "infantil",
+          "quantidade_informada": null,
+          "grade": [
+            { "tamanho": "2", "quantidade": 1 },
+            { "tamanho": "4", "quantidade": 2 },
+            { "tamanho": "6", "quantidade": 3 },
+            { "tamanho": "8", "quantidade": 4 },
+            { "tamanho": "10", "quantidade": 3 },
+            { "tamanho": "12", "quantidade": 2 },
+            { "tamanho": "14", "quantidade": 2 },
+            { "tamanho": "16", "quantidade": 1 }
+          ],
+          "tipo_servico": "Silk"
+        },
+        {
+          "tipo": "Camiseta manga longa com recorte lateral e punho canelado para delegação",
+          "cor": "Azul-royal com detalhes em branco e faixa amarela na altura do peito",
+          "estampa": "Escudo da federação no peito, número grande nas costas e duas marcas na manga",
+          "malhas": [
+            "Dry fit 160 g antipilling",
+            "Poliéster micro ilhós nas laterais e nas mangas"
+          ],
+          "gola": "Redonda canelada com reforço interno e etiqueta transfer",
+          "modelo": "Raglan com recorte lateral e barra reta, comprimento padrão adulto e infantil",
+          "cor_frente": "Azul-royal com faixa amarela",
+          "cor_costas": "Azul-royal liso",
+          "cor_manga_direita": "Branco neve com recorte",
+          "cor_manga_esquerda": "Branco neve com recorte",
+          "vies_gola": "Amarelo-ouro brilhante com costura dupla",
+          "vies_mangas": "Branco neve em ambas as mangas com acabamento",
+          "publico": "unissex",
+          "quantidade_informada": 100,
+          "grade": [
+            { "tamanho": "PP", "quantidade": 3 },
+            { "tamanho": "P", "quantidade": 6 },
+            { "tamanho": "M", "quantidade": 10 },
+            { "tamanho": "G", "quantidade": 14 },
+            { "tamanho": "GG", "quantidade": 12 },
+            { "tamanho": "XG", "quantidade": 8 },
+            { "tamanho": "EG", "quantidade": 5 },
+            { "tamanho": "EGG", "quantidade": 2 },
+            { "tamanho": "2", "quantidade": 2 },
+            { "tamanho": "4", "quantidade": 3 },
+            { "tamanho": "6", "quantidade": 4 },
+            { "tamanho": "8", "quantidade": 5 },
+            { "tamanho": "10", "quantidade": 6 },
+            { "tamanho": "12", "quantidade": 5 },
+            { "tamanho": "14", "quantidade": 4 },
+            { "tamanho": "16", "quantidade": 3 }
+          ],
+          "tipo_servico": "Silk nas costas e sublimação frontal com aplicação de transfer nas mangas"
+        }
+      ],
+      "observations": [
+        "Conferir o escudo aprovado antes de iniciar o silk.",
+        "Separar e identificar uma embalagem por item.",
+        "Enviar junto a lista de nomes conferida pela equipe.",
+        "Fazer uma peça piloto do tamanho M e mostrar para a coordenação antes de produzir o restante do pedido, registrando a aprovação no campo de anotações do controle.",
+        "Embalar cada delegação em caixa própria, com a lista de nomes conferida por fora, e não fechar a última caixa antes da conferência final do pedido inteiro."
+      ],
+      "serviceData": {
+        "notes": ["Cliente pediu para revisar a manga direita antes de cortar"],
+        "product_model": "Raglan com recorte lateral",
+        "customizations": "Nomes individuais conforme lista enviada",
+        "numbers": "De 01 a 92, sem repetir",
+        "sponsors": "Duas marcas na manga esquerda",
+        "delivery_mode": "Envio por transportadora",
+        "delivery_address": "Rua Exemplo, sem número, Centro",
+        "city_or_postal_code": "Cidade Exemplo, 00000-000",
+        "needed_by": "18 de novembro"
+      },
+      "artwork": {
+        "feito_pelo_cliente": true,
+        "feito_pela_silmer": false,
+        "sem_estampa": false,
+        "files": []
+      }
+    }
+  }
+}

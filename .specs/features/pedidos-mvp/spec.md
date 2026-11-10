@@ -116,7 +116,7 @@ para workflows antigos.
    status THEN o sistema SHALL rejeitar esses campos, como já faz hoje.
 7. **PAB-01** WHEN a ficha da conversa (briefing anterior unido ao patch da
    rodada) passa a ter, pela primeira vez, um valor real em um dos sete
-   pontos (tipo de roupa, cor, quantidade, estampa, tecido, tamanhos, gola)
+   pontos (modelo, cor, quantidade, estampa, tecido, tamanhos, gola)
    THEN o workflow SHALL enviar `open_order: true` na reserva de envio ou no
    handoff dessa rodada e de todas as seguintes. "Definir com o vendedor" e o
    nome sozinho SHALL NOT abrir o pedido, e `order_intent_confirmed` do modelo
@@ -448,7 +448,8 @@ fato entregamos, na ficha digital e na impressa.
    Primeiro contato, Pedido fechado, Pagamento, Entrega prometida e Entrega
    realizada, e quantas delas já existem. Emendado por PFI-20 (RFC 024): na
    tela a seção se chama "Datas do pedido"; a ficha impressa mantém "Lastro
-   do pedido".
+   do pedido". Emendado em 09/11/2026 por FPI-01: a ficha v8 não usa esse
+   título; as fichas v2 a v7 mantêm.
 2. **PLA-02** Primeiro contato SHALL ser a abertura da conversa que originou o
    pedido, copiada na criação e nunca digitada; pedidos criados antes da
    migração SHALL recebê-la da conversa. No Pedido manual sem conversa, SHALL
@@ -514,7 +515,7 @@ Ver “Entregue em” preenchido sem mudar pagamento, status ou ficha já gerada
 ### P1-11: Itens com os sete pontos da ficha ⭐ MVP
 
 **História:** Como vendedor, quero que o item do pedido traga os sete pontos
-que o bot coletou (tipo de roupa, cor, quantidade, estampa, tecido, tamanhos e
+que o bot coletou (modelo, cor, quantidade, estampa, tecido, tamanhos e
 gola), para completar só o que falta e gerar um pedido que a fábrica consegue
 produzir.
 
@@ -523,15 +524,18 @@ que substitui a regra A01 do [contexto](context.md).
 
 **Aceite:**
 
-1. **PIT-01** Cada item SHALL mostrar os principais nesta ordem: Tipo de
-   roupa (`tipo`), Cor (`cor`), Quantidade (soma dos tamanhos, nunca
+1. **PIT-01** Cada item SHALL mostrar os principais nesta ordem: Modelo
+   (`tipo`), Cor (`cor`), Quantidade (soma dos tamanhos, nunca
    digitada), Estampa (`estampa`), Tecido (`malhas`), Tamanhos (`grade`) e
-   Gola (`gola`), com o cabeçalho "Item N · <tipo de roupa ou —> ·
-   <quantidade> peças".
+   Gola (`gola`), com o cabeçalho "Item N · <modelo ou —> ·
+   <quantidade> peças". Rótulo Modelo desde 09/11/2026 (FPI-05).
 2. **PIT-02** Modelo, Cor frente, Cor costas, Manga direita, Manga esquerda,
    Viés gola e Viés mangas SHALL ficar num bloco recolhível "Adicionais (não
    obrigatórios)", fechado ao abrir a página, que o teclado abre e fecha
    (`aria-expanded`, foco no botão). Mangas e viés mantêm "Não aplicável".
+   Emendado em 09/11/2026 por FPI-05 e FPI-06: o "Modelo" deste bloco é o
+   campo antigo `item.modelo`, que na ficha v8 se chama "Detalhe do modelo";
+   "Modelo" passa a ser o rótulo de `item.tipo`.
 3. **PIT-03** WHEN o vendedor salva os itens com campos em branco, sem tecido
    ou sem tamanhos THEN o sistema SHALL aceitar; cada linha de tamanho
    continua exigindo tamanho e quantidade inteira > 0, tecido não tem linha em
@@ -560,7 +564,7 @@ que substitui a regra A01 do [contexto](context.md).
    lista da página e passam a ser digitados no diálogo "Gerar o pedido". A
    API e `missingFields` não mudam.
 7. **PIT-07** WHEN o bot projeta a pré-ficha THEN o item 1 SHALL receber:
-   `product_model` (ou, sem ele, `product_type`) em Tipo de roupa; `colors` em
+   `product_model` (ou, sem ele, `product_type`) em Modelo; `colors` em
    Cor; `artwork_status` em Estampa, com os locais de `artwork_locations`
    depois de " · " e "sem aplicação" como "Sem estampa"; `fabrics` em Tecido;
    `collar` em Gola. `artwork_technique` SHALL ir para Tipo de serviço só
@@ -579,7 +583,7 @@ que substitui a regra A01 do [contexto](context.md).
    informada (Y)"; sem tamanhos, a Quantidade do item 1 SHALL mostrar "—
    (cliente informou Y)".
 10. **PIT-10** A tela SHALL dizer "Forma de pagamento", "Tamanhos", "Tecido" e
-    "Tipo de roupa"; em Dados do atendimento, `sizes` é "Tamanhos informados"
+    "Modelo"; em Dados do atendimento, `sizes` é "Tamanhos informados"
     e `artwork_technique` é "Estampa desejada".
 11. **PIT-11** O cliente do pedido SHALL ser um nome confirmado: o nome do
     contato dado por uma pessoa ou promovido do `customer_name` do bot; senão
@@ -944,6 +948,11 @@ pontos da ADR 016; o vendedor completa as escolhas operacionais antes de
 | REV-09 | Páginas observam eventos seguros do CRM e atualizam sem botão normal de atualização. Edição em andamento preserva rascunho; conflito de versão permite recuperar a leitura atual após cancelar. Nova tentativa manual continua para falha real.                          |
 | REV-10 | O [glossário](../../../docs/product/GLOSSARIO.md) fixa termos e verbos; a [revisão heurística](../../../docs/product/REVISAO-HEURISTICA.md) documenta achados e verificação. Aviso a Rose por n8n ou e-mail é proposta para fluxo conjunto, sem implantação nesta etapa. |
 
+Emenda de 09/11/2026 (ADR 078, FPI-05 a FPI-07): REV-01 e REV-05 ficam como
+registro da decisão de 03/10/2026. `item.tipo` passa a se chamar **Modelo**,
+`item.modelo` volta à ficha v8 como **Detalhe do modelo** e a v8 tem 7 campos de
+produção, sem Cores da arte.
+
 ## Técnica por item e arte do pedido (ADR 020, 03/10/2026)
 
 O PO revisou as labels da ficha por seção ([RFC 008](../../../docs/rfc/008-rotulos-da-ficha-tecnica-e-arte.md))
@@ -961,6 +970,11 @@ Estes critérios superam REV-02–REV-05 onde divergem.
 | TEC-06 | Lastro com **Pago em** e **Entregue em** na tela e no papel; resumo com **Nome do pedido**; a dica da entrega prometida diz “A data combinada com o cliente.”; o total de peças não mostra “cliente informou N” (o aviso de diferença continua).                                                                                                                                                                                                                                                    |
 | TEC-07 | `ficha-canonical-v5`: resumo com Cliente, Entrega prometida e Total de peças; apoio com Nome do pedido, Vendedor, Data do pedido e FAB; lastro com Primeiro contato, Pago em e Entregue em; **Arte do pedido** em toda página comercial; itens com os pontos de TEC-05; produção com **Cores da arte** e **Nº de cores — …**. V2–v4, PDFs e hashes intactos. `PRINT_TEMPLATE` muda para v5 só após a aprovação provisória do PO; a assinatura física de Rose e Operação continua antes da produção. |
 | TEC-08 | O [glossário](../../../docs/product/GLOSSARIO.md) fixa Técnica, Arte do pedido, Estampa (referência), Cor do tecido, Cores da arte, Nome do pedido, Pago em e Entregue em.                                                                                                                                                                                                                                                                                                                          |
+
+Emenda de 09/11/2026 (ADR 078, FPI-05, FPI-07 e FPI-10): TEC-05 a TEC-08 ficam
+como registro da decisão de 03/10/2026 e da v5. O rótulo vigente de `item.tipo`
+é **Modelo**, e “Modelo informado” substitui o nome anterior em Dados do
+atendimento. A ficha v8 não imprime Cores da arte nem Pago em.
 
 ## Arquivos da arte no RustFS (ADR 023, 05/10/2026)
 
@@ -1227,7 +1241,9 @@ LOJ-33, LOJ-34, REV-06, REV-10 e FIN-02.
    (por exemplo, em "A Silmer cria a arte") SHALL vir de `brand`, nunca
    escrito no componente (ADR 035). A seção Arte do pedido SHALL mostrar um
    só controle de adicionar arquivo por vez; os limites e as regras de ARQ-02
-   a ARQ-06 não mudam.
+   a ARQ-06 não mudam. Emendado em 09/11/2026 por FPI-01: a ficha v8 é um
+   template novo, sem "Lastro do pedido"; as fichas v2 a v7 e seus hashes
+   continuam como estão.
 
 ### Conversa e fila da Caixa de Entrada
 

@@ -837,6 +837,22 @@ async function setupManaged(page, options = {}) {
   return state;
 }
 
+test('FPI-05 the priced form names one control "Modelo", apart from the old field', async ({
+  page,
+}) => {
+  await setupManaged(page);
+  await page.goto(`/pedidos/${orderId}`);
+  await page
+    .getByRole('button', { name: 'Editar atributos do item 1', exact: true })
+    .click();
+  const model = page.getByLabel('Modelo', { exact: true });
+  await expect(model).toHaveCount(1);
+  await expect(model).toHaveAttribute('id', 'priced-tipo');
+  await expect(
+    page.getByLabel('Detalhe do modelo', { exact: true }),
+  ).toHaveAttribute('id', 'priced-modelo');
+});
+
 test('T12 changing quantity preserves IDs and old subtotal but requires a separate human review', async ({
   page,
 }) => {
@@ -1729,11 +1745,16 @@ for (const gates of [
     });
     await openAndPreview(page);
     await expect(humanGenerate(page)).toBeVisible();
+    await expect
+      .poll(
+        () =>
+          state.calls.filter(
+            ({ path }) => path === `${operation}/preview/check`,
+          ).length,
+      )
+      .toBe(1);
     await expect(humanDialog(page)).toHaveCount(0);
     expectNoEffectsOrGeneralRead(state);
-    expect(
-      state.calls.filter(({ path }) => path === `${operation}/preview/check`),
-    ).toHaveLength(1);
   });
 }
 

@@ -158,7 +158,7 @@ test('names each point missing to generate in plain words (PIT-06)', () => {
       'paymentCondition',
     ]),
     [
-      'tipo de roupa do item 1',
+      'modelo do item 1',
       'cor do item 1',
       'aplicação do item 1',
       'modelo de malha do item 1',

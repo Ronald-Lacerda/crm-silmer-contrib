@@ -33,11 +33,12 @@ const optionalColorFields = new Set([
 let opener = null;
 
 const ATTRIBUTE_FIELDS = Object.freeze([
-  { key: 'tipo', label: 'Tipo de roupa' },
+  { key: 'tipo', label: 'Modelo' },
   { key: 'cor', label: 'Cor' },
   { key: 'tipo_servico', label: 'Aplicação' },
   { key: 'gola', label: 'Gola' },
-  { key: 'modelo', label: 'Modelo' },
+  // FPI-05: "Modelo" names item.tipo; the old field needs its own name.
+  { key: 'modelo', label: 'Detalhe do modelo' },
   { key: 'estampa', label: 'Estampa (referência)' },
   { key: 'cor_frente', label: 'Cor do tecido — frente' },
   { key: 'cor_costas', label: 'Cor do tecido — costas' },

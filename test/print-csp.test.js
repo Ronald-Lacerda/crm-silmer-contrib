@@ -11,6 +11,7 @@ import {
   TEMPLATE_V5,
   TEMPLATE_V6,
   TEMPLATE_V7,
+  TEMPLATE_V8,
   renderOrderFicha,
 } from '../modules/orders/src/print/index.js';
 
@@ -32,6 +33,14 @@ test('the print route alone permits the exact styles of supported ficha template
   assert.ok(routePolicy, 'only the print path adds stylesheet hashes');
   assert.match(nginx, /style-src 'self' \$print_style_sources" always;/u);
   assert.doesNotMatch(nginx, /unsafe-inline/u);
+  // ADR 078: v8 embeds its fonts; only the print path may load data: fonts.
+  const fontPolicy =
+    /map \$uri \$print_font_sources \{\s*default "";\s*~\^\/api\/v1\/orders\/\[\^\/\]\+\/print\$ "data:";\s*\}/u.exec(
+      nginx,
+    );
+  assert.ok(fontPolicy, 'only the print path adds data: fonts');
+  assert.match(nginx, /font-src 'self' \$print_font_sources;/u);
+  assert.equal((nginx.match(/font-src/gu) ?? []).length, 1);
 
   const permittedHashes = new Set(routePolicy[1].split(' '));
   for (const template of [
@@ -41,8 +50,14 @@ test('the print route alone permits the exact styles of supported ficha template
     TEMPLATE_V5,
     TEMPLATE_V6,
     TEMPLATE_V7,
+    TEMPLATE_V8,
   ]) {
-    const html = renderOrderFicha(fixture.order, template);
+    // v8 refuses explicit financial text in the fixture's observations.
+    const printableOrder = structuredClone(fixture.order);
+    if (template === TEMPLATE_V8) {
+      printableOrder.ficha.observations = ['Amostra sintética de produção.'];
+    }
+    const html = renderOrderFicha(printableOrder, template);
     const styles = [...html.matchAll(/<style>([\s\S]*?)<\/style>/gu)];
     assert.equal(styles.length, 1, `${template} has one static style block`);
     assert.doesNotMatch(
@@ -50,7 +65,7 @@ test('the print route alone permits the exact styles of supported ficha template
       /\sstyle=/iu,
       `${template} has no style attributes`,
     );
-    const anotherOrder = structuredClone(fixture.order);
+    const anotherOrder = structuredClone(printableOrder);
     anotherOrder.number = '26-CRM';
     anotherOrder.ficha.summary.cliente = 'Outra cliente sintética';
     const otherStyles = [
@@ -79,6 +94,7 @@ test('the print route alone permits the exact styles of supported ficha template
       TEMPLATE_V5,
       TEMPLATE_V6,
       TEMPLATE_V7,
+      TEMPLATE_V8,
     ].includes(PRINT_TEMPLATE),
     'the active template must be included in the permitted set',
   );
@@ -125,7 +141,7 @@ test('the print route alone permits the exact styles of supported ficha template
   );
   assert.equal(
     permittedHashes.size,
-    7,
+    8,
     'no other inline stylesheet is allowed',
   );
 });

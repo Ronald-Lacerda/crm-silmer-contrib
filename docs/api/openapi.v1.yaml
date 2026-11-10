@@ -6892,7 +6892,7 @@ components:
       additionalProperties: false
       description: >-
         Item da ficha (ADRs 016, 020 e 022). Principais, na ordem da tela: tipo
-        (Tipo de roupa), cor, quantidade (soma da grade; nunca enviada),
+        (Modelo), cor, quantidade (soma da grade; nunca enviada),
         tipo_servico (Aplicação: silk, DTF, sublimação, bordado… ou Sem
         estampa), malhas (Modelo de malha), grade (Tamanhos) e gola (Gola).
         Opcionais e sem bloquear (ADR 025): publico (masculino, feminino,
@@ -6901,7 +6901,7 @@ components:
         preencher uma aplicação vazia; é obrigatória para confirmar, mas pode
         ficar vazia enquanto pendente. Adicionais, que não bloqueiam: estampa
         (Estampa (referência)), cores do tecido por parte e vies_mangas; modelo
-        e vies_gola são legados. Mangas e viés aceitam NAO APLICAVEL. Um item pode ser
+        (Detalhe do modelo na ficha v8) e vies_gola são legados. Mangas e viés aceitam NAO APLICAVEL. Um item pode ser
         salvo incompleto (malhas e grade vazias, textos em branco). O servidor
         devolve todos os campos de texto, com vazio para os omitidos. Textos
         com até 200 caracteres; até 50 itens.

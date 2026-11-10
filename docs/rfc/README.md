@@ -2,6 +2,10 @@
 
 ## Decisão de 09/11/2026
 
+- [061 — Ficha impressa por item](061-ficha-impressa-por-item.md),
+  decidida na [ADR 078](../adr/078-ficha-impressa-por-item.md) / FPI-T01–T04:
+  uma folha A4 retrato por item, com as amostras e a assinatura física como gates.
+
 - [058 — Retirada da página Financeiro](058-retirada-da-pagina-financeiro.md),
   decidida na [ADR 074](../adr/074-retirada-da-pagina-financeiro.md) / FINQ-T07:
   retirada só da interface, com perfil, API e dados preservados.

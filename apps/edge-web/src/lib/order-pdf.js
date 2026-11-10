@@ -1,3 +1,13 @@
+/** The API's error code, when the failure carries a JSON body. @param {Response} response */
+async function errorCode(response) {
+  try {
+    const body = await response.json();
+    return typeof body?.error?.code === 'string' ? body.error.code : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** @param {string} orderId */
 export async function getOrderPdf(orderId) {
   const response = await globalThis.fetch(
@@ -7,6 +17,7 @@ export async function getOrderPdf(orderId) {
   if (!response.ok) {
     const error = new Error('PDF_UNAVAILABLE');
     /** @type {any} */ (error).status = response.status;
+    /** @type {any} */ (error).code = await errorCode(response);
     throw error;
   }
   if (

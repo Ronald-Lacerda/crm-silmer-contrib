@@ -4,6 +4,7 @@ import { renderFichaHtmlV4 } from './ficha-canonical-v4.js';
 import { renderFichaHtmlV5 } from './ficha-canonical-v5.js';
 import { renderFichaHtmlV6 } from './ficha-canonical-v6.js';
 import { renderFichaHtmlV7 } from './ficha-canonical-v7.js';
+import { renderFichaHtmlV8 } from './ficha-canonical-v8.js';
 import { renderStoreFichaHtml, TEMPLATE_STORE_V1 } from './ficha-loja-v1.js';
 import {
   TEMPLATE_V2,
@@ -12,6 +13,7 @@ import {
   TEMPLATE_V5,
   TEMPLATE_V6,
   TEMPLATE_V7,
+  TEMPLATE_V8,
   printSnapshot,
 } from './print-snapshot.js';
 
@@ -23,6 +25,7 @@ export {
   TEMPLATE_V5,
   TEMPLATE_V6,
   TEMPLATE_V7,
+  TEMPLATE_V8,
 };
 
 /**
@@ -41,6 +44,10 @@ export {
  * approve its synthetic sample and the physical gates; the validator refuses
  * `PRINT_TEMPLATE = v7` until that approval is recorded.
  *
+ * ADR 078 (FPI-T02): `ficha-canonical-v8`, one sheet per item, is addressable
+ * and testable but NOT selected either: the same approval of its sample comes
+ * first, and the physical signature stays a production gate.
+ *
  * @type {string}
  */
 export const PRINT_TEMPLATE = TEMPLATE_V6;
@@ -53,11 +60,22 @@ export const PRINT_TEMPLATE = TEMPLATE_V6;
  *
  * @param {any} order
  * @param {string} [template]
+ * @param {{printedAt?: Date}} [options] when the paper was printed (v8 footer)
  * @returns {string}
  */
-export function renderOrderFicha(order, template = PRINT_TEMPLATE) {
+export function renderOrderFicha(
+  order,
+  template = PRINT_TEMPLATE,
+  options = {},
+) {
   if (order?.origin === 'loja') return renderStoreFichaHtml(order);
   const snapshot = printSnapshot(order, template);
+  if (template === TEMPLATE_V8) {
+    return renderFichaHtmlV8(snapshot, {
+      printedAt: options.printedAt,
+      synthetic: false,
+    });
+  }
   if (template === TEMPLATE_V7) {
     return renderFichaHtmlV7(snapshot, { synthetic: false });
   }

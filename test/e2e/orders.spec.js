@@ -996,17 +996,19 @@ test('keeps garment, colour and collar data from older fichas when saving an ite
   await expect(items).toContainText('OLÍMPICA - VERDE');
   // ADR 020: the old model stays stored, without a field or a notice.
   await expect(items).not.toContainText('GOLA OLÍMPICA');
-  await expect(items.getByText('Modelo', { exact: true })).toHaveCount(0);
+  // FPI-05: the one "Modelo" on the screen is item.tipo, empty here.
+  await expect(items.getByText('Modelo', { exact: true })).toHaveCount(1);
   await items.getByRole('button', { name: 'Editar' }).click();
-  await expect(items.getByLabel('Modelo', { exact: true })).toHaveCount(0);
-  await expect(items.getByLabel('Tipo de roupa')).toHaveValue('');
+  await expect(items.getByLabel('Modelo', { exact: true })).toHaveCount(1);
+  await expect(items.getByLabel('Modelo', { exact: true })).toHaveValue('');
   await expect(items.getByLabel('Cor', { exact: true })).toHaveValue('BRANCA');
   await expect(items.getByLabel('Gola', { exact: true })).toHaveValue(
     'OLÍMPICA - VERDE',
   );
-  await items.getByLabel('Tipo de roupa').fill('CAMISETA');
+  await items.getByLabel('Modelo', { exact: true }).fill('CAMISETA');
   await items.getByRole('button', { name: 'Salvar itens' }).click();
-  await expect(items.getByText('Modelo', { exact: true })).toHaveCount(0);
+  await expect(items.getByText('Modelo', { exact: true })).toHaveCount(1);
+  await expect(items).not.toContainText('GOLA OLÍMPICA');
 
   expect(writes[0].body.value[0]).toMatchObject({
     cor: 'BRANCA',
@@ -1222,7 +1224,7 @@ test('reads each item with the seven points in order and the extras closed (PFI-
   ).toBeVisible();
   const points = card.locator('dl').first();
   await expect(points.locator(':scope > div > dt')).toHaveText([
-    'Tipo de roupa',
+    'Modelo',
     'Cor',
     'Quantidade',
     'Aplicação',
@@ -1257,7 +1259,7 @@ test('reads each item with the seven points in order and the extras closed (PFI-
   await expect(
     card.getByText('Cor do tecido — frente', { exact: true }),
   ).toBeVisible();
-  await expect(card.getByText('Modelo', { exact: true })).toHaveCount(0);
+  await expect(card).not.toContainText('GOLA OLÍMPICA');
   // ADR 020: the print is a reference; the part colours are the fabric's.
   await expect(card.locator('dl').nth(1).locator('dt')).toHaveText([
     'Estampa (referência)',
@@ -1298,7 +1300,7 @@ test('opens and closes the extras with the keyboard, keeping the focus (PIT-02)'
 
   // While editing, the extras are closed again and open the same way.
   await items.getByRole('button', { name: 'Editar' }).click();
-  await expect(items.getByLabel('Tipo de roupa')).toBeFocused();
+  await expect(items.getByLabel('Modelo', { exact: true })).toBeFocused();
   const editToggle = items.getByRole('button', {
     name: 'Adicionais (não obrigatórios)',
   });
@@ -1327,7 +1329,7 @@ test('edits the seven points and the extras of an item (PIT-01, PIT-02, PIT-03)'
   const items = page.getByRole('region', { name: 'Itens e especificações' });
   await items.getByRole('button', { name: 'Editar' }).click();
   await expect(items.getByText('Quantidade', { exact: true })).toBeVisible();
-  await items.getByLabel('Tipo de roupa').fill('REGATA');
+  await items.getByLabel('Modelo', { exact: true }).fill('REGATA');
   await items.getByLabel('Cor', { exact: true }).fill('PRETA');
   await items.getByLabel('Aplicação', { exact: true }).fill('SILK 4 CORES');
   await items.getByLabel('Modelo de malha 1').fill('ALGODÃO');
@@ -1420,7 +1422,7 @@ test('names the fields the way the PO asked (PIT-10)', async ({ page }) => {
   await page.goto('/pedidos/order-pendente');
 
   const main = page.locator('main');
-  for (const label of ['Tipo de roupa', 'Tamanhos', 'Modelo de malha']) {
+  for (const label of ['Modelo', 'Tamanhos', 'Modelo de malha']) {
     await expect(main.getByText(label, { exact: true }).first()).toBeVisible();
   }
   // PFI-19: the payment method is named in the dialog "Gerar o pedido".
@@ -1437,6 +1439,7 @@ test('names the fields the way the PO asked (PIT-10)', async ({ page }) => {
     'Malhas',
     'Ainda em branco na ficha',
     // ADR 020: one name per concept.
+    'Tipo de roupa',
     'Tipo de serviço',
     'Técnica da arte (referência)',
     'Definição da gola',
@@ -1553,7 +1556,7 @@ test('keeps every summary and item field as text typed by hand (PFI-14)', async 
 
   const items = page.getByRole('region', { name: 'Itens e especificações' });
   await items.getByRole('button', { name: 'Editar' }).click();
-  await expect(items.getByLabel('Tipo de roupa')).toBeEditable();
+  await expect(items.getByLabel('Modelo', { exact: true })).toBeEditable();
   await expect(lists).toHaveCount(0);
 });
 
@@ -1775,8 +1778,8 @@ test('keeps the other "Editar" focusable but unavailable, with the reason, while
   const editItems = items.getByRole('button', { name: 'Editar itens' });
   await editItems.focus();
   await page.keyboard.press('Enter');
-  await expect(items.getByLabel('Tipo de roupa')).toBeFocused();
-  await items.getByLabel('Tipo de roupa').fill('REGATA');
+  await expect(items.getByLabel('Modelo', { exact: true })).toBeFocused();
+  await items.getByLabel('Modelo', { exact: true }).fill('REGATA');
 
   const others = page.getByRole('button', { name: /^Editar\b/u });
   await expect(others).toHaveText([
@@ -1800,7 +1803,9 @@ test('keeps the other "Editar" focusable but unavailable, with the reason, while
   await editSummary.dispatchEvent('click');
   await expect(editSummary).toBeFocused();
   await expect(summary.getByLabel('Nome do pedido')).toHaveCount(0);
-  await expect(items.getByLabel('Tipo de roupa')).toHaveValue('REGATA');
+  await expect(items.getByLabel('Modelo', { exact: true })).toHaveValue(
+    'REGATA',
+  );
   // After the attempt the reason shows on screen, next to the button.
   await expect(
     summary.getByText('Salve ou cancele a edição aberta.'),
@@ -1839,7 +1844,7 @@ test('opens the items from the next step by keyboard, through the section itself
   await next.focus();
   await page.keyboard.press('Enter');
   const items = page.getByRole('region', { name: 'Itens e especificações' });
-  await expect(items.getByLabel('Tipo de roupa')).toBeFocused();
+  await expect(items.getByLabel('Modelo', { exact: true })).toBeFocused();
   await expect(
     items.getByRole('button', { name: 'Salvar itens' }),
   ).toBeVisible();
@@ -1852,7 +1857,7 @@ test('opens the items from the next step by keyboard, through the section itself
   const step = footer.getByRole('button', { name: 'Completar itens' });
   await step.focus();
   await page.keyboard.press('Enter');
-  await expect(items.getByLabel('Tipo de roupa')).toBeFocused();
+  await expect(items.getByLabel('Modelo', { exact: true })).toBeFocused();
 });
 
 test('counts a blocker the screen does not know as a step that leads to the closing panel (PFI-15)', async ({

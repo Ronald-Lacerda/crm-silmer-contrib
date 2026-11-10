@@ -141,7 +141,7 @@ D10/D11/D15 foram refinadas pelas ADRs 016–020, preservando seus IDs e dados a
 
 ## Discrição do agente (validar na revisão da spec)
 
-- **A01** Gerar exige ao menos um item com Tipo de roupa, Cor, Quantidade calculada, Técnica, Tecido, Tamanhos e Gola; origem da arte, entrega prometida, valor final e condição (ADR 020). Adicionais e nome do pedido não bloqueiam. Pago em não bloqueia nem altera status; o CRM não afirma pagamento por gerar o pedido.
+- **A01** Gerar exige ao menos um item com Modelo (`item.tipo`, FPI-05), Cor, Quantidade calculada, Técnica, Tecido, Tamanhos e Gola; origem da arte, entrega prometida, valor final e condição (ADR 020). Adicionais e nome do pedido não bloqueiam. Pago em não bloqueia nem altera status; o CRM não afirma pagamento por gerar o pedido.
 - **A02** "Tempo parado": no inbox, desde a criação do handoff pendente; na
   lista de Pedidos, desde a última alteração do pedido.
 - **A03** Rótulos de motivo a partir de `handoffs.reason_code`:

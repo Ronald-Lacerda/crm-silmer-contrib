@@ -38,9 +38,9 @@ const SERVICE_LABELS = Object.freeze({
   numbers: 'Numeração',
   order_name: 'Nome do pedido informado',
   pickup_location: 'Local de retirada',
-  product_model: 'Tipo de roupa informado',
+  product_model: 'Modelo informado',
   // ADR 020: one name for the garment, whichever field the bot used.
-  product_type: 'Tipo de roupa informado',
+  product_type: 'Modelo informado',
   purchase_profile: 'Perfil de compra',
   purpose: 'Finalidade',
   quantity: 'Quantidade informada',

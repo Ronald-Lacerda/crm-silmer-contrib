@@ -77,6 +77,7 @@ export const WEBHOOK_REQUESTS_PER_SECOND = 20;
  *   shipping?: any,
  *   olist?: any,
  *   orderPdfRenderer?: (html: string) => Promise<Buffer>,
+ *   orderFichaRenderer?: (order: any, template?: string, options?: {printedAt?: Date}) => string,
  *   storeOrders?: import('./store-order-runtime.js').StoreOrderRuntime
  *   subjects?: Record<string, any>,
  * }} [runtime]
@@ -449,6 +450,7 @@ export function createApi(options = {}, runtime = {}) {
         return context;
       },
       runtime.orderPdfRenderer,
+      runtime.orderFichaRenderer,
     );
   }
 

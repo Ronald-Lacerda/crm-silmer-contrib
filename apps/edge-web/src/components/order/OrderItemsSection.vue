@@ -548,7 +548,7 @@ async function save() {
           <!-- PIT-01 (ADR 020): the seven points, in the order the ficha prints. -->
           <div class="op-item-fields">
             <div class="op-field">
-              <label :for="`item-${itemIndex}-tipo`">Tipo de roupa</label>
+              <label :for="`item-${itemIndex}-tipo`">Modelo</label>
               <input
                 :id="`item-${itemIndex}-tipo`"
                 v-model="item.tipo"
@@ -958,7 +958,7 @@ async function save() {
         <!-- PIT-01 (ADR 020): the seven points, as the ficha prints them. -->
         <dl class="op-points">
           <div>
-            <dt>Tipo de roupa</dt>
+            <dt>Modelo</dt>
             <dd>{{ shownValue(item.tipo) }}</dd>
           </div>
           <div>

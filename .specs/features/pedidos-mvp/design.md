@@ -313,7 +313,7 @@ type PaymentCondition = 'pix' | 'cartao_credito' | 'cartao_debito';
 // ADR 016 (02/10/2026): principais na ordem da tela; a quantidade é a soma
 // da grade. Pode ser salvo incompleto; gerar exige os principais.
 interface FichaItem {
-  tipo: string; // Tipo de roupa
+  tipo: string; // Modelo (FPI-05)
   cor: string;
   tipo_servico: string; // Técnica, obrigatória; ADR 020
   estampa: string; // Estampa (referência), adicional opcional
@@ -321,7 +321,7 @@ interface FichaItem {
   grade: { tamanho: string; quantidade: number }[]; // Tamanhos; inteiro > 0
   gola: string;
   // Adicionais (não obrigatórios)
-  modelo: string;
+  modelo: string; // Detalhe do modelo na ficha v8 (FPI-06)
   cor_frente: string;
   cor_costas: string;
   cor_manga_direita: string; // 'NAO APLICAVEL' permitido

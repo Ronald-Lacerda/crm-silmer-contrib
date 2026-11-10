@@ -408,9 +408,11 @@ async function generatePdf(share = false) {
     } else downloadPdf(file);
   } catch (cause) {
     pdfError.value =
-      Number(cause?.status) === 409
-        ? 'Este pedido foi reaberto. Atualize a página antes de gerar o PDF.'
-        : 'Não foi possível gerar o PDF. Tente novamente.';
+      cause?.code === 'PRINT_FINANCIAL_TEXT_REVIEW_REQUIRED'
+        ? 'Revise as informações financeiras nos textos do pedido antes de gerar a ficha da fábrica.'
+        : Number(cause?.status) === 409
+          ? 'Este pedido foi reaberto. Atualize a página antes de gerar o PDF.'
+          : 'Não foi possível gerar o PDF. Tente novamente.';
   } finally {
     pdfBusy.value = false;
   }

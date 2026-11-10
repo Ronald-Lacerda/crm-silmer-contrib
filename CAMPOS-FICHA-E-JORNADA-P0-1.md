@@ -98,6 +98,11 @@ Validações obrigatórias:
 > passam a adicionais, que não bloqueiam. A regra 3 vira aviso: a soma da grade
 > diferente da quantidade informada não bloqueia.
 
+> **Rótulos desde 09/11/2026 ([ADR 078](docs/adr/078-ficha-impressa-por-item.md),
+> FPI-05 e FPI-06).** `itens[].tipo` aparece como Modelo. `itens[].modelo` sai
+> como Detalhe do modelo na ficha v8. A tabela acima registra os rótulos
+> originais da planilha.
+
 ### 2.3 Observações do pedido
 
 | ID canônico            | Rótulo original           | Célula/intervalo | Origem           | Obrigatoriedade | Regra                                                                                                   |
@@ -120,6 +125,15 @@ preserva no documento.
 | `producao.observacao_arremate`    | `OBS:`                          | `A37:E37`        | Produção      | Arremate                  |
 | `producao.conferido_embalado_por` | `Conferido / Embalado por:`     | `H37:I37`        | Produção      | Embalagem                 |
 | `producao.conferido_embalado_em`  | `Data:`                         | `K37`            | Produção      | Embalagem                 |
+
+#### Cores da arte, fora da ficha desde a v8
+
+Os sete campos abaixo saem da ficha `ficha-canonical-v8` (ADR 078, FPI-07). A
+tabela fica como inventário do arquivo lido; as fichas v2 a v7 continuam
+imprimindo esses campos, e nenhum deles existe no domínio, na API ou no banco.
+
+| ID canônico                       | Rótulo original                 | Célula/intervalo | Responsável   | Momento                   |
+| --------------------------------- | ------------------------------- | ---------------- | ------------- | ------------------------- |
 | `producao.cores_frente`           | `Cores Frente:`                 | `C38`            | Produção/arte | Separação de cores        |
 | `producao.cores_costas`           | `Costas:`                       | `E38`            | Produção/arte | Separação de cores        |
 | `producao.cores_manga_direita`    | `Manga Direita:`                | `G38`            | Produção/arte | Separação de cores        |
@@ -151,7 +165,7 @@ criação. Não há Kanban, Negócio, avanço de card nem retorno de etapa.
 
 Gerar por dono da conversa ou administrador exige:
 
-- ao menos um item com Tipo de roupa, Cor, Quantidade calculada, Técnica,
+- ao menos um item com Modelo (`item.tipo`, FPI-05), Cor, Quantidade calculada, Técnica,
   Tecido, Tamanhos e Gola;
 - arte do pedido: cliente envia, Silmer cria ou sem estampa; a última é
   exclusiva das outras duas;
@@ -174,7 +188,7 @@ sem impor ordem ou gates intermediários. Extrair resposta espontânea, não
 repetir dado já conhecido e perguntar quando houver ambiguidade.
 
 1. Acolher e identificar o cliente/pedido pelo contexto autorizado.
-2. Coletar tipo de roupa, quantidade, tecido, cor, tamanhos e gola.
+2. Coletar modelo, quantidade, tecido, cor, tamanhos e gola.
 3. Perguntar técnica e origem da arte; Sem estampa é resposta explícita.
 4. Registrar locais como referência, finalidade, perfil e prazo desejado,
    sem prometer disponibilidade ou viabilidade.

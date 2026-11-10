@@ -68,7 +68,7 @@ const ITEM_POINT_LABELS = Object.freeze({
   grade: 'tamanhos',
   // ADR 025 (D5): the fabric is "Modelo de malha" at Silmer.
   malhas: 'modelo de malha',
-  tipo: 'tipo de roupa',
+  tipo: 'modelo',
   tipo_servico: 'aplicação',
 });
 

@@ -404,8 +404,9 @@ A página do pedido (`/pedidos/:id`) segue a ordem da ficha impressa, com as
 palavras da tela (PFI-01, PFI-20): Resumo do pedido, Datas do pedido, Itens e
 especificações, Arte do pedido, Observações do pedido, Dados do atendimento
 (não impresso) e Fechamento e pagamento. O bloco "Controle de produção" não
-aparece na tela; ele só existe na ficha impressa, que mantém "Lastro do
-pedido" e os mesmos templates e hashes.
+aparece na tela; ele só existe na ficha impressa. As fichas v2 a v7 mantêm
+"Lastro do pedido" e os mesmos templates e hashes; a v8 (ADR 078, FPI-01) não
+tem esse título e imprime os dados em cada folha, sem Pago em.
 
 - **Progresso real no topo (PFI-15):** "Para gerar o pedido: N de 3", com os
   passos Previsão de entrega, Itens e Arte do pedido, lidos só de

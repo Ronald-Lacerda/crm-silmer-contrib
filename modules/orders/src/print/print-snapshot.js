@@ -1,4 +1,6 @@
 import { blankProduction } from './ficha-canonical-v2.js';
+import { PRODUCTION_FIELDS_V8 } from './ficha-canonical-v8.js';
+import { factoryContent } from './ficha-v8-content.js';
 
 export const TEMPLATE_V2 = 'ficha-canonical-v2';
 export const TEMPLATE_V3 = 'ficha-canonical-v3';
@@ -6,6 +8,7 @@ export const TEMPLATE_V4 = 'ficha-canonical-v4';
 export const TEMPLATE_V5 = 'ficha-canonical-v5';
 export const TEMPLATE_V6 = 'ficha-canonical-v6';
 export const TEMPLATE_V7 = 'ficha-canonical-v7';
+export const TEMPLATE_V8 = 'ficha-canonical-v8';
 
 /** A field nobody filled prints blank, never "null". @param {unknown} value */
 function printedText(value) {
@@ -69,6 +72,9 @@ function printedTrail(order) {
  * stored (v6 prints their audience, v7 renames two labels): each template
  * decides how to print them.
  *
+ * v8 (ADR 078) prints the allowlisted factory instructions, omits the payment
+ * day and carries only the seven production fields left on the sheet.
+ *
  * @param {any} order
  * @param {string} [templateVersion]
  */
@@ -79,7 +85,8 @@ export function printSnapshot(order, templateVersion = TEMPLATE_V2) {
     templateVersion !== TEMPLATE_V4 &&
     templateVersion !== TEMPLATE_V5 &&
     templateVersion !== TEMPLATE_V6 &&
-    templateVersion !== TEMPLATE_V7
+    templateVersion !== TEMPLATE_V7 &&
+    templateVersion !== TEMPLATE_V8
   ) {
     throw new Error(`Unknown ficha template: ${templateVersion}`);
   }
@@ -94,23 +101,44 @@ export function printSnapshot(order, templateVersion = TEMPLATE_V2) {
     itens: items,
     nome: printedText(summary.nome),
     numero: printedText(order.number),
-    observacoes: observations,
+    observacoes:
+      templateVersion === TEMPLATE_V8
+        ? factoryContent(order.ficha)
+        : observations,
     quantidade_total: order.totalPieces,
     vendedor: printedText(order.confirmedBy?.name),
   };
   if (templateVersion !== TEMPLATE_V2) {
-    pedido.lastro = printedTrail(order);
+    const trail = printedTrail(order);
+    pedido.lastro =
+      templateVersion === TEMPLATE_V8
+        ? {
+            primeiro_contato: trail.primeiro_contato,
+            entrega_realizada: trail.entrega_realizada,
+          }
+        : trail;
   }
   if (
     templateVersion === TEMPLATE_V4 ||
     templateVersion === TEMPLATE_V5 ||
     templateVersion === TEMPLATE_V6 ||
-    templateVersion === TEMPLATE_V7
+    templateVersion === TEMPLATE_V7 ||
+    templateVersion === TEMPLATE_V8
   ) {
     pedido.artwork = order.ficha.artwork ?? {
       feito_pelo_cliente: false,
       feito_pela_silmer: false,
       files: [],
+    };
+  }
+  if (templateVersion === TEMPLATE_V8) {
+    pedido.versao = order.version;
+    const blank = /** @type {Record<string, string>} */ (blankProduction());
+    return {
+      pedido,
+      producao: Object.fromEntries(
+        PRODUCTION_FIELDS_V8.map((field) => [field, blank[field]]),
+      ),
     };
   }
   return { pedido, producao: blankProduction() };

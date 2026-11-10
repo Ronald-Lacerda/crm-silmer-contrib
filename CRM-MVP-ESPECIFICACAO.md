@@ -156,7 +156,7 @@ confirmado do cliente são fixados na confirmação humana (ADR 018).
 A pessoa completa seções em qualquer ordem. Salvar rascunho incompleto é
 permitido; gerar exige:
 
-- ao menos um item com Tipo de roupa, Cor, Quantidade calculada pela grade,
+- ao menos um item com Modelo (`item.tipo`, FPI-05), Cor, Quantidade calculada pela grade,
   Técnica, Tecido, Tamanhos e Gola;
 - origem da arte do pedido;
 - entrega prometida, valor final e condição de pagamento.

@@ -57,7 +57,7 @@ const missingGroups = computed(() => {
 const items = computed(() =>
   (detail.value?.ficha?.items ?? []).map(
     (/** @type {Record<string, any>} */ item, /** @type {number} */ index) => {
-      const type = item.tipo || 'Tipo de roupa não informado';
+      const type = item.tipo || 'Modelo não informado';
       const collar = item.gola || item.vies_gola;
       return {
         key: `${index}`,

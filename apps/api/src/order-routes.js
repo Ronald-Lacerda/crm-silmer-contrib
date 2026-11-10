@@ -57,6 +57,7 @@ const PUBLIC_CODES = new Set([
   'ORDER_NOT_CONFIRMED',
   'ORDER_NOT_FOUND',
   'ORDER_STATUS_CONFLICT',
+  'PRINT_FINANCIAL_TEXT_REVIEW_REQUIRED',
   'VERSION_CONFLICT',
 ]);
 
@@ -83,6 +84,7 @@ export function registerOrderRoutes(
   orders,
   contextFor,
   pdfRenderer = renderOrderPdf,
+  fichaRenderer = renderOrderFicha,
 ) {
   api.get('/api/v1/orders/summary', async (request, reply) =>
     respond(reply, async () => {
@@ -207,6 +209,9 @@ export function registerOrderRoutes(
       if (order.status !== 'confirmado') {
         throw new OrderRequestError(409, 'ORDER_NOT_CONFIRMED');
       }
+      // Rendering may reject instructions that require review. A failed
+      // document must not remove a new store order from the Dashboard notice.
+      const html = fichaRenderer(order, undefined, { printedAt: new Date() });
       if (
         request.method !== 'HEAD' &&
         order.origin === 'loja' &&
@@ -225,10 +230,7 @@ export function registerOrderRoutes(
           attachment('pedido-' + order.number + '.html'),
         );
       }
-      return reply
-        .code(200)
-        .type('text/html; charset=utf-8')
-        .send(renderOrderFicha(order));
+      return reply.code(200).type('text/html; charset=utf-8').send(html);
     }),
   );
 
@@ -248,6 +250,10 @@ export function registerOrderRoutes(
           if (order.status !== 'confirmado') {
             throw new OrderRequestError(409, 'ORDER_NOT_CONFIRMED');
           }
+          // A document under review answers 422 without download headers.
+          const html = fichaRenderer(order, undefined, {
+            printedAt: new Date(),
+          });
           reply.header('cache-control', 'private, no-store');
           reply.header('vary', 'Origin, Cookie');
           reply.header('x-content-type-options', 'nosniff');
@@ -262,7 +268,7 @@ export function registerOrderRoutes(
           if (request.method === 'HEAD') {
             return reply.code(200).type('application/pdf').send();
           }
-          const pdf = await pdfRenderer(renderOrderFicha(order));
+          const pdf = await pdfRenderer(html);
           if (order.origin === 'loja' && !order.fichaFirstPrintedAt) {
             await orders.recordFirstPrint({
               actor: principal.actor,
