@@ -144,7 +144,7 @@ não são necessárias para essa jornada e dificultam sua conclusão.
      frete; sem estorno.
    - **Venda ERP:** `valorFrete` conferido conforme acima (OLC-T02, T03 e T06).
 
-   Três pontos sem precedente ficam como proposta técnica a confirmar pelo PO
+   Três pontos sem precedente foram confirmados pelo PO em 10/11/2026
    (ADR 080, P1–P3): ausência de alçada para frete zero ou abaixo do cotado,
    cotação de origem desatualizada só como aviso e performance por
    responsável com o mesmo total.

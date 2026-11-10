@@ -4,8 +4,8 @@ Data: 10/11/2026. Status: aceita. Registro documental, sem runtime.
 Decisores: proprietário do produto, em 10/11/2026, decidiu que o frete compõe
 o total, que o vendedor o informa, que a cotação é só sugestão, que o frete
 congela na confirmação e que o Dashboard não separa peças e frete. Tech Lead
-fechou o desenho técnico abaixo; os pontos P1–P3 são propostas técnicas ainda
-a confirmar pelo PO.
+fechou o desenho técnico abaixo; o proprietário confirmou os pontos P1–P3 em
+10/11/2026.
 Proposta: [RFC 062](../rfc/062-valor-final-com-frete.md).
 Requisitos [OLC-05a–j](../../.specs/features/olist-confirmed/spec.md#frete-no-total-do-pedido);
 tarefa [OLC-T01](../../.specs/features/olist-confirmed/tasks.md#olc-t01-dados-do-pedido-e-autorização)
@@ -112,7 +112,7 @@ quitação e Dashboard leem o valor final persistido; e o Olist exige
     recalcular sem frete o total de Pedido que o tem: a implementação
     documenta como bloquear reconfirmação nessa condição.
 
-### Propostas técnicas a confirmar pelo PO
+### Pontos P1–P3, confirmados pelo PO em 10/11/2026
 
 - **P1:** sem alçada nesta entrega para frete zero, "já no preço" ou abaixo do
   cotado (RFC 038 D3); a auditoria registra cotado e informado.

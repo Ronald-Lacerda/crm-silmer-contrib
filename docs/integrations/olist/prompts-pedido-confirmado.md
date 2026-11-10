@@ -37,7 +37,7 @@ sobre o frete: quem informa é o vendedor responsável pelo Pedido (Admin não
 informa por herança); a cotação de modules/shipping é só sugestão, com preço
 lido no servidor; o frete é definido até a confirmação e congela com ela; o
 Dashboard usa o total único, sem separar peças e frete. As propostas técnicas
-P1–P3 da ADR 080 seguem a confirmar pelo PO e não devem ser ampliadas. O
+P1–P3 da ADR 080 foram confirmadas pelo PO em 10/11/2026 e não devem ser ampliadas. O
 cancelamento local vale só para Pedido não confirmado.
 
 A entrega principal não inclui remoção Financeiro, exportação de pendentes,

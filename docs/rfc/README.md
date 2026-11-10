@@ -6,7 +6,7 @@
   [ADR 080](../adr/080-valor-final-com-frete.md) / OLC-05a–j / OLC-T01: frete
   informado pelo vendedor responsável, cotação como sugestão, congelamento na
   confirmação e Dashboard com total único; atualiza por referência a RFC 038
-  (D4 e D5) e deixa P1–P3 a confirmar pelo PO.
+  (D4 e D5) e registra P1–P3 confirmados pelo PO.
 
 - [050 — Geração de pedidos de venda no Olist](050-geracao-assistida-de-pedidos-no-olist.md),
   revisão 3 aceita na ADR 079 / OLIST-PLAN-03: somente Confirmado pelo detalhe,

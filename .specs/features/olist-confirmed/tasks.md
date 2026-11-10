@@ -93,8 +93,7 @@ revisão QA.
     reabertura com cobrança/quitação, legado, loja, Dashboard e ficha.
   - **Rollback:** sem remover o dado; documentar como impedir que código
     anterior recalcule sem frete o total de Pedido que o tem.
-  - **A confirmar pelo PO** (propostas técnicas P1–P3 da ADR 080, adotadas de
-    forma conservadora até lá): sem alçada para frete zero, "já no preço" ou
+  - **Confirmado pelo PO em 10/11/2026** (pontos P1–P3 da ADR 080): sem alçada para frete zero, "já no preço" ou
     abaixo do cotado; cotação de origem desatualizada só como aviso, sem
     bloquear a confirmação; performance por responsável (ADR 059) com o
     mesmo total com frete.

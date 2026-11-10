@@ -7,7 +7,7 @@
   responsável informa o frete com o Pedido pendente, a cotação é só sugestão,
   o frete congela na confirmação e o Dashboard usa o total único. Complementa
   a ADR 020, supersede em parte as ADRs 053/054 nesse ponto e atualiza por
-  referência a RFC 038; propostas P1–P3 a confirmar pelo PO.
+  referência a RFC 038; pontos P1–P3 confirmados pelo PO.
 
 - [079 — Olist a partir do pedido confirmado](079-olist-a-partir-do-pedido-confirmado.md),
   revisão 3 da RFC 050 / OLIST-PLAN-03: botão no detalhe, OLC-T01–T06, valor

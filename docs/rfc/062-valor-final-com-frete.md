@@ -2,7 +2,7 @@
 
 Data: 10/11/2026. Status: decidida na
 [ADR 080](../adr/080-valor-final-com-frete.md), com as respostas do
-proprietário de 10/11/2026 e três propostas técnicas ainda a confirmar pelo PO
+proprietário de 10/11/2026, que também confirmou as propostas técnicas P1–P3
 (seção 5). Responsável pela proposta: Tech Lead. Aprovador: proprietário do
 produto.
 Requisitos [OLC-05a–j](../../.specs/features/olist-confirmed/spec.md#frete-no-total-do-pedido);
@@ -157,10 +157,10 @@ Respostas do PO em 10/11/2026 às perguntas de OLC-T01:
 | ADRs 058, 076, 077             | Sem regra nova; o valor final com frete é a base de cobrança e quitação de Pedido novo    |
 | ADR 057 item 11 / ADR 078      | Sem frete na impressão nesta entrega                                                      |
 
-## 5. Propostas técnicas a confirmar pelo PO
+## 5. Propostas técnicas P1–P3, confirmadas pelo PO em 10/11/2026
 
-Sem precedente nas decisões existentes; a ADR 080 as adota de forma
-conservadora até o PO confirmar ou mudar:
+Sem precedente nas decisões existentes; a ADR 080 as adotou de forma
+conservadora e o proprietário as confirmou:
 
 - **P1 — Sem alçada nesta entrega** (RFC 038 D3): frete zero, "já no preço"
   ou abaixo do cotado não exige aprovação do gestor; a auditoria registra
