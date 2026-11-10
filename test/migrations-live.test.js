@@ -128,6 +128,162 @@ if (connectionString) {
     }
   });
 
+  // Incident of 2026-10-14: the image shipped expand migrations the database
+  // did not have, so ready answered 503 while live kept answering 200.
+  test('PostgreSQL live: an image ahead of the database stays unavailable until expand migrations run', async () => {
+    const databaseName = new URL(connectionString).pathname.slice(1);
+    assert.equal(
+      databaseName,
+      'crm_silmer_test',
+      'live migration test only resets the dedicated crm_silmer_test database',
+    );
+
+    const pool = new Pool({ connectionString, max: 2 });
+    const previousImage = [
+      ...(await loadMigrations()).filter(({ version }) => version === '0001'),
+      {
+        checksum: 'live-applied-v1',
+        name: 'live_applied',
+        phase: /** @type {const} */ ('expand'),
+        sql: 'CREATE TABLE crm.live_applied (id integer PRIMARY KEY)',
+        version: '9001',
+      },
+    ];
+    const newImage = [
+      ...previousImage,
+      {
+        checksum: 'live-pending-a-v1',
+        name: 'live_pending_a',
+        phase: /** @type {const} */ ('expand'),
+        sql: 'ALTER TABLE crm.live_applied ADD COLUMN label text',
+        version: '9002',
+      },
+      {
+        checksum: 'live-pending-b-v1',
+        name: 'live_pending_b',
+        phase: /** @type {const} */ ('expand'),
+        sql: 'ALTER TABLE crm.live_applied ADD COLUMN note text',
+        version: '9003',
+      },
+    ];
+
+    try {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await migrate(pool, { migrations: previousImage });
+      assert.equal(
+        await checkDatabaseReadiness(pool, previousImage),
+        true,
+        'the release that matches the database is ready',
+      );
+      assert.equal(await checkDatabaseReadiness(pool, newImage), false);
+
+      // One instance through the recovery: the runbook migrates without restart.
+      const api = createServerApi({
+        logger: createSafeLogger({ service: 'crm-silmer-api', sink: () => {} }),
+        readiness: () => checkDatabaseReadiness(pool, newImage),
+      });
+      try {
+        const unavailable = await api.inject({ url: '/api/health/ready' });
+        assert.equal(unavailable.statusCode, 503);
+        assert.deepEqual(unavailable.json(), {
+          service: 'crm-silmer-api',
+          status: 'unavailable',
+        });
+        const live = await api.inject({ url: '/api/health/live' });
+        assert.equal(live.statusCode, 200);
+        assert.equal(live.json().status, 'ok');
+
+        assert.deepEqual(await migrate(pool, { migrations: newImage }), {
+          applied: ['9002', '9003'],
+          phase: 'expand',
+        });
+
+        const ready = await api.inject({ url: '/api/health/ready' });
+        assert.equal(ready.statusCode, 200);
+        assert.deepEqual(ready.json(), {
+          service: 'crm-silmer-api',
+          status: 'ready',
+        });
+      } finally {
+        await api.close();
+      }
+    } finally {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await pool.end();
+    }
+  });
+
+  test('PostgreSQL live: a checksum that diverges from applied history stays unavailable and migrate refuses it', async () => {
+    const databaseName = new URL(connectionString).pathname.slice(1);
+    assert.equal(
+      databaseName,
+      'crm_silmer_test',
+      'live migration test only resets the dedicated crm_silmer_test database',
+    );
+
+    const pool = new Pool({ connectionString, max: 2 });
+    const baseline = (await loadMigrations()).filter(
+      ({ version }) => version === '0001',
+    );
+    const applied = {
+      checksum: 'live-history-v1',
+      name: 'live_history',
+      phase: /** @type {const} */ ('expand'),
+      sql: 'CREATE TABLE crm.live_history (id integer PRIMARY KEY)',
+      version: '9001',
+    };
+    const appliedImage = [...baseline, applied];
+    const divergentImage = [
+      ...baseline,
+      { ...applied, checksum: 'live-history-edited-after-apply' },
+    ];
+
+    try {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await migrate(pool, { migrations: appliedImage });
+      assert.equal(await checkDatabaseReadiness(pool, appliedImage), true);
+      assert.equal(await checkDatabaseReadiness(pool, divergentImage), false);
+
+      const api = createServerApi({
+        logger: createSafeLogger({ service: 'crm-silmer-api', sink: () => {} }),
+        readiness: () => checkDatabaseReadiness(pool, divergentImage),
+      });
+      try {
+        const unavailable = await api.inject({ url: '/api/health/ready' });
+        assert.equal(unavailable.statusCode, 503);
+        assert.deepEqual(unavailable.json(), {
+          service: 'crm-silmer-api',
+          status: 'unavailable',
+        });
+        const live = await api.inject({ url: '/api/health/live' });
+        assert.equal(live.statusCode, 200);
+
+        await assert.rejects(migrate(pool, { migrations: divergentImage }), {
+          message: 'Migration 9001 does not match applied history or checksum',
+        });
+
+        const stillUnavailable = await api.inject({
+          url: '/api/health/ready',
+        });
+        assert.equal(stillUnavailable.statusCode, 503);
+      } finally {
+        await api.close();
+      }
+
+      const { rows } = await pool.query(
+        `SELECT checksum FROM crm_meta.schema_migrations WHERE version = '9001'`,
+      );
+      assert.deepEqual(rows, [{ checksum: 'live-history-v1' }]);
+    } finally {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await pool.end();
+    }
+  });
+
   test('PostgreSQL live: orders keep one pending per conversation and complete confirmations', async () => {
     const databaseName = new URL(connectionString).pathname.slice(1);
     assert.equal(
