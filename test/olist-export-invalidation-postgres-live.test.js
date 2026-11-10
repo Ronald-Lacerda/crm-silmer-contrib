@@ -2145,7 +2145,13 @@ else
             orderVersion: 1,
             snapshot: f.snapshot,
           });
-          const result = await migrate(pool, { migrations });
+          // This is the historical 0070 -> 0072 fixture. Later billing
+          // migrations have a separate upgrade-and-preservation scenario.
+          const historicalPlan = migrations.filter(
+            (entry) => entry.version <= '0072',
+          );
+          assert.equal(historicalPlan.at(-1)?.version, '0072');
+          const result = await migrate(pool, { migrations: historicalPlan });
           assert.deepEqual(result.applied, ['0071', '0072']);
           assert.deepEqual(await names(), [
             'olist_exports_account_key_reference_key',
