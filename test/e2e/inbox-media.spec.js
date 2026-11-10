@@ -730,7 +730,14 @@ for (const viewport of [
       page.getByRole('button', { name: 'Anexar arquivo', exact: true }),
     ).toBeFocused();
     await page.keyboard.press('Tab');
-    // T139 adds a keyboard-accessible freight tool to this same toolbar.
+    // COB-REL-01 and T139 share the toolbar's native keyboard order.
+    const billing = page.getByRole('button', {
+      name: 'Cobranças e pagamentos',
+      exact: true,
+    });
+    await expect(billing).toBeFocused();
+    await expect(billing).toBeInViewport();
+    await page.keyboard.press('Tab');
     await expect(
       page.getByRole('button', { name: 'Cotar frete', exact: true }),
     ).toBeFocused();
