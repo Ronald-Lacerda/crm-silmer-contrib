@@ -326,7 +326,9 @@ ponta a ponta.
 API/worker/PostgreSQL existentes, conexão/configuração central, checkbox
 individual mais leitura comercial e piloto privado. O valor final do Pedido é
 a soma dos subtotais por linha de tamanho, calculada pelo backend, mais o frete
-quando existir no Pedido; a composição por tamanho aditiva, que deve igualar o
+(decisão do PO de 10/11/2026: o frete compõe o total; funcionalidade nova, ainda
+não implementada, e a master atual não tem o campo, pois a cotação em
+`modules/shipping` é estimativa separada, ADR 054); a composição por tamanho aditiva, que deve igualar o
 total existente, vale só para Pedido antigo ou da loja que possui apenas total,
 preservando snapshot/ficha/checkout. Resolver
 cadastros por identidade, reservar cada efeito e conferir linhas/totais;
@@ -370,8 +372,8 @@ Ainda sem persistência/API/UI e sem geração ERP; o gate monetário F1 permane
 
 A mescla da revisão 3 não remove os pontos acima; as decisões do PO de 10/11/2026
 os ajustam em dois pontos. O total é a soma dos subtotais por linha de tamanho,
-calculada pelo backend, mais o frete quando existir no Pedido, como registrado
-acima; a igualdade com o total existente vale só para enriquecer Pedido antigo
+calculada pelo backend, mais o frete, como registrado acima (ainda não
+implementado; ADR 079, decisão 9); a igualdade com o total existente vale só para enriquecer Pedido antigo
 ou da loja que possui apenas total. O texto de 04/11 sobre cancelar Pedido
 pago ou confirmado foi superado: o cancelamento local vale só para Pedido não
 confirmado (ADR 079; ajuste do código entregue em OLC-F03). A exigência de

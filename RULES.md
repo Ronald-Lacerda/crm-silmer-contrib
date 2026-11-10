@@ -50,7 +50,10 @@ RFC e nos planos de tarefas.
   entrada/projeção para Financeiro ou liberação de edição geral.
 - Dados estruturados, não PDF. O valor final do Pedido é a soma dos subtotais
   por linha de tamanho, calculada pelo backend (ADR 057 itens 4 e 6), mais o
-  frete quando existir no Pedido; não há total digitado. Composição por tamanho
+  frete; não há total digitado. Decisão do PO de 10/11/2026: o frete compõe o
+  total, mas é funcionalidade nova ainda não implementada e a master atual não
+  tem o campo (a cotação é estimativa separada, ADR 054; OLC-T01 define o
+  contrato). Composição por tamanho
   aditiva, revisada e ligada 1:1 à grade confirmada serve a Pedido antigo ou da
   loja que só tem total, e deve somar exatamente esse total, sem rateio ou
   alteração de snapshot, ficha, checkout ou pagamento. Loja/legado têm adapter
@@ -99,8 +102,8 @@ gates registrados na RFC e no plano de tarefas.
 
 A mescla da revisão 3 não remove os pontos acima; as decisões do PO de 10/11/2026
 os ajustam em dois pontos. O total é a soma dos subtotais por linha de tamanho,
-calculada pelo backend, mais o frete quando existir no Pedido, como registrado
-acima; a igualdade com o total existente vale só para enriquecer Pedido antigo
+calculada pelo backend, mais o frete, como registrado acima (ainda não
+implementado; ADR 079, decisão 9); a igualdade com o total existente vale só para enriquecer Pedido antigo
 ou da loja que possui apenas total. O texto de 04/11 sobre cancelar Pedido
 pago ou confirmado foi superado: o cancelamento local vale só para Pedido não
 confirmado (ADR 079; ajuste do código entregue em OLC-F03). A exigência de

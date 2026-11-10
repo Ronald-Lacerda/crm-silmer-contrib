@@ -327,14 +327,16 @@ nas fases anteriores segue como insumo reaproveitável.
   gerido por Admin e piloto privado. Não criar nova entrada de perfil restrito.
 - Pedido: somente `confirmado`, com comando **Gerar no Olist** no detalhe.
   Valor final = soma dos subtotais por linha de tamanho, calculada pelo
-  backend (ADR 057 itens 4 e 6), mais o frete quando existir no Pedido; não há
-  total digitado. Composição ERP aditiva, para Pedido antigo ou da loja que só
+  backend (ADR 057 itens 4 e 6), mais o frete; não há total digitado. Composição ERP aditiva, para Pedido antigo ou da loja que só
   tem total, deriva identidade/grade no servidor, liga cada linha ao
   tamanho/quantidade confirmado e soma exatamente o `finalAmountCents`
   existente. Preservar total, confirmação, snapshot e PDF; nenhum rateio
   automático ou alteração de grade pelo comando de enriquecimento. Loja tem
-  adapter próprio. Na master o frete é estimativa separada do total (ADR 054);
-  como ele integra o total e a venda ERP é ponto de conferência em OLC-T01.
+  adapter próprio. Decisão do PO de 10/11/2026: o frete compõe o total (ADR 079,
+  decisão 9; critérios OLC-05a–j), na venda ERP em `valorFrete` conferido em
+  centavos exatos. É funcionalidade nova, ainda não implementada: na master o
+  frete é estimativa separada do total (ADR 054; `modules/shipping`; migration 0050) e o Olist exige `valorFrete` ausente ou zero. Campo, migração,
+  versionamento, recálculo e relação com a cotação são desenho de OLC-T01.
 - Conexão: credenciais cifradas, renovação serializada, conta esperada e
   configuração central versionada. API oficial no monólito/worker/PostgreSQL.
 - Processamento: validação interna antes de qualquer inclusão, snapshot/reserva/
@@ -364,8 +366,8 @@ Olist da master onde divergirem. Publicação GitHub → EasyPanel permanece vig
 
 Contrato da ADR 057 já adotado; permanece vigente, sem enfraquecimento, nos pontos
 em que OLC-01–16 não o supersede expressamente. Pelas decisões do PO de
-10/11/2026, o total derivado dos subtotais (mais frete, quando existir) segue
-valendo e o texto de 04/11 sobre cancelar Pedido pago ou confirmado foi
+10/11/2026, o total derivado dos subtotais, agora mais o frete (ainda não
+implementado), segue valendo e o texto de 04/11 sobre cancelar Pedido pago ou confirmado foi
 superado: o cancelamento local vale só para Pedido não confirmado (ADR 079).
 
 - Identidade/acesso: checkbox default false gerido por Admin, autorização

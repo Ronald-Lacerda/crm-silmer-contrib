@@ -27,8 +27,11 @@ O PO decidiu em 10/11/2026 que o Olist passa por refatoração conforme os bloco
 1 a 6: este pacote é a direção vigente e prevalece sobre o que a master já tem
 de Olist onde houver divergência; o código existente é ponto de partida e de
 reaproveitamento. O valor final do Pedido é a soma dos subtotais por linha de
-tamanho, calculada pelo backend (ADR 057 itens 4 e 6), mais o frete quando
-existir no Pedido. O cancelamento local vale só para Pedido não confirmado.
+tamanho, calculada pelo backend (ADR 057 itens 4 e 6), mais o frete. O frete é
+funcionalidade nova, ainda não implementada: a master não tem o campo e o
+contrato é definido no bloco 1 (OLC-T01); veja ADR 079, decisão 9, e os
+critérios OLC-05a–j da spec. O cancelamento local vale só para Pedido não
+confirmado.
 
 A entrega principal não inclui remoção Financeiro, exportação de pendentes,
 menu/busca Olist, prévia obrigatória, a restrição do cancelamento local
@@ -52,7 +55,9 @@ gerais deste documento. Objetivo: preparar Pedido confirmado e dados ERP sem
 alterar sua confirmação, total, ficha/PDF, cobrança ou pagamento históricos.
 
 Pode editar módulos Orders, Contacts e Identity Access, rotas/runtimes API
-correspondentes, migrations expand, OpenAPI e testes. Não edite Financeiro
+correspondentes, migrations expand, OpenAPI e testes; para o frete, também o
+vínculo com modules/shipping e os pontos de leitura do total em cobrança e
+Dashboard, preservando cobranças, ficha e histórico existentes. Não edite Financeiro
 para removê-lo, templates de impressão ou a jornada n8n. Preserve alterações
 locais de terceiros e confirme nomes/caminhos atuais com rg antes de editar.
 
@@ -62,15 +67,19 @@ Admin precisa do checkbox. Não acrescente projeção/entrada ao perfil Financei
 
 Reutilize size-pricing.js e olist-exact-cent.js. Persista IDs estáveis. Pedido
 novo: reaproveite os subtotais por linha de tamanho existentes; o valor final é
-a soma calculada pelo backend, mais o frete quando existir no Pedido, sem igualar
-outro total. Pedido antigo ou da loja que só tem total: persista a composição por
+a soma calculada pelo backend mais o frete do Pedido (centavos inteiros não
+negativos; zero ou ausente equivale a sem frete; Pedido legado sem frete fica
+preservado), sem igualar outro total. Pedido antigo ou da loja que só tem total: persista a composição por
 tamanho por comando aditivo versionado/auditado, cuja soma deve igualar
 exatamente o total existente (ADR 057 item 6); a ausência exige preenchimento
 humano, sem rateio. Derive grade/IDs no servidor e vincule 1:1 aos
 grupos/tamanhos/quantidades confirmados, sem editar grade ou atributos pelo
-enriquecimento. Antes de codificar, confira como o frete entra no total (na
-master é só estimativa separada; ponto de conferência em OLC-T01) e não invente
-contrato. Trate loja/legados por adapter e complemento ERP aditivo, sem
+enriquecimento. Defina e implemente o contrato do frete no Pedido (na master é
+só estimativa separada em modules/shipping): feche primeiro as perguntas de
+desenho listadas em OLC-T01 (quem informa e quando, relação com a cotação,
+campo/migração/versionamento do total, recálculo e expectedVersion, efeito em
+Pedido confirmado, documento RFC/ADR) sem inventar nome de campo, rota ou
+migração antes disso, e cubra os critérios OLC-05a–j. Trate loja/legados por adapter e complemento ERP aditivo, sem
 destravar checkout. Não substitua globalmente o campo de valor final nem
 reescreva snapshot/PDF.
 
@@ -103,7 +112,11 @@ explícitos/versionados. Não use usuário CRM para inferir vendedor ERP.
 
 Implemente adapter limitado para resolver e criar comprador/produto/variação,
 criar venda e ler resultados. Confira identidade fiscal/comercial, conta,
-referência, produtos, quantidades, marcadores e valores exatos. Não altere
+referência, produtos, quantidades, marcadores e valores exatos. Trate o
+valorFrete no adapter e no inspector (hoje exigem ausente ou zero): envie o
+frete do Pedido em centavos exatos, fora dos unitários, e confira que o
+valorFrete e o total retornados igualam o frete e o total do Pedido (soma dos
+subtotais mais frete). Não altere
 cadastro remoto encontrado nem peça escopos fiscais/estoque/baixa desnecessários.
 
 Reaproveite fixtures e descobertas das provas, sem IDs de casos reais,
@@ -126,7 +139,8 @@ InfinitePay, templates e comandos comerciais não relacionados. Não crie
 prévia obrigatória ou vínculo genérico de vendas antigas como dependência.
 
 O comando valida status confirmado, ator/checkbox/piloto, cadastro e todas as
-linhas/valores antes de inclusões. Congele conteúdo/configuração e grave reserva,
+linhas/valores antes de inclusões, inclusive que o total do Pedido é a soma dos
+subtotais mais o frete congelado no snapshot; divergência bloqueia. Congele conteúdo/configuração e grave reserva,
 snapshot, auditoria e job numa transação. Duas abas, chaves distintas e replay
 devem retornar a mesma operação sem segunda venda.
 
@@ -164,8 +178,8 @@ FinanceView, loja, versões da ficha e mudanças locais de terceiros.
 
 Adicione bloco Olist com pendências por campo/peça/tamanho e composição
 monetária autorizada, usada em Pedido antigo ou da loja sem subtotais. O valor
-final nunca é digitado: vem da soma dos subtotais calculada pelo backend, mais o
-frete quando existir. Nesses Pedidos antigos/da loja o total existente
+final nunca é digitado: vem da soma dos subtotais calculada pelo backend mais o
+frete, exibido como parte do total conforme o contrato de OLC-T01. Nesses Pedidos antigos/da loja o total existente
 permanece somente leitura e a soma da composição precisa coincidir com ele.
 Usuário sem permissão de correção vê motivo/responsável.
 Não crie menu/busca Olist, assistente ou tela de prévia obrigatória.
@@ -228,7 +242,7 @@ reais se ela ainda não existir na sessão; este prompt não autoriza POST real.
 
 Após autorização, habilite somente a conta piloto prevista e execute pelo
 detalhe do CRM. Confira comprador, grade, quantidades, cada valor, o total do
-Pedido (soma dos subtotais, mais frete quando existir), os totais da venda e o
+Pedido (soma dos subtotais mais o frete), o valorFrete, os totais da venda e o
 número remoto. Observe reload/replay sem duplicidade e recuperação
 conforme runbook, sem injetar falha destrutiva em dados reais.
 
@@ -299,8 +313,8 @@ de 10/11/2026, que supersede parcialmente a ADR 068), ajustando o já entregue
 feita só nesta tarefa. Mantém estado terminal e impactos em métricas/filas, sem
 estorno, exclusão histórica ou cancelamento ERP; nunca alterar exportados.
 OLC-F04: prévia detalhada e eventuais ampliações do modelo de preços além da
-soma dos subtotais por linha de tamanho (mais frete, quando existir) já
-vigente; preserve totais/snapshots antigos e valide a necessidade com produto.
+soma dos subtotais por linha de tamanho mais o frete (contrato em OLC-T01);
+preserve totais/snapshots antigos e valide a necessidade com produto.
 
 Nesta etapa, pode editar somente contrato/tarefas/RFC/ADR da melhoria escolhida.
 Informe arquivos de código candidatos, critérios positivos/negativos,

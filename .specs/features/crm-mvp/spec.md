@@ -171,7 +171,9 @@ para a entrega principal, supersedendo OLIST-01–50 onde incompatíveis.
   herança Admin ou nova projeção de perfil restrito. Validar cadastro e grade
   independentemente do estado confirmado; resolver/criar recursos ausentes.
 - Valor final = soma dos subtotais por linha de tamanho, calculada pelo backend,
-  mais o frete quando existir no Pedido. Composição por tamanho aditiva
+  mais o frete (decisão do PO de 10/11/2026: o frete compõe o total; funcionalidade
+  nova, ainda não implementada, e a master atual não tem o campo; critérios
+  OLC-05a–j). Composição por tamanho aditiva
   corresponde à grade e, em Pedido antigo ou da loja que só tem total, iguala
   esse total, sem reprecificar ou reescrever ficha. ADR 062, unicidade/reservas,
   recuperação mínima de incertezas, auditoria e bloqueio de edição incompatível
@@ -205,8 +207,8 @@ adapters/escopos explícitos, sem inventar preço/dado fiscal ou apagar históri
 
 A mescla da revisão 3 não remove os pontos acima; as decisões do PO de 10/11/2026
 os ajustam em dois pontos. O total é a soma dos subtotais por linha de tamanho,
-calculada pelo backend, mais o frete quando existir no Pedido, como registrado
-acima; a igualdade com o total existente vale só para enriquecer Pedido antigo
+calculada pelo backend, mais o frete, como registrado acima (ainda não
+implementado; ADR 079, decisão 9); a igualdade com o total existente vale só para enriquecer Pedido antigo
 ou da loja que possui apenas total. O texto de 04/11 sobre cancelar Pedido
 pago ou confirmado foi superado: o cancelamento local vale só para Pedido não
 confirmado (ADR 079; ajuste do código entregue em OLC-F03). A exigência de
