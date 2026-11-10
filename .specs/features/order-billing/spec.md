@@ -1,6 +1,6 @@
 # Cobranças do pedido — contrato aprovado
 
-Continuação autorizada em 08/11/2026: [ADR067](../../../docs/adr/067-recebimentos-externos-e-conciliacao-de-cobrancas.md)
+Continuação autorizada em 08/11/2026: [ADR077](../../../docs/adr/077-recebimentos-externos-e-conciliacao-de-cobrancas.md)
 e [order-billing-completion](../order-billing-completion/spec.md) acrescentam
 recebimentos externos, consultas e frontend real no redesign atual. As seções
 datadas de 06/11 abaixo registram o diferimento anterior, já supersedido.
@@ -54,7 +54,7 @@ Devolução é registro de operação já feita no provedor, sem estorno pelo CR
 
 ## Backend do envio integrado, BAPI-01–10
 
-Autorizado pelo proprietário em 06/11/2026; [ADR 066](../../../docs/adr/066-intencoes-de-cobranca-e-envio-transacional.md).
+Autorizado pelo proprietário em 06/11/2026; [ADR 076](../../../docs/adr/076-intencoes-de-cobranca-e-envio-transacional.md).
 Frontend adiado até o redesign. Contrato de comandos/respostas e erros:
 [API de intenções](../../../docs/api/order-billing-chat.md).
 

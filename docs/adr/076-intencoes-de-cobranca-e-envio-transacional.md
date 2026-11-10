@@ -1,4 +1,4 @@
-# ADR 066 — Intenções de cobrança e envio transacional
+# ADR 076 — Intenções de cobrança e envio transacional
 
 Status: aceita para implementação de backend. Data: 06/11/2026.
 Decisor: proprietário do produto, que aprovou o plano revisado e autorizou
@@ -49,3 +49,5 @@ idempotência, auditoria e recuperação nas fronteiras existentes.
 As etapas ainda não entregues ficam pendentes nos tasks. Testes de contrato
 com serviço sintético não comprovam comportamento PostgreSQL ou transporte.
 Frontend/redesign, ativação remota e pagamentos reais têm gates separados.
+
+Registro renumerado de066 para076 na integração de09/11/2026 com a master; conteúdo decisório preservado. Migrações inéditas relacionadas passam a0073/0074.

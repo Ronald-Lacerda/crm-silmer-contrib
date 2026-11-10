@@ -1,6 +1,6 @@
 # Recebimentos externos e conferência de pagamentos
 
-Contrato da [ADR067](../adr/067-recebimentos-externos-e-conciliacao-de-cobrancas.md)
+Contrato da [ADR077](../adr/077-recebimentos-externos-e-conciliacao-de-cobrancas.md)
 e [BFIN-01–08](../../.specs/features/order-billing-completion/spec.md).
 Complementa [cobranças](order-billing.v1.json) e
 [intenções de envio](order-billing-chat.md). Rotas humanas usam sessão,

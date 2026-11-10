@@ -3,7 +3,7 @@
 COB-READY-01 / COB-API-READY, requisitos COB-01–16 e BAPI-01–11 da
 [especificação](../../.specs/features/order-billing/spec.md),
 [RFC 047](../rfc/047-enviar-cobranca-pela-conversa.md) e
-[ADR 066](../adr/066-intencoes-de-cobranca-e-envio-transacional.md).
+[ADR 076](../adr/076-intencoes-de-cobranca-e-envio-transacional.md).
 
 Este documento descreve os contratos consumidos pela interface no redesign
 atual, autorizada em 08/11/2026. A entrega integrada é rastreada em

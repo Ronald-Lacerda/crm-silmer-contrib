@@ -378,6 +378,7 @@ export function createOrderBillingChatRuntime(database, options) {
   }
   /** @param {any} c @param {any} input @param {any} f */
   function eligible(c, input, f) {
+    if (c.order.cancelled_at) throw error('ORDER_CANCELLED', 409);
     if (
       Number(c.order.version) !== input.expectedVersion ||
       Number(c.plan?.version ?? 0) !== input.expectedBillingVersion ||

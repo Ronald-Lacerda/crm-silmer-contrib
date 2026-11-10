@@ -23,6 +23,7 @@ import {
   KEY,
   SELLER,
   NOW,
+  cancelOrder,
 } from './support/order-billing-chat-fixture.js';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -259,6 +260,99 @@ if (!url) {
     delete request.percent;
     return request;
   }
+
+  test('COB-REL-01: cancellation before checkout reservation blocks the waiting intent without creating a message', async () => {
+    const { orderId, intent } = await issue();
+    await cancelOrder(pool, orderId);
+    assert.equal(
+      (
+        await legacy.reserve({
+          chargeId: intent.chargeId,
+          executionId: randomUUID(),
+          correlationId: randomUUID(),
+        })
+      ).allowed,
+      false,
+    );
+    const row = await intentRow(intent.id);
+    assert.equal(row.state, 'blocked');
+    assert.equal(row.blocked_reason, 'AGREEMENT_CHANGED');
+    assert.equal(row.message_id, null);
+    assert.equal(
+      (
+        await pool.query(
+          'SELECT execution_id FROM crm.order_billing_charges WHERE id=$1',
+          [intent.chargeId],
+        )
+      ).rows[0].execution_id,
+      null,
+    );
+  });
+
+  test('COB-REL-01: cancellation after transport reservation fails the final preflight and preserves terminal order history', async () => {
+    const { orderId, intent } = await issue();
+    const reserved = await reserve(await ready(intent));
+    assert.equal((await preflight(reserved)).valid, true);
+    await cancelOrder(pool, orderId);
+    const before = (
+      await pool.query('SELECT * FROM crm.orders WHERE id=$1', [orderId])
+    ).rows[0];
+    assert.equal((await preflight(reserved)).valid, false);
+    const row = await intentRow(intent.id);
+    assert.equal(row.state, 'blocked');
+    assert.equal(row.blocked_reason, 'AGREEMENT_CHANGED');
+    assert.equal(
+      (
+        await pool.query(
+          'SELECT status,external_message_id FROM crm.messages WHERE id=$1',
+          [row.message_id],
+        )
+      ).rows[0].external_message_id,
+      null,
+    );
+    assert.deepEqual(
+      (await pool.query('SELECT * FROM crm.orders WHERE id=$1', [orderId]))
+        .rows[0],
+      before,
+    );
+  });
+
+  test('COB-REL-01: a late payment on a cancelled order remains unapplied and still invalidates the queued message', async () => {
+    const { orderId, intent } = await issue();
+    const row = await ready(intent);
+    await cancelOrder(pool, orderId);
+    const before = (
+      await pool.query('SELECT * FROM crm.orders WHERE id=$1', [orderId])
+    ).rows[0];
+    const result = await payment(intent);
+    assert.equal(result.reviewRequired, true);
+    assert.deepEqual(
+      (await pool.query('SELECT * FROM crm.orders WHERE id=$1', [orderId]))
+        .rows[0],
+      before,
+    );
+    const receipt = (
+      await pool.query(
+        'SELECT application_valid,applied_amount_cents FROM crm.order_billing_payments WHERE charge_id=$1',
+        [intent.chargeId],
+      )
+    ).rows[0];
+    assert.equal(receipt.application_valid, false);
+    assert.equal(Number(receipt.applied_amount_cents), 0);
+    assert.equal((await intentRow(intent.id)).state, 'blocked');
+    assert.equal(
+      (await intentRow(intent.id)).blocked_reason,
+      'AGREEMENT_CHANGED',
+    );
+    assert.equal(
+      (
+        await pool.query('SELECT status FROM crm.messages WHERE id=$1', [
+          row.message_id,
+        ])
+      ).rows[0].status,
+      'failed',
+    );
+  });
 
   test('BAPI-07: concurrent link callbacks compose exactly one encrypted Inbox message and command', async () => {
     const { orderId, intent } = await issue();

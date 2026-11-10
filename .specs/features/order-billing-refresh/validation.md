@@ -98,7 +98,7 @@ contracts. The prototype's synthetic payment simulation is not provider evidence
 - Inbox/billing browser regression evidence: `var/billing-refresh-e2e.log:97`: **79 passed**. Broad gates were not repeated after source review because no production changes followed those gates.
 - Prototype tests are five additions relative to master; no existing prototype assertions were removed. CI retains master's serialized gates and adds the two billing suites (`.github/workflows/ci.yml:152`). Existing backend/transport tests are preserved or strengthened for current startup composition.
 - `ops/n8n/workflows/create-evolution-workflow.mjs` is byte-identical to master. The explicit offline billing patch remains separate. SIL-36 artifact preservation gate is present at `test/n8n-production-reference.test.js:112` and passed within validate.
-- Master's ADR 058, ADR 061 and RFC 045 have no diff. New chat decision is ADR 066; financial reference resolves to RFC 049. No production flag or live credential was changed.
+- Master's ADR 058, ADR 061 and RFC 045 have no diff. New chat decision is ADR 076; financial reference resolves to RFC 049. No production flag or live credential was changed.
 
 ## Discrimination sensor
 

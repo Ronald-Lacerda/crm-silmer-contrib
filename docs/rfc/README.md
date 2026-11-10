@@ -26,6 +26,9 @@
 
 ## Decisão de 08/11/2026
 
+- [060 — Recebimentos externos e conciliação de cobranças](060-recebimentos-externos-e-conciliacao-de-cobrancas.md),
+  decidida na ADR077; proposta renumerada de053 na integração de09/11.
+
 - [053 — Responder por mensagem mais recente](053-responder-por-mensagem-mais-recente.md),
   decidida na ADR 066 / INBOX-VEZ-08: mensagens recentes no topo de Responder.
 - [052 — Caixa de entrada organizada por "de quem é a vez"](052-caixa-de-entrada-por-vez-de-responder.md),
@@ -35,7 +38,7 @@
 ## Decisão de 06/11/2026
 
 - [047 — Enviar cobrança pela conversa](047-enviar-cobranca-pela-conversa.md),
-  backend decidido na ADR 066; frontend adiado até o redesign.
+  backend decidido na ADR 076; frontend adiado até o redesign.
 
 - [051 — Triagem prioritária sem inferir regras comerciais](051-triagem-prioritaria-sem-inferir-regras-comerciais.md),
   aprovada na solicitação do proprietário, decidida na ADR 063 / VND-L05.

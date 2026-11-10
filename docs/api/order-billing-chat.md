@@ -1,7 +1,7 @@
 # Intenções de envio de cobrança, contrato v1
 
 COB-CHAT-B01–B05 e COB-API-READY / BAPI-01–11, [RFC 047](../rfc/047-enviar-cobranca-pela-conversa.md),
-[ADR 066](../adr/066-intencoes-de-cobranca-e-envio-transacional.md),
+[ADR 076](../adr/076-intencoes-de-cobranca-e-envio-transacional.md),
 [OpenAPI](order-billing-chat.v1.json). Backend autorizado em 06/11/2026.
 Frontend autorizado no redesign atual em 08/11/2026. O contrato independe de tela e compositor.
 

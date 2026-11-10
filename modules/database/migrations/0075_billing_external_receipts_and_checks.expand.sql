@@ -100,13 +100,25 @@ CREATE TABLE crm.order_billing_payment_check_events (
 CREATE INDEX billing_payment_check_events_check ON crm.order_billing_payment_check_events(check_id,occurred_at,id);
 CREATE TRIGGER billing_payment_check_events_immutable BEFORE UPDATE OR DELETE ON crm.order_billing_payment_check_events
   FOR EACH ROW EXECUTE FUNCTION crm.reject_deal_history_mutation();
-ALTER TABLE crm.outbox_jobs DROP CONSTRAINT outbox_jobs_type_check,DROP CONSTRAINT outbox_jobs_target_check,
-  ADD CONSTRAINT outbox_jobs_type_check CHECK (job_type IN ('channel_event.process','media.delete','channel_message.send','n8n.command.deliver','chat_media.process','billing.checkout.create','billing.payment.check')),
-  ADD CONSTRAINT outbox_jobs_target_check CHECK (
-    (job_type='channel_event.process' AND channel_event_id IS NOT NULL AND transient_media_id IS NULL AND message_id IS NULL AND n8n_command_id IS NULL AND chat_media_id IS NULL AND deletion_reason IS NULL)
-    OR (job_type='media.delete' AND channel_event_id IS NULL AND transient_media_id IS NOT NULL AND message_id IS NULL AND n8n_command_id IS NULL AND chat_media_id IS NULL AND deletion_reason IN ('expired','journey_terminal'))
-    OR (job_type='channel_message.send' AND channel_event_id IS NULL AND transient_media_id IS NULL AND message_id IS NOT NULL AND n8n_command_id IS NULL AND chat_media_id IS NULL AND deletion_reason IS NULL)
-    OR (job_type='n8n.command.deliver' AND channel_event_id IS NULL AND transient_media_id IS NULL AND n8n_command_id IS NOT NULL AND chat_media_id IS NULL AND deletion_reason IS NULL)
-    OR (job_type='chat_media.process' AND channel_event_id IS NULL AND transient_media_id IS NULL AND message_id IS NULL AND n8n_command_id IS NULL AND chat_media_id IS NOT NULL AND deletion_reason IS NULL)
-    OR (job_type IN ('billing.checkout.create','billing.payment.check') AND channel_event_id IS NULL AND transient_media_id IS NULL AND message_id IS NULL AND n8n_command_id IS NULL AND chat_media_id IS NULL AND deletion_reason IS NULL)
-  );
+-- Extend the installed contracts: Olist already owns export/reconcile targets.
+-- Trusted catalog expressions preserve existing queue/effect/target invariants.
+DO $billing_check_outbox$
+DECLARE previous_type text; previous_target text;
+BEGIN
+  SELECT pg_get_expr(conbin,conrelid) INTO STRICT previous_type
+    FROM pg_constraint WHERE conrelid='crm.outbox_jobs'::regclass
+    AND conname='outbox_jobs_type_check' AND contype='c';
+  SELECT pg_get_expr(conbin,conrelid) INTO STRICT previous_target
+    FROM pg_constraint WHERE conrelid='crm.outbox_jobs'::regclass
+    AND conname='outbox_jobs_target_check' AND contype='c';
+  EXECUTE format($checks$
+    ALTER TABLE crm.outbox_jobs DROP CONSTRAINT outbox_jobs_type_check,DROP CONSTRAINT outbox_jobs_target_check,
+      ADD CONSTRAINT outbox_jobs_type_check CHECK ((%s) OR job_type='billing.payment.check'),
+      ADD CONSTRAINT outbox_jobs_target_check CHECK ((%s)
+        OR (job_type='billing.payment.check' AND channel_event_id IS NULL
+          AND transient_media_id IS NULL AND message_id IS NULL AND n8n_command_id IS NULL
+          AND chat_media_id IS NULL AND olist_export_id IS NULL AND deletion_reason IS NULL
+          AND queue='billing' AND effect_policy='queryable'))
+  $checks$,previous_type,previous_target);
+END;
+$billing_check_outbox$;

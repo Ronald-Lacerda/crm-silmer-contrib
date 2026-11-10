@@ -4,6 +4,7 @@ import { commandKey, request } from '../../lib/api-client.js';
 import {
   billingError,
   billingMoney,
+  billingReason,
   billingUrl,
 } from '../../lib/order-billing.js';
 import { parseBrl } from '../../lib/order-format.js';
@@ -82,9 +83,15 @@ const destination = computed(
     props.destinationLabel ||
     'Conversa vinculada ao pedido',
 );
+const cancelled = computed(
+  () =>
+    Boolean(props.order.cancelledAt) ||
+    billing.value?.blockedReason === 'ORDER_CANCELLED',
+);
 const mutable = computed(
   () =>
     billing.value?.canManage &&
+    !cancelled.value &&
     !props.disabled &&
     !loading.value &&
     !error.value &&
@@ -260,7 +267,7 @@ async function refreshConversation() {
     conversation.value = response.data.conversation;
 }
 async function show(nextMode, event, item = null) {
-  if (busy.value || props.disabled || pending.value) return;
+  if (busy.value || !mutable.value) return;
   const trigger = event.currentTarget;
   const ownGeneration = generation;
   mode.value = nextMode;
@@ -464,6 +471,10 @@ function createRecord() {
 }
 async function submit() {
   if (busy.value) return;
+  if (cancelled.value) {
+    dialogError.value = billingReason('ORDER_CANCELLED');
+    return;
+  }
   if (
     !pending.value &&
     (!mutable.value || (mode.value === 'send' && !canSend.value))
@@ -542,7 +553,7 @@ async function submit() {
   }
 }
 async function recover(event) {
-  if (!pending.value || busy.value) return;
+  if (!pending.value || busy.value || cancelled.value) return;
   const trigger = event.currentTarget;
   mode.value = pending.value.mode;
   stage.value = 'review';
@@ -599,6 +610,9 @@ watch(
     if (value) dialog.value?.close();
   },
 );
+watch(cancelled, (value) => {
+  if (value && !busy.value) dialog.value?.close();
+});
 async function poll() {
   if (disposed) return;
   await load();
@@ -624,6 +638,9 @@ onBeforeUnmount(() => {
       {{ notice }}
     </p>
     <template v-if="billing">
+      <p v-if="cancelled" role="status" class="op-hint">
+        {{ billingReason('ORDER_CANCELLED') }}
+      </p>
       <dl
         v-if="!compact"
         class="workspace-totals"
@@ -675,7 +692,12 @@ onBeforeUnmount(() => {
         >
           Registrar recebimento externo
         </button>
-        <button v-if="pending" type="button" :disabled="busy" @click="recover">
+        <button
+          v-if="pending"
+          type="button"
+          :disabled="busy || cancelled"
+          @click="recover"
+        >
           Conferir registro pendente
         </button>
       </div>
@@ -712,7 +734,7 @@ onBeforeUnmount(() => {
               referrerpolicy="no-referrer"
               >Abrir
               {{
-                charge.status === 'closed'
+                cancelled || charge.status === 'closed'
                   ? 'link anterior para conferência'
                   : 'cobrança'
               }}</a

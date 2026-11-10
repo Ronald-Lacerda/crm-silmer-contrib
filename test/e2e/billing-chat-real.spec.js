@@ -35,6 +35,7 @@ async function setup(page, options = {}) {
     paidOn: null,
     finalAmountCents: 100000,
     seller: { id: 'shipping-seller', name: 'Vendedora sintética' },
+    ...options.order,
   };
   const billing = {
     enabled: true,
@@ -937,4 +938,162 @@ test('BFUI-04: an unapplied external receipt remains reversible until its own re
   await expect(section).toContainText(
     'Motivo do estorno: Registro externo incorreto',
   );
+});
+
+test('COB-REL-01/BFUI-03/04: cancelled orders retain private history and receipts in chat and order without financial commands', async ({
+  page,
+}) => {
+  const state = await setup(page, {
+    order: { cancelledAt: '2026-11-09T12:00:00.000Z' },
+    billing: {
+      managed: true,
+      percent: 30,
+      charges: [
+        {
+          id: 'cancelled-current',
+          kind: 'signal',
+          status: 'waiting',
+          amountCents: 30000,
+          validUntil: new Date(Date.now() + 86400000).toISOString(),
+          checkoutUrl: 'https://checkout.infinitepay.io/synthetic-cancelled',
+        },
+        {
+          id: 'cancelled-prior',
+          kind: 'signal',
+          status: 'paid',
+          amountCents: 10000,
+          receiptUrl: 'https://recibo.infinitepay.io/synthetic-cancelled',
+          refundableAmountCents: 10000,
+        },
+      ],
+    },
+  });
+  const payment = state.receive(10000, 'external');
+  state.billing.externalReceipts.push({
+    ...payment,
+    note: 'Recebimento anterior ao cancelamento',
+    reversedAt: null,
+  });
+  const { dialog } = await openChat(page);
+  await expect(dialog).toContainText(
+    'Pedido cancelado. O histórico de cobranças e pagamentos continua disponível',
+  );
+  await expect(
+    dialog.getByRole('button', {
+      name: 'Gerar e enviar cobrança',
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await expect(
+    dialog.getByRole('button', {
+      name: 'Registrar recebimento externo',
+      exact: true,
+    }),
+  ).toBeDisabled();
+  for (const button of await dialog
+    .getByRole('button', { name: 'Conferir pagamento', exact: true })
+    .all())
+    await expect(button).toBeDisabled();
+  await expect(
+    dialog.getByRole('button', { name: 'Estornar registro', exact: true }),
+  ).toBeDisabled();
+  await expect(
+    dialog.getByRole('link', {
+      name: 'Abrir link anterior para conferência',
+      exact: true,
+    }),
+  ).toHaveAttribute(
+    'href',
+    'https://checkout.infinitepay.io/synthetic-cancelled',
+  );
+  await dialog
+    .getByText('Histórico de cobranças, envios e pagamentos', { exact: true })
+    .click();
+  await expect(dialog).toContainText('Recebimento externo');
+  await dialog
+    .getByRole('button', { name: 'Fechar cobranças', exact: true })
+    .click();
+  await page.goto('/pedidos/shipping-order-1#cobrancas');
+  const section = page.getByRole('region', { name: 'Cobranças', exact: true });
+  await expect(section).toContainText(
+    'novos registros e envios estão bloqueados',
+  );
+  await expect(section).toContainText('Recebimento anterior ao cancelamento');
+  await expect(
+    section.getByRole('button', {
+      name: 'Gerar e enviar cobrança',
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await expect(
+    section.getByRole('button', {
+      name: 'Registrar recebimento externo',
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await expect(
+    section.getByRole('button', { name: 'Copiar link', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    section.getByRole('button', { name: 'Preparar mensagem', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    section.getByRole('button', { name: 'Revisar cobrança', exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    section.getByRole('link', { name: 'Comprovante InfinitePay', exact: true }),
+  ).toHaveAttribute(
+    'href',
+    'https://recibo.infinitepay.io/synthetic-cancelled',
+  );
+  await section.getByText('Conferência e devoluções', { exact: true }).click();
+  await expect(
+    section.getByRole('button', {
+      name: 'Registrar devolução do sinal',
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await expect(
+    section.getByRole('link', {
+      name: 'Abrir cobrança anterior para conferência',
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(state.calls).toHaveLength(0);
+});
+
+test('COB-REL-01/BFUI-04: Olist composition lock preserves external receipt registration', async ({
+  page,
+}) => {
+  const state = await setup(page, {
+    order: { olistLocked: true },
+    billing: { managed: true, percent: 0 },
+  });
+  await page.goto('/pedidos/shipping-order-1#cobrancas');
+  const section = page.getByRole('region', { name: 'Cobranças', exact: true });
+  await section
+    .getByRole('button', { name: 'Registrar recebimento externo', exact: true })
+    .click();
+  const external = page.getByRole('dialog', {
+    name: 'Registrar recebimento externo',
+    exact: true,
+  });
+  await external.getByLabel('Valor recebido (R$)').fill('100,00');
+  await external.getByRole('button', { name: 'Revisar', exact: true }).click();
+  await external
+    .getByRole('button', { name: 'Confirmar recebimento externo', exact: true })
+    .click();
+  await expect(external).not.toBeVisible();
+  expect(state.calls).toHaveLength(1);
+  expect(state.calls[0].path).toBe(
+    '/api/v1/orders/shipping-order-1/billing/external-receipts',
+  );
+  expect(state.billing.receivedAmountCents).toBe(10000);
+  expect(state.billing.balanceAmountCents).toBe(90000);
+  await expect(
+    section.getByRole('region', {
+      name: 'Pagamentos registrados',
+      exact: true,
+    }),
+  ).toContainText('R$ 100,00');
 });

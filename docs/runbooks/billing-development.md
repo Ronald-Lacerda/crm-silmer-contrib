@@ -1,7 +1,7 @@
 # Desenvolvimento interativo de cobranças
 
 Escopo: [BDEV2-01–04](../../.specs/features/order-billing-completion/spec.md),
-ADR067/RFC053. Ambiente sintético da jornada real, separado de produção e dos
+ADR077/RFC060. Ambiente sintético da jornada real, separado de produção e dos
 containers de desenvolvimento existentes. Não usar dados ou credenciais reais.
 
 ## Operação

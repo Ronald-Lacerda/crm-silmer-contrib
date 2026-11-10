@@ -4,6 +4,26 @@ export const KEY = Buffer.alloc(32, 91);
 export const SELLER = { id: 'billing-seller', kind: 'human' };
 export const NOW = new Date('2026-11-05T15:00:00.000Z');
 const current = NOW;
+/** Legal terminal cancellation with synthetic reason; preserves commercial/payment fields.
+ * @param {any} pool @param {string} orderId */
+export async function cancelOrder(pool, orderId) {
+  await pool.query(
+    `UPDATE crm.orders SET cancelled_at=$2,cancelled_by=$3,cancellation_reason_envelope=$4::jsonb,
+      version=version+1,updated_at=$2 WHERE id=$1`,
+    [
+      orderId,
+      NOW,
+      SELLER.id,
+      JSON.stringify(
+        encryptJson(
+          { reason: 'Synthetic cancellation' },
+          `order-cancellation:${orderId}`,
+          KEY,
+        ),
+      ),
+    ],
+  );
+}
 /** @param {any} pool @param {any} [options] */
 export async function seed(pool, options = {}) {
   const id = `billing-order-${randomUUID()}`;

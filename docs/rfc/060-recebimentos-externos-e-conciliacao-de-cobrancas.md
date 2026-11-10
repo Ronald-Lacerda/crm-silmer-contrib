@@ -1,7 +1,7 @@
-# RFC 053: recebimentos externos e conciliação de cobranças
+# RFC 060: recebimentos externos e conciliação de cobranças
 
 Status: aceita pelo proprietário em 08/11/2026. Decisão na
-[ADR 067](../adr/067-recebimentos-externos-e-conciliacao-de-cobrancas.md).
+[ADR 077](../adr/077-recebimentos-externos-e-conciliacao-de-cobrancas.md).
 Continuação do [PR 298](https://github.com/romulosutil/crm-silmer/pull/298),
 da RFC047 e da entrega DEV. Critérios e tarefas em
 [order-billing-completion](../../.specs/features/order-billing-completion/spec.md).

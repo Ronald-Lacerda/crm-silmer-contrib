@@ -33,7 +33,7 @@ comparadas às expressões de asserção, não apenas aos nomes dos testes.
    mudança de contexto ou flag impede o envio. O caminho não publica
    `conversation.message_delivery_changed`, ao contrário de
    `modules/n8n-integration/src/postgres-command-store.js:349`–`:350`.
-   O trigger em `modules/database/migrations/0064_billing_send_transport.expand.sql:27`
+   O trigger em `modules/database/migrations/0074_billing_send_transport.expand.sql:27`
    registra estado/auditoria da intenção, mas também não publica invalidação
    da conversa. Assim o backend pode deixar a Inbox aberta exibindo queued
    até outra atualização/reabertura, apesar de a consulta já retornar failed.

@@ -1,7 +1,7 @@
-# ADR 067: recebimentos externos e conciliação de cobranças
+# ADR 077: recebimentos externos e conciliação de cobranças
 
 Data: 08/11/2026. Status: aceita por autorização explícita do proprietário.
-RFC: [053](../rfc/053-recebimentos-externos-e-conciliacao-de-cobrancas.md).
+RFC: [060](../rfc/060-recebimentos-externos-e-conciliacao-de-cobrancas.md).
 Requisitos: [BFIN-01–08, BFUI-01–06, BDEV2-01–04](../../.specs/features/order-billing-completion/spec.md).
 Tarefas: [T0–T6](../../.specs/features/order-billing-completion/tasks.md).
 Relacionada ao [PR 298](https://github.com/romulosutil/crm-silmer/pull/298).
@@ -36,3 +36,5 @@ cancelados ao registrar dinheiro externo. O checkout da loja é preservado.
 Um novo livro e seu agregado exigem migração expand e revisão de todas as
 guardas de saldo/Financeiro. A alternativa de mudar Pago em não oferece lastro;
 NSU fictício mistura proveniência. Nenhuma nova infraestrutura de produção.
+
+Registro renumerado de067 para077 na integração de09/11/2026 com a master; conteúdo decisório preservado. A migração inédita relacionada passa a0075 e a proposta paraRFC060.

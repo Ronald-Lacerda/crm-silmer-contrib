@@ -118,7 +118,7 @@ export async function billingSendBlockReason(client, intent, options) {
     EXISTS(SELECT 1 FROM crm.user_capabilities WHERE user_id=i.actor_id AND capability='COMMERCIAL_ADMIN') AS admin,
     c.assigned_user_id AS current_owner,c.provider,c.provider_account_id,c.automation_state,c.automation_epoch AS current_epoch,c.cycle_number AS current_cycle,c.inbound_revision AS current_revision,c.terminal_at,
     ci.current_contact_id,o.contact_id,ci.id AS identity_id,
-    o.status AS order_status,o.confirmed_at AS current_confirmed_at,o.final_amount_cents AS current_total,o.payment_condition AS current_condition,
+    o.status AS order_status,o.cancelled_at AS order_cancelled_at,o.confirmed_at AS current_confirmed_at,o.final_amount_cents AS current_total,o.payment_condition AS current_condition,
     CASE WHEN o.conversation_id IS NULL THEN o.manual_owner_id ELSE primary_c.assigned_user_id END AS current_order_owner,
     o.conversation_id AS primary_id,p.review_required,
     ch.status AS charge_status,ch.valid_until,
@@ -175,6 +175,7 @@ export async function billingSendBlockReason(client, intent, options) {
   )
     return 'AGREEMENT_CHANGED';
   if (
+    row.order_cancelled_at ||
     row.order_status !== 'confirmado' ||
     new Date(row.current_confirmed_at).getTime() !==
       new Date(row.confirmed_at).getTime() ||

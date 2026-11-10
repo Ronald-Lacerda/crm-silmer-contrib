@@ -1,6 +1,6 @@
 # RFC 047 — Enviar cobrança pela conversa
 
-Status: backend autorizado em 06/11/2026, decidido na [ADR 066](../adr/066-intencoes-de-cobranca-e-envio-transacional.md). Frontend adiado até o redesign de outra frente. Proposta inicial de 05/11/2026.
+Status: backend autorizado em 06/11/2026, decidido na [ADR 076](../adr/076-intencoes-de-cobranca-e-envio-transacional.md). Frontend adiado até o redesign de outra frente. Proposta inicial de 05/11/2026.
 Artefato: [protótipo e roteiro de avaliação](../prototypes/README.md), COB-CHAT-P01.
 Requisitos existentes: COB-01–16, MSG-02/03, PCX-13, UX-FUNC-01.
 Tarefas: COB-REV-01 e COB-CHAT-01 em
