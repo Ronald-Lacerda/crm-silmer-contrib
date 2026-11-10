@@ -92,3 +92,28 @@ homologação real permanecem condições da futura ativação, fora do veredito
 implantação desligada. Não houve ensaio financeiro nem prova de autenticação
 ponta a ponta por simples vínculo de credenciais. Ver validation.md e relatório
 de preparação atualizado em09/11.
+
+### T5: Publicar a proteção no workflow humano
+
+Depends on: T4
+Where: ops/n8n/billing-send-preflight.mjs
+Tests: BREL-06/04, BAPI-07/09/10; patch focal, comparação independente do export real,141nós originais exatos, três novos nós e grafo de falhas, versão publicada e flagsfalse.
+Gate: HumanPreflight
+Done when: proteção publicada no atendimento, artefato reexportado conferido e nenhum ensaio financeiro executado.
+Status: Complete
+
+Publicada versão9157724a do atendimento às23:06:25 de09/11.141nós originais
+inteiramente exatos e três novos; comparação independente do export publicado
+PASS, sete arestas adicionadas/uma removida.24testes focais aprovados e seis
+mutações perigosas recusadas pelo comparador. Flagsfalse antes/depois em
+API/worker; health200, tabelas/fila billing vazias. Sem execução financeira.
+Evidência em docs/qa/order-billing-human-guard-2026-11-09.md.
+
+### T6: Preparar a ativação coordenada sem habilitá-la
+
+Depends on: T5
+Where: docs/runbooks/order-billing-activation.md
+Tests: BREL-07/04/05; sequência de publicação/recebimento/emissão/envio, filas pendentes, rollback sem apagar histórico, flags efetivasfalse e workflows financeiros inativos.
+Gate: ActivationPreparation
+Done when: runbook e revisão independente registram prontidão técnica limitada e condições anteriores ao ensaio real, sem efetuar a ativação.
+Status: Pending

@@ -18,6 +18,8 @@ disponível e envios desligados, para realizar depois um ensaio autorizado.
 - BREL-03: WHEN as migrações forem aplicadas, THE SYSTEM SHALL conferir backup e capacidade antes, executar somente expand da release compatível e comparar versões/checksums e saúde após, sem apagar dados ou editar migrações aplicadas.
 - BREL-04: WHILE o teste financeiro não for autorizado, THE SYSTEM SHALL manter emissão e envio de cobrança desligados e não executar pagamento, checkout ou mensagem reais.
 - BREL-05: WHEN a chave InfinitePay for cadastrada, THE SYSTEM SHALL mantê-la exclusivamente na credencial privada do n8n, com entrada e salvamento pessoais pelo proprietário, sem segredo em chat, repositório, logs ou export.
+- BREL-06: WHEN a proteção do workflow humano for publicada, THE SYSTEM SHALL preservar integralmente os nós originais e encaminhar cobranças reservadas somente após preflight positivo do CRM, bloqueando envio em falha, timeout ou resposta inválida.
+- BREL-07: WHILE a ativação coordenada e o ensaio real estiverem apenas preparados, THE SYSTEM SHALL manter as três flags financeiras false e os workflows financeiros inativos, registrando ordem de ativação, recuperação e aviso prévio ao proprietário antes de qualquer teste real.
 
 ## Out of Scope
 
@@ -51,3 +53,5 @@ de checks, saúde, backup e cadastro seguro, com status explícito em tasks.md.
 | BREL-03     | T3    | COB-OPS-01 e runbook de migração/recovery        |
 | BREL-04     | T1–T4 | autorização limitada do proprietário             |
 | BREL-05     | T4    | política de credenciais e runbook InfinitePay    |
+| BREL-06     | T5    | BAPI-07/09/10 e autorização de09/11 para proteção humana |
+| BREL-07     | T6    | autorização de09/11 para preparar ativação sem envios |
