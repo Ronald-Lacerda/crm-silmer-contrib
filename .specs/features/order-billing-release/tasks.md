@@ -52,7 +52,12 @@ Where: .github/workflows/ci.yml
 Tests: BREL-02/04; checks, revisão independente, merge linear e identificação da imagem/fonte anterior.
 Gate: Release
 Done when: release aprovada e caminho de recuperação concreto registrados.
-Status: Pending
+Status: Complete
+
+PR333 integrado pelo mantenedor com rebase em87cbc435, após cinco checks
+aprovados no HEADe5e65af9. As árvores são idênticas. A fonte anterior0ed44bd3
+e o image ID anterior registrado no EasyPanel estão identificados em
+validation-release.md. Não houve bypass dos gates nem merge commit.
 
 ### T3: Implantar a aplicação e executar migrações expand
 
