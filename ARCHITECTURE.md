@@ -310,10 +310,35 @@ os gates de conexão/ACL/runtime/piloto continuam separados. Sem nova infraestru
 
 Prova C05–C07 concluída em 05/11: [API e tela nativa consistentes](docs/integrations/olist/evidence/exact-cent-proof-result.json),
 14 GETs, três pedidos/R$ 5,20. F1/T02 fechados somente para `exact-cent-v1`;
-T03 pode iniciar. Runtime integrado, ACL, banco, UI e piloto seguem nas tarefas
-posteriores; frações continuam bloqueadas antes do envio.
+Implementação segue OLC-T01–T06 pelo recorte de 10/11 abaixo. Integração do fluxo OLC,
+piloto e ativação continuam pendentes; frações bloqueadas antes do envio.
 
-## Olist por habilitação e subtotal por tamanho em 04/11/2026
+## Olist pelo pedido confirmado em 10/11/2026
+
+[ADR 079](docs/adr/079-olist-a-partir-do-pedido-confirmado.md), revisão 3 da
+[RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), OLIST-PLAN-03:
+**Confirmado → Gerar no Olist**, pelo detalhe atual, com validação interna e
+estado persistido na mesma página. [OLC-01–16](.specs/features/olist-confirmed/spec.md)
+e [OLC-T01–T06](.specs/features/olist-confirmed/tasks.md) substituem a amplitude
+anterior da ADR 057 onde incompatível; o fluxo OLC ainda não está entregue
+ponta a ponta.
+
+API/worker/PostgreSQL existentes, conexão/configuração central, checkbox
+individual mais leitura comercial e piloto privado. Composição por tamanho
+aditiva iguala o total confirmado, preservando snapshot/ficha/checkout. Resolver
+cadastros por identidade, reservar cada efeito e conferir linhas/totais;
+incerteza exige recuperação administrativa mínima, sem retry criador.
+Alterações incompatíveis serializam com exportação; pagamento/entrega compatíveis
+não invalidam o conteúdo exportado só por mudança da versão global.
+
+FINQ-DEPREC-01, melhorias OLC-F01–F04 e ficha FPI-T01–T04 são trilhas independentes,
+sem dependência reversa sobre a geração. Não exigir prévia, busca/menu Olist,
+cancelamento local, pagamento integral ou mudança de template.
+
+Núcleos de IDs/preços e conferência exata já existem; F1/T02 fechados apenas
+para `exact-cent-v1`. [Implementação e limites](docs/integrations/olist/implementation-progress.md).
+
+### Registro de 04/11/2026 preservado
 
 [ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), OLIST-PLAN-02. Desenho
 aprovado para implementar, sem runtime ou ativação entregues nesta revisão.
@@ -335,6 +360,11 @@ Preparação local em 05/11 (T20a/T21a): o domínio Orders contém o núcleo de
 IDs e subtotais por tamanho, cálculo exato e revisão após quantidade.
 [Implementação e limites](docs/integrations/olist/implementation-progress.md).
 Ainda sem persistência/API/UI e sem geração ERP; o gate monetário F1 permanece.
+
+A mescla da revisão 3 não remove os pontos acima. Onde OLC-01–16 diverge
+(total derivado dos subtotais e cancelamento local terminal), prevalece o texto
+acima até decisão do proprietário; a exigência de acesso comercial ao Pedido,
+mais restritiva, vale desde já.
 
 ## Cobranças do pedido — InfinitePay (05/11/2026)
 

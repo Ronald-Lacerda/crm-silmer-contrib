@@ -1,5 +1,26 @@
 # CRM Silmer MVP — Plano de prontidão
 
+## OLIST-PLAN-03 Pedido confirmado e geração no detalhe em 10/11/2026
+
+[ADR 079](../../../docs/adr/079-olist-a-partir-do-pedido-confirmado.md) e revisão 3
+da [RFC 050](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md).
+
+- [x] Atualizar fontes canônicas e [OLC-01–16](../olist-confirmed/spec.md) para
+      **Confirmado → Gerar no Olist**, sem prévia obrigatória, PDF prévio,
+      pagamento ou check financeiro como pré-requisito.
+- [x] Separar [OLC-T01–T06](../olist-confirmed/tasks.md), FINQ-DEPREC-01 e
+      OLC-F01–F04, preservando prova F1, código reutilizável e FPI-T01–T04.
+- [x] Entregar [prompts por blocos](../../../docs/integrations/olist/prompts-pedido-confirmado.md)
+      com fronteiras, dependências, aceite, verificações e preservações.
+- Implementação/ativação ainda não entregues: executar OLC-T01–T06 na ordem
+  própria. Financeiro e melhorias futuras não bloqueiam essa sequência.
+- Os checklists OLIST-T01–T26 e PLAN-01/02 datados abaixo são históricos;
+  usar o mapa de migração da RFC revisão 3, sem somar as tarefas antigas às novas.
+- Evidência documental: 62 links novos/alterados válidos, 16 requisitos e oito
+  blocos conferidos; Prettier do escopo, `git diff --check`, gate de decisões
+  e seus 11 testes aprovados em Node 24.20.0/npm 11.19.0. Revisão especializada
+  somente leitura sem achado bloqueante. Sem alteração de código ou teste live.
+
 ## INBOX-VEZ-08 — Responder por mensagem mais recente (08/11/2026)
 
 [RFC 053](../../../docs/rfc/053-responder-por-mensagem-mais-recente.md) /
@@ -1666,8 +1687,9 @@ Coleta permanece manual; expurgo diário14dias autorizado pelo proprietário.
       [RFC 050](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md).
 - [x] Revisar decisões de produto na ADR 057/RFC 050 revisão 2 (OLIST-PLAN-02).
 - [ ] Provar contratos técnicos de cadastros/precisão e preencher parâmetros reais.
-- [ ] Implementar e validar OLIST-T01–T15 e T19–T26 conforme gates da RFC revisada.
-- [ ] Autorizar/executar piloto e decidir ampliação em OLIST-T16–T18.
+- Plano substituído em 10/11 por OLIST-PLAN-03: implementação/piloto seguem
+  OLC-T01–T06; não executar o conjunto antigo como dependência cumulativa.
 
-A proposta original foi revisada pela OLIST-PLAN-02/ADR 057. Produto decidido;
+A proposta original foi revisada pela OLIST-PLAN-02/ADR 057 e depois pela
+OLIST-PLAN-03/ADR 079. Produto decidido;
 contratos técnicos, implementação, conexão real e ativação continuam pendentes.

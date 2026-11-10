@@ -1,5 +1,54 @@
 # Geração assistida de pedidos de venda no Olist
 
+## Escopo vigente em 10/11/2026
+
+**Revisão 3 aceita pelo proprietário**, registrada na
+[ADR 079](../adr/079-olist-a-partir-do-pedido-confirmado.md), OLIST-PLAN-03.
+O cliente abre um Pedido **Confirmado**, aciona **Gerar no Olist** no detalhe
+atual e acompanha a venda gerada na mesma página. Não exigir PDF anterior,
+quitação, check financeiro, entrada Olist própria ou prévia obrigatória.
+
+Contrato vigente: [OLC-01–16](../../.specs/features/olist-confirmed/spec.md).
+Execução: [OLC-T01–T06](../../.specs/features/olist-confirmed/tasks.md).
+Prompts: [blocos de implementação e trilhas independentes](../integrations/olist/prompts-pedido-confirmado.md).
+
+Mantêm-se checkbox por usuário, leitura comercial existente, piloto privado,
+resolução/criação de comprador/produtos/variações, reservas por identidade,
+auditoria e recuperação mínima. Composição aditiva por tamanho corresponde
+à grade confirmada e soma exatamente o total fechado, sem reescrever ficha,
+snapshot ou negociação. A ADR 062 continua vigente integralmente.
+
+**Separação:** FINQ-DEPREC-01 remove Financeiro em trilha própria; OLC-F01–F04
+tratam operação centralizada, vínculo de venda antiga, cancelamento local e
+revisão/preços ampliados. FPI-T01–T04 preservam a entrega própria da ficha.
+Nenhuma é predecessora da geração OLC-T01–T06. Recuperação de efeitos incertos
+da própria exportação continua obrigatória; não é o vínculo genérico futuro.
+
+### Destino dos requisitos e tarefas da revisão anterior
+
+| Referência anterior                             | Destino vigente                                                                                                   |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| OLIST-01/02/33–35, T19 e parte de T12           | OLC-01/02/04 e T01/T04: confirmado, acesso comercial + checkbox; entrada/projeção restrita fica em OLC-F01        |
+| OLIST-03–05/11, T03–T05                         | OLC-08/09 e T01/T02: dados, conexão e configuração centrais                                                       |
+| OLIST-06–17/36–43, T06–T08/T22                  | OLC-04–12 e T01–T03: validação interna, cadastros, valores e operação, sem previewId obrigatório                  |
+| OLIST-10/42–44, T20/T21 e preparações T20a/T21a | Núcleo entregue preservado; composição mínima aditiva em OLC-T01/T04; reforma global de preços diferida a OLC-F04 |
+| OLIST-16–18/30, T09                             | Recuperação da própria operação em OLC-T03; vínculo genérico de venda antiga em OLC-F02                           |
+| OLIST-19–21, T10                                | OLC-03/10: sem efeitos fiscais/estoque/baixa e com guardas pós-reserva; cancelamento local é separado             |
+| OLIST-22–24, T11–T13                            | OLC-13/T04: botão/estados no detalhe; busca/menu em OLC-F01, revisão ampliada em OLC-F04                          |
+| OLIST-25–32/48, T14/T15/T17/T18                 | OLC-T05/T06: QA, operação e piloto, sem dependência de ficha nova ou Financeiro                                   |
+| OLIST-T16                                       | OLC-F02; primeiro piloto usa Pedido ainda não lançado, sem criar duplicata do caso antigo                         |
+| OLIST-45–47, T23                                | OLC-F03, sem impacto no caminho principal                                                                         |
+| OLIST-T24/T26                                   | OLC-14/T01/T03/T04: adapter e complemento mínimos de loja/legado, sem dados inventados                            |
+| OLIST-49/50, T25                                | FPI-T01–T04, preservando implementação/amostras/gates próprios                                                    |
+| OLIST-T01/T02 e prova F1                        | Evidência concluída preservada, apenas no escopo exato da ADR 062                                                 |
+
+As seções seguintes preservam a revisão 2 e a prova de 05/11 como referência
+técnica/histórica. Suas frases sobre qualquer status, prévia, projeção restrita,
+gates de ficha/cancelamento e tarefas em aberto **não são o checklist vigente**.
+Aplicar OLC-01–16 e OLC-T01–T06 em qualquer incompatibilidade.
+
+## Referência da revisão 2 e prova de centavos exatos
+
 Emenda de escopo de 05/11/2026: [RFC 046](046-olist-escopo-inicial-de-centavos-exatos.md)
 /[ADR 062](../adr/062-olist-exportacao-com-unitario-exato-em-centavos.md) supersede
 a amplitude monetária inicial: somente unitários exatos em centavos, com
@@ -1176,3 +1225,8 @@ As preparações anteriores T20a/T21a não fechavam essas tarefas; o fechamento
 de T20/T21 está registrado no runbook. A limitação fracionária da ADR 062 permanece registrada. Não liberar
 geração real antes de cadastro automático seguro, precisão por linha, filtros
 de cancelamento e identidade individual do piloto estarem validados.
+
+Revisão 3 (10/11/2026): executar OLC-T01–T06 pelo contrato atual. T02/F1
+concluídos no escopo exato permanecem insumos; limitação fracionária, cadastro
+seguro, precisão por linha e identidade piloto continuam obrigatórios. Nova
+ficha e remoção Financeiro não são gates Olist.

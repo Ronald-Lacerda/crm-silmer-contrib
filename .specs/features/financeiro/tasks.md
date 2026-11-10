@@ -183,10 +183,19 @@ e notas e tratamento de duplicidade antes de qualquer implementação.
 > escopo menor. Rota e menu saíram em FINQ-T07; perfil, API, dados e runbook
 > permanecem. Os itens abaixo ficam como registro e exigem decisão separada.
 
-Decisão do PO em 05/11/2026. A cobrança InfinitePay ainda está em
-implementação (commit `9c729681`, fora do master); nada abaixo começa antes
-de a quitação conciliada estar disponível.
+Decisão do PO em 05/11/2026, separação reafirmada em 10/11 na
+[ADR 079](../../../docs/adr/079-olist-a-partir-do-pedido-confirmado.md).
+COB-DEL-01 está entregue localmente; COB-OPS-01 ainda registra ativação e
+homologação reais pendentes. Verificar quitação conciliada efetiva no alvo
+antes da retirada; não inferir disponibilidade operacional a partir do código.
 
+Esta tarefa não bloqueia [OLC-T01–T06](../olist-confirmed/tasks.md), nem depende
+de Olist. O check Nota criada e pagamento não habilitam a geração ERP.
+Prompt separado no [bloco 7](../../../docs/integrations/olist/prompts-pedido-confirmado.md#bloco-7-remoção-independente-do-financeiro).
+
+- [ ] Inventariar dependências e confirmar substituição da quitação no alvo,
+      inclusive `order-billing-runtime`, repositório de pedidos, coluna de revisão,
+      perfis/sessões, referências e gatilhos de mudança de valor.
 - [ ] Registrar a decisão: novo ADR que supersede 040/041/042 e emenda o
       058 e COB-01/09/10.
 - [ ] Remover a rota `/financeiro`, o perfil Financeiro e o item de menu.
@@ -196,3 +205,9 @@ de a quitação conciliada estar disponível.
       `invalidate_finance_amount` (expand 0043), somente após verificação.
 - [ ] Remover testes, CSS e runbook do Financeiro.
 - [ ] Quitação passa a vir só da cobrança InfinitePay conciliada.
+- [ ] Preservar ou arquivar histórico pelo contrato aprovado, manter autoria
+      e substituir invariantes válidas antes de retirar triggers/colunas.
+      Não apagar migrations publicadas nem retirar `paidOn`, billing ou
+      confirmação de pagamento por associação nominal ao Financeiro.
+- [ ] Validar identidade, reconfirmação com mudança de valor, billing,
+      migração/rollback e gates do projeto antes de concluir a remoção.

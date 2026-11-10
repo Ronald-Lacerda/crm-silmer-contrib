@@ -33,7 +33,36 @@ corretos; multiplicação exata do unitário retornado confere a linha, e ambos
 os totais devem coincidir. F1 só fecha para esse subconjunto após prova API/UI;
 os gates de conexão/ACL/runtime/piloto continuam separados. Sem nova infraestrutura.
 
-## Evolução aprovada para implementação Olist e valores por tamanho
+## Olist pelo pedido confirmado em 10/11/2026
+
+[ADR 079](docs/adr/079-olist-a-partir-do-pedido-confirmado.md) e revisão 3 da
+[RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), OLIST-PLAN-03:
+[OLC-01–16](.specs/features/olist-confirmed/spec.md) supersedem o recorte amplo
+da ADR 057 onde incompatível, sem enfraquecer o registro de 04/11/2026
+preservado abaixo. A implementação segue as fases e os gates registrados na
+RFC e nos planos de tarefas.
+
+- Somente Pedido `confirmado`, pelo detalhe atual, em **Gerar no Olist**.
+  Validação interna e estado na mesma página, sem prévia obrigatória, PDF
+  anterior, quitação ou check financeiro como pré-requisito.
+- Humano ativo com acesso comercial ao Pedido e checkbox Habilitado Olist;
+  Admin também depende do checkbox. Preservar piloto por ID privado, sem nova
+  entrada/projeção para Financeiro ou liberação de edição geral.
+- Dados estruturados, não PDF. Composição por tamanho é aditiva, revisada e
+  corresponde exatamente à grade confirmada; soma backend iguala o total
+  confirmado, sem rateio ou alteração de snapshot, ficha, checkout ou pagamento.
+  Loja/legado têm adapter e pendências explícitas. ADR 062 permanece integral.
+- Resolver/reutilizar/criar comprador, produtos e variações com identidade,
+  reservas e reconciliação por etapa. Não sobrescrever cadastro encontrado.
+  Persistir uma operação por conta/Pedido e conferir linhas/totais antes de
+  sucesso; incerteza não permite retry criador. Bloquear edição incompatível.
+- Conexão e parâmetros centrais, ACL, auditoria, privacidade, recuperação e
+  homologação são parte da entrega. Usar monólito/worker/PostgreSQL existentes.
+- FINQ-DEPREC-01 remove Financeiro em trilha própria; OLC-F01–F04 diferem
+  operação centralizada, vínculo antigo, cancelamento e revisão/preços ampliados.
+  FPI-T01–T04 preservam sua entrega de ficha. Nenhuma bloqueia OLC-T01–T06.
+
+### Registro de 04/11/2026 preservado
 
 Decisão de 04/11/2026 na [ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md),
 OLIST-01–50 e OLIST-PLAN-02. Estes pontos supersedem os trechos antigos
@@ -59,8 +88,13 @@ gates registrados na RFC e no plano de tarefas.
 - Loja mantém travas/gateway; adapter de completude não inventa dado faltante.
   Parâmetros ERP centralizados e piloto individual por ID privado, sem PII em diff.
 
-As regras abaixo descrevem baseline anterior onde houver divergência expressa.
-Nada neste registro habilita conta, muda produção ou substitui os gates da RFC.
+A mescla da revisão 3 não remove os pontos acima. Onde OLC-01–16 diverge
+(total derivado da soma dos subtotais e cancelamento local terminal),
+prevalece o texto acima até decisão do proprietário; a exigência de acesso
+comercial ao Pedido, mais restritiva, vale desde já.
+
+As regras abaixo continuam vigentes nas demais fronteiras. Nada neste registro
+habilita conta, altera produção ou apaga histórico Financeiro.
 
 ## Cobranças InfinitePay — extensão aprovada (05/11/2026)
 

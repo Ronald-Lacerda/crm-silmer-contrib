@@ -35,6 +35,10 @@ Documentos principais:
 - `ARCHITECTURE.md`: resumo das fronteiras e decisões técnicas propostas como baseline.
 - `docs/adr/`: decisões arquiteturais tomadas, imutáveis e numeradas.
 - `docs/rfc/`: propostas relevantes em avaliação antes da decisão.
+- `.specs/features/olist-confirmed/`: contrato e tarefas do botão Gerar no
+  Olist em Pedido confirmado; remoção Financeiro e melhorias são independentes.
+- `docs/integrations/olist/prompts-pedido-confirmado.md`: prompts em blocos
+  para implementar, verificar e homologar a geração, com trilhas separadas.
 - `docs/integrations/n8n/README.md`: contrato v1, entidades, estados,
   configuração, rollout e troubleshooting da integração.
 - `docs/roadmap/PROXIMAS-FASES.md`: ordem das próximas telas e do Instagram,

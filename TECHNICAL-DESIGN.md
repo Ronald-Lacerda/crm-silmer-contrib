@@ -290,8 +290,8 @@ os gates de conexão/ACL/runtime/piloto continuam separados. Sem nova infraestru
 
 Prova C05–C07 concluída em 05/11: [API e tela nativa consistentes](docs/integrations/olist/evidence/exact-cent-proof-result.json),
 14 GETs, três pedidos/R$ 5,20. F1/T02 fechados somente para `exact-cent-v1`;
-T03 pode iniciar. Runtime integrado, ACL, banco, UI e piloto seguem nas tarefas
-posteriores; frações continuam bloqueadas antes do envio.
+Implementação segue OLC-T01–T06 pelo recorte de 10/11 abaixo. Integração do fluxo OLC,
+piloto e ativação continuam pendentes; frações bloqueadas antes do envio.
 
 ## OLIST-T23 — marcador terminal de cancelamento local
 
@@ -314,10 +314,48 @@ API de arte revalida terminalidade sob lock e impressão histórica não grava
 primeira impressão. [Operação e rollback](docs/runbooks/olist-phase3.md#t23--cancelamento-local-terminal).
 T10 e interface F4 seguem separados; nenhum cancelamento ERP ou estorno.
 
-## Olist subtotal e cancelamento contrato para implementação
+## Olist pelo pedido confirmado em 10/11/2026
 
-[ADR 057](docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md) / [RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), OLIST-01–50,
-OLIST-PLAN-02 e T01–T26. Não representa código ou schema já publicados.
+[ADR 079](docs/adr/079-olist-a-partir-do-pedido-confirmado.md) e revisão 3 da
+[RFC 050](docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md), OLIST-PLAN-03:
+[OLC-01–16](.specs/features/olist-confirmed/spec.md) e
+[OLC-T01–T06](.specs/features/olist-confirmed/tasks.md) são o contrato vigente.
+O recorte substitui os trechos incompatíveis da ADR 057; o runtime já entregue
+nas fases anteriores segue como insumo reaproveitável.
+
+- Acesso: humano ativo, leitura comercial existente, checkbox default false
+  gerido por Admin e piloto privado. Não criar nova entrada de perfil restrito.
+- Pedido: somente `confirmado`, com comando **Gerar no Olist** no detalhe.
+  Composição ERP aditiva deriva identidade/grade no servidor, liga cada linha
+  ao tamanho/quantidade confirmado e soma exatamente `finalAmountCents`.
+  Preservar total, confirmação, snapshot e PDF; nenhum rateio automático ou
+  alteração de grade pelo comando de enriquecimento. Loja tem adapter próprio.
+- Conexão: credenciais cifradas, renovação serializada, conta esperada e
+  configuração central versionada. API oficial no monólito/worker/PostgreSQL.
+- Processamento: validação interna antes de qualquer inclusão, snapshot/reserva/
+  auditoria/job transacionais, unicidade conta/Pedido e recursos por identidade.
+  Resolver cliente → produtos/variações → venda; persistir cada ID confirmado.
+- Consistência: serializar com comandos incompatíveis, inclusive reabertura e
+  correção de quantidade da loja. Conferir revisão/fingerprint do conteúdo
+  comercial exportável; mudança compatível de pagamento/entrega não invalida
+  envio apenas por incremento de `orders.version`. Não relaxar verificação de
+  status, conta, parâmetros ou habilitação. Após sucesso, bloquear edição.
+- Dinheiro/recuperação: manter ADR 062, núcleo exato e conferência de conta,
+  referências, identidade de linhas/produtos e ambos os totais. Incerteza bloqueia
+  dependentes e exige recuperação administrativa mínima, sem POST repetido.
+- UI: bloco no detalhe com pendências, botão e progresso persistido; sem
+  previewId ou prévia obrigatória. Não usar PDF, pagamento ou check financeiro
+  como entrada/gate. Runbook e gate operacional próprios antes de ativar.
+
+FINQ-DEPREC-01, OLC-F01–F04 e FPI-T01–T04 são trilhas separadas, não predecessoras
+de OLC-T01–T06. Não remover Financeiro, reformar preços globalmente ou trocar
+template nesta integração. Publicação GitHub → EasyPanel permanece vigente.
+
+### Contrato de 04/11/2026 preservado
+
+Contrato da ADR 057 já adotado; permanece vigente, sem enfraquecimento, nos pontos
+em que OLC-01–16 não o supersede expressamente (divergências abertas: total
+derivado dos subtotais e cancelamento local, em decisão do proprietário).
 
 - Identidade/acesso: checkbox default false gerido por Admin, autorização
   ortogonal antes das negações por perfil e sem posse. Projeção Olist mínima
@@ -342,14 +380,9 @@ OLIST-PLAN-02 e T01–T26. Não representa código ou schema já publicados.
 Contrato/precisão fiscal e detalhes DDL têm evidências em T02/T03/T23 no runbook;
 flags permanecem desligadas. Sem novo serviço/store/infra; publicação GitHub → EasyPanel.
 
-Preparação local T20a/T21a em 05/11: `modules/orders/src/domain/size-pricing.js`
-implementa IDs de grupo/linha, subtotal positivo em centavos, soma exata e
-invalidação de revisão após mudança de quantidade. Exportado por Orders,
-sem integração HTTP/persistência/UI nem mudança de snapshots. A futura
-aplicação deve autorizar/versionar o comando humano e calcular o total antes
-da gravação; o navegador não fornece revisão ou total autoritativo.
+Já existem `size-pricing.js`, `olist-exact-cent.js` e F1/T02 fechado para
+`exact-cent-v1`; o que falta integrar ao fluxo OLC consta nas tarefas OLC-T01–T06.
 [Estado e evidências](docs/integrations/olist/implementation-progress.md).
-F1 monetário e as tarefas completas permanecem abertos; nenhuma geração ERP.
 
 ## Cobranças InfinitePay — COB-DEL-01 (05/11/2026)
 

@@ -156,7 +156,31 @@ padrão de PCX-15a; as filas pessoais e capacidades permanecem existentes.
   contagem oficial, sem depender só de cor. Todas lidera o grupo; contagens
   ficam alinhadas e o estado do botão Filtros indica abertura/filtro aplicado.
   Toque, foco visível, temas e leitura até 320 px permanecem utilizáveis.
-## Olist e melhorias comerciais aprovadas em 04/11/2026
+
+## Olist pelo pedido confirmado em 10/11/2026
+
+[ADR 079](../../../docs/adr/079-olist-a-partir-do-pedido-confirmado.md) e revisão 3
+da [RFC 050](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md),
+OLIST-PLAN-03: [OLC-01–16](../olist-confirmed/spec.md) são o contrato vigente
+para a entrega principal, supersedendo OLIST-01–50 onde incompatíveis.
+
+- Somente `confirmado` inicia **Gerar no Olist** no detalhe atual. Pendências,
+  progresso e número da venda ficam na mesma página; prévia obrigatória,
+  busca/menu Olist, PDF anterior, quitação e check financeiro não são gates.
+- Preservar checkbox, leitura comercial existente e piloto privado, sem
+  herança Admin ou nova projeção de perfil restrito. Validar cadastro e grade
+  independentemente do estado confirmado; resolver/criar recursos ausentes.
+- Composição por tamanho aditiva corresponde à grade e iguala total confirmado
+  sem reprecificar ou reescrever ficha. ADR 062, unicidade/reservas, recuperação
+  mínima de incertezas, auditoria e bloqueio de edição incompatível permanecem.
+- [OLC-T01–T06](../olist-confirmed/tasks.md) implementam dados, conexão,
+  processamento, UI, QA e piloto. FINQ-DEPREC-01 e OLC-F01–F04 são independentes;
+  FPI-T01–T04 mantêm seus próprios gates de impressão, sem bloquear Olist.
+
+O código puro e a prova F1 são reaproveitados; esta emenda não declara
+runtime integrado, habilitação de conta ou geração operacional entregues.
+
+### Registro de 04/11/2026 preservado
 
 [ADR 057](../../../docs/adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md)
@@ -171,6 +195,11 @@ pré-exportação para métricas/filas. Não conceder edição geral pelo checkb
 Aplicação é o campo 4 por item/grupo; Previsão de entrega é o novo rótulo.
 Ficha v7 preserva histórico. Loja/legados, Financeiro e perfil restrito seguem
 adapters/escopos explícitos, sem inventar preço/dado fiscal ou apagar história.
+
+A mescla da revisão 3 não remove os pontos acima. Onde OLC-01–16 diverge
+(total derivado dos subtotais e cancelamento local terminal), prevalece o texto
+acima até decisão do proprietário; a exigência de acesso comercial ao Pedido,
+mais restritiva, vale desde já.
 
 ## Inbox orientada ao vendedor — PCX-15 (03/11/2026)
 

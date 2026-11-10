@@ -1,5 +1,11 @@
 # Architecture Decision Records
 
+## Decisão de 10/11/2026
+
+- [079 — Olist a partir do pedido confirmado](079-olist-a-partir-do-pedido-confirmado.md),
+  revisão 3 da RFC 050 / OLIST-PLAN-03: botão no detalhe, OLC-T01–T06 e
+  composição aditiva; Financeiro, melhorias futuras e ficha em trilhas próprias.
+
 ## Decisão de 09/11/2026
 
 - [078 — Ficha impressa por item](078-ficha-impressa-por-item.md),

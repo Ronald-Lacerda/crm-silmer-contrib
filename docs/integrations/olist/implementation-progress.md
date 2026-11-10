@@ -1,5 +1,23 @@
 # Implementação local — subtotais por tamanho
 
+## Plano vigente em 10/11/2026
+
+[ADR 079](../../adr/079-olist-a-partir-do-pedido-confirmado.md), revisão 3 da
+[RFC 050](../../rfc/050-geracao-assistida-de-pedidos-no-olist.md): a entrega
+vigente é **Pedido confirmado → Gerar no Olist**, no detalhe atual.
+Contrato [OLC-01–16](../../../.specs/features/olist-confirmed/spec.md),
+[tarefas OLC-T01–T06](../../../.specs/features/olist-confirmed/tasks.md) e
+[prompts por blocos](prompts-pedido-confirmado.md).
+
+Os núcleos descritos abaixo são reaproveitados na composição aditiva que
+preserva o total/snapshot confirmado. A prova F1 continua restrita a centavos
+exatos; o estado integrado das fases já entregues consta nos runbooks
+`olist-phase3`/`olist-phase4` e na RFC 050. A atualização é documental. Referências
+antigas a T03/T20/T21 não substituem o plano OLC; Financeiro, cancelamento,
+busca/prévia ampliadas e ficha nova não são dependências da geração.
+
+## Entregas anteriores e evidências
+
 OLIST-T20a/T21a, preparação parcial de T20/T21. Requisitos OLIST-09–10,
 40, 42–43, [ADR 057](../../adr/057-olist-por-habilitacao-subtotal-por-tamanho-e-cancelamento.md)
 e [RFC 050](../../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
