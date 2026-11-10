@@ -61,6 +61,31 @@ Não introduza outro framework de frontend, store global, estado de domínio em
 `window`, Redis, microserviços ou nova infraestrutura sem autorização explícita
 e decisão registrada. Vue 3 e Vue Router são a baseline aprovada no ADR-001.
 
+## Checkout único e branches curtos
+
+Na máquina do Rômulo existe **um só checkout de trabalho**: `crm-silmer`. O
+sócio trabalha como preferir na máquina dele; esta regra vale para o checkout
+do Rômulo e para todos os agentes (Codex e Claude).
+
+- **Sem pastas irmãs:** não crie `crm-silmer-*` ao lado do repositório nem
+  worktrees persistentes (`.claude/worktrees/`, `~/.codex/worktrees/`). Um clone
+  ou worktree extra só é aceitável como temporário, para uma tarefa isolada, e
+  deve ser removido com `git worktree remove` antes do handoff, confirmando com
+  `git worktree list` que ficou limpo. Nunca aponte `node_modules` de um
+  worktree para outro checkout por junction ou symlink.
+- **Um agente por vez:** só uma sessão altera o checkout principal. Outra
+  sessão não troca de branch nem reescreve arquivos ali; se precisar de
+  paralelismo, aguarde ou use um worktree temporário conforme o item acima.
+- **Branch curto por tarefa:** parta de `origin/master`, abra um PR, mescle
+  com histórico linear e apague o branch (o GitHub já apaga o branch remoto ao
+  mesclar; apague o local com `git branch -d`). Branches `backup/*`, `*-wip` e
+  `*-pre-rebase` não são permanentes: promova a PR ou apague.
+- **Nada solto antes de trocar de branch:** commit, ou descarte consciente com
+  o patch guardado fora do repositório. Não deixe trabalho só no disco, em
+  stash ou em worktree.
+- **A `master` não recebe push direto:** ela segue para produção e exige PR
+  com os gates do CI. Antes de começar, `git switch master && git pull --ff-only`.
+
 ## Equipe por responsabilidade
 
 Ative somente os papéis necessários para a fatia. O Tech Lead continua dono da
