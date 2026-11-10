@@ -2196,7 +2196,10 @@ else
             ).rows[0].n,
             1,
           );
-          assert.deepEqual((await migrate(pool, { migrations })).applied, []);
+          assert.deepEqual(
+            (await migrate(pool, { migrations: historicalPlan })).applied,
+            [],
+          );
           // The expanded schema still serves the whole flow.
           const g = await seed();
           await prepared(g, 'ready');
