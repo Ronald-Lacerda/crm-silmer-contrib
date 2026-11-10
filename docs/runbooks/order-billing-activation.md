@@ -1,11 +1,35 @@
 # Ativação coordenada de cobranças InfinitePay
 
-BREL-07/04/05, COB-OPS-01, tarefa T6. Preparado em09/11/2026.
-**Este roteiro não foi executado.** A autorização atual cobre publicar a
-proteção humana e preparar a ativação, mantendo envios desligados. Checkout,
-pagamento e mensagem reais exigem aviso prévio e autorização específica.
+BREL-07/08/09/04/05, COB-OPS-01, tarefas T6/T7/T8. Preparado em09/11/2026.
+Recebimento/conferência autorizados em09/11 e compatibilidade da credencial
+Basic existente autorizada em10/11. Emissão e envios permanecem desligados.
+Checkout, pagamento e mensagem reais exigem aviso prévio e autorização específica.
 
-## Ponto de partida verificado
+## Janela de recebimento, 10/11/2026
+
+Recebimento/conferência habilitados: workflows financeiros publicados nas versões71a6a9d3
+(emissão/recebimento,19nós) e d774f29e (conferência,11nós). Atendimento
+9157724a,144nós, preservado. Exports comparados integralmente com os baselines;
+retenção de sucesso/erro none e execuções manuais/progresso sem salvamento.
+API e worker com RECEIVEtrue e ENABLED/CHAT_SENDfalse, conferidos nos processos
+reais após deploy. Antes da correção, o worker foi recuperado com três flagsfalse
+após falha de inicialização pelo mínimo local de32caracteres.
+
+A correção BREL-09 aceita a credencial existente sem alterá-la. Seus clientes
+recusam branco, CR/LF, usuário com dois-pontos e valores acima de256/1024,
+preservando os bytes do header e as guardas HTTPS/timeout/redirect/auth.
+PR334 integrado por rebase em631909ea, com árvore idêntica ao SHA08feacd aprovado
+pelos cinco checks de CI. API e worker conferidos por papel, container e hashes
+de quatro arquivos de runtime. Cliente de conferência inicializado com a Basic
+existente sem executar transporte; scanner presente e worker estável durante
+a conferência. Live/ready/edge200; GETs técnicos404 com Basic e401 sem Basic.
+Tabelas/fila billing vazias e71expand/checksums exatos antes e depois do rollout;
+heartbeat global4s, sem inferir heartbeat dedicado ao consumidor billing.
+Nenhum checkout, pagamento, callback fabricado ou mensagem foi usado como probe.
+Não houve migração nem troca de credencial nesta janela. Evidência e limites em
+[QA do recebimento](../qa/order-billing-receive-only-2026-11-10.md).
+
+## Ponto de partida histórico, 09/11 antes da publicação financeira
 
 - API/worker/edge da release87cbc435; expand até0075,71/71checksums conferidos.
 - Atendimento k7tI6T4RhQPyJkn9 publicado em9157724a-1493-4d85-91f7-582af4d73a1c com preflight, preservando141nós originais. Versão anterior7b78d0b9-80e0-41b5-a5ae-e4ff52cd96b3 disponível no histórico.
@@ -31,13 +55,14 @@ desatualizados ou reiniciar toda a instância n8n para essa ativação.
 
 ## Ordem de ativação futura
 
-Todas as linhas abaixo são **planejadas**. Os valores de API/worker devem
+Esta tabela registra a sequência preparada em T6. O estado executado de T7
+está na janela datada acima. Os valores de API/worker devem
 ser conferidos no processo depois de cada deploy, não apenas salvos no
 editor. Não alterar outras variáveis ou credenciais.
 
 | Etapa | RECEIVE_ENABLED | ENABLED | CHAT_SEND_ENABLED | Gate antes de seguir |
 | --- | --- | --- | --- | --- |
-| Estado atual | false | false | false | Já conferido; nenhum efeito financeiro |
+| Estado inicial de T6 | false | false | false | Conferido antes da publicação financeira; nenhum efeito financeiro |
 | Preparar webhooks | false | false | false | Publicar individualmente os dois workflows financeiros revisados; validar versão/path/credenciais e ausência de conflitos, sem Execute ou chamada ao provedor |
 | Receber e conferir | true | false | false | Atualizar API e worker; health/heartbeat, autenticação técnica e rotas de consulta/callback verificadas sem criar checkout |
 | Emitir para homologação autorizada | true | true | false | API e worker atualizados; pedido/valor/destino revisados; autorizar uma emissão controlada pelo CRM, sem retry manual em resultado incerto |
@@ -76,7 +101,8 @@ ou o retorno visual do navegador como confirmação financeira.
 
 ## Critério de encerramento
 
-Agora: guarda publicada, workflows financeiros inativos e três flagsfalse;
-ensaio real pendente. Depois de execução autorizada: registrar estado de
+Encerramento histórico de T6: guarda publicada, workflows financeiros inativos
+e três flagsfalse. A janela datada acima registra o avanço de T7; ensaio real
+permanece pendente. Depois de execução autorizada: registrar estado de
 cada fase, crédito/saldo único, ausência de envio indevido e decisão explícita
 sobre operação. Não promover um resultado DEV a evidência financeira de produção.

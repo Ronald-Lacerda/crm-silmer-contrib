@@ -68,3 +68,14 @@ inativa; atualiza a pendência histórica do guard, sem declarar ativação,
 execução financeira, homologação InfinitePay ou entrega WhatsApp. As três
 flags continuam false e os dois workflows financeiros permanecem inativos
 nas evidências inspecionadas.
+
+## Addendum — recebimento e conferência habilitados (10/11/2026)
+
+O estado histórico acima é atualizado pelas revisões independentes
+[T8/compatibilidade Basic](validation-credential-compatibility.md) e
+[T7/recebimento](validation-receive-only.md), ambas PASS em seus escopos.
+Os workflows financeiros estão publicados e API/worker executam RECEIVEtrue,
+ENABLEDfalse e CHAT_SENDfalse. Nenhuma credencial foi alterada e nenhum teste
+financeiro real foi executado. Isso encerra T7/T8/BREL-08/09, preservando os
+vereditos históricos e os limites sobre autenticação externa, image ID completo
+da API, heartbeat dedicado, homologação InfinitePay e entrega WhatsApp.
