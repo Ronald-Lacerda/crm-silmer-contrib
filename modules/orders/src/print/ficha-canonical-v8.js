@@ -39,11 +39,11 @@ body { margin: 0; background: var(--color-surface); color: var(--color-text); fo
 h1, h2, h3, p, ol { margin: 0; }
 b, strong { font-weight: 600; }
 @media screen { .sheet { margin: 0 auto; } }
-.sheet { --val: var(--text-sm); display: flex; flex-direction: column; width: 210mm; min-height: 1120px; padding: 32px calc((210mm - 720px) / 2); background: var(--color-surface); color: var(--color-text); font-size: var(--text-sm); line-height: 20px; break-after: page; }
+.sheet { --val: var(--text-sm); text-rendering: geometricPrecision; display: flex; flex-direction: column; width: 210mm; min-height: 1120px; padding: 32px calc((210mm - 720px) / 2); background: var(--color-surface); color: var(--color-text); font-size: var(--text-sm); line-height: 20px; break-after: page; }
 .sheet:last-of-type { break-after: auto; }
 .sheet.compact { --val: var(--text-xs); }
 .sheet.compact .r1 > *, .sheet.compact .r2 > * { grid-column: span 4; }
-.sheet.compact .free { min-height: 72px; }
+.sheet.compact .free { min-height: 44px; }
 .lbl { display: block; font-size: var(--text-xs); line-height: 16px; font-weight: 500; color: var(--color-text-muted); }
 .lbl b { font-weight: 600; color: var(--color-text); margin-right: 4px; }
 .val { font-size: var(--val); line-height: 20px; font-weight: 400; overflow-wrap: anywhere; }
@@ -127,7 +127,7 @@ td.spacer, th.spacer { border-left: 0; background: var(--color-surface); }
 .stages .wide { grid-column: span 2; }
 .date { display: flex; align-items: center; justify-content: space-evenly; }
 .date .sep { color: var(--color-border-strong); font-size: var(--text-sm); line-height: 20px; }
-.free { flex: 1 1 0; min-height: 96px; margin-top: 12px; display: flex; flex-direction: column; }
+.free { flex: 1 1 0; min-height: 64px; margin-top: 12px; display: flex; flex-direction: column; }
 .free h3 { font-size: var(--text-xs); line-height: 16px; font-weight: 600; color: var(--color-text); }
 .ruled { position: relative; flex: 1 1 0; min-height: 0; }
 .lines { position: absolute; inset: 0; display: flex; flex-direction: column-reverse; overflow: hidden; }

@@ -258,7 +258,8 @@ for (const [name, build, onGrid] of /** @type {const} */ ([
     await open(page, build());
     const sheets = await page.locator('.sheet').count();
     expect(sheets).toBeGreaterThan(0);
-    expect(await printedPages(page)).toBe(sheets);
+    const heights = (await measure(page)).map((s) => Math.round(s.height));
+    expect(await printedPages(page), `sheet heights: ${heights}`).toBe(sheets);
     const loaded = await page.evaluate(() =>
       document.fonts.check('600 14px Poppins'),
     );

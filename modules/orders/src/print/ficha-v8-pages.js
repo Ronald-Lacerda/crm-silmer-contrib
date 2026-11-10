@@ -16,8 +16,12 @@ const LABEL = 16;
 const NOTES_MAX = 160;
 const NOTES_WIDTH = 668;
 const CONTROL_FIXED = PANEL_PADDING + 32 + 88 + 12;
+// The plan keeps this much ruled area; the stylesheet allows less. The gap
+// absorbs what the renderer lays out taller than estimated, on any platform.
 const FREE_MIN = 96;
 const FREE_MIN_COMPACT = 72;
+// Continuation sheets may have no ruled area to give back.
+const CONTINUATION_SLACK = 16;
 const FREE_PANEL_MIN = PANEL_GAP + PANEL_PADDING + 16 + 56;
 const CHECK_COLUMN = 32;
 const CONTINUATION_TITLE = PANEL_GAP + PANEL_PADDING + 24;
@@ -603,7 +607,8 @@ function planExtras(order, plans, noteHeights) {
     /** @type {number} */ need,
     /** @type {boolean} */ carries,
   ) => {
-    if (used + need <= SHEET_BODY || !hasContent()) return false;
+    if (used + need <= SHEET_BODY - CONTINUATION_SLACK || !hasContent())
+      return false;
     sheet = start(carries);
     return true;
   };

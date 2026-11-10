@@ -18,10 +18,10 @@
   "snapshotVersion": "synthetic-order-v8",
   "templateVersion": "ficha-canonical-v8",
   "snapshotSha256": "f2fe111a1c6cd2fd75c91ee99461305563c2538936a905614d35008f2d4a5a1f",
-  "renderedHtmlSha256": "ef83af0705e541d18e81922ab8a40dbdc9d6ed67fbe28a98fc10ff99852063b5",
+  "renderedHtmlSha256": "4945cb914802fd91f0417cb30d3f5aafa4c3636539ec3760ab296805181492fd",
   "artifact": {
     "path": "output/pdf/ficha-canonica-sintetica-v8.pdf",
-    "sha256": "a2a001520cc80b39b85e6054820e448b73c37498ffdd9a15400eb78bbd5628d0",
+    "sha256": "f866c9a3b7935d7dbe9001600150e7e4dbb6df1120f1876606dfa98b14a41610",
     "pageCount": 5
   },
   "provisionalApproval": {
@@ -31,8 +31,8 @@
     "reviewedBy": { "role": "PO", "name": null },
     "reviewedAt": null,
     "snapshotSha256": "f2fe111a1c6cd2fd75c91ee99461305563c2538936a905614d35008f2d4a5a1f",
-    "renderedHtmlSha256": "ef83af0705e541d18e81922ab8a40dbdc9d6ed67fbe28a98fc10ff99852063b5",
-    "artifactSha256": "a2a001520cc80b39b85e6054820e448b73c37498ffdd9a15400eb78bbd5628d0",
+    "renderedHtmlSha256": "4945cb914802fd91f0417cb30d3f5aafa4c3636539ec3760ab296805181492fd",
+    "artifactSha256": "f866c9a3b7935d7dbe9001600150e7e4dbb6df1120f1876606dfa98b14a41610",
     "decisionRef": "docs/phase0/FICHA-PDF-REVIEW-V8.md"
   },
   "approval": {
