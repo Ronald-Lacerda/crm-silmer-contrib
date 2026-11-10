@@ -15,6 +15,8 @@ leituras técnicas, sem ensaio financeiro. Falhas não autorizam bypass de gate.
 | T2   | BREL-02/04 | PR/CI/merge e fonte recuperável                               |
 | T3   | BREL-03/04 | backup, checksums, health e flags remotas                     |
 | T4   | BREL-04/05 | credencial privada, referências e estado inativo              |
+| T7   | BREL-08/04 | versões publicadas, processos receive-only, saúde, filas e consultas técnicas |
+| T8   | BREL-09/04 | Basic legada exata, credenciais inválidas recusadas e regressões financeiras |
 
 ## Gate Check Commands
 
@@ -22,6 +24,8 @@ leituras técnicas, sem ensaio financeiro. Falhas não autorizam bypass de gate.
 - Release: checks do PR, histórico linear, revisão independente e versão anterior recuperável.
 - Deployment: backup/space/flags, CLI expand da release, SELECT read-only de versões/checksums, health live/ready e UI privada sem comandos financeiros.
 - Credentials: export privado sem valores de segredo, referências corretas, emissão/envios desligados e entrada pessoal do proprietário.
+- ReceiveOnly: reexportar workflows, conferir contagens/checksums read-only, flags dos processos API/worker, health e GETs técnicos autenticados sem efeito financeiro.
+- CredentialCompatibility: node --test test/billing-worker-credentials.test.js test/billing-integration-worker.test.js test/order-billing-payment-check-worker.test.js test/order-billing-chat-wiring.test.js; npm run typecheck; lint/format focais; revisão independente e sensor de regressão.
 
 ## Task Breakdown
 
@@ -125,3 +129,36 @@ piloto operacional, receive-only e recuperação sem apagar histórico. Flags
 continuamfalse; workflows financeiros19/11nós inativos e sem drift. Veredito
 T5/T6 PASS limitado em validation-activation-preparation.md; nenhuma ativação
 ou homologação financeira foi inferida.
+
+### T7: Publicar workflows financeiros e habilitar somente recebimento
+
+Depends on: T6, T8
+Where: docs/runbooks/order-billing-activation.md
+Tests: BREL-08/04/05; exports revisados, ausência de backlog, publicação individual, RECEIVEtrue e ENABLED/CHAT_SENDfalse nos processos, health/heartbeat, GET técnico autenticado sem registro financeiro e comparação de filas antes/depois.
+Gate: ReceiveOnly
+Done when: dois workflows publicados e API/worker em modo recebimento/conferência, sem habilitar emissão/envio ou executar teste financeiro real.
+Status: Pending
+Progresso parcial: workflows financeiros publicados nas versoes71a6a9d3 e
+d774f29e, mantendo nodes/conexoes/settings aprovados. API com RECEIVEtrue,
+ENABLED/CHAT_SENDfalse e health200. O worker falhou ao iniciar o cliente de
+conferencia porque a senha Basic legada tem13caracteres (minimo32).
+RECEIVE do worker foi restaurado parafalse e o processo recuperou.
+Troca coordenada da credencial compartilhada depende de entrada/salvamento
+pelo proprietario. T7 permanece pendente; nenhuma homologacao financeira
+real foi executada. GETs tecnicos retornaram404 autenticado/401 sem
+autenticacao, sem alteracao das tabelas/fila billing, que permaneceram vazias.
+
+### T8: Compatibilizar credenciais dos clientes financeiros
+
+Depends on: T6
+Where: modules/integration-reliability/src/billing-command-worker.js, modules/integration-reliability/src/billing-payment-check-worker.js, test/billing-worker-credentials.test.js
+Tests: BREL-09/04; senha sintética13 preservada no Basic dos dois clientes; recusa de branco, tipos inválidos, CR/LF, usuário com dois-pontos e limites superiores; regressão de HTTPS/auth/timeout e flags desligadas.
+Gate: CredentialCompatibility
+Done when: clientes financeiros seguem a validação do cliente n8n existente sem alterar credenciais e testes focais, tipos/lint e revisão independente passam; patch commitado/publicado para implantação autorizada em T7.
+Status: Complete
+
+T8: dois clientes aceitam Basic legada sem alterar bytes; branco/CRLF/limites
+invalidos recusados. RED2pass/7fail; GREEN37/37 focais; validate2427pass,
+52skips condicionais preexistentes,0fail. Revisao independente28/28,
+typecheck e sensor9/9 regressões detectadas. Ver validation-credential-compatibility.md.
+Ativacao remota continua em T7 e depende do deploy desta correcao.
