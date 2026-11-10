@@ -28,6 +28,10 @@ import { createOrderFileService } from '../modules/orders/src/application/order-
 import { PostgresOrderConversationPort } from '../modules/orders/src/adapters/postgres-order-conversation-port.js';
 import { PostgresOrderRepository } from '../modules/orders/src/adapters/postgres-order-repository.js';
 import { createOrderService } from '../modules/orders/src/application/order-service.js';
+import {
+  OrderConflictError,
+  OrderForbiddenError,
+} from '../modules/orders/src/domain/errors.js';
 import { defineOrderRepositoryContract } from './orders-repository-contract.test.js';
 import { orderContextsFrom } from './fixtures/order-contexts.js';
 import { syntheticItems } from './fixtures/order-items.js';
@@ -270,6 +274,116 @@ if (connectionString) {
       }),
       { code: 'CONVERSATION_NOT_FOUND', statusCode: 404 },
     );
+  });
+
+  /**
+   * A closed conversation owned by one seller, next to a seller with no claim
+   * on it. `attempt` sends a complete order, so only the guards can stop it.
+   */
+  async function seedClosedConversation() {
+    const tag = randomUUID().replaceAll('-', '').slice(0, 10);
+    const conversationId = await seedConversation(pool);
+    const owner = {
+      id: `closed-owner-${tag}`,
+      kind: 'human',
+      capabilities: [],
+    };
+    const outsider = {
+      id: `closed-outsider-${tag}`,
+      kind: 'human',
+      capabilities: [],
+    };
+    for (const [id, name] of [
+      [owner.id, 'Vendedor Dono'],
+      [outsider.id, 'Vendedor Sem Posse'],
+    ]) {
+      await pool.query(
+        `INSERT INTO crm.users (id, email, password_hash, name)
+         VALUES ($1, $2, '$argon2id$synthetic', $3)`,
+        [id, `${id}@example.test`, name],
+      );
+    }
+    await pool.query(
+      `UPDATE crm.conversations
+       SET assigned_user_id = $2, state = 'sem_lead', terminal_at = now(),
+           version = version + 1
+       WHERE id = $1`,
+      [conversationId, owner.id],
+    );
+    const orderId = randomUUID();
+    return {
+      /** @param {{id: string, kind: string, capabilities: string[]}} actor */
+      attempt: (actor) =>
+        repository.createPending({
+          actor,
+          conversationId,
+          correlationId: `correlation-closed-${tag}`,
+          createdBy: actor.id,
+          createdByKind: 'user',
+          fabCode: '01',
+          ficha: {
+            artwork: {
+              feito_pelo_cliente: true,
+              feito_pela_silmer: false,
+              files: [],
+              sem_estampa: false,
+            },
+            items: /** @type {any} */ (syntheticItems()),
+            observations: [],
+            serviceData: {},
+            summary: {
+              aplicacao: null,
+              cliente: 'Cliente Sintetico',
+              data_entrega_confirmada: '2026-10-24',
+              nome: 'Evento Sintetico',
+            },
+          },
+          firstContactAt: NOW.toISOString(),
+          id: orderId,
+          missingFields: ['finalAmount', 'paymentCondition'],
+          now: NOW,
+          totalPieces: 32,
+        }),
+      async assertNothingCreated() {
+        const orders = await pool.query(
+          'SELECT count(*) AS total FROM crm.orders WHERE conversation_id = $1',
+          [conversationId],
+        );
+        assert.equal(Number(orders.rows[0].total), 0);
+        const events = await pool.query(
+          `SELECT count(*) AS total FROM crm.domain_events
+           WHERE aggregate_type = 'order' AND aggregate_id = $1`,
+          [orderId],
+        );
+        assert.equal(Number(events.rows[0].total), 0);
+      },
+      outsider,
+      owner,
+    };
+  }
+
+  test('a closed conversation answers an actor without ownership as forbidden, hiding that it is closed', async () => {
+    const { assertNothingCreated, attempt, outsider } =
+      await seedClosedConversation();
+    await assert.rejects(attempt(outsider), (/** @type {any} */ error) => {
+      assert.equal(error.code, 'FORBIDDEN');
+      assert.equal(error.statusCode, 403);
+      assert.ok(error instanceof OrderForbiddenError);
+      return true;
+    });
+    await assertNothingCreated();
+  });
+
+  test('a closed conversation refuses a new order from its owner as a conflict', async () => {
+    const { assertNothingCreated, attempt, owner } =
+      await seedClosedConversation();
+    await assert.rejects(attempt(owner), (/** @type {any} */ error) => {
+      assert.equal(error.code, 'CONVERSATION_CLOSED');
+      assert.equal(error.statusCode, 409);
+      assert.ok(error instanceof OrderConflictError);
+      return true;
+    });
+    await assertNothingCreated();
   });
 
   test('reads owner, customer, pre-ficha and search matches from the conversation', async () => {
