@@ -12,7 +12,9 @@ Contrato [OLC-01–16](../../../.specs/features/olist-confirmed/spec.md),
 Os núcleos descritos abaixo são reaproveitados: o valor final é a soma dos
 subtotais por linha de tamanho mais o frete (decisão do PO de 10/11/2026; ainda
 não implementado, a master não tem o campo e o código atual de venda exige
-`valorFrete` ausente ou zero) e a composição aditiva, para Pedido antigo ou da loja que só tem total, preserva o
+`valorFrete` ausente ou zero; contrato fechado na
+[ADR 080](../../adr/080-valor-final-com-frete.md) /
+[RFC 062](../../rfc/062-valor-final-com-frete.md), a implementar em OLC-T01) e a composição aditiva, para Pedido antigo ou da loja que só tem total, preserva o
 total/snapshot confirmado. A prova F1 continua restrita a centavos
 exatos; o estado integrado das fases já entregues consta nos runbooks
 `olist-phase3`/`olist-phase4` e na RFC 050. A atualização é documental. Referências

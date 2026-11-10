@@ -6,9 +6,12 @@ sobre refatoração, total do Pedido (inclusive o frete), cancelamento local e
 Financeiro. Registro documental, sem ativação de runtime.
 
 Proposta atualizada: [RFC 050 revisão 3](../rfc/050-geracao-assistida-de-pedidos-no-olist.md).
+Desenho do frete no total: [ADR 080](080-valor-final-com-frete.md) /
+[RFC 062](../rfc/062-valor-final-com-frete.md). PR documental:
+[#340](https://github.com/romulosutil/crm-silmer/pull/340).
 Contrato: [OLC-01–16](../../.specs/features/olist-confirmed/spec.md).
 Entrega documental: OLIST-PLAN-03. Implementação: OLC-T01–T06.
-Sem issue/PR específica nesta etapa; registrar os vínculos de implementação
+Sem issue específica nesta etapa; registrar os vínculos de implementação
 nas respectivas tarefas quando existirem.
 
 ## Contexto
@@ -76,59 +79,75 @@ não são necessárias para essa jornada e dificultam sua conclusão.
 9. **O frete entra no total do Pedido** (decisão do PO em 10/11/2026). Valor
    final do Pedido = soma dos subtotais por linha de tamanho, calculada pelo
    backend, **mais o frete**. É uma funcionalidade **nova e ainda não
-   implementada**: a master atual não tem o campo. Nela, a cotação
+   implementada**: a master atual não tem o campo, a cotação
    (`modules/shipping`, `apps/api/src/conversation-shipping-runtime.js`,
-   migration 0050) é uma estimativa separada do Valor final, que "não altera
-   ficha, total, pagamento ou status"
-   ([ADR 054](054-cotacao-na-conversa-vinculada-ao-pedido.md)); a composição
-   peças + frete está fora de escopo nas
-   [ADRs 053](053-conexao-e-cotacao-administrativa-melhor-envio.md) e 054; e o
+   migration 0050) é estimativa separada que "não altera ficha, total,
+   pagamento ou status" ([ADR 054](054-cotacao-na-conversa-vinculada-ao-pedido.md)),
+   a composição peças + frete está fora de escopo nas
+   [ADRs 053](053-conexao-e-cotacao-administrativa-melhor-envio.md) e 054, e o
    adapter e o inspector do Olist exigem `valorFrete` ausente ou zero
-   (`modules/olist/src/sale-payload.js`, `readonly-inspector.js`). O contrato
-   do frete no Pedido (quem informa e quando, campo, migração, versionamento do
-   total, recálculo) **não é definido aqui**: é desenho técnico a fechar em
-   OLC-T01, sem inventar nome de campo, rota ou migração antes disso. A
-   [RFC 038](../rfc/038-frete-e-etiqueta-pelo-melhor-envio.md) (D3–D5, ME-2) é
-   a proposta de origem da composição "peças + frete"; não é reescrita aqui, e
-   OLC-T01 decide se ela é atualizada ou se o Valor final com frete ganha RFC e
-   ADR próprias, que complementem a ADR 020. Regras já decididas, independentes
-   do desenho:
-   - O frete é valor em centavos inteiros não negativos, sem ponto flutuante;
-     zero ou ausente equivale a "sem frete". Não é retroativo.
-   - Compõe o `finalAmountCents` calculado pelo backend e entra no snapshot
-     congelado da exportação. Na venda ERP segue em `valorFrete`, conferido em
-     centavos exatos com as linhas e os totais (ADR 062); não é diluído nos
-     unitários nem compensa linhas, e `valorDesconto` e `valorOutrasDespesas`
-     continuam exigidos zero. O adapter e o inspector deixam de exigir
-     `valorFrete` zero e passam a conferi-lo (OLC-T02).
+   (`modules/olist/src/sale-payload.js`, `readonly-inspector.js`). O desenho
+   foi fechado com as respostas do PO de 10/11/2026 na
+   [ADR 080](080-valor-final-com-frete.md) /
+   [RFC 062](../rfc/062-valor-final-com-frete.md), que complementam a ADR 020
+   e atualizam por referência a
+   [RFC 038](../rfc/038-frete-e-etiqueta-pelo-melhor-envio.md) (D4 e D5
+   resolvidas), sem reescrevê-la. Em resumo:
+   - O frete é dado próprio do Pedido em centavos inteiros não negativos,
+     aditivo, default zero, versionado e auditado; zero ou ausente equivale a
+     "sem frete" e não é pendência. Não é retroativo. Nomes de campo, rota e
+     migração: a definir na implementação (OLC-T01).
+   - **Quem informa:** o vendedor responsável pelo Pedido, com a autorização
+     comercial atual; Admin não informa por herança e a automação nunca
+     informa.
+   - **Cotação é sugestão:** o servidor lê o preço da cotação persistida
+     escolhida e o vendedor revisa e confirma; o navegador nunca envia preço
+     de cotação. O frete gravado é a única fonte do total; cotação nova ou
+     desatualizada não o altera.
+   - **Congela na confirmação:** só Pedido `pendente` recebe ou altera frete;
+     Pedido confirmado não muda. Pedido confirmado legado fica com frete zero,
+     intocado. A reabertura existente segue a mesma regra do total.
+   - O backend calcula `finalAmountCents` = soma dos subtotais + frete na
+     confirmação; esse total entra no snapshot congelado da exportação. Na
+     venda ERP o frete segue em `valorFrete`, conferido em centavos exatos com
+     as linhas e os totais (ADR 062); não é diluído nos unitários nem compensa
+     linhas, e `valorDesconto` e `valorOutrasDespesas` continuam exigidos zero.
+     O adapter e o inspector deixam de exigir `valorFrete` zero e passam a
+     conferi-lo (OLC-T02).
    - Divergência entre o total do Pedido (soma mais frete) e o total do ERP, ou
      entre o frete do Pedido e o `valorFrete` retornado, bloqueia o sucesso,
      preserva IDs e exige conferência, sem segunda venda.
 
-   Mapa de impactos, a tratar em OLC-T01–T06 sem alterar o histórico:
-   - **Valor final** (`finalAmountCents`): em Pedido novo passa a ser soma dos
-     subtotais mais frete; campo, migração e versionamento a definir em OLC-T01.
-   - **Snapshot, ficha e PDF:** versões imutáveis. Pedido confirmado mantém
-     total e snapshot; a impressão não ganha valor monetário por inferência
-     (ADR 057 item 11) e exibir o frete na ficha exige versão própria.
+   Mapa de impactos, tratado em OLC-T01–T06 sem alterar o histórico
+   (detalhes na ADR 080):
+   - **Valor final** (`finalAmountCents`): em Pedido novo é soma dos subtotais
+     mais frete, calculada no backend; a regra usada fica identificável por
+     Pedido para nunca recalcular histórico.
+   - **Snapshot, ficha e PDF:** versões imutáveis. Nesta entrega a ficha **não**
+     mostra frete: sem versão de impressão nova (ADR 057 item 11).
    - **Cobrança InfinitePay:** o valor cobrado deriva do total
-     (`apps/api/src/order-billing-runtime.js`) e passa a incluir o frete em
-     Pedido novo. Cobrança já emitida não muda; alterar o frete depois de
-     emitida segue a regra de recálculo a definir.
+     (`apps/api/src/order-billing-runtime.js`) e inclui o frete em Pedido
+     novo. Como o frete congela na confirmação, não há regra nova de
+     recálculo: cobrança emitida não muda e reconfirmação após reabertura usa
+     as proteções vigentes (ADRs 058, 076 e 077).
    - **Pagamento e quitação:** `paid_on` e `finance_payment_review_required`
      comparam com o total que inclui o frete; a proteção contra reconfirmação
      com outro valor continua valendo.
    - **Dashboard "vendido"** (`apps/api/src/dashboard-runtime.js`): soma o valor
-     final e herda o frete; separar peças e frete no Painel (RFC 038, seção 4)
-     é desenho de OLC-T01. O histórico não é reprocessado.
-   - **Pedido da loja:** checkout e gateway não mudam. Loja com total único segue
-     como Pedido que só tem total; separar o frete exige que o adapter receba o
-     dado, sem inferência nem rateio.
+     final com frete, **sem separar** peças e frete (decisão do PO). O
+     histórico não é reprocessado.
+   - **Pedido da loja:** checkout, gateway, travas e adapter não mudam; total é
+     o preço pago, com frete zero e sem rateio.
    - **Pedidos antigos:** não retroativo; total e snapshot preservados e
      `valorFrete` zero.
    - **Cancelamento local:** o Pedido cancelado sai dos universos ativos com seu
      frete; sem estorno.
    - **Venda ERP:** `valorFrete` conferido conforme acima (OLC-T02, T03 e T06).
+
+   Três pontos sem precedente ficam como proposta técnica a confirmar pelo PO
+   (ADR 080, P1–P3): ausência de alçada para frete zero ou abaixo do cotado,
+   cotação de origem desatualizada só como aviso e performance por
+   responsável com o mesmo total.
 
 ## Precedência e alternativas
 
@@ -139,7 +158,9 @@ valor final pela soma dos subtotais (itens 4 e 6), agora acrescido do frete
 (decisão 9). Supersede parcialmente as ADRs 053 e 054 apenas no ponto em que a
 composição peças + frete fica fora de escopo e a estimativa de frete não altera
 o total; a conexão, a cotação, as permissões e a persistência da estimativa
-dessas ADRs continuam como estão, e elas não são reescritas. Supersede
+dessas ADRs continuam como estão, e elas não são reescritas. O detalhe dessa
+supersessão parcial e do desenho do frete está na
+[ADR 080](080-valor-final-com-frete.md). Supersede
 parcialmente a ADR 068 quanto ao Pedido cancelável (decisão 7). A habilitação sem posse
 continua válida dentro do acesso comercial já existente, sem ampliar edição.
 A remoção do Financeiro (decisão 6) é trilha própria que supersederá as ADRs
@@ -159,8 +180,8 @@ própria, não como parte da integração. Acesso centralizado, vínculo antigo,
 restrição do cancelamento local e revisão ampliada evoluem por tarefas
 independentes (OLC-F01–F04).
 
-O frete (decisão 9) amplia OLC-T01: antes do Olist, a tarefa define e
-implementa o contrato do frete no Pedido; OLC-T02 passa a tratar `valorFrete`
+O frete (decisão 9) amplia OLC-T01: antes do Olist, a tarefa implementa o
+contrato do frete no Pedido fechado na ADR 080; OLC-T02 passa a tratar `valorFrete`
 no adapter e no inspector, e OLC-T03 e OLC-T06 conferem o total com frete.
 
 Conferir critérios positivos, negativos, concorrentes, teclado/ARIA e regressão

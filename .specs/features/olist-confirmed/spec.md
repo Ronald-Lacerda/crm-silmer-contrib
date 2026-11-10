@@ -38,9 +38,14 @@ e o código puro de cálculo/conferência existentes são insumos reutilizáveis
    a composição peças + frete está fora de escopo nas ADRs 053 e 054, e o
    Olist atual exige `valorFrete` ausente ou zero. Registrada na
    [ADR 079](../../../docs/adr/079-olist-a-partir-do-pedido-confirmado.md)
-   (decisão 9), que supersede parcialmente as ADRs 053/054 só nesse ponto. A
-   [RFC 038](../../../docs/rfc/038-frete-e-etiqueta-pelo-melhor-envio.md) é a
-   proposta de origem; o contrato do frete no Pedido é desenho de OLC-T01.
+   (decisão 9) e detalhada na
+   [ADR 080](../../../docs/adr/080-valor-final-com-frete.md) /
+   [RFC 062](../../../docs/rfc/062-valor-final-com-frete.md), que supersedem
+   parcialmente as ADRs 053/054 só nesse ponto e atualizam por referência a
+   [RFC 038](../../../docs/rfc/038-frete-e-etiqueta-pelo-melhor-envio.md).
+   O PO respondeu no mesmo dia: quem informa o frete é o vendedor responsável
+   (Admin não informa por herança); a cotação é só sugestão; o frete congela
+   na confirmação; o Dashboard não separa peças e frete.
 
 ## Jornada e interface
 
@@ -87,23 +92,24 @@ desses comandos nem exige que o PDF já tenha sido gerado ou baixado.
 
 Decisão do PO em 10/11/2026 ([ADR 079](../../../docs/adr/079-olist-a-partir-do-pedido-confirmado.md),
 decisão 9): o frete compõe o total do Pedido. É funcionalidade **nova e ainda
-não implementada**; a master não tem o campo, e o contrato (quem informa, campo,
-migração, versionamento, recálculo, relação com a cotação) é definido em
+não implementada**; a master não tem o campo. O contrato foi fechado na
+[ADR 080](../../../docs/adr/080-valor-final-com-frete.md) /
+[RFC 062](../../../docs/rfc/062-valor-final-com-frete.md) e é implementado em
 OLC-T01. Os critérios valem para o Pedido novo depois dessa entrega; nomes de
-campo, rota e migração são "a definir em OLC-T01".
+campo, rota e migração são "a definir na implementação (OLC-T01)".
 
-| ID      | Critério                                                                                                                                                                                                                                       |
-| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OLC-05a | Positivo: com subtotais revisados e frete positivo, o valor final é a soma dos subtotais mais o frete, calculada no backend em centavos inteiros; o navegador não informa o total.                                                             |
-| OLC-05b | Frete zero ou ausente: o valor final é só a soma dos subtotais e o Olist recebe `valorFrete` zero ou ausente. Não é erro nem pendência.                                                                                                        |
-| OLC-05c | Frete em centavos exatos: inteiro não negativo, sem ponto flutuante. Negativo, fração de centavo, texto numérico ambíguo e overflow são recusados com motivo seguro, sem arredondar.                                                           |
-| OLC-05d | Pedido legado sem frete: total, snapshot, ficha e PDF preservados; nenhum frete é inferido de cotação ou do total; `valorFrete` zero. A composição aditiva de Pedido antigo ou da loja continua somando exatamente o total existente.          |
-| OLC-05e | Divergência bloqueia: total persistido diferente de subtotais mais frete, ou composição legada diferente do total existente, impede aceitar a operação antes de qualquer inclusão; não há rateio nem compensação.                              |
-| OLC-05f | Olist recebe `valorFrete` igual ao frete do Pedido em centavos exatos, fora dos unitários das linhas; `valorDesconto` e `valorOutrasDespesas` seguem zero e a ADR 062 continua integral.                                                       |
-| OLC-05g | Conferência de retorno: o total do ERP deve ser a soma das linhas mais `valorFrete`, e este deve igualar o frete do Pedido. Divergência não declara sucesso, preserva ID e exige conferência, sem segunda venda.                               |
-| OLC-05h | A cotação de `modules/shipping` não altera o total por si só; passa a compor o total apenas pelo contrato definido em OLC-T01, sem aceitar preço enviado pelo navegador.                                                                       |
-| OLC-05i | Concorrência: alterar frete, subtotal ou quantidade concorrente com a reserva é serializado; o snapshot congelado inclui o frete; depois da reserva ou do sucesso, a mudança do frete é bloqueada e não edita a venda ERP nem reabre o Pedido. |
-| OLC-05j | Regressão: ficha/PDF históricos, cobrança InfinitePay já emitida, quitação, Dashboard histórico e checkout da loja não mudam para Pedido existente; Pedido novo com frete é cobrado e contabilizado pelo total que o inclui.                   |
+| ID      | Critério                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| OLC-05a | Positivo: com subtotais revisados e frete positivo, o valor final é a soma dos subtotais mais o frete, calculada no backend em centavos inteiros na confirmação; o navegador não informa o total, e `amountCents` divergente na confirmação é recusado.                                                                                                                                                                                                                                                                                       |
+| OLC-05b | Frete zero ou ausente: o valor final é só a soma dos subtotais e o Olist recebe `valorFrete` zero ou ausente. Não é erro nem pendência.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| OLC-05c | Frete em centavos exatos: inteiro não negativo, sem ponto flutuante. Negativo, fração de centavo, texto numérico ambíguo e overflow são recusados com motivo seguro, sem arredondar.                                                                                                                                                                                                                                                                                                                                                          |
+| OLC-05d | Pedido legado sem frete: total, snapshot, ficha, PDF, cobrança e quitação preservados; frete zero; nenhum frete é inferido de cotação ou do total; `valorFrete` zero. A composição aditiva de Pedido antigo ou da loja continua somando exatamente o total existente. Pedido da loja segue com frete zero, sem rateio nem mudança de checkout/gateway.                                                                                                                                                                                        |
+| OLC-05e | Divergência bloqueia: total persistido diferente de subtotais mais frete, ou composição legada diferente do total existente, impede aceitar a operação antes de qualquer inclusão; não há rateio nem compensação.                                                                                                                                                                                                                                                                                                                             |
+| OLC-05f | Olist recebe `valorFrete` igual ao frete do Pedido em centavos exatos, fora dos unitários das linhas; `valorDesconto` e `valorOutrasDespesas` seguem zero e a ADR 062 continua integral.                                                                                                                                                                                                                                                                                                                                                      |
+| OLC-05g | Conferência de retorno: o total do ERP deve ser a soma das linhas mais `valorFrete`, e este deve igualar o frete do Pedido; ausente só vale como zero se o frete do Pedido for zero. Divergência não declara sucesso, preserva ID e exige conferência, sem segunda venda.                                                                                                                                                                                                                                                                     |
+| OLC-05h | Quem informa e sugestão: só o vendedor responsável pelo Pedido `pendente`, humano ativo com a autorização comercial atual, informa ou altera o frete; Admin não responsável, outro vendedor e automação são negados pela API. A cotação de `modules/shipping` é sugestão: o servidor lê o preço da cotação persistida escolhida (mesmo Pedido, serviço selecionado, não desatualizada) e grava a origem; preço enviado pelo navegador é recusado. Cotação nova ou desatualizada não altera o frete gravado; a tela mostra a origem e o aviso. |
+| OLC-05i | Congelamento e concorrência: o comando de frete exige `expectedVersion` e idempotência e serializa com subtotal, quantidade e confirmação; a confirmação congela o frete com o total e o registra com peças, origem, autor e horário. Pedido confirmado recusa qualquer alteração de frete; a reabertura existente segue a regra do total e continua bloqueada para loja e para Pedido com operação Olist reservada ou concluída. O snapshot da exportação inclui o frete.                                                                    |
+| OLC-05j | Regressão e leitura: ficha/PDF sem frete e sem versão nova, cobrança InfinitePay já emitida, quitação, Dashboard histórico e checkout da loja não mudam para Pedido existente; Pedido novo com frete é cobrado, quitado e contabilizado no "vendido" pelo total único que o inclui, sem separar peças e frete.                                                                                                                                                                                                                                |
 
 ## Estados visíveis e ações
 

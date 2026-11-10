@@ -17,7 +17,9 @@ resolução/criação de comprador/produtos/variações, reservas por identidade
 auditoria e recuperação mínima. O valor final do Pedido é a soma dos subtotais
 por linha de tamanho, calculada pelo backend (ADR 057 itens 4 e 6), mais o
 frete (decisão do PO de 10/11/2026, ADR 079 decisão 9; funcionalidade nova, ainda
-não implementada, com contrato a definir em OLC-T01). A composição aditiva por tamanho, ligada à grade
+não implementada, com contrato fechado na
+[ADR 080](../adr/080-valor-final-com-frete.md) /
+[RFC 062](062-valor-final-com-frete.md) e implementado em OLC-T01). A composição aditiva por tamanho, ligada à grade
 confirmada, serve a Pedido antigo ou da loja que só tem total e deve somar
 exatamente esse total, sem reescrever ficha, snapshot ou negociação. A ADR 062
 continua vigente integralmente.
@@ -27,8 +29,10 @@ blocos 1–6 dos prompts, com este pacote prevalecendo sobre o runtime Olist da
 master onde divergirem; o total é a soma dos subtotais mais o frete (na master
 ainda não há campo de frete no Pedido: a cotação de `modules/shipping` é
 estimativa separada e o Olist atual exige `valorFrete` ausente ou zero; a
-[RFC 038](038-frete-e-etiqueta-pelo-melhor-envio.md) é a proposta de origem e
-OLC-T01 define o contrato e se há RFC/ADR própria); o cancelamento local vale só para Pedido não confirmado; os filtros de
+[RFC 038](038-frete-e-etiqueta-pelo-melhor-envio.md) é a proposta de origem,
+atualizada por referência pela ADR 080 / RFC 062: o vendedor responsável
+informa o frete, a cotação é só sugestão, o frete congela na confirmação e o
+Dashboard não separa peças e frete); o cancelamento local vale só para Pedido não confirmado; os filtros de
 cancelamento seguem como gate de liberação; a remoção do Financeiro foi aprovada.
 
 **Separação:** FINQ-DEPREC-01 remove Financeiro em trilha própria (código

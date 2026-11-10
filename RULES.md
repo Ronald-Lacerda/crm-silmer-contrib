@@ -52,8 +52,8 @@ RFC e nos planos de tarefas.
   por linha de tamanho, calculada pelo backend (ADR 057 itens 4 e 6), mais o
   frete; não há total digitado. Decisão do PO de 10/11/2026: o frete compõe o
   total, mas é funcionalidade nova ainda não implementada e a master atual não
-  tem o campo (a cotação é estimativa separada, ADR 054; OLC-T01 define o
-  contrato). Composição por tamanho
+  tem o campo (a cotação é estimativa separada, ADR 054). Contrato do frete fechado na [ADR 080](docs/adr/080-valor-final-com-frete.md) / [RFC 062](docs/rfc/062-valor-final-com-frete.md): o vendedor responsável informa o frete com o Pedido pendente (Admin não informa por herança; exceção à regra 20 só para o frete), a cotação do Melhor Envio é só sugestão lida no servidor, o frete congela na confirmação e o Dashboard usa o total único, sem separar peças e frete.
+  Composição por tamanho
   aditiva, revisada e ligada 1:1 à grade confirmada serve a Pedido antigo ou da
   loja que só tem total, e deve somar exatamente esse total, sem rateio ou
   alteração de snapshot, ficha, checkout ou pagamento. Loja/legado têm adapter
@@ -103,7 +103,7 @@ gates registrados na RFC e no plano de tarefas.
 A mescla da revisão 3 não remove os pontos acima; as decisões do PO de 10/11/2026
 os ajustam em dois pontos. O total é a soma dos subtotais por linha de tamanho,
 calculada pelo backend, mais o frete, como registrado acima (ainda não
-implementado; ADR 079, decisão 9); a igualdade com o total existente vale só para enriquecer Pedido antigo
+implementado; ADR 079, decisão 9, e ADR 080); a igualdade com o total existente vale só para enriquecer Pedido antigo
 ou da loja que possui apenas total. O texto de 04/11 sobre cancelar Pedido
 pago ou confirmado foi superado: o cancelamento local vale só para Pedido não
 confirmado (ADR 079; ajuste do código entregue em OLC-F03). A exigência de

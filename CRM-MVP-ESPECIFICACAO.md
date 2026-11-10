@@ -25,7 +25,7 @@ cadastros ausentes e cria uma venda conferida. O valor final do Pedido é a soma
 dos subtotais por linha de tamanho, calculada pelo backend, mais o frete (decisão
 do PO de 10/11/2026: o frete compõe o total; funcionalidade nova, ainda não
 implementada, e a master atual não tem o campo, pois a cotação do Melhor Envio
-é estimativa separada); só em Pedido antigo ou da loja que possui apenas total, a
+é estimativa separada). Contrato do frete fechado na [ADR 080](docs/adr/080-valor-final-com-frete.md) / [RFC 062](docs/rfc/062-valor-final-com-frete.md): o vendedor responsável informa o frete com o Pedido pendente (Admin não informa por herança), a cotação do Melhor Envio é só sugestão lida no servidor, o frete congela na confirmação e o Dashboard usa o total único, sem separar peças e frete. Só em Pedido antigo ou da loja que possui apenas total, a
 composição por tamanho deve somar exatamente esse total. Sem inferência de
 preços ou alteração de ficha/snapshot. Centavos exatos e bloqueio de duplicidade seguem
 obrigatórios; falha incerta pede conferência, sem nova criação automática.
@@ -61,7 +61,7 @@ Configuração comercial central e piloto individual em identidade privada.
 A mescla da revisão 3 não remove os pontos acima; as decisões do PO de 10/11/2026
 os ajustam em dois pontos. O total é a soma dos subtotais por linha de tamanho,
 calculada pelo backend, mais o frete, como registrado acima (ainda não
-implementado; ADR 079, decisão 9); a igualdade com o total existente vale só para enriquecer Pedido antigo
+implementado; ADR 079, decisão 9, e ADR 080); a igualdade com o total existente vale só para enriquecer Pedido antigo
 ou da loja que possui apenas total. O texto de 04/11 sobre cancelar Pedido
 pago ou confirmado foi superado: o cancelamento local vale só para Pedido não
 confirmado (ADR 079; ajuste do código entregue em OLC-F03). A exigência de

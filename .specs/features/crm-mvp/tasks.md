@@ -15,7 +15,11 @@ da [RFC 050](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md).
 - [x] Registrar as decisões do PO de 10/11/2026: refatoração do Olist conforme
       os blocos 1–6 (o pacote OLC prevalece sobre o runtime Olist da master onde
       divergirem); valor final = soma dos subtotais mais frete (novo, ainda não implementado;
-      contrato em OLC-T01);
+      contrato fechado na [ADR 080](../../../docs/adr/080-valor-final-com-frete.md)
+      / [RFC 062](../../../docs/rfc/062-valor-final-com-frete.md) com as
+      respostas do PO: o vendedor responsável informa o frete, a cotação é só
+      sugestão, o frete congela na confirmação e o Dashboard não separa peças e
+      frete; implementação em OLC-T01);
       cancelamento local só para Pedido não confirmado (OLC-F03); remoção do
       Financeiro aprovada (FINQ-DEPREC-01, código removido, tabelas e dados
       mantidos).

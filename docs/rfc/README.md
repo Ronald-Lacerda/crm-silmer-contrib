@@ -2,6 +2,12 @@
 
 ## Decisão de 10/11/2026
 
+- [062 — Valor final com frete](062-valor-final-com-frete.md), decidida na
+  [ADR 080](../adr/080-valor-final-com-frete.md) / OLC-05a–j / OLC-T01: frete
+  informado pelo vendedor responsável, cotação como sugestão, congelamento na
+  confirmação e Dashboard com total único; atualiza por referência a RFC 038
+  (D4 e D5) e deixa P1–P3 a confirmar pelo PO.
+
 - [050 — Geração de pedidos de venda no Olist](050-geracao-assistida-de-pedidos-no-olist.md),
   revisão 3 aceita na ADR 079 / OLIST-PLAN-03: somente Confirmado pelo detalhe,
   OLC-01–16 e OLC-T01–T06; remoção Financeiro (aprovada) e melhorias futuras
@@ -89,7 +95,8 @@
 
 - [038 — Frete e etiqueta pelo Melhor Envio](038-frete-e-etiqueta-pelo-melhor-envio.md),
   aberta em 29/10/2026. Tem retirada na loja ou Melhor Envio, etiqueta
-  pronta ao embalar e menu próprio. As decisões D1–D9 estão em aberto.
+  pronta ao embalar e menu próprio. As decisões D1–D9 estão em aberto, exceto
+  D4 e D5, resolvidas para o frete no total pela ADR 080 / RFC 062.
 
 ## Decisão de 05/11/2026
 

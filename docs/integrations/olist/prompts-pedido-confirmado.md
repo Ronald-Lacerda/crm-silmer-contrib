@@ -11,7 +11,9 @@ trabalho futuro; não indicam que a implementação já foi feita.
 
 Contrato: [OLC-01–16](../../../.specs/features/olist-confirmed/spec.md).
 Tarefas: [OLC-T01–T06 e OLC-F01–F04](../../../.specs/features/olist-confirmed/tasks.md).
-Decisão: [ADR 079](../../adr/079-olist-a-partir-do-pedido-confirmado.md).
+Decisão: [ADR 079](../../adr/079-olist-a-partir-do-pedido-confirmado.md);
+frete no total: [ADR 080](../../adr/080-valor-final-com-frete.md) /
+[RFC 062](../../rfc/062-valor-final-com-frete.md).
 O planejamento documental OLIST-PLAN-03 está na
 [lista principal](../../../.specs/features/crm-mvp/tasks.md).
 
@@ -28,10 +30,15 @@ O PO decidiu em 10/11/2026 que o Olist passa por refatoração conforme os bloco
 de Olist onde houver divergência; o código existente é ponto de partida e de
 reaproveitamento. O valor final do Pedido é a soma dos subtotais por linha de
 tamanho, calculada pelo backend (ADR 057 itens 4 e 6), mais o frete. O frete é
-funcionalidade nova, ainda não implementada: a master não tem o campo e o
-contrato é definido no bloco 1 (OLC-T01); veja ADR 079, decisão 9, e os
-critérios OLC-05a–j da spec. O cancelamento local vale só para Pedido não
-confirmado.
+funcionalidade nova, ainda não implementada: a master não tem o campo. O
+contrato está fechado na ADR 080 e é implementado no bloco 1 (OLC-T01); veja
+também ADR 079, decisão 9, e os critérios OLC-05a–j da spec. Decisões do PO
+sobre o frete: quem informa é o vendedor responsável pelo Pedido (Admin não
+informa por herança); a cotação de modules/shipping é só sugestão, com preço
+lido no servidor; o frete é definido até a confirmação e congela com ela; o
+Dashboard usa o total único, sem separar peças e frete. As propostas técnicas
+P1–P3 da ADR 080 seguem a confirmar pelo PO e não devem ser ampliadas. O
+cancelamento local vale só para Pedido não confirmado.
 
 A entrega principal não inclui remoção Financeiro, exportação de pendentes,
 menu/busca Olist, prévia obrigatória, a restrição do cancelamento local
@@ -74,12 +81,18 @@ tamanho por comando aditivo versionado/auditado, cuja soma deve igualar
 exatamente o total existente (ADR 057 item 6); a ausência exige preenchimento
 humano, sem rateio. Derive grade/IDs no servidor e vincule 1:1 aos
 grupos/tamanhos/quantidades confirmados, sem editar grade ou atributos pelo
-enriquecimento. Defina e implemente o contrato do frete no Pedido (na master é
-só estimativa separada em modules/shipping): feche primeiro as perguntas de
-desenho listadas em OLC-T01 (quem informa e quando, relação com a cotação,
-campo/migração/versionamento do total, recálculo e expectedVersion, efeito em
-Pedido confirmado, documento RFC/ADR) sem inventar nome de campo, rota ou
-migração antes disso, e cubra os critérios OLC-05a–j. Trate loja/legados por adapter e complemento ERP aditivo, sem
+enriquecimento. Implemente o contrato do frete no Pedido fechado na ADR 080
+(na master é só estimativa separada em modules/shipping), cobrindo OLC-05a–j:
+frete em centavos inteiros, aditivo, default zero, versionado e auditado, com
+origem; quem informa é só o vendedor responsável, com Pedido pendente (Admin
+não responsável, outro vendedor e automação negados); a cotação persistida é
+sugestão, aplicada pelo servidor a partir da cotação e do serviço escolhidos,
+nunca por preço vindo do navegador, e cotação nova ou desatualizada não muda
+o frete gravado; comando com expectedVersion e idempotência; a confirmação
+calcula soma dos subtotais + frete e congela o frete; Pedido confirmado não
+aceita alteração; cobrança, quitação e Dashboard leem o total único. Escolha
+nomes de campo, rota e migração na implementação e registre-os no OpenAPI.
+Trate loja/legados por adapter e complemento ERP aditivo, com frete zero, sem
 destravar checkout. Não substitua globalmente o campo de valor final nem
 reescreva snapshot/PDF.
 
@@ -116,7 +129,8 @@ referência, produtos, quantidades, marcadores e valores exatos. Trate o
 valorFrete no adapter e no inspector (hoje exigem ausente ou zero): envie o
 frete do Pedido em centavos exatos, fora dos unitários, e confira que o
 valorFrete e o total retornados igualam o frete e o total do Pedido (soma dos
-subtotais mais frete). Não altere
+subtotais mais frete); valorFrete ausente só equivale a zero se o frete do
+Pedido for zero. Não altere
 cadastro remoto encontrado nem peça escopos fiscais/estoque/baixa desnecessários.
 
 Reaproveite fixtures e descobertas das provas, sem IDs de casos reais,
@@ -140,7 +154,8 @@ prévia obrigatória ou vínculo genérico de vendas antigas como dependência.
 
 O comando valida status confirmado, ator/checkbox/piloto, cadastro e todas as
 linhas/valores antes de inclusões, inclusive que o total do Pedido é a soma dos
-subtotais mais o frete congelado no snapshot; divergência bloqueia. Congele conteúdo/configuração e grave reserva,
+subtotais mais o frete congelado na confirmação e no snapshot; divergência
+bloqueia. O frete integra a revisão comercial exportável. Congele conteúdo/configuração e grave reserva,
 snapshot, auditoria e job numa transação. Duas abas, chaves distintas e replay
 devem retornar a mesma operação sem segunda venda.
 
@@ -179,7 +194,11 @@ FinanceView, loja, versões da ficha e mudanças locais de terceiros.
 Adicione bloco Olist com pendências por campo/peça/tamanho e composição
 monetária autorizada, usada em Pedido antigo ou da loja sem subtotais. O valor
 final nunca é digitado: vem da soma dos subtotais calculada pelo backend mais o
-frete, exibido como parte do total conforme o contrato de OLC-T01. Nesses Pedidos antigos/da loja o total existente
+frete. Mostre peças, frete com origem e total (ADR 080), inclusive no Pedido
+pendente e em Gerar pedido. Só o vendedor responsável edita o frete ou usa a
+cotação sugerida, e só em Pedido pendente; a sugestão nunca muda o valor sem
+ação dele e mostra aviso quando difere ou está desatualizada. Confirmado
+mostra o frete somente leitura. Nesses Pedidos antigos/da loja o total existente
 permanece somente leitura e a soma da composição precisa coincidir com ele.
 Usuário sem permissão de correção vê motivo/responsável.
 Não crie menu/busca Olist, assistente ou tela de prévia obrigatória.
@@ -242,8 +261,10 @@ reais se ela ainda não existir na sessão; este prompt não autoriza POST real.
 
 Após autorização, habilite somente a conta piloto prevista e execute pelo
 detalhe do CRM. Confira comprador, grade, quantidades, cada valor, o total do
-Pedido (soma dos subtotais mais o frete), o valorFrete, os totais da venda e o
-número remoto. Observe reload/replay sem duplicidade e recuperação
+Pedido (soma dos subtotais mais o frete congelado na confirmação), o
+valorFrete, os totais da venda e o número remoto. O frete do caso é o que o
+vendedor responsável informou antes de confirmar; não altere frete de Pedido
+confirmado para montar o piloto. Observe reload/replay sem duplicidade e recuperação
 conforme runbook, sem injetar falha destrutiva em dados reais.
 
 Registre versão/digest, migrations, resultado sanitizado, suporte e aceite
@@ -294,8 +315,8 @@ mais gates do projeto. Não confunda ocultar menu com concluir a remoção.
 ## Bloco 8 Melhorias futuras por escolha explícita
 
 Este bloco serve para escolher e detalhar uma melhoria, sem expandir a entrega
-principal automaticamente. A ficha FIP já tem tarefas próprias e deve ser
-preservada.
+principal automaticamente. A ficha por item (FPI-T01–T04) já tem tarefas
+próprias e deve ser preservada.
 
 ```text
 Trabalhe apenas na melhoria OLC-F01, OLC-F02, OLC-F03 ou OLC-F04 escolhida
@@ -313,7 +334,7 @@ de 10/11/2026, que supersede parcialmente a ADR 068), ajustando o já entregue
 feita só nesta tarefa. Mantém estado terminal e impactos em métricas/filas, sem
 estorno, exclusão histórica ou cancelamento ERP; nunca alterar exportados.
 OLC-F04: prévia detalhada e eventuais ampliações do modelo de preços além da
-soma dos subtotais por linha de tamanho mais o frete (contrato em OLC-T01);
+soma dos subtotais por linha de tamanho mais o frete (contrato na ADR 080);
 preserve totais/snapshots antigos e valide a necessidade com produto.
 
 Nesta etapa, pode editar somente contrato/tarefas/RFC/ADR da melhoria escolhida.
