@@ -26,6 +26,9 @@
 
 ## Decisão de 08/11/2026
 
+- [077 — Recebimentos externos e conciliação de cobranças](077-recebimentos-externos-e-conciliacao-de-cobrancas.md),
+  RFC060 / BFIN-01–08; registro renumerado de067 na integração de09/11 para preservar a numeração publicada da master.
+
 - [066 — Responder por mensagem mais recente](066-responder-por-mensagem-mais-recente.md),
   RFC 053 / INBOX-VEZ-08: recência da última mensagem, sem fixar falhas no topo,
   com cursor próprio e preservação do relógio de espera.
@@ -39,8 +42,8 @@
   RFC 050 / OLIST-T23: marcador separado dos dois status comerciais, motivo
   cifrado, ACL comercial, disputa com reserva de venda e histórico financeiro preservado.
 
-- [066 — Intenções de cobrança e envio transacional](066-intencoes-de-cobranca-e-envio-transacional.md),
-  RFC 047 / COB-CHAT-B01–B04; backend autorizado e frontend adiado até o redesign.
+- [076 — Intenções de cobrança e envio transacional](076-intencoes-de-cobranca-e-envio-transacional.md),
+  RFC 047 / COB-CHAT-B01–B04; registro renumerado de066 na integração de09/11, com decisão original preservada.
 - [063 — Triagem prioritária do Vendedor](063-triagem-prioritaria-do-vendedor.md),
   RFC 051 / VND-L05: dúvidas comerciais e alternativas sem regra inferida,
   urgência antes da ficha completa e perguntas só de campos faltantes.

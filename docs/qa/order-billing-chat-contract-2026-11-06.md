@@ -2,7 +2,7 @@
 
 PASS para a fronteira HTTP injetável. Persistência e transporte não estão
 integrados. Base da revisão: `5dec408` mais o patch de B01, requisitos
-BAPI-01–05 e ADR 066. Frontend adiado; nenhum arquivo do frontend modificado.
+BAPI-01–05 e ADR 076. Frontend adiado; nenhum arquivo do frontend modificado.
 
 ## Critérios e evidências
 

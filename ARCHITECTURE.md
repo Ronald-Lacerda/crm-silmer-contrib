@@ -47,8 +47,8 @@ mantêm seus contratos. Sem migration ou infraestrutura nova.
 
 ## Pagamentos mistos e conciliação, 08/11/2026
 
-[ADR067](docs/adr/067-recebimentos-externos-e-conciliacao-de-cobrancas.md) /
-[RFC053](docs/rfc/053-recebimentos-externos-e-conciliacao-de-cobrancas.md)
+[ADR077](docs/adr/077-recebimentos-externos-e-conciliacao-de-cobrancas.md) /
+[RFC060](docs/rfc/060-recebimentos-externos-e-conciliacao-de-cobrancas.md)
 estendem o saldo de pedidos geridos com recebimentos externos e reversões
 auditadas. Consultas de pagamento guardam candidatos cifrados e seguem
 worker/n8n/payment_check/callback; rechecagem limitada não descobre transações
@@ -57,13 +57,13 @@ inclui transporte simulado. Nenhum go-live ou efeito financeiro real autorizado.
 
 ## Backend de envio de cobranças, 06/11/2026
 
-[ADR 066](docs/adr/066-intencoes-de-cobranca-e-envio-transacional.md) decide
+[ADR 076](docs/adr/076-intencoes-de-cobranca-e-envio-transacional.md) decide
 intenção humana durável no CRM e composição transacional com a Inbox, sem
 novo transporte. Contrato [BAPI-01–10](.specs/features/order-billing/spec.md)
 e [HTTP](docs/api/order-billing-chat.md). B01 entrega a fronteira injetável;
-persistência transacional está em B02 (migração 0063 e serviço injetável).
+persistência transacional está em B02 (migração 0073 e serviço injetável).
 B03 compõe mensagem, outbox e auditoria na mesma transação e revalida a
-reserva pelo transporte existente; migração expand 0064 conserva seu histórico.
+reserva pelo transporte existente; migração expand 0074 conserva seu histórico.
 B04 integra API/worker com flag própria inicialmente desligada. Frontend
 aguarda redesign; publicação de workflows e homologação real ficam separadas.
 

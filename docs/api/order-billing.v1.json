@@ -3,7 +3,7 @@
   "info": {
     "title": "CRM Silmer — Cobranças InfinitePay",
     "version": "1.0.0",
-    "description": "COB-01–16 / ADR058. Valores em centavos; nenhuma rota pública de quitação. Corpos limitados a 8KiB; respostas privadas no-store. Pedido cancelado localmente (OLIST-19/46, ADR 068) recusa emissão e comandos com 409 ORDER_CANCELLED; recebimento de cobrança já emitida é preservado em revisão e a consulta por ID continua. ADR067/BFIN-01–08: recebimentos externos e conferência verificável."
+    "description": "COB-01–16 / ADR058. Valores em centavos; nenhuma rota pública de quitação. Corpos limitados a 8KiB; respostas privadas no-store. Pedido cancelado localmente (OLIST-19/46, ADR 068) recusa emissão e comandos com 409 ORDER_CANCELLED; recebimento de cobrança já emitida é preservado em revisão e a consulta por ID continua. ADR077/BFIN-01–08: recebimentos externos e conferência verificável."
   },
   "servers": [
     {

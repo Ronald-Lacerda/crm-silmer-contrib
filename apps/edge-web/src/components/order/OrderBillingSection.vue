@@ -61,6 +61,12 @@ const active = computed(() =>
   ),
 );
 const canManage = computed(() => Boolean(billing.value?.canManage));
+const cancelled = computed(
+  () =>
+    Boolean(props.order.cancelledAt) ||
+    billing.value?.blockedReason === 'ORDER_CANCELLED',
+);
+const canMutate = computed(() => canManage.value && !cancelled.value);
 const canInspectPrivate = computed(
   () =>
     canManage.value &&
@@ -75,6 +81,7 @@ const activeExpired = computed(() => {
 const canShareActive = computed(
   () =>
     canInspectPrivate.value &&
+    !cancelled.value &&
     props.order.status === 'confirmado' &&
     !uncertain.value &&
     !billing.value?.reviewRequired &&
@@ -117,7 +124,7 @@ const nextAmount = computed(() => {
 });
 const canIssue = computed(
   () =>
-    canManage.value &&
+    canMutate.value &&
     !uncertain.value &&
     billing.value?.enabled &&
     !active.value &&
@@ -277,7 +284,7 @@ function cancelCondition() {
   editing?.stop?.();
 }
 async function showDialog(mode, event, charge = null) {
-  if (busy.value || otherEditing.value) return;
+  if (busy.value || otherEditing.value || cancelled.value) return;
   if (mode === 'share') {
     readAt.value = Date.now();
     if (!canShareActive.value || charge?.id !== active.value?.id) {
@@ -364,7 +371,8 @@ async function write(path, body) {
   return response;
 }
 async function resumePending(event) {
-  if (!commandRecord || !pendingContext || busy.value) return;
+  if (!commandRecord || !pendingContext || busy.value || cancelled.value)
+    return;
   if (pendingContext.mode === 'plan') {
     busy.value = true;
     try {
@@ -414,6 +422,10 @@ async function prepare(event) {
 }
 async function submitDialog() {
   if (busy.value) return;
+  if (cancelled.value) {
+    dialogError.value = billingReason('ORDER_CANCELLED');
+    return;
+  }
   dialogError.value = '';
   let path = 'charges';
   let body = {
@@ -546,7 +558,7 @@ onBeforeUnmount(() => {
       :tone="paid ? 'ok' : 'neutral'"
       section="billing"
       body-id="order-billing-body"
-      :can-edit="canManage && !charges.length && !choosing && billing?.enabled"
+      :can-edit="canMutate && !charges.length && !choosing && billing?.enabled"
       edit-label="Alterar condição"
       :blocked="Boolean(otherEditing)"
       @edit="editCondition"
@@ -571,7 +583,11 @@ onBeforeUnmount(() => {
             Há um registro com resultado incerto. Confira esta operação antes de
             iniciar outra.
           </p>
-          <button type="button" :disabled="busy" @click="resumePending">
+          <button
+            type="button"
+            :disabled="busy || cancelled"
+            @click="resumePending"
+          >
             Conferir registro pendente
           </button>
         </div>
@@ -608,6 +624,17 @@ onBeforeUnmount(() => {
         </p>
         <p v-else-if="!canManage" class="op-hint">
           {{ billingReason('FORBIDDEN') }}
+        </p>
+        <p
+          v-if="
+            cancelled &&
+            billing.chatSendEnabled === undefined &&
+            billing.externalReceipts === undefined
+          "
+          role="status"
+          class="op-hint"
+        >
+          {{ billingReason('ORDER_CANCELLED') }}
         </p>
         <div
           v-if="active"
@@ -920,6 +947,7 @@ onBeforeUnmount(() => {
               billing.blockedReason === 'BILLING_REVIEW_REQUIRED'
             "
             type="button"
+            :disabled="cancelled"
             @click="showDialog('reconcile', $event)"
           >
             Conferir cobrança</button
@@ -930,6 +958,7 @@ onBeforeUnmount(() => {
                 charge.refundableAmountCents > 0
               "
               type="button"
+              :disabled="cancelled"
               @click="showDialog('refund', $event, charge)"
             >
               Registrar devolução do

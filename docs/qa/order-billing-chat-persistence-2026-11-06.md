@@ -3,7 +3,7 @@
 PASS para T2. Migração 0063 e serviço PostgreSQL injetável implementados.
 Frontend, callback da Inbox e envios reais permanecem fora desta entrega.
 Base `bf502a4` mais o patch B02. Requisitos BAPI-05/06/08 e guardas iniciais
-de BAPI-07/09, RFC 047 / ADR 066.
+de BAPI-07/09, RFC 047 / ADR 076.
 
 ## Comportamento entregue
 

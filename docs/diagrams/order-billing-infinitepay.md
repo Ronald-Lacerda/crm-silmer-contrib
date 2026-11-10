@@ -61,6 +61,6 @@ pagamentos; o transporte humano envia a mensagem. n8n não acessa o banco CRM.
 
 Preparação e ativação estão no [runbook](../runbooks/order-billing.md).
 Contratos: [BAPI-01–10](../../.specs/features/order-billing/spec.md) e
-[ADR 066](../adr/066-intencoes-de-cobranca-e-envio-transacional.md).
+[ADR 076](../adr/076-intencoes-de-cobranca-e-envio-transacional.md).
 Diagrama conferido contra `order-billing-chat-runtime.js`,
 `order-billing-runtime.js`, `billing-send-guard.js` e os workflows locais.

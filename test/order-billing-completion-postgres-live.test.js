@@ -16,6 +16,7 @@ import {
   KEY,
   SELLER,
   NOW,
+  cancelOrder,
 } from './support/order-billing-chat-fixture.js';
 
 const url = process.env.TEST_DATABASE_URL;
@@ -146,6 +147,100 @@ if (!url) {
       correlationId: randomUUID(),
       ...extra,
     });
+
+  test('COB-REL-01: cancelled orders reject new chat intents, external receipts/reversals and payment checks without effects', async () => {
+    const id = await seed(pool, { conversation: true });
+    await pool.query(
+      "UPDATE crm.conversations SET automation_state='human',state='em_atendimento' WHERE id=(SELECT conversation_id FROM crm.orders WHERE id=$1)",
+      [id],
+    );
+    const charge = await issue(id);
+    const recorded = await external(id, { amountCents: 1000 });
+    const receiptId = recorded.billing.externalReceipts[0].id;
+    await cancelOrder(pool, id);
+    const before = (
+      await pool.query('SELECT * FROM crm.orders WHERE id=$1', [id])
+    ).rows[0];
+    const conversation = (
+      await pool.query('SELECT * FROM crm.conversations WHERE id=$1', [
+        before.conversation_id,
+      ])
+    ).rows[0];
+    await assert.rejects(
+      chat.submit(
+        await command(id, {
+          action: 'issue',
+          percent: 30,
+          conversationId: conversation.id,
+          expectedConversationVersion: Number(conversation.version),
+        }),
+      ),
+      { code: 'ORDER_CANCELLED' },
+    );
+    await assert.rejects(external(id, { amountCents: 1 }), {
+      code: 'ORDER_CANCELLED',
+    });
+    await assert.rejects(
+      runtime.reverseExternal(
+        await command(id, { receiptId, reason: 'Synthetic correction' }),
+      ),
+      { code: 'ORDER_CANCELLED' },
+    );
+    await assert.rejects(
+      runtime.checkPayment(
+        await command(id, {
+          chargeId: charge.id,
+          invoiceSlug: 'synthetic-invoice',
+          transactionNsu: 'synthetic-transaction',
+        }),
+      ),
+      { code: 'ORDER_CANCELLED' },
+    );
+    assert.deepEqual(
+      (await pool.query('SELECT * FROM crm.orders WHERE id=$1', [id])).rows[0],
+      before,
+    );
+    assert.equal(
+      (
+        await pool.query(
+          'SELECT id FROM crm.order_billing_send_intents WHERE order_id=$1',
+          [id],
+        )
+      ).rows.length,
+      0,
+    );
+    assert.equal(
+      (
+        await pool.query(
+          'SELECT id FROM crm.order_billing_external_receipts WHERE order_id=$1',
+          [id],
+        )
+      ).rows.length,
+      1,
+    );
+    assert.equal(
+      (
+        await pool.query(
+          'SELECT id FROM crm.order_billing_external_reversals WHERE receipt_id=$1',
+          [receiptId],
+        )
+      ).rows.length,
+      0,
+    );
+    assert.equal(
+      (
+        await pool.query(
+          'SELECT id FROM crm.order_billing_payment_checks WHERE charge_id=$1',
+          [charge.id],
+        )
+      ).rows.length,
+      0,
+    );
+    assert.equal(
+      (await runtime.get({ actor: SELLER, orderId: id })).billing.blockedReason,
+      'ORDER_CANCELLED',
+    );
+  });
 
   test('BFIN-02: mixed InfinitePay and external receipts settle once, preserve sources and never fabricate a provider transaction', async () => {
     const id = await seed(pool),

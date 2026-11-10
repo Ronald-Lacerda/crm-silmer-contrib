@@ -33,14 +33,14 @@ tarefa. T6 fecha a integração, seguida de verificação independente e sensor.
 ### T0: Registrar contrato e decisões da entrega
 
 Depends on: none
-Where: docs/adr/067-recebimentos-externos-e-conciliacao-de-cobrancas.md
+Where: docs/adr/077-recebimentos-externos-e-conciliacao-de-cobrancas.md
 Tests: validadores de spec/tasks, revisão das fontes, links/diff check.
 Gate: Documents
 Done when: critérios distinguem origem dos recebimentos, consulta verificada e autorização do frontend/DEV sem go-live.
 Status: Complete
 
 Master remota conferida (15edc73b, já ancestral), grafo ausente e fontes
-confirmadas com rg. ADR067/RFC053 registram a autorização e os limites.
+confirmadas com rg. ADR077/RFC060 registram a autorização e os limites.
 validate_spec/validate_tasks sem erros, links locais e diff check aprovados.
 
 ### T1: Registrar recebimentos externos e consultas de pagamento transacionalmente

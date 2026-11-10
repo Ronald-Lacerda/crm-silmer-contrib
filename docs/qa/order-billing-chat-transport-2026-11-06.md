@@ -1,7 +1,7 @@
 # Composição e transporte de cobranças — COB-CHAT-B03
 
 Backend implementado na worktree `codex/billing-chat-plan-review`, conforme
-BAPI-07–10, RFC 047 e ADR 066. Frontend e ativação real continuam separados.
+BAPI-07–10, RFC 047 e ADR 076. Frontend e ativação real continuam separados.
 
 ## Resultado
 

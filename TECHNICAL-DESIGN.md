@@ -74,13 +74,13 @@ cursores da antiga ordem. Classificação, alertas e consultas legadas permanece
 
 ## Contrato de intenção de cobrança, COB-CHAT-B01 (06/11/2026)
 
-[ADR 066](docs/adr/066-intencoes-de-cobranca-e-envio-transacional.md) e
+[ADR 076](docs/adr/076-intencoes-de-cobranca-e-envio-transacional.md) e
 [API](docs/api/order-billing-chat.md): POST de intenção discriminada, GET de
 intenção e histórico privado paginado. Fronteira injetável e escrita false
 por padrão. B02 implementa contexto/versões,
-idempotência e histórico sob transação na migração expand 0063, preservando
+idempotência e histórico sob transação na migração expand 0073, preservando
 as filas existentes e a identidade do ator. B03 compõe callback,
-mensagem/outbox/auditoria na mesma transação e reserva final; migração 0064
+mensagem/outbox/auditoria na mesma transação e reserva final; migração 0074
 projeta estados reais, sem retry de efeito incerto. O transporte humano
 revalida comandos `billing_send:true` pelo preflight autenticado antes do HTTP
 externo. B04 integra rotas, serviço e flags na API/worker sem interromper

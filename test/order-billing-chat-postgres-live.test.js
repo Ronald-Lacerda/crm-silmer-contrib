@@ -152,7 +152,7 @@ if (!url) {
     await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
     const migrations = await loadMigrations();
     const first = await migrate(pool, { migrations });
-    assert.ok(first.applied.includes('0063'));
+    assert.ok(first.applied.includes('0073'));
     assert.deepEqual((await migrate(pool, { migrations })).applied, []);
     for (const [actor, role] of /** @type {Array<[any,string]>} */ ([
       [SELLER, 'Vendedor'],

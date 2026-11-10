@@ -2,7 +2,7 @@
 
 ## Pagamentos mistos e conciliação, 08/11/2026
 
-A [ADR067](docs/adr/067-recebimentos-externos-e-conciliacao-de-cobrancas.md)
+A [ADR077](docs/adr/077-recebimentos-externos-e-conciliacao-de-cobrancas.md)
 autoriza recebimentos externos de pedidos geridos, registrados pelo
 responsável/Admin com valor, data efetiva, método e autoria. Fonte externa
 não inventa NSU/cobrança InfinitePay. Crédito de ambas as fontes determina
@@ -13,7 +13,7 @@ Frontend está autorizado no redesign atual; produção continua desativada.
 
 ## Backend de envio integrado, 06/11/2026
 
-A [ADR 066](docs/adr/066-intencoes-de-cobranca-e-envio-transacional.md)
+A [ADR 076](docs/adr/076-intencoes-de-cobranca-e-envio-transacional.md)
 autoriza backend de intenção humana durável com filas existentes. Correção
 pode definir outro valor de cobrança limitado ao saldo após vencimento,
 encerramento sem pagamento e conferência da anterior, sem mudar o total

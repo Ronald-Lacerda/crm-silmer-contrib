@@ -38,6 +38,8 @@ export function billingReason(code) {
         'Novas cobranças estão desativadas. O histórico e a conferência dos pagamentos continuam disponíveis.',
       BILLING_ORDER_NOT_CONFIRMED:
         'Confirme o pedido antes de gerar uma cobrança.',
+      ORDER_CANCELLED:
+        'Pedido cancelado. O histórico de cobranças e pagamentos continua disponível; novos registros e envios estão bloqueados.',
       BILLING_STORE_ORDER: 'Este pedido usa o checkout da loja.',
       BILLING_LEGACY_PAYMENT:
         'Este pedido já tem um pagamento manual. Confira esse registro antes de usar a cobrança integrada.',
@@ -58,6 +60,7 @@ export function billingReason(code) {
 /** @param {any} cause */
 export function billingError(cause) {
   const code = String(cause?.code ?? '');
+  if (code === 'ORDER_CANCELLED') return billingReason(code);
   if (Number(cause?.status) === 409)
     return 'O pedido ou a cobrança mudou. Atualize as cobranças e revise antes de continuar.';
   if (Number(cause?.status) === 403) return billingReason('FORBIDDEN');

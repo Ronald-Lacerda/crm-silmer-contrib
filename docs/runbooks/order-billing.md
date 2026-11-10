@@ -1,5 +1,12 @@
 # Cobranças InfinitePay — operação e recuperação
 
+Integração para implantação em09/11/2026: migrações inéditas de cobrança
+renumeradas de0063/0064/0065 para0073/0074/0075, preservando todas as migrações
+da master/Olist. ADR066/067 desta branch passam a076/077 e RFC053 para060;
+as decisões publicadas da master com os números antigos não mudam.
+Implantar não habilita emissão ou envio: essas flags permanecem desligadas
+até o ensaio financeiro especificamente autorizado.
+
 Preparação técnica de produção em08/11/2026:
 [diagnóstico, candidatos inativos e pendências de implantação](../qa/order-billing-production-preparation-2026-11-08.md).
 API/worker permanecem com emissão/envio desligados. A preparação não conclui
@@ -8,7 +15,7 @@ COB-OPS-01 nem autoriza teste financeiro real.
 ## Continuação de 08/11/2026
 
 Recebimentos externos, conferência de pagamento e interface real no redesign
-foram autorizados na [ADR067](../adr/067-recebimentos-externos-e-conciliacao-de-cobrancas.md).
+foram autorizados na [ADR077](../adr/077-recebimentos-externos-e-conciliacao-de-cobrancas.md).
 Contrato em [pagamentos](../api/order-billing-payments.md); ambiente local em
 [DEV interativo](billing-development.md); requisitos e evidências em
 [order-billing-completion](../../.specs/features/order-billing-completion/spec.md).
@@ -17,8 +24,8 @@ nem a nova implementação habilitam produção ou transações reais.
 
 ## Backend do envio integrado, B01–B05 (06/11/2026)
 
-Migração expand `0063_order_billing_send_intents` cria intenções, snapshots
-de autorização/acordo e eventos append-only. A migração expand 0064 acompanha
+Migração expand `0073_order_billing_send_intents` cria intenções, snapshots
+de autorização/acordo e eventos append-only. A migração expand 0074 acompanha
 o estado real do transporte. API e worker integram as filas existentes com
 mensagem, comando, auditoria e invalidação da Inbox na mesma transação.
 Não alterar migrações anteriores; aplicar todas as migrações da versão antes
@@ -28,7 +35,7 @@ O backend foi validado com PostgreSQL e dados sintéticos; emissão e envio real
 continuam desligados. Não configurar `ORDER_BILLING_CHAT_SEND_ENABLED=true`
 no ambiente remoto antes da homologação. A interface integrada ainda depende
 do protótipo/design; contrato e implementação estão na
-[ADR 066](../adr/066-intencoes-de-cobranca-e-envio-transacional.md) e na
+[ADR 076](../adr/076-intencoes-de-cobranca-e-envio-transacional.md) e na
 [API de intenções](../api/order-billing-chat.md).
 
 `waiting_link` aguarda a composição; link existente válido/retry seguro podem
@@ -189,8 +196,8 @@ resolver a duplicidade antes de prosseguir, sem descartar recebimentos.
 1. Gates locais/CI, revisão e commit da entrega. Confirmar imagem/digest da
    versão aprovada; o push de branch por si só não comprova publicação.
 2. Aplicar as migrações da versão, incluindo expand `0055_order_billing`,
-   `0063_order_billing_send_intents`, `0064_billing_send_transport` e
-   `0065_billing_external_receipts_and_checks`, no ambiente
+   `0073_order_billing_send_intents`, `0074_billing_send_transport` e
+   `0075_billing_external_receipts_and_checks`, no ambiente
    alvo **antes de habilitar flags**; conferir checksum e readiness. Não editar migrações
    anteriores nem copiar um banco sintético para o remoto.
 3. Publicar API/worker/edge da mesma entrega, inicialmente sem emissão.
@@ -235,7 +242,7 @@ da primeira emissão. Não contornar a API com SQL de ajuste em produção.
 
 ### Envio integrado pela conversa (COB-CHAT-B03/B04)
 
-Aplicar as migrações expand 0063, 0064 e 0065 antes da imagem compatível; conferir
+Aplicar as migrações expand 0073, 0074 e 0075 antes da imagem compatível; conferir
 checksums. `ORDER_BILLING_CHAT_SEND_ENABLED` permanece ausente/false por
 padrão na API e no worker e exige também `ORDER_BILLING_ENABLED=true`.
 Configuração true sem banco, autorização ou outbox funcional impede startup
