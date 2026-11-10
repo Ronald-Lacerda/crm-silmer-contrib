@@ -110,7 +110,7 @@ revisar/publicar controladamente os workflows compatíveis e coordenar flags
 de emissão, recebimento e envio. A tentativa de importação do guard foi
 revertida: o rascunho foi restaurado e comparado com o original. A versão
 publicada do atendimento continua a original de06/11; nenhum teste foi
-executado por esse workflow durante a intervenção.
+disparado pelo agente nesse workflow durante a intervenção.
 
 O proprietário deve ser avisado antes de qualquer ensaio com checkout,
 pagamento ou mensagem reais, obtendo-se autorização específica. As Basic
