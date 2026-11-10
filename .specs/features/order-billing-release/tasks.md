@@ -116,4 +116,12 @@ Where: docs/runbooks/order-billing-activation.md
 Tests: BREL-07/04/05; sequência de publicação/recebimento/emissão/envio, filas pendentes, rollback sem apagar histórico, flags efetivasfalse e workflows financeiros inativos.
 Gate: ActivationPreparation
 Done when: runbook e revisão independente registram prontidão técnica limitada e condições anteriores ao ensaio real, sem efetuar a ativação.
-Status: Pending
+Status: Complete
+
+Runbook order-billing-activation.md preparado e revisto independentemente
+contra API/worker: webhooks antes das flags, recebimento antes da emissão e
+envio por último, com autorização própria. Inclui filas pendentes, limite do
+piloto operacional, receive-only e recuperação sem apagar histórico. Flags
+continuamfalse; workflows financeiros19/11nós inativos e sem drift. Veredito
+T5/T6 PASS limitado em validation-activation-preparation.md; nenhuma ativação
+ou homologação financeira foi inferida.

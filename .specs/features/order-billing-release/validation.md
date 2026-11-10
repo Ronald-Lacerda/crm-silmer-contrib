@@ -57,3 +57,14 @@ do autor como novas execuções independentes.
 Nenhum finding bloqueante para encerrar T1–T4 no escopo de implantação
 desligada. As pendências acima bloqueiam declarar homologação completa ou
 liberar a operação financeira para vendedores.
+
+## Addendum — proteção publicada e preparação inativa (09/11/2026)
+
+A revisão histórica T1–T4 acima permanece inalterada. A proteção humana foi
+publicada posteriormente e sua preparação de ativação foi revisada de forma
+independente em [validation-activation-preparation.md](validation-activation-preparation.md).
+O novo veredito é PASS somente para T5/proteção publicada e T6/preparação
+inativa; atualiza a pendência histórica do guard, sem declarar ativação,
+execução financeira, homologação InfinitePay ou entrega WhatsApp. As três
+flags continuam false e os dois workflows financeiros permanecem inativos
+nas evidências inspecionadas.

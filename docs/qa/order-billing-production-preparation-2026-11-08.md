@@ -174,3 +174,12 @@ ponta a ponta. O proprietário deve ser avisado antes de qualquer teste com
 checkout, pagamento ou mensagem reais e autorizar especificamente o ensaio.
 A implantação desligada não encerra COB-OPS-01 nem comprova a validade da
 API Key no provedor.
+
+Atualização posterior em09/11, às23:06: proteção humana publicada na versão
+9157724a, com141nós originais exatos e três novos. Comparação independente
+pós-publicação aprovada. A pendência de aplicar essa guarda descrita acima
+foi concluída; permanecem publicação dos workflows financeiros, ativação
+coordenada e homologação autorizada. Ver [evidência](order-billing-human-guard-2026-11-09.md)
+e [roteiro preparado](../runbooks/order-billing-activation.md). As três flags
+continuamfalse, os dois workflows financeiros inativos e nenhum teste real
+foi executado.

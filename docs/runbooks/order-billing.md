@@ -1,5 +1,11 @@
 # Cobranças InfinitePay — operação e recuperação
 
+Estado conferido em09/11/2026 após23:06: aplicação e migrações implantadas,
+proteção de envio publicada no atendimento, workflows financeiros inativos
+e três flags financeirasfalse. Seguir o
+[roteiro de ativação coordenada](order-billing-activation.md) antes de
+qualquer habilitação; pagamento e mensagem reais não foram homologados.
+
 Integração para implantação em09/11/2026: migrações inéditas de cobrança
 renumeradas de0063/0064/0065 para0073/0074/0075, preservando todas as migrações
 da master/Olist. ADR066/067 desta branch passam a076/077 e RFC053 para060;
@@ -74,8 +80,10 @@ não são oferecidos para compartilhamento normal. O acesso ao link anterior
 fica explicitamente na conferência; isso não cancela o link no gateway.
 
 A conta da loja é reaproveitada, mas o workflow e os IDs das cobranças do CRM
-são próprios. Não apontar essa rotina para `store-orders`, reutilizar a Data
-Table da loja ou publicar mudanças no workflow de atendimento.
+são próprios. Não apontar essa rotina para `store-orders` nem reutilizar a
+Data Table da loja. No atendimento, a alteração autorizada é somente a guarda
+de preflight revisada, preservando os nós e ramos originais; conferir versão
+publicada e diff conforme o roteiro de ativação coordenada.
 
 ## Configuração
 
