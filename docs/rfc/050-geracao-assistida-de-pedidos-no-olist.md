@@ -14,13 +14,23 @@ Prompts: [blocos de implementação e trilhas independentes](../integrations/oli
 
 Mantêm-se checkbox por usuário, leitura comercial existente, piloto privado,
 resolução/criação de comprador/produtos/variações, reservas por identidade,
-auditoria e recuperação mínima. Composição aditiva por tamanho corresponde
-à grade confirmada e soma exatamente o total fechado, sem reescrever ficha,
-snapshot ou negociação. A ADR 062 continua vigente integralmente.
+auditoria e recuperação mínima. O valor final do Pedido é a soma dos subtotais
+por linha de tamanho, calculada pelo backend (ADR 057 itens 4 e 6), mais o
+frete quando existir no Pedido. A composição aditiva por tamanho, ligada à grade
+confirmada, serve a Pedido antigo ou da loja que só tem total e deve somar
+exatamente esse total, sem reescrever ficha, snapshot ou negociação. A ADR 062
+continua vigente integralmente.
 
-**Separação:** FINQ-DEPREC-01 remove Financeiro em trilha própria; OLC-F01–F04
-tratam operação centralizada, vínculo de venda antiga, cancelamento local e
-revisão/preços ampliados. FPI-T01–T04 preservam a entrega própria da ficha.
+**Decisões do PO em 10/11/2026:** o Olist passa por refatoração conforme os
+blocos 1–6 dos prompts, com este pacote prevalecendo sobre o runtime Olist da
+master onde divergirem; o total é a soma dos subtotais mais o frete quando
+existir; o cancelamento local vale só para Pedido não confirmado; os filtros de
+cancelamento seguem como gate de liberação; a remoção do Financeiro foi aprovada.
+
+**Separação:** FINQ-DEPREC-01 remove Financeiro em trilha própria (código
+removido, tabelas e dados mantidos); OLC-F01–F04 tratam operação centralizada,
+vínculo de venda antiga, restrição do cancelamento local a Pedido não confirmado
+(supersede em parte a ADR 068) e revisão/preços ampliados. FPI-T01–T04 preservam a entrega própria da ficha.
 Nenhuma é predecessora da geração OLC-T01–T06. Recuperação de efeitos incertos
 da própria exportação continua obrigatória; não é o vínculo genérico futuro.
 
@@ -37,15 +47,16 @@ da própria exportação continua obrigatória; não é o vínculo genérico fut
 | OLIST-22–24, T11–T13                            | OLC-13/T04: botão/estados no detalhe; busca/menu em OLC-F01, revisão ampliada em OLC-F04                          |
 | OLIST-25–32/48, T14/T15/T17/T18                 | OLC-T05/T06: QA, operação e piloto, sem dependência de ficha nova ou Financeiro                                   |
 | OLIST-T16                                       | OLC-F02; primeiro piloto usa Pedido ainda não lançado, sem criar duplicata do caso antigo                         |
-| OLIST-45–47, T23                                | OLC-F03, sem impacto no caminho principal                                                                         |
+| OLIST-45–47, T23                                | OLC-F03: restringir o cancelamento a Pedido não confirmado; os filtros de cancelamento seguem como gate           |
 | OLIST-T24/T26                                   | OLC-14/T01/T03/T04: adapter e complemento mínimos de loja/legado, sem dados inventados                            |
 | OLIST-49/50, T25                                | FPI-T01–T04, preservando implementação/amostras/gates próprios                                                    |
 | OLIST-T01/T02 e prova F1                        | Evidência concluída preservada, apenas no escopo exato da ADR 062                                                 |
 
 As seções seguintes preservam a revisão 2 e a prova de 05/11 como referência
 técnica/histórica. Suas frases sobre qualquer status, prévia, projeção restrita,
-gates de ficha/cancelamento e tarefas em aberto **não são o checklist vigente**.
-Aplicar OLC-01–16 e OLC-T01–T06 em qualquer incompatibilidade.
+gates de ficha e tarefas em aberto **não são o checklist vigente**; os filtros
+de cancelamento continuam gate de liberação. Aplicar OLC-01–16 e OLC-T01–T06 em
+qualquer incompatibilidade.
 
 ## Referência da revisão 2 e prova de centavos exatos
 
@@ -1228,5 +1239,5 @@ de cancelamento e identidade individual do piloto estarem validados.
 
 Revisão 3 (10/11/2026): executar OLC-T01–T06 pelo contrato atual. T02/F1
 concluídos no escopo exato permanecem insumos; limitação fracionária, cadastro
-seguro, precisão por linha e identidade piloto continuam obrigatórios. Nova
-ficha e remoção Financeiro não são gates Olist.
+seguro, precisão por linha, filtros de cancelamento e identidade piloto
+continuam obrigatórios. Nova ficha e remoção Financeiro não são gates Olist.

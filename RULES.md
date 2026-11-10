@@ -48,19 +48,28 @@ RFC e nos planos de tarefas.
 - Humano ativo com acesso comercial ao Pedido e checkbox Habilitado Olist;
   Admin também depende do checkbox. Preservar piloto por ID privado, sem nova
   entrada/projeção para Financeiro ou liberação de edição geral.
-- Dados estruturados, não PDF. Composição por tamanho é aditiva, revisada e
-  corresponde exatamente à grade confirmada; soma backend iguala o total
-  confirmado, sem rateio ou alteração de snapshot, ficha, checkout ou pagamento.
-  Loja/legado têm adapter e pendências explícitas. ADR 062 permanece integral.
+- Dados estruturados, não PDF. O valor final do Pedido é a soma dos subtotais
+  por linha de tamanho, calculada pelo backend (ADR 057 itens 4 e 6), mais o
+  frete quando existir no Pedido; não há total digitado. Composição por tamanho
+  aditiva, revisada e ligada 1:1 à grade confirmada serve a Pedido antigo ou da
+  loja que só tem total, e deve somar exatamente esse total, sem rateio ou
+  alteração de snapshot, ficha, checkout ou pagamento. Loja/legado têm adapter
+  e pendências explícitas. ADR 062 permanece integral.
 - Resolver/reutilizar/criar comprador, produtos e variações com identidade,
   reservas e reconciliação por etapa. Não sobrescrever cadastro encontrado.
   Persistir uma operação por conta/Pedido e conferir linhas/totais antes de
   sucesso; incerteza não permite retry criador. Bloquear edição incompatível.
 - Conexão e parâmetros centrais, ACL, auditoria, privacidade, recuperação e
   homologação são parte da entrega. Usar monólito/worker/PostgreSQL existentes.
-- FINQ-DEPREC-01 remove Financeiro em trilha própria; OLC-F01–F04 diferem
-  operação centralizada, vínculo antigo, cancelamento e revisão/preços ampliados.
-  FPI-T01–T04 preservam sua entrega de ficha. Nenhuma bloqueia OLC-T01–T06.
+- FINQ-DEPREC-01 remove a feature Financeiro (código; tabelas e dados ficam),
+  aprovada pelo PO em 10/11/2026, em trilha própria. OLC-F01–F04 diferem
+  operação centralizada, vínculo antigo, restrição do cancelamento local a
+  Pedido não confirmado e revisão/preços ampliados. FPI-T01–T04 preservam sua
+  entrega de ficha. Nenhuma bloqueia OLC-T01–T06.
+- Cancelamento local só para Pedido não confirmado (`pendente`), por decisão do
+  PO de 10/11/2026 que supersede parcialmente a ADR 068. O Olist é refatorado
+  conforme os blocos 1–6 dos prompts e este recorte prevalece sobre o runtime
+  Olist da master onde divergirem.
 
 ### Registro de 04/11/2026 preservado
 
@@ -88,10 +97,14 @@ gates registrados na RFC e no plano de tarefas.
 - Loja mantém travas/gateway; adapter de completude não inventa dado faltante.
   Parâmetros ERP centralizados e piloto individual por ID privado, sem PII em diff.
 
-A mescla da revisão 3 não remove os pontos acima. Onde OLC-01–16 diverge
-(total derivado da soma dos subtotais e cancelamento local terminal),
-prevalece o texto acima até decisão do proprietário; a exigência de acesso
-comercial ao Pedido, mais restritiva, vale desde já.
+A mescla da revisão 3 não remove os pontos acima; as decisões do PO de 10/11/2026
+os ajustam em dois pontos. O total é a soma dos subtotais por linha de tamanho,
+calculada pelo backend, mais o frete quando existir no Pedido, como registrado
+acima; a igualdade com o total existente vale só para enriquecer Pedido antigo
+ou da loja que possui apenas total. O texto de 04/11 sobre cancelar Pedido
+pago ou confirmado foi superado: o cancelamento local vale só para Pedido não
+confirmado (ADR 079; ajuste do código entregue em OLC-F03). A exigência de
+acesso comercial ao Pedido, mais restritiva, vale desde já.
 
 As regras abaixo continuam vigentes nas demais fronteiras. Nada neste registro
 habilita conta, altera produção ou apaga histórico Financeiro.

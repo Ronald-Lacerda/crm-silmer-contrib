@@ -324,16 +324,23 @@ anterior da ADR 057 onde incompatível; o fluxo OLC ainda não está entregue
 ponta a ponta.
 
 API/worker/PostgreSQL existentes, conexão/configuração central, checkbox
-individual mais leitura comercial e piloto privado. Composição por tamanho
-aditiva iguala o total confirmado, preservando snapshot/ficha/checkout. Resolver
+individual mais leitura comercial e piloto privado. O valor final do Pedido é
+a soma dos subtotais por linha de tamanho, calculada pelo backend, mais o frete
+quando existir no Pedido; a composição por tamanho aditiva, que deve igualar o
+total existente, vale só para Pedido antigo ou da loja que possui apenas total,
+preservando snapshot/ficha/checkout. Resolver
 cadastros por identidade, reservar cada efeito e conferir linhas/totais;
 incerteza exige recuperação administrativa mínima, sem retry criador.
 Alterações incompatíveis serializam com exportação; pagamento/entrega compatíveis
 não invalidam o conteúdo exportado só por mudança da versão global.
 
-FINQ-DEPREC-01, melhorias OLC-F01–F04 e ficha FPI-T01–T04 são trilhas independentes,
-sem dependência reversa sobre a geração. Não exigir prévia, busca/menu Olist,
-cancelamento local, pagamento integral ou mudança de template.
+FINQ-DEPREC-01 (remoção do código Financeiro, aprovada pelo PO em 10/11/2026,
+com tabelas e dados mantidos), melhorias OLC-F01–F04 e ficha FPI-T01–T04 são
+trilhas independentes, sem dependência reversa sobre a geração. Não exigir
+prévia, busca/menu Olist, a restrição do cancelamento local (OLC-F03: só Pedido
+não confirmado, supersede em parte a ADR 068), pagamento integral ou mudança de
+template. O Olist é refatorado conforme os blocos 1–6 dos prompts; este recorte
+prevalece sobre o runtime Olist da master onde divergirem.
 
 Núcleos de IDs/preços e conferência exata já existem; F1/T02 fechados apenas
 para `exact-cent-v1`. [Implementação e limites](docs/integrations/olist/implementation-progress.md).
@@ -361,10 +368,14 @@ IDs e subtotais por tamanho, cálculo exato e revisão após quantidade.
 [Implementação e limites](docs/integrations/olist/implementation-progress.md).
 Ainda sem persistência/API/UI e sem geração ERP; o gate monetário F1 permanece.
 
-A mescla da revisão 3 não remove os pontos acima. Onde OLC-01–16 diverge
-(total derivado dos subtotais e cancelamento local terminal), prevalece o texto
-acima até decisão do proprietário; a exigência de acesso comercial ao Pedido,
-mais restritiva, vale desde já.
+A mescla da revisão 3 não remove os pontos acima; as decisões do PO de 10/11/2026
+os ajustam em dois pontos. O total é a soma dos subtotais por linha de tamanho,
+calculada pelo backend, mais o frete quando existir no Pedido, como registrado
+acima; a igualdade com o total existente vale só para enriquecer Pedido antigo
+ou da loja que possui apenas total. O texto de 04/11 sobre cancelar Pedido
+pago ou confirmado foi superado: o cancelamento local vale só para Pedido não
+confirmado (ADR 079; ajuste do código entregue em OLC-F03). A exigência de
+acesso comercial ao Pedido, mais restritiva, vale desde já.
 
 ## Cobranças do pedido — InfinitePay (05/11/2026)
 

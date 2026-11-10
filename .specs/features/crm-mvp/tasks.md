@@ -12,6 +12,12 @@ da [RFC 050](../../../docs/rfc/050-geracao-assistida-de-pedidos-no-olist.md).
       OLC-F01–F04, preservando prova F1, código reutilizável e FPI-T01–T04.
 - [x] Entregar [prompts por blocos](../../../docs/integrations/olist/prompts-pedido-confirmado.md)
       com fronteiras, dependências, aceite, verificações e preservações.
+- [x] Registrar as decisões do PO de 10/11/2026: refatoração do Olist conforme
+      os blocos 1–6 (o pacote OLC prevalece sobre o runtime Olist da master onde
+      divergirem); valor final = soma dos subtotais mais frete quando existir;
+      cancelamento local só para Pedido não confirmado (OLC-F03); remoção do
+      Financeiro aprovada (FINQ-DEPREC-01, código removido, tabelas e dados
+      mantidos).
 - Implementação/ativação ainda não entregues: executar OLC-T01–T06 na ordem
   própria. Financeiro e melhorias futuras não bloqueiam essa sequência.
 - Os checklists OLIST-T01–T26 e PLAN-01/02 datados abaixo são históricos;

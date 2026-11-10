@@ -21,18 +21,22 @@ PDF, mas não exige gerar PDF antes, quitar ou marcar Nota criada.
 Geração exige humano ativo, leitura comercial do Pedido, Habilitado Olist e
 piloto privado; não acrescenta acesso ou edição geral ao perfil Financeiro.
 O CRM valida comprador, produtos/tamanhos e composição de preços, resolve
-cadastros ausentes e cria uma venda conferida. Subtotais correspondem à grade
-confirmada e somam exatamente seu valor final, sem inferência de preços ou
-alteração de ficha/snapshot. Centavos exatos e bloqueio de duplicidade seguem
+cadastros ausentes e cria uma venda conferida. O valor final do Pedido é a soma
+dos subtotais por linha de tamanho, calculada pelo backend, mais o frete quando
+existir no Pedido; só em Pedido antigo ou da loja que possui apenas total, a
+composição por tamanho deve somar exatamente esse total. Sem inferência de
+preços ou alteração de ficha/snapshot. Centavos exatos e bloqueio de duplicidade seguem
 obrigatórios; falha incerta pede conferência, sem nova criação automática.
 
 [OLC-01–16](.specs/features/olist-confirmed/spec.md) e
 [OLC-T01–T06](.specs/features/olist-confirmed/tasks.md) são o aceite e o caminho
 vigentes, ainda não implementados ponta a ponta. A amplitude anterior da ADR
-057 fica supersedida onde incompatível. Remoção Financeiro (FINQ-DEPREC-01),
+057 fica supersedida onde incompatível. Remoção Financeiro (FINQ-DEPREC-01,
+aprovada pelo PO em 10/11/2026: código removido, tabelas e dados mantidos),
 melhorias OLC-F01–F04 e ficha FPI-T01–T04 são trilhas próprias, sem bloquear
-a geração. Não há nova tela de prévia, menu/busca Olist ou cancelamento local
-como requisito desta entrega.
+a geração. Não há nova tela de prévia, menu/busca Olist ou restrição do
+cancelamento local (só Pedido não confirmado, OLC-F03) como requisito desta
+entrega. O Olist é refatorado conforme os blocos 1–6 dos prompts.
 
 ### Registro de 04/11/2026 preservado
 
@@ -52,10 +56,14 @@ sem excluir dados ou cancelar/estornar ERP. Não editar após envio. Aplicação
 e Previsão de entrega são os novos rótulos, inclusive na ficha v7 versionada.
 Configuração comercial central e piloto individual em identidade privada.
 
-A mescla da revisão 3 não remove os pontos acima. Onde OLC-01–16 diverge
-(total derivado dos subtotais e cancelamento local terminal), prevalece o texto
-acima até decisão do proprietário; a exigência de acesso comercial ao Pedido,
-mais restritiva, vale desde já.
+A mescla da revisão 3 não remove os pontos acima; as decisões do PO de 10/11/2026
+os ajustam em dois pontos. O total é a soma dos subtotais por linha de tamanho,
+calculada pelo backend, mais o frete quando existir no Pedido, como registrado
+acima; a igualdade com o total existente vale só para enriquecer Pedido antigo
+ou da loja que possui apenas total. O texto de 04/11 sobre cancelar Pedido
+pago ou confirmado foi superado: o cancelamento local vale só para Pedido não
+confirmado (ADR 079; ajuste do código entregue em OLC-F03). A exigência de
+acesso comercial ao Pedido, mais restritiva, vale desde já.
 
 ## Evolução aprovada — cobranças InfinitePay (05/11/2026)
 

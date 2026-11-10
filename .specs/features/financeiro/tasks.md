@@ -181,10 +181,17 @@ e notas e tratamento de duplicidade antes de qualquer implementação.
 > **Nota de 09/11/2026:** a
 > [ADR 074](../../../docs/adr/074-retirada-da-pagina-financeiro.md) adotou um
 > escopo menor. Rota e menu saíram em FINQ-T07; perfil, API, dados e runbook
-> permanecem. Os itens abaixo ficam como registro e exigem decisão separada.
+> permaneciam. A decisão separada foi tomada: o PO **aprovou em 10/11/2026**
+> remover a feature, conforme os itens abaixo.
 
-Decisão do PO em 05/11/2026, separação reafirmada em 10/11 na
-[ADR 079](../../../docs/adr/079-olist-a-partir-do-pedido-confirmado.md).
+Decisão do PO em 05/11/2026, aprovada para execução em 10/11/2026 (registrada
+na [ADR 079](../../../docs/adr/079-olist-a-partir-do-pedido-confirmado.md)).
+Escopo: remover o código da feature Financeiro (fila, check "Nota criada",
+perfil Financeiro, rotas `/api/v1/finance/*`, código `finance.*`), **mantendo as
+tabelas e os dados históricos** (migrações 0042/0043), sem migração destrutiva,
+e sem mexer em quitação (`paid_on`, `finance_payment_review_required`),
+cobranças InfinitePay nem Dashboard. A execução é independente dos blocos 1–6
+do Olist e não é predecessora deles.
 COB-DEL-01 está entregue localmente; COB-OPS-01 ainda registra ativação e
 homologação reais pendentes. Verificar quitação conciliada efetiva no alvo
 antes da retirada; não inferir disponibilidade operacional a partir do código.
@@ -196,18 +203,20 @@ Prompt separado no [bloco 7](../../../docs/integrations/olist/prompts-pedido-con
 - [ ] Inventariar dependências e confirmar substituição da quitação no alvo,
       inclusive `order-billing-runtime`, repositório de pedidos, coluna de revisão,
       perfis/sessões, referências e gatilhos de mudança de valor.
-- [ ] Registrar a decisão: novo ADR que supersede 040/041/042 e emenda o
-      058 e COB-01/09/10.
-- [ ] Remover a rota `/financeiro`, o perfil Financeiro e o item de menu.
-- [ ] Migração contract das tabelas `crm.order_finance` e
-      `crm.order_finance_events`, da coluna
-      `crm.orders.finance_payment_review_required` e do trigger
-      `invalidate_finance_amount` (expand 0043), somente após verificação.
+- [ ] Registrar, na execução, a decisão: novo ADR que supersede 040/041/042 e
+      emenda o 058 e COB-01/09/10.
+- [ ] Remover a rota `/financeiro`, o perfil Financeiro e o item de menu, as
+      rotas `/api/v1/finance/*` e o código `finance.*`.
+- [ ] Manter as tabelas `crm.order_finance` e `crm.order_finance_events`, os
+      dados históricos e as migrações 0042/0043; não há migração destrutiva
+      (contract). A coluna `crm.orders.finance_payment_review_required` e o
+      trigger `invalidate_finance_amount` ficam como estão, por pertencerem à
+      quitação, que esta tarefa não altera.
 - [ ] Remover testes, CSS e runbook do Financeiro.
-- [ ] Quitação passa a vir só da cobrança InfinitePay conciliada.
-- [ ] Preservar ou arquivar histórico pelo contrato aprovado, manter autoria
-      e substituir invariantes válidas antes de retirar triggers/colunas.
-      Não apagar migrations publicadas nem retirar `paidOn`, billing ou
-      confirmação de pagamento por associação nominal ao Financeiro.
+- [ ] Conferir, sem alterar `paid_on`, que a quitação segue vindo da cobrança
+      InfinitePay conciliada e que o Dashboard não é afetado.
+- [ ] Preservar o histórico e a autoria nas tabelas mantidas. Não apagar
+      migrations publicadas nem retirar `paidOn`, billing ou confirmação de
+      pagamento por associação nominal ao Financeiro.
 - [ ] Validar identidade, reconfirmação com mudança de valor, billing,
       migração/rollback e gates do projeto antes de concluir a remoção.

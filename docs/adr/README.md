@@ -3,8 +3,11 @@
 ## Decisão de 10/11/2026
 
 - [079 — Olist a partir do pedido confirmado](079-olist-a-partir-do-pedido-confirmado.md),
-  revisão 3 da RFC 050 / OLIST-PLAN-03: botão no detalhe, OLC-T01–T06 e
-  composição aditiva; Financeiro, melhorias futuras e ficha em trilhas próprias.
+  revisão 3 da RFC 050 / OLIST-PLAN-03: botão no detalhe, OLC-T01–T06, valor
+  final pela soma dos subtotais (mais frete quando existir) e composição aditiva
+  só para Pedido antigo ou da loja; cancelamento local só para Pedido não
+  confirmado (supersede em parte a ADR 068); remoção do Financeiro aprovada;
+  melhorias futuras e ficha em trilhas próprias.
 
 ## Decisão de 09/11/2026
 

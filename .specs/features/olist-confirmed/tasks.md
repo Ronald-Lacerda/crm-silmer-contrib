@@ -16,6 +16,13 @@ Cada tarefa é uma entrega atômica com evidência, commit e push. Não concluir
 tarefa posterior apenas porque houve prova isolada ou mock de interface.
 FINQ-DEPREC-01 e OLC-F01–F04 não são predecessoras de nenhuma OLC-T.
 
+Decisões do PO em 10/11/2026 (ADR 079): o Olist é refatorado conforme os blocos
+1–6 dos prompts, com este pacote prevalecendo sobre o runtime Olist da master
+onde divergirem (a master é ponto de partida e de reaproveitamento); o valor
+final do Pedido é a soma dos subtotais por linha de tamanho, calculada pelo
+backend, mais o frete quando existir no Pedido; o cancelamento local vale só
+para Pedido não confirmado (OLC-F03); a remoção do Financeiro foi aprovada.
+
 ## OLC-T01 Dados do pedido e autorização
 
 Requisitos OLC-01–06/09/10/14. Dono Backend/Dados com revisão QA.
@@ -26,8 +33,21 @@ Requisitos OLC-01–06/09/10/14. Dono Backend/Dados com revisão QA.
 - [ ] Persistir composição monetária aditiva por tamanho com IDs estáveis,
       revisão humana, versão e auditoria, reutilizando o núcleo existente.
       Derivar grade/IDs no servidor e exigir correspondência 1:1 com grupos,
-      tamanhos/quantidades confirmados. Soma exata iguala o total confirmado;
-      sem rateio automático nem alteração de grade/atributo pelo enriquecimento.
+      tamanhos/quantidades confirmados. Pedido novo: reaproveitar os subtotais
+      por linha de tamanho já existentes; o valor final é a soma calculada no
+      backend (ADR 057 itens 4 e 6), mais o frete quando existir no Pedido, sem
+      igualar outro total. A composição aditiva serve a Pedido antigo ou da loja
+      que só tem total: a soma deve igualar exatamente esse total existente
+      (ADR 057 item 6). Sem rateio automático nem alteração de grade/atributo
+      pelo enriquecimento.
+- [ ] **Ponto de conferência: frete no total.** Na master o frete não integra o
+      total do Pedido: a cotação é estimativa separada do Valor final
+      (ADR 054; `modules/shipping`; migration 0050), a composição peças + frete
+      está fora das ADRs 053/054 e o contrato Olist atual exige `valorFrete`
+      ausente ou zero na leitura (`modules/olist/src/sale-payload.js`). Antes de
+      implementar, confirmar se e onde o frete existe no Pedido e como ele entra
+      no total e na venda ERP, sem inventar contrato; até lá, escrever
+      "frete, quando existir no Pedido".
 - [ ] Compor cadastro e adapter da loja/legado; comando específico de
       enriquecimento não reabre, não reprecifica, não altera snapshot/PDF.
 - [ ] Definir operação/recursos compartilhados/etapas, referências protegidas,
@@ -37,7 +57,7 @@ Requisitos OLC-01–06/09/10/14. Dono Backend/Dados com revisão QA.
 - [ ] Verificar migration expand, autorização negativa, aritmética, revisão,
       concorrência e compatibilidade de leitura. Documentar rollback.
 
-Não remover campo/tabela do Financeiro nem alterar o total digitado global.
+Não remover campo/tabela do Financeiro nem alterar o cálculo do valor final já vigente (soma dos subtotais).
 
 ## OLC-T02 Conexão e adapter Olist
 
@@ -101,8 +121,9 @@ Requisitos OLC-01–16. Depende OLC-T01–T04. Dono QA/Tech Lead com DevOps.
 - [ ] Preparar ambiente com escrita desligada e conferir migrations, digest,
       health e compatibilidade; deixar aprovação/caso real para OLC-T06.
 
-Gate: sem achados críticos/altos ou divergência monetária sem tratamento.
-Não exigir remoção Financeiro, cancelamento local, busca ou ficha nova.
+Gate: sem achados críticos/altos ou divergência monetária sem tratamento, com
+os filtros de cancelamento (cancelados fora dos universos ativos) validados.
+Não exigir remoção Financeiro, a restrição OLC-F03, busca ou ficha nova.
 
 ## OLC-T06 Piloto e aceite da geração
 
@@ -114,15 +135,18 @@ Requisitos OLC-02/08/11/12/15/16. Depende OLC-T05. Dono Operação/Tech Lead/PO.
       manual, excluir esse caso do piloto e encaminhar para conferência sem
       criar duplicata ou exigir o vínculo genérico OLC-F02.
 - [ ] Observar clique no detalhe → processamento → venda conferida; conferir
-      comprador, produtos/tamanhos, quantidades, cada valor e ambos os totais.
+      comprador, produtos/tamanhos, quantidades, cada valor, o total do Pedido
+      (soma dos subtotais, mais frete quando existir) e os totais da venda.
 - [ ] Verificar reload/replay sem duplicação, registrar evidência sanitizada,
       suporte e aceite. Ampliar operadores somente após decisão do PO.
 
 ## Remoção independente do Financeiro
 
-[FINQ-DEPREC-01](../financeiro/tasks.md) continua sendo a tarefa de remoção.
-Ela depende de verificação da quitação conciliada e de suas próprias
-migrações/compatibilidade, nunca da conclusão ou implementação de Olist.
+[FINQ-DEPREC-01](../financeiro/tasks.md) é a tarefa de remoção, **aprovada pelo
+PO em 10/11/2026**: remove a feature (fila, check Nota criada, perfil, rotas
+`/api/v1/finance/*`, código `finance.*`) e mantém tabelas e dados históricos,
+sem migração destrutiva. Depende de verificação da quitação conciliada e de suas
+próprias migrações/compatibilidade, nunca da conclusão ou implementação de Olist.
 Reciprocamente, OLC-T01–T06 não esperam essa remoção. Não usar check financeiro
 ou pagamento como habilitador da exportação.
 
@@ -137,11 +161,20 @@ da entrega principal sem escolha explícita da melhoria.
 - [ ] **OLC-F02 — Vínculo de venda antiga.** Prévia administrativa, conferência
       e vínculo justificado de venda manual anterior. Retoma OLIST-18/T09/T16;
       não substituir a recuperação mínima obrigatória de OLC-T03.
-- [ ] **OLC-F03 — Cancelamento local.** Motivo, estado terminal e impactos nas
-      métricas/filas sem estorno ou cancelamento ERP. Retoma OLIST-45–47/T23;
-      novo desenho/revisão antes de migration, sem alterar exportados.
+- [ ] **OLC-F03 — Cancelamento local só para Pedido não confirmado.**
+      Decisão do PO em 10/11/2026, que supersede parcialmente a ADR 068:
+      cancelar vale só para Pedido não fechado (`pendente`). Esta tarefa
+      **restringe o cancelamento local a Pedido não confirmado, ajustando o já
+      entregue** (rota, UI, testes e métricas). É mudança de comportamento do
+      código existente (a master permite cancelar qualquer Pedido antes da
+      exportação, inclusive confirmado ou pago): fazê-la aqui, em tarefa
+      própria com migração/compatibilidade avaliadas, nunca silenciosamente
+      nem dentro de OLC-T01–T06. Mantém motivo, estado terminal, sem estorno
+      nem cancelamento ERP; os filtros de cancelamento seguem como gate.
+      Retoma OLIST-45–47/T23; sem alterar exportados.
 - [ ] **OLC-F04 — Revisão e preços ampliados.** Prévia detalhada optativa e
-      eventual adoção global de subtotais/total calculado em novos pedidos.
+      eventuais ampliações do modelo de preços além da soma dos subtotais por
+      linha de tamanho (mais frete, quando existir) já vigente.
       Retoma a amplitude de OLIST-10/22/40–44/T20–21 após validação de produto;
       a composição mínima para exportação permanece em OLC-T01/T04.
 

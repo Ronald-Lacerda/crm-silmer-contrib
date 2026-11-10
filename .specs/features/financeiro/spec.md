@@ -19,14 +19,23 @@
 Pedido confirmado, sem exigir quitação ou check Nota criada. Não acrescentar
 menu, busca ou projeção Olist ao perfil Financeiro nesta entrega.
 
-A interface já foi retirada pela [ADR 074](../../../docs/adr/074-retirada-da-pagina-financeiro.md);
-perfil, API, dados e histórico permanecem até FINQ-DEPREC-01,
-trilha independente em [tasks.md](tasks.md), com verificação própria de
-quitação conciliada/dependências. A geração não espera essa remoção e a remoção
-não depende de Olist. Billing e regras válidas de pagamento são preservados.
+A interface já foi retirada pela [ADR 074](../../../docs/adr/074-retirada-da-pagina-financeiro.md).
+O PO **aprovou em 10/11/2026 remover a feature Financeiro** (fila, check
+"Nota criada", perfil Financeiro, rotas `/api/v1/finance/*` e código
+`finance.*`), em FINQ-DEPREC-01, trilha independente em [tasks.md](tasks.md),
+com verificação própria de quitação conciliada/dependências. Mantêm-se as
+tabelas e os dados históricos (migrações 0042/0043), sem migração destrutiva,
+e não se altera a quitação (`paid_on`, `finance_payment_review_required`),
+as cobranças InfinitePay nem o Dashboard. A decisão que supersede as ADRs
+040/041/042 será registrada na execução. A geração não espera essa remoção e a
+remoção não depende de Olist. Billing e regras válidas de pagamento são
+preservados.
 
 A emenda de 04/11 abaixo é referência anterior: projeção Olist de perfil
 restrito fica em OLC-F01 e cancelamento em OLC-F03, sem novos efeitos nesta fase.
+O texto de 04/11 abaixo sobre cancelar Pedido pago ou confirmado foi superado
+pela decisão do PO de 10/11/2026: o cancelamento local vale só para Pedido não
+confirmado (ADR 079, OLC-F03).
 
 ## Emenda Olist e cancelamento de 04/11/2026
 

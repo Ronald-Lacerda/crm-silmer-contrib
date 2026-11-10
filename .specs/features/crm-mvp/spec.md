@@ -170,12 +170,19 @@ para a entrega principal, supersedendo OLIST-01–50 onde incompatíveis.
 - Preservar checkbox, leitura comercial existente e piloto privado, sem
   herança Admin ou nova projeção de perfil restrito. Validar cadastro e grade
   independentemente do estado confirmado; resolver/criar recursos ausentes.
-- Composição por tamanho aditiva corresponde à grade e iguala total confirmado
-  sem reprecificar ou reescrever ficha. ADR 062, unicidade/reservas, recuperação
-  mínima de incertezas, auditoria e bloqueio de edição incompatível permanecem.
+- Valor final = soma dos subtotais por linha de tamanho, calculada pelo backend,
+  mais o frete quando existir no Pedido. Composição por tamanho aditiva
+  corresponde à grade e, em Pedido antigo ou da loja que só tem total, iguala
+  esse total, sem reprecificar ou reescrever ficha. ADR 062, unicidade/reservas,
+  recuperação mínima de incertezas, auditoria e bloqueio de edição incompatível
+  permanecem.
 - [OLC-T01–T06](../olist-confirmed/tasks.md) implementam dados, conexão,
-  processamento, UI, QA e piloto. FINQ-DEPREC-01 e OLC-F01–F04 são independentes;
-  FPI-T01–T04 mantêm seus próprios gates de impressão, sem bloquear Olist.
+  processamento, UI, QA e piloto. FINQ-DEPREC-01 (remoção do código Financeiro,
+  aprovada pelo PO em 10/11/2026) e OLC-F01–F04 são independentes; FPI-T01–T04
+  mantêm seus próprios gates de impressão, sem bloquear Olist.
+- O Olist é refatorado conforme os blocos 1–6 dos prompts, com este recorte
+  prevalecendo sobre o runtime Olist da master onde divergirem. Cancelamento
+  local só para Pedido não confirmado (OLC-F03).
 
 O código puro e a prova F1 são reaproveitados; esta emenda não declara
 runtime integrado, habilitação de conta ou geração operacional entregues.
@@ -196,10 +203,14 @@ Aplicação é o campo 4 por item/grupo; Previsão de entrega é o novo rótulo.
 Ficha v7 preserva histórico. Loja/legados, Financeiro e perfil restrito seguem
 adapters/escopos explícitos, sem inventar preço/dado fiscal ou apagar história.
 
-A mescla da revisão 3 não remove os pontos acima. Onde OLC-01–16 diverge
-(total derivado dos subtotais e cancelamento local terminal), prevalece o texto
-acima até decisão do proprietário; a exigência de acesso comercial ao Pedido,
-mais restritiva, vale desde já.
+A mescla da revisão 3 não remove os pontos acima; as decisões do PO de 10/11/2026
+os ajustam em dois pontos. O total é a soma dos subtotais por linha de tamanho,
+calculada pelo backend, mais o frete quando existir no Pedido, como registrado
+acima; a igualdade com o total existente vale só para enriquecer Pedido antigo
+ou da loja que possui apenas total. O texto de 04/11 sobre cancelar Pedido
+pago ou confirmado foi superado: o cancelamento local vale só para Pedido não
+confirmado (ADR 079; ajuste do código entregue em OLC-F03). A exigência de
+acesso comercial ao Pedido, mais restritiva, vale desde já.
 
 ## Inbox orientada ao vendedor — PCX-15 (03/11/2026)
 

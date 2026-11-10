@@ -23,8 +23,16 @@ Consulte o grafo existente somente para descoberta, confirme com `rg` e fontes
 atuais e nunca gere ou versione Graphify no Windows. Use somente infraestrutura
 existente, dados sintéticos e os componentes Vue atuais.
 
+O PO decidiu em 10/11/2026 que o Olist passa por refatoração conforme os blocos
+1 a 6: este pacote é a direção vigente e prevalece sobre o que a master já tem
+de Olist onde houver divergência; o código existente é ponto de partida e de
+reaproveitamento. O valor final do Pedido é a soma dos subtotais por linha de
+tamanho, calculada pelo backend (ADR 057 itens 4 e 6), mais o frete quando
+existir no Pedido. O cancelamento local vale só para Pedido não confirmado.
+
 A entrega principal não inclui remoção Financeiro, exportação de pendentes,
-menu/busca Olist, prévia obrigatória, cancelamento local ou troca de ficha.
+menu/busca Olist, prévia obrigatória, a restrição do cancelamento local
+(OLC-F03) ou troca de ficha.
 Mantenha a habilitação individual e a autorização de leitura comercial sem
 acrescentar edição geral. Não exigir pagamento integral ou check Nota criada.
 Não invente preços, rateie total histórico, arredonde centavos nem repita uma
@@ -52,13 +60,19 @@ Implemente Habilitado Olist default falso, gerido por Admin, com autorização
 explícita na API: humano ativo + leitura comercial do Pedido + checkbox + piloto.
 Admin precisa do checkbox. Não acrescente projeção/entrada ao perfil Financeiro.
 
-Reutilize size-pricing.js e olist-exact-cent.js. Persista IDs estáveis e composição
-por tamanho por comando aditivo versionado/auditado. Derive grade/IDs no servidor
-e vincule 1:1 aos grupos/tamanhos/quantidades confirmados, sem editar grade ou
-atributos pelo enriquecimento. Soma backend deve igualar finalAmountCents
-confirmado. Ausência exige preenchimento humano, sem rateio.
-Trate loja/legados por adapter e complemento ERP aditivo, sem destravar checkout.
-Não substitua globalmente o campo de valor final nem reescreva snapshot/PDF.
+Reutilize size-pricing.js e olist-exact-cent.js. Persista IDs estáveis. Pedido
+novo: reaproveite os subtotais por linha de tamanho existentes; o valor final é
+a soma calculada pelo backend, mais o frete quando existir no Pedido, sem igualar
+outro total. Pedido antigo ou da loja que só tem total: persista a composição por
+tamanho por comando aditivo versionado/auditado, cuja soma deve igualar
+exatamente o total existente (ADR 057 item 6); a ausência exige preenchimento
+humano, sem rateio. Derive grade/IDs no servidor e vincule 1:1 aos
+grupos/tamanhos/quantidades confirmados, sem editar grade ou atributos pelo
+enriquecimento. Antes de codificar, confira como o frete entra no total (na
+master é só estimativa separada; ponto de conferência em OLC-T01) e não invente
+contrato. Trate loja/legados por adapter e complemento ERP aditivo, sem
+destravar checkout. Não substitua globalmente o campo de valor final nem
+reescreva snapshot/PDF.
 
 Defina registros de operação, recursos compartilhados e tentativas, snapshot
 cifrado, referências estáveis e unicidades por conta/Pedido/identidade. Prepare
@@ -149,8 +163,11 @@ Confirme os caminhos com rg. Preserve Gerar pedido, Gerar PDF, billing,
 FinanceView, loja, versões da ficha e mudanças locais de terceiros.
 
 Adicione bloco Olist com pendências por campo/peça/tamanho e composição
-monetária autorizada. Total confirmado permanece somente leitura e a soma
-precisa coincidir. Usuário sem permissão de correção vê motivo/responsável.
+monetária autorizada, usada em Pedido antigo ou da loja sem subtotais. O valor
+final nunca é digitado: vem da soma dos subtotais calculada pelo backend, mais o
+frete quando existir. Nesses Pedidos antigos/da loja o total existente
+permanece somente leitura e a soma da composição precisa coincidir com ele.
+Usuário sem permissão de correção vê motivo/responsável.
 Não crie menu/busca Olist, assistente ou tela de prévia obrigatória.
 
 Ligue Gerar no Olist ao comando real. Mostre Aguardando processamento,
@@ -210,8 +227,9 @@ nem improvise vínculo genérico. Obtenha autorização explícita para os efeit
 reais se ela ainda não existir na sessão; este prompt não autoriza POST real.
 
 Após autorização, habilite somente a conta piloto prevista e execute pelo
-detalhe do CRM. Confira comprador, grade, quantidades, cada valor, ambos os
-totais e número remoto. Observe reload/replay sem duplicidade e recuperação
+detalhe do CRM. Confira comprador, grade, quantidades, cada valor, o total do
+Pedido (soma dos subtotais, mais frete quando existir), os totais da venda e o
+número remoto. Observe reload/replay sem duplicidade e recuperação
 conforme runbook, sem injetar falha destrutiva em dados reais.
 
 Registre versão/digest, migrations, resultado sanitizado, suporte e aceite
@@ -222,31 +240,36 @@ Ampliação de usuários depende de decisão própria após o aceite.
 
 ## Bloco 7 Remoção independente do Financeiro
 
-Este bloco é FINQ-DEPREC-01. Pode ter cronograma próprio; não é requisito
-para executar nenhum bloco 1 a 6.
+Este bloco é FINQ-DEPREC-01, **aprovado pelo PO em 10/11/2026**. A execução é
+independente dos blocos 1 a 6 e tem cronograma próprio; não é requisito para
+nenhum deles. Remova o código e mantenha tabelas e dados. A decisão que
+supersede as ADRs 040/041/042 será registrada na execução.
 
 ```text
 Trabalhe somente em FINQ-DEPREC-01 de .specs/features/financeiro/tasks.md.
 Leia a emenda de separação, ADR 079, contratos de billing, AGENTS.md e regras
 gerais deste documento. Não implemente nem modifique a entrega Olist.
 
-Objetivo: retirar a rotina manual Financeiro sem perder histórico, contas,
-quitação válida ou proteções contra reconfirmação com outro valor.
+Objetivo: retirar a feature Financeiro (fila, check Nota criada, perfil
+Financeiro, rotas /api/v1/finance/* e código finance.*) mantendo as tabelas e
+os dados históricos (migrações 0042/0043, sem migração destrutiva), sem mexer em
+quitação (paid_on, finance_payment_review_required), cobranças InfinitePay nem
+Dashboard, e sem perder proteções contra reconfirmação com outro valor.
 Primeiro confirme a disponibilidade da quitação conciliada e todas as
 dependências reais, inclusive order-billing-runtime, repositório de pedidos,
 finance_payment_review_required e triggers. Código de cobrança local entregue
 não prova que o ambiente real já esteja habilitado.
 
 Pode editar rota/menu/tela/CSS Financeiro, gestão de perfis, runtime/API,
-repositórios/exports respectivos, testes, runbook e migração de retirada
-compatível. Preserve dados históricos e identidades com autoria financeira;
-não apague migrations já publicadas. Não remova paidOn, confirmação de
+repositórios/exports respectivos, testes e runbook. Não crie migração
+destrutiva: preserve tabelas, dados históricos e identidades com autoria
+financeira; não apague migrations já publicadas. Não remova paidOn, confirmação de
 pagamento, InfinitePay ou regras comerciais apenas pelo nome Financeiro.
 
 Registre a decisão específica que supersede ADRs 040/041/042 no alcance
 necessário. Faça retirada em etapas compatíveis, trate sessões/contas e
-referências, preserve ou arquive histórico conforme contrato aprovado e
-substitua invariantes monetárias que ainda dependam do trigger antigo.
+referências e preserve o histórico nas tabelas mantidas. Não altere a quitação
+nem o trigger e a coluna que a protegem.
 
 Se a quitação ou compatibilidade não estiver pronta, conclua o inventário
 e descreva o bloqueio desta trilha; Olist continua seguindo seus próprios gates.
@@ -270,10 +293,14 @@ OLC-F01: entrada/menu/busca exata e projeção mínima para operação centraliz
 inclusive perfil restrito, com decisão de acesso e testes contra vazamento.
 OLC-F02: conferência administrativa e vínculo de venda manual antiga, sem
 criação. Não adie para esta melhoria a recuperação de incerteza de OLC-T03.
-OLC-F03: cancelamento local terminal e impactos em métricas/filas, sem
+OLC-F03: restringir o cancelamento local a Pedido não confirmado (decisão do PO
+de 10/11/2026, que supersede parcialmente a ADR 068), ajustando o já entregue
+(rota, UI, testes e métricas). É mudança de comportamento do código existente,
+feita só nesta tarefa. Mantém estado terminal e impactos em métricas/filas, sem
 estorno, exclusão histórica ou cancelamento ERP; nunca alterar exportados.
-OLC-F04: prévia detalhada e eventual modelo global de subtotais em novos
-pedidos; preserve totais/snapshots antigos e valide a necessidade com produto.
+OLC-F04: prévia detalhada e eventuais ampliações do modelo de preços além da
+soma dos subtotais por linha de tamanho (mais frete, quando existir) já
+vigente; preserve totais/snapshots antigos e valide a necessidade com produto.
 
 Nesta etapa, pode editar somente contrato/tarefas/RFC/ADR da melhoria escolhida.
 Informe arquivos de código candidatos, critérios positivos/negativos,

@@ -4,7 +4,8 @@
 
 - [050 — Geração de pedidos de venda no Olist](050-geracao-assistida-de-pedidos-no-olist.md),
   revisão 3 aceita na ADR 079 / OLIST-PLAN-03: somente Confirmado pelo detalhe,
-  OLC-01–16 e OLC-T01–T06; remoção Financeiro e melhorias futuras independentes.
+  OLC-01–16 e OLC-T01–T06; remoção Financeiro (aprovada) e melhorias futuras
+  independentes.
 
 ## Decisão de 09/11/2026
 

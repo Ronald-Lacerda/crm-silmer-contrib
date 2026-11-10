@@ -326,10 +326,15 @@ nas fases anteriores segue como insumo reaproveitável.
 - Acesso: humano ativo, leitura comercial existente, checkbox default false
   gerido por Admin e piloto privado. Não criar nova entrada de perfil restrito.
 - Pedido: somente `confirmado`, com comando **Gerar no Olist** no detalhe.
-  Composição ERP aditiva deriva identidade/grade no servidor, liga cada linha
-  ao tamanho/quantidade confirmado e soma exatamente `finalAmountCents`.
-  Preservar total, confirmação, snapshot e PDF; nenhum rateio automático ou
-  alteração de grade pelo comando de enriquecimento. Loja tem adapter próprio.
+  Valor final = soma dos subtotais por linha de tamanho, calculada pelo
+  backend (ADR 057 itens 4 e 6), mais o frete quando existir no Pedido; não há
+  total digitado. Composição ERP aditiva, para Pedido antigo ou da loja que só
+  tem total, deriva identidade/grade no servidor, liga cada linha ao
+  tamanho/quantidade confirmado e soma exatamente o `finalAmountCents`
+  existente. Preservar total, confirmação, snapshot e PDF; nenhum rateio
+  automático ou alteração de grade pelo comando de enriquecimento. Loja tem
+  adapter próprio. Na master o frete é estimativa separada do total (ADR 054);
+  como ele integra o total e a venda ERP é ponto de conferência em OLC-T01.
 - Conexão: credenciais cifradas, renovação serializada, conta esperada e
   configuração central versionada. API oficial no monólito/worker/PostgreSQL.
 - Processamento: validação interna antes de qualquer inclusão, snapshot/reserva/
@@ -341,21 +346,27 @@ nas fases anteriores segue como insumo reaproveitável.
   envio apenas por incremento de `orders.version`. Não relaxar verificação de
   status, conta, parâmetros ou habilitação. Após sucesso, bloquear edição.
 - Dinheiro/recuperação: manter ADR 062, núcleo exato e conferência de conta,
-  referências, identidade de linhas/produtos e ambos os totais. Incerteza bloqueia
+  referências, identidade de linhas/produtos e totais exatos. Incerteza bloqueia
   dependentes e exige recuperação administrativa mínima, sem POST repetido.
 - UI: bloco no detalhe com pendências, botão e progresso persistido; sem
   previewId ou prévia obrigatória. Não usar PDF, pagamento ou check financeiro
   como entrada/gate. Runbook e gate operacional próprios antes de ativar.
 
-FINQ-DEPREC-01, OLC-F01–F04 e FPI-T01–T04 são trilhas separadas, não predecessoras
-de OLC-T01–T06. Não remover Financeiro, reformar preços globalmente ou trocar
-template nesta integração. Publicação GitHub → EasyPanel permanece vigente.
+FINQ-DEPREC-01 (remoção do código Financeiro, aprovada pelo PO em 10/11/2026;
+tabelas e dados ficam), OLC-F01–F04 e FPI-T01–T04 são trilhas separadas, não
+predecessoras de OLC-T01–T06. Não remover Financeiro, restringir o cancelamento
+(OLC-F03: só Pedido não confirmado, supersede em parte a ADR 068), reformar
+preços globalmente ou trocar template nesta integração. O Olist é refatorado
+conforme os blocos 1–6 dos prompts, prevalecendo este recorte sobre o runtime
+Olist da master onde divergirem. Publicação GitHub → EasyPanel permanece vigente.
 
 ### Contrato de 04/11/2026 preservado
 
 Contrato da ADR 057 já adotado; permanece vigente, sem enfraquecimento, nos pontos
-em que OLC-01–16 não o supersede expressamente (divergências abertas: total
-derivado dos subtotais e cancelamento local, em decisão do proprietário).
+em que OLC-01–16 não o supersede expressamente. Pelas decisões do PO de
+10/11/2026, o total derivado dos subtotais (mais frete, quando existir) segue
+valendo e o texto de 04/11 sobre cancelar Pedido pago ou confirmado foi
+superado: o cancelamento local vale só para Pedido não confirmado (ADR 079).
 
 - Identidade/acesso: checkbox default false gerido por Admin, autorização
   ortogonal antes das negações por perfil e sem posse. Projeção Olist mínima
@@ -372,7 +383,8 @@ derivado dos subtotais e cancelamento local, em decisão do proprietário).
   encontrado, inventar desconto ou compensar diferenças entre tamanhos.
 - Cancelamento: marcador terminal separado dos dois status, adotado na ADR 068,
   motivo/versão/auditoria e exclusão das métricas/filas ativas antes de paginar;
-  preservar histórico/pagamento/check. Só pré-exportação, serializado com worker.
+  preservar histórico/pagamento/check. Só pré-exportação, serializado com worker;
+  restrito a Pedido não confirmado pela ADR 079 (ajuste em OLC-F03).
 - UI/ficha: Aplicação por grupo e Previsão de entrega preservam chaves. Nova
   ficha v7/selector/snapshot/amostra; templates v2–v6 intactos. Sem preço novo
   na impressão. Configuração ERP central versionada, piloto por ID privado.

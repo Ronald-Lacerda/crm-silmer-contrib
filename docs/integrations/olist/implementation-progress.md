@@ -9,8 +9,10 @@ Contrato [OLC-01–16](../../../.specs/features/olist-confirmed/spec.md),
 [tarefas OLC-T01–T06](../../../.specs/features/olist-confirmed/tasks.md) e
 [prompts por blocos](prompts-pedido-confirmado.md).
 
-Os núcleos descritos abaixo são reaproveitados na composição aditiva que
-preserva o total/snapshot confirmado. A prova F1 continua restrita a centavos
+Os núcleos descritos abaixo são reaproveitados: o valor final é a soma dos
+subtotais por linha de tamanho (mais frete, quando existir no Pedido) e a
+composição aditiva, para Pedido antigo ou da loja que só tem total, preserva o
+total/snapshot confirmado. A prova F1 continua restrita a centavos
 exatos; o estado integrado das fases já entregues consta nos runbooks
 `olist-phase3`/`olist-phase4` e na RFC 050. A atualização é documental. Referências
 antigas a T03/T20/T21 não substituem o plano OLC; Financeiro, cancelamento,
