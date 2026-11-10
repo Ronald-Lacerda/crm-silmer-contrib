@@ -134,3 +134,11 @@ inspecionou capturas, relatórios, logs de imagem, CI/PR, igualdade das árvores
 e hashes dos assets locais. Não executou teste financeiro nem restauração.
 O UUID publicado do atendimento deriva da conferência DOM do responsável;
 a captura confirma a publicação original separada das alterações de rascunho.
+
+## Atualização posterior à implantação — proteção humana
+
+Às23:06 de09/11 a proteção humana foi publicada; ver
+[evidência da guarda](order-billing-human-guard-2026-11-09.md) e
+[ativação coordenada preparada](../runbooks/order-billing-activation.md).
+As observações T2/T3 acima preservam o momento da implantação. Flags
+continuamfalse e workflows financeiros inativos; ensaio real não foi executado.
