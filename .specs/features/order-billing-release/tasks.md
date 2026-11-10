@@ -66,7 +66,13 @@ Where: docs/runbooks/order-billing.md
 Tests: BREL-03/04; backup/capacidade, migrações da release/checksums, health e flags nos processos.
 Gate: Deployment
 Done when: versão compatível e banco conferidos em produção, sem emissão/envio.
-Status: Pending
+Status: Complete
+
+API/worker/edge implantados pelo EasyPanel a partir de87cbc435. Backup local
+conferido antes;0073–0075 aplicadas,71/71expand sem divergência, replay0.
+Comando original da API restaurado e redeploy conferido. Flags3false nos
+processos Node de API/worker; health200, heartbeat e scanner saudáveis.
+Evidências, image IDs e limites em docs/qa/order-billing-release-2026-11-09.md.
 
 ### T4: Vincular credencial InfinitePay e fechar conferência técnica
 
