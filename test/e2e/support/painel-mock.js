@@ -230,6 +230,7 @@ const BUSINESS_HOURS = Object.freeze({
 /** MET-02..05 (RFC 048): synthetic service times in business minutes.
  * @param {boolean} manager @param {number} days */
 export function serviceMetrics(manager, days = 7) {
+  /** @type {Array<Record<string, any>>} */
   const rows = [
     {
       userId: 'seller-1',
