@@ -2640,6 +2640,193 @@ if (connectionString) {
       await pool.end();
     }
   });
+
+  test('site polling runs its SQL on PostgreSQL and returns only the text of the bearer session', async () => {
+    assertTestDatabase(connectionString);
+    const pool = new Pool({ connectionString, max: 4 });
+    const database = {
+      query: pool.query.bind(pool),
+      transaction: (/** @type {(client: any) => Promise<any>} */ work) =>
+        withTransaction(pool, work),
+    };
+    let currentTime = NOW;
+    let sequence = 0;
+    // Four distinct keys: polling must hash with the lookup key and decrypt
+    // with the message key, as the production composition does.
+    const repository = new PostgresN8nIntegrationRepository({
+      contactEnvelopeKey: Buffer.alloc(32, 111),
+      contactLookupKey: Buffer.alloc(32, 112),
+      database,
+      envelopeKey: Buffer.alloc(32, 113),
+      messageEnvelopeKey: Buffer.alloc(32, 114),
+    });
+    const service = createN8nIntegrationService({
+      clock: () => currentTime,
+      idFactory: (kind) => `${kind}-polling-${++sequence}`,
+      repository,
+    });
+    const ownSession = '33333333-3333-4333-8333-333333333333';
+    const otherSession = '44444444-4444-4444-8444-444444444444';
+    const emptySession = '55555555-5555-4555-8555-555555555555';
+    const ownPhone = '5527900000333';
+    const otherPhone = '5527900000444';
+    /** @param {number} seconds */
+    const at = (seconds) => new Date(NOW.getTime() + seconds * 1000);
+    /** @param {string} session */
+    const syntheticId = (session) =>
+      `999${BigInt(`0x${session.replaceAll('-', '')}`)
+        .toString(10)
+        .padStart(39, '0')}`;
+    /** @param {string} id */
+    const technical = (id) => ({
+      actor: 'AUTOMATION_EXECUTOR',
+      correlationId: `correlation-${id}`,
+      credentialVersion: 'current',
+      executionId: `execution-${id}`,
+      idempotencyKey: id,
+      requestId: `request-${id}`,
+      workflowKey: 'site-chat-mvp',
+      workflowVersion: 'mvp-simple-15',
+    });
+    /**
+     * @param {string} session @param {string} phone @param {string} id
+     * @param {Record<string, unknown>} message
+     */
+    const inbound = (session, phone, id, message) =>
+      service.receiveInbound({
+        channel: 'site_chat',
+        provider: 'site',
+        contact: { external_id: syntheticId(session) },
+        event_id: id,
+        external_conversation_id: `session-${session}`,
+        message: { external_id: `message-${id}`, ...message },
+        metadata: { provider_account_id: 'silmer-site' },
+        occurred_at: currentTime.toISOString(),
+        schema_version: '1.0',
+        site_contact: { name: 'Visitante Sintetico', phone },
+        technical: technical(id),
+      });
+    /** @param {any} context @param {string} id @param {string} text */
+    const reserveReply = (context, id, text) =>
+      service.recordEvent({
+        automation_epoch: context.automation_epoch,
+        command_id: `command-${id}`,
+        conversation_id: context.conversation_id,
+        event_id: `reserve-${id}`,
+        event_type: 'message.send.requested',
+        message: { text, type: 'text' },
+        occurred_at: currentTime.toISOString(),
+        schema_version: '1.0',
+        source_revision: context.source_revision,
+        technical: technical(`reserve-${id}`),
+      });
+
+    try {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await migrate(pool, { migrations: await loadMigrations() });
+
+      const first = await inbound(ownSession, ownPhone, 'polling-own-1', {
+        text: 'Pergunta sintetica',
+        type: 'text',
+      });
+      const other = await inbound(otherSession, otherPhone, 'polling-other-1', {
+        text: 'Mensagem de outra sessao',
+        type: 'text',
+      });
+      assert.notEqual(other.conversation_id, first.conversation_id);
+
+      currentTime = at(60);
+      await reserveReply(first, 'sent', 'Resposta enviada');
+      await service.recordEvent({
+        command_id: 'command-sent',
+        conversation_id: first.conversation_id,
+        event_id: 'sent-polling',
+        event_type: 'message.sent',
+        external_message_id: 'provider-polling-sent',
+        occurred_at: currentTime.toISOString(),
+        schema_version: '1.0',
+        technical: technical('sent-polling'),
+      });
+
+      // Both rows below carry readable text: only the filters keep them out.
+      currentTime = at(120);
+      const second = await inbound(ownSession, ownPhone, 'polling-own-image', {
+        content: { text: 'Legenda de imagem' },
+        type: 'image',
+      });
+      currentTime = at(180);
+      await reserveReply(second, 'unconfirmed', 'Resposta ainda nao enviada');
+
+      const stored = await pool.query(
+        `SELECT id, conversation_id, direction, message_type, status
+         FROM crm.messages ORDER BY occurred_at, id`,
+      );
+      const ids = new Map(
+        stored.rows.map((/** @type {any} */ row) => [
+          `${row.conversation_id === first.conversation_id ? 'own' : 'other'}:${row.direction}:${row.message_type}:${row.status}`,
+          row.id,
+        ]),
+      );
+      assert.deepEqual(
+        [...ids.keys()].sort(),
+        [
+          'other:inbound:text:received',
+          'own:inbound:image:received',
+          'own:inbound:text:received',
+          'own:outbound:text:sending',
+          'own:outbound:text:sent',
+        ],
+        'the fixture must hold the rows the filters are expected to separate',
+      );
+
+      const own = await repository.readSiteMessages({ sessionId: ownSession });
+      assert.deepEqual(own.messages, [
+        {
+          id: ids.get('own:inbound:text:received'),
+          direction: 'inbound',
+          sender: 'customer',
+          text: 'Pergunta sintetica',
+          occurred_at: NOW.toISOString(),
+        },
+        {
+          id: ids.get('own:outbound:text:sent'),
+          direction: 'outbound',
+          sender: 'assistant',
+          text: 'Resposta enviada',
+          occurred_at: at(60).toISOString(),
+        },
+      ]);
+      assert.deepEqual(
+        await repository.readSiteMessages({ sessionId: otherSession }),
+        {
+          messages: [
+            {
+              id: ids.get('other:inbound:text:received'),
+              direction: 'inbound',
+              sender: 'customer',
+              text: 'Mensagem de outra sessao',
+              occurred_at: NOW.toISOString(),
+            },
+          ],
+        },
+      );
+      assert.deepEqual(
+        await repository.readSiteMessages({ sessionId: emptySession }),
+        { messages: [] },
+      );
+      const exposed = JSON.stringify(own);
+      assert.equal(exposed.includes(ownPhone), false);
+      assert.doesNotMatch(
+        exposed,
+        /phone|contact_id|order_id|envelope|ciphertext|algorithm/u,
+      );
+    } finally {
+      await pool.query('DROP SCHEMA IF EXISTS crm_meta CASCADE');
+      await pool.query('DROP SCHEMA IF EXISTS crm CASCADE');
+      await pool.end();
+    }
+  });
 }
 
 /** @param {Promise<any>[]} promises */
