@@ -80,5 +80,15 @@ Depends on: T2, T3
 Where: docs/qa/order-billing-production-preparation-2026-11-08.md
 Tests: BREL-04/05; usuário cadastra segredo, referências privadas corretas, leituras autorizadas sem efeitos financeiros.
 Gate: Credentials
-Done when: referências conferidas e pendência exclusiva do ensaio real explicitada antes de pedir autorização específica.
-Status: Pending
+Done when: referências conferidas e condições restantes de ativação e ensaio real explicitadas antes de pedir autorização específica.
+Status: Complete
+
+O proprietário cadastrou/salvou a chave pessoalmente. Os três nós do provedor
+usam a mesma credencial Header Auth, e cada workflow conserva cinco Basic.
+Export final comprova19/11nós inativos, parâmetros/conexões/settings exatos e
+retenção desligada. Atendimento publicado conserva versão7b78d0b9 de06/11;
+rascunho restaurado com141nós exatos. Guard humano, publicação coordenada e
+homologação real permanecem condições da futura ativação, fora do veredito de
+implantação desligada. Não houve ensaio financeiro nem prova de autenticação
+ponta a ponta por simples vínculo de credenciais. Ver validation.md e relatório
+de preparação atualizado em09/11.

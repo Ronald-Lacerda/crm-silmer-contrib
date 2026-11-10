@@ -118,3 +118,59 @@ Handle continua suficiente para criar link básico. Nesta feature as options
 single_payment e valid_until exigem API Key; sem ela não há evidência das
 garantias de uso único e vencimento do provedor. Slug de fatura é outro
 identificador, usado na conferência de pagamento, não uma credencial.
+
+## Implantação e vínculo da chave em09/11/2026 — BREL-04/05, T4
+
+Esta atualização sucede as pendências históricas acima. O proprietário
+preencheu e salvou pessoalmente a credencial `InfinitePay Checkout API Key`
+no n8n, Header Auth com nome `X-Api-Key`. O valor não foi lido pelo agente,
+copiado para o chat ou incluído nos exports. A vinculação usou somente a
+referência da credencial existente, sem nova entrada ou rotação de segredo.
+
+Os dois nós InfinitePay do workflow de emissão/aviso e o nó do workflow de
+conferência agora referenciam essa credencial. Cada workflow mantém uma Basic
+de entrada e quatro de saída, reaproveitadas conforme a autorização anterior.
+O sufixo DEV dos nomes existentes não foi alterado nem usado como evidência
+de homologação financeira.
+
+Novas exportações ao final da implantação confirmaram:
+
+| Workflow | Nós | Estado | Basic | Header Auth InfinitePay |
+| --- | --- | --- | --- | --- |
+| Cobranças InfinitePay, YI75ZEo33RsVbW4r |19| activefalse |5|2|
+| Conferir pagamentos, t5wxOAz2c8OUl9Hf |11| activefalse |5|1|
+
+Nós, parâmetros, conexões e settings coincidem com os candidatos privados
+conferidos após o vínculo. Mantidas saveDataErrorExecution=none,
+saveDataSuccessExecution=none, saveManualExecutions=false,
+saveExecutionProgress=false e availableInMCPfalse. Não houve Publish ou Execute
+dos workflows financeiros, chamada à InfinitePay, checkout ou pagamento real.
+
+O atendimento conserva a versão **publicada** original
+`7b78d0b9-80e0-41b5-a5ae-e4ff52cd96b3`, de06/11 às16:27:52. Foi conferida
+clicando a versão Published no histórico; a URL apontou esse mesmo UUID do
+export anterior. A tentativa de importar o guard pelo editor acrescentou
+nós e depois recriou IDs; as alterações foram revertidas pelo histórico.
+O export do rascunho final tem exatamente os141nós, conexões e settings do
+original. Nenhuma versão alterada do atendimento foi publicada. O delta
+offline de três nós ainda precisa ser aplicado/revisado antes de habilitar
+envio de cobranças. A loja não foi alterada.
+
+API/worker/edge foram implantados na release87cbc435, com migrações
+0073–0075, três flagsfalse nos processos e saúde conferida. O relatório de
+[implantação](order-billing-release-2026-11-09.md) registra os detalhes; as
+numerações0063–0065 acima descrevem o estado anterior ao rebase e não foram
+usadas na implantação atual.
+
+Provas privadas em `var/billing-production-preparation/`:
+`order-billing-release-final.json`, `payment-check-release-final.json`,
+`release-final-review.json`, `human-final-restored.json` e
+`human-restoration-review.json`. Capturas em `var/billing-release-key-bound.jpg`
+e `var/billing-release-human-published-preserved.jpg` não contêm o valor da chave.
+
+**Pendente para ativar/homologar:** aplicar o guard humano, revisar/publicar
+os workflows compatíveis, coordenar flags e conferir autenticação/conta de
+ponta a ponta. O proprietário deve ser avisado antes de qualquer teste com
+checkout, pagamento ou mensagem reais e autorizar especificamente o ensaio.
+A implantação desligada não encerra COB-OPS-01 nem comprova a validade da
+API Key no provedor.
