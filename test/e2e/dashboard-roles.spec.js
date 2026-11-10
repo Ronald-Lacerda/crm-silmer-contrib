@@ -10,7 +10,9 @@ test('the manager reads reconciled human performance and keeps operational desti
   await expect(
     page.getByRole('heading', { name: 'Dashboard', level: 1 }),
   ).toBeFocused();
-  const team = page.getByRole('region', { name: 'Desempenho da equipe' });
+  // ACT-T04: the Dashboard shows the compact team; the full table has its
+  // own page.
+  const team = page.getByRole('region', { name: 'Equipe nos últimos 7 dias' });
   await expect(team).toContainText('R$ 16.400,00');
   await expect(
     team.getByRole('row', { name: /Atendente Sintética/u }),
@@ -18,8 +20,26 @@ test('the manager reads reconciled human performance and keeps operational desti
   await expect(
     team.getByRole('row', { name: /Vendedor Sintético/u }),
   ).toContainText('Inativo');
-  await expect(team).toContainText('Loja do site: R$ 1.800,00');
-  await expect(team).toContainText('Sem atribuição histórica: R$ 0,00');
+  await expect(
+    team.getByRole('row', { name: /Vendedor Sintético/u }),
+  ).toContainText('4');
+  await expect(team.getByRole('row', { name: /Loja do site/u })).toContainText(
+    'R$ 1.800,00',
+  );
+  await expect(
+    team.getByRole('row', { name: /Sem atribuição/u }),
+  ).toContainText('R$ 0,00');
+  await expect(
+    team.getByRole('columnheader', { name: 'Vendido' }),
+  ).toHaveAttribute('aria-sort', 'descending');
+  const waiting = page.getByRole('region', { name: 'Esperando um vendedor' });
+  await expect(
+    waiting.getByRole('link', { name: /Conversa Sintética/u }),
+  ).toHaveAttribute('href', '/inbox/waiting-1');
+  await expect(waiting).toContainText('Fora do prazo · 2 h');
+  await expect(
+    waiting.getByRole('link', { name: 'Ver todos (3)' }),
+  ).toHaveAttribute('href', '/inbox?situacao=aguardando');
   await expect(
     page.getByRole('link', { name: /^Vendido hoje/u }),
   ).toContainText('R$ 1.800,00');
@@ -73,6 +93,10 @@ test('the manager reads reconciled human performance and keeps operational desti
   await expect(
     attendance.getByRole('link', { name: 'Ver desempenho do agente' }),
   ).toHaveAttribute('href', '/dashboard/agente');
+  // MET-02: a handoff nobody took is never omitted, in business minutes.
+  await expect(attendance).toContainText(
+    'Pedidos de atendimento ainda sem tomada: 3; o mais antigo espera 42 min de expediente.',
+  );
   // PNL-06: the partners' checkpoint and the manager's own actions left.
   await expect(page.getByText('Checkpoint dos sócios')).toHaveCount(0);
   await expect(page.getByText('Minhas providências')).toHaveCount(0);
@@ -96,14 +120,8 @@ test('the manager reads reconciled human performance and keeps operational desti
   ).toBe(true);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(team.getByRole('columnheader')).toHaveCount(6);
-  await expect(team.getByRole('rowheader')).toHaveCount(2);
-  await expect(team.getByRole('cell').first()).toHaveAttribute(
-    'headers',
-    'team-person-0 team-sold',
-  );
   await page.screenshot({
-    path: test.info().outputPath('team-mobile-390.png'),
+    path: test.info().outputPath('dashboard-manager-390.png'),
     fullPage: true,
   });
   // The two cards stack on the phone without horizontal scrolling.
@@ -269,4 +287,108 @@ test('PNL-05: manager chart labels fit phone, narrow desktop with expanded menu 
       ),
     ).toBeLessThanOrEqual(0);
   }
+});
+
+test('PERF-05/MET-04: the team page reconciles sales and switches views by keyboard', async ({
+  page,
+}) => {
+  await mockPainel(page);
+  await page.goto('/dashboard');
+  await page
+    .getByRole('region', { name: 'Equipe nos últimos 7 dias' })
+    .getByRole('link', { name: 'Ver desempenho da equipe' })
+    .click();
+  await expect(page).toHaveURL('/dashboard/equipe');
+  await expect(
+    page.getByRole('heading', { name: 'Desempenho da equipe', level: 1 }),
+  ).toBeFocused();
+  await expect(page.locator('.page-heading')).toContainText(
+    'de segunda a sexta, 9h–12h e 13h–18h, horário de São Paulo',
+  );
+  const table = page.getByRole('region', { name: 'Por vendedor' });
+  const views = table.getByRole('group', { name: 'Visão da tabela' });
+  await expect(views.getByRole('button', { name: 'Vendas' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(table.getByRole('columnheader')).toHaveCount(5);
+  await expect(table.getByRole('rowheader')).toHaveCount(5);
+  await expect(table.getByRole('row', { name: /^Total/u })).toContainText(
+    'R$ 16.400,00',
+  );
+  await expect(
+    table.getByRole('columnheader', { name: /Vendido/u }),
+  ).toHaveAttribute('aria-sort', 'descending');
+  await table.getByRole('button', { name: /^Vendido/u }).click();
+  await expect(
+    table.getByRole('columnheader', { name: /Vendido/u }),
+  ).toHaveAttribute('aria-sort', 'ascending');
+  await expect(table.getByRole('rowheader').first()).toContainText(
+    'Vendedor Sintético',
+  );
+  await expect(table.getByRole('rowheader').nth(2)).toContainText(
+    'Loja do site',
+  );
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+  await views.getByRole('button', { name: 'Atendimento' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(
+    views.getByRole('button', { name: 'Atendimento' }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  const seller = table.getByRole('row', { name: /Vendedor Sintético/u });
+  await expect(seller).toContainText('14 min');
+  await expect(seller).toContainText('1 em aberto');
+  await expect(seller).toContainText('—');
+  await expect(table.getByRole('row', { name: /^Total/u })).toHaveCount(0);
+  await expect(table).toContainText('Pedidos de atendimento ainda sem tomada');
+
+  await views.getByRole('button', { name: 'Perdas' }).click();
+  await expect(table.getByRole('row', { name: /^Total/u })).toContainText('5');
+  await expect(
+    table.getByRole('row', { name: /Atendente Sintética/u }),
+  ).toContainText('Preço (2)');
+  await expect(
+    page.getByRole('region', { name: 'Por que perdemos' }),
+  ).toContainText('5 leads marcados como perdidos');
+  await expect(
+    page.getByRole('region', { name: 'Como medimos' }),
+  ).toContainText('nada é inferido');
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+  for (const width of [390, 1366]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(
+      await page.evaluate(
+        () =>
+          globalThis.document.documentElement.scrollWidth -
+          globalThis.document.documentElement.clientWidth,
+      ),
+    ).toBeLessThanOrEqual(0);
+    await page.screenshot({
+      path: test.info().outputPath(`team-page-${width}.png`),
+      fullPage: true,
+    });
+  }
+  await views.getByRole('button', { name: 'Vendas' }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(table.getByRole('cell').first()).toHaveAttribute(
+    'headers',
+    'team-person-0 team-sold',
+  );
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test('PERF-07: a seller who opens the team page goes back to their own Dashboard', async ({
+  page,
+}) => {
+  await mockPainel(page, { manager: false });
+  await page.goto('/dashboard/equipe');
+  await expect(page).toHaveURL('/dashboard');
+  await expect(
+    page.getByRole('region', { name: 'Seu resultado' }),
+  ).toContainText('R$ 8.400,00');
+  await expect(
+    page.getByRole('region', { name: 'Equipe nos últimos 7 dias' }),
+  ).toHaveCount(0);
 });

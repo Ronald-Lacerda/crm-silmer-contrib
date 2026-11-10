@@ -12,7 +12,11 @@ import { RouterLink } from 'vue-router';
 import AppIcon from '../components/AppIcon.vue';
 import DashboardActions from '../components/DashboardActions.vue';
 import DashboardPerformance from '../components/DashboardPerformance.vue';
+import DashboardTeamSummary from '../components/DashboardTeamSummary.vue';
+import DashboardWaitingQueue from '../components/DashboardWaitingQueue.vue';
 import { request } from '../lib/api-client.js';
+import { useLatestRead } from '../lib/dashboard-read.js';
+import { minutesLabel } from '../lib/dashboard-metrics.js';
 import {
   PERIODS,
   attendanceRows,
@@ -35,6 +39,9 @@ import { performanceTitle } from '../lib/assistant-performance.js';
 // cada papel. O gestor vê o dia (vendas do período, entregas, quem espera
 // uma pessoa e a saúde do assistente); a atendente vê a própria fila
 // primeiro. Cada indicador é um link para a lista já filtrada.
+// ACT-T04 (protótipo aprovado em 05/11/2026): o gestor lê, nesta ordem,
+// próximo passo → vendas e entregas → vendido por dia e atendimento agora →
+// equipe em 7 dias → quem espera um vendedor.
 const ADMIN_CAPABILITY = 'COMMERCIAL_ADMIN';
 
 const heading = ref(null);
@@ -65,6 +72,16 @@ let refreshTimer = 0;
 
 const isManager = computed(() =>
   (sessionUser.value?.capabilities ?? []).includes(ADMIN_CAPABILITY),
+);
+// MET-02 / MET-05: the manager's service times in business minutes; the team
+// table and the unclaimed handoffs read from it.
+const service = useLatestRead({
+  unavailable: 'Não foi possível consultar as esperas sem resposta agora.',
+  stale:
+    'Não foi possível atualizar as esperas sem resposta. Os números podem estar desatualizados.',
+});
+const unclaimed = computed(
+  () => service.data.value?.team?.unclaimedHandoffs ?? null,
 );
 
 // LOJ-31 (ADR 031): paid site orders whose ficha nobody printed yet. The
@@ -198,8 +215,21 @@ const attendance = computed(() =>
     failed: !queue.value || Boolean(queueError.value),
   }),
 );
+function loadService() {
+  return isManager.value
+    ? service.load('/api/v1/dashboard/metrics/service?days=7')
+    : Promise.resolve(false);
+}
+
+async function retryService() {
+  if (service.loading.value) return;
+  if (!(await loadService())) return;
+  await nextTick();
+  queueHeading?.focus();
+}
 
 async function loadDashboard({ announce = false } = {}) {
+  if (!announce) void loadService();
   controller?.abort();
   const currentController = new AbortController();
   controller = currentController;
@@ -302,6 +332,12 @@ onMounted(() => {
   heading.value?.focus();
   void loadDashboard();
 });
+// The session can arrive after the first paint; the manager's service read
+// starts when the role is known.
+watch(isManager, (manager) => {
+  if (manager && !service.data.value && !service.loading.value)
+    void loadService();
+});
 onBeforeUnmount(() => {
   controller?.abort();
   if (refreshTimer) globalThis.clearTimeout(refreshTimer);
@@ -347,7 +383,7 @@ onBeforeUnmount(() => {
 
     <DashboardActions v-if="!isManager" @changed="dashboardChanged">
       <template #summary>
-        <DashboardPerformance compact :revision="dashboardRevision" />
+        <DashboardPerformance :revision="dashboardRevision" />
       </template>
     </DashboardActions>
 
@@ -561,6 +597,34 @@ onBeforeUnmount(() => {
                 </RouterLink>
               </li>
             </ul>
+            <!-- MET-02: a handoff nobody took is never omitted, with its age
+               in business minutes. -->
+            <p
+              v-if="unclaimed && unclaimed.count > 0"
+              class="dashboard-performance-note"
+            >
+              Pedidos de atendimento ainda sem tomada: {{ unclaimed.count
+              }}<template v-if="unclaimed.oldestWaitingMinutes !== null"
+                >; o mais antigo espera
+                {{ minutesLabel(unclaimed.oldestWaitingMinutes) }} de
+                expediente</template
+              >.
+            </p>
+            <!-- ACT-09: the service read fails in its own region, with retry. -->
+            <div v-if="service.error.value" class="audit-note" role="alert">
+              <p>{{ service.error.value }}</p>
+              <button
+                type="button"
+                :aria-disabled="service.loading.value ? 'true' : undefined"
+                @click="retryService()"
+              >
+                {{
+                  service.loading.value
+                    ? 'Consultando…'
+                    : 'Atualizar atendimento'
+                }}
+              </button>
+            </div>
             <!-- AGENTE-OBS-01: the agent's numbers over days. -->
             <RouterLink class="metric-more" to="/dashboard/agente">{{
               performanceLinkLabel
@@ -569,11 +633,18 @@ onBeforeUnmount(() => {
         </div>
       </template>
     </component>
-    <!-- The team after the day and the week, as in the manager's design. -->
-    <DashboardPerformance
-      v-if="isManager"
-      manager
-      :revision="dashboardRevision"
-    />
+    <!-- The team after the day and the week, then who waits for a seller
+         (ACT-T04: PERF-01..05, PCX-03, MET-02, MET-05). -->
+    <template v-if="isManager">
+      <DashboardTeamSummary
+        :service="service.data.value"
+        :service-error="service.error.value"
+        :revision="dashboardRevision"
+      />
+      <DashboardWaitingQueue
+        :now="queue?.generatedAt ?? ''"
+        :total="queue ? Number(queue.waitingHandoff?.count ?? 0) : null"
+      />
+    </template>
   </div>
 </template>

@@ -51,7 +51,13 @@ confirmação (PERF-01).
       migração 0063, `POST /api/v1/presence/heartbeat`,
       `GET /api/v1/dashboard/metrics/presence`, flag desligada, teste de
       balanceamento e aviso à equipe antes de ligar.
-- [ ] Interface do redesenho, depois de ACT-T03 no master.
+- [x] E — Interface do desempenho da equipe e da fila de espera (PERF-01–05,
+      MET-02–08): "Seu resultado" do vendedor, "Equipe nos últimos 7 dias" e
+      "Esperando um vendedor" no Dashboard do gestor e a página
+      `/dashboard/equipe`, sobre os endpoints de `dashboard-metrics-routes.js`.
+      O lead perdido com motivo continua só na Caixa de Entrada
+      (`useInboxOutcome.js`).
+- [ ] Demais telas do redesenho, depois de ACT-T03 no master.
 - [ ] Integrar saldo InfinitePay à central (COB-DASH-01): link vencido →
       “Gerar novo link”; “Resultado a conferir” → conferência humana.
 - [ ] Quando Olist (ADR 057) chegar ao master: estado da exportação

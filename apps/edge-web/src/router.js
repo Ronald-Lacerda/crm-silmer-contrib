@@ -12,6 +12,7 @@ import MelhorEnvioView from './views/MelhorEnvioView.vue';
 import OlistView from './views/OlistView.vue';
 import OrdersView from './views/OrdersView.vue';
 import OrderView from './views/OrderView.vue';
+import TeamPerformanceView from './views/TeamPerformanceView.vue';
 import UsersView from './views/UsersView.vue';
 
 const PublicRoute = { name: 'PublicRoute', render: () => h('span') };
@@ -33,6 +34,14 @@ export const router = createRouter({
       path: '/dashboard/agente',
       component: AssistantPerformanceView,
       meta: { requiresAdmin: true, title: performanceTitle() },
+    },
+    {
+      // PERF-07 / MET-12: the whole team is the manager's; a seller who
+      // opens the address goes back to the Dashboard (App.vue guard), where
+      // "Seu resultado" shows only their own line.
+      path: '/dashboard/equipe',
+      component: TeamPerformanceView,
+      meta: { requiresAdmin: true, title: 'Desempenho da equipe' },
     },
     {
       // Deep link to one conversation (Pedido, Clientes and Dashboard open it

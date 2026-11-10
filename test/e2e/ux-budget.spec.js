@@ -313,7 +313,7 @@ for (const screen of SCREENS) {
         await page.goto('/dashboard');
         if (manager) {
           await expect(
-            page.getByRole('region', { name: 'Desempenho da equipe' }),
+            page.getByRole('region', { name: 'Equipe nos últimos 7 dias' }),
           ).toBeVisible();
           await budget(
             page,

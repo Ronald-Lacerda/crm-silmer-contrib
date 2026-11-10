@@ -21,10 +21,8 @@ test('the manager keeps a single next step and the sales selector names its scop
   await expect(
     page.getByRole('link', { name: /^Vendido no mês/u }),
   ).toContainText('R$ 24.800,00');
-  const team = page.getByRole('region', { name: 'Desempenho da equipe' });
-  await expect(
-    team.getByRole('combobox', { name: 'Período do desempenho' }),
-  ).toHaveValue('7');
+  // The sales period never changes the team block, which stays at 7 days.
+  const team = page.getByRole('region', { name: 'Equipe nos últimos 7 dias' });
   await expect(team).toContainText('R$ 16.400,00');
 });
 
