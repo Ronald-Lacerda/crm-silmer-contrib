@@ -1,9 +1,32 @@
 # Ativação coordenada de cobranças InfinitePay
 
-BREL-07/08/09/04/05, COB-OPS-01, tarefas T6/T7/T8. Preparado em09/11/2026.
-Recebimento/conferência autorizados em09/11 e compatibilidade da credencial
-Basic existente autorizada em10/11. Emissão e envios permanecem desligados.
-Checkout, pagamento e mensagem reais exigem aviso prévio e autorização específica.
+BREL-07/08/09/10/04/05, COB-OPS-01, tarefas T6/T7/T8/T9. Preparado em09/11/2026.
+Atualização de autorização em10/11, BREL-10/T9: o proprietário solicitou ligar
+também emissão e envio para realizar seu teste manual depois. Essa decisão
+substitui a sequência anteriormente proposta de homologar antes de ligar envio.
+O agente não está autorizado a executar checkout, mensagem ou pagamento de
+teste. A ativação não constitui homologação e alcança todos os operadores com
+as capacidades existentes; não há piloto financeiro isolado por usuário.
+
+As janelas abaixo preservam os estados históricos de cada etapa.
+
+## Janela atual T9, 10/11/2026
+
+Ativação concluída com as três flagstrue na API e no worker. Primeiro foi
+atualizado/conferido o worker; depois a API. Guards humanos, workflows,
+credenciais e permissões preservados, sem mudança de código ou migração.
+Live/ready/edge200; scanner no worker presente; quatro hashes de runtime exatos.
+71expand/checksums exatos, seis tabelas financeiras e fila billing vazias antes
+e depois; heartbeat global5s na leitura final. Nenhum comando financeiro de teste
+foi executado. O teste manual do proprietário continua pendente e os valores de
+credenciais externas/conta e entrega real ainda não foram homologados.
+Ver [evidência de ativação](../qa/order-billing-manual-activation-2026-11-10.md) e
+[revisão independente](../../.specs/features/order-billing-release/validation-manual-activation.md).
+
+Recebimento/conferência foram autorizados em09/11 e compatibilidade da credencial
+Basic existente em10/11. Emissão e envios permaneceram desligados em T7.
+Execução de checkout, pagamento ou mensagem de teste pelo agente continua exigindo
+aviso prévio e autorização específica; não foi efetuada na janela T9.
 
 ## Janela de recebimento, 10/11/2026
 
@@ -67,6 +90,11 @@ editor. Não alterar outras variáveis ou credenciais.
 | Receber e conferir | true | false | false | Atualizar API e worker; health/heartbeat, autenticação técnica e rotas de consulta/callback verificadas sem criar checkout |
 | Emitir para homologação autorizada | true | true | false | API e worker atualizados; pedido/valor/destino revisados; autorizar uma emissão controlada pelo CRM, sem retry manual em resultado incerto |
 | Enviar pela conversa | true | true | true | Somente após homologação e autorização separada de envio real; guarda humana publicada, ACL/reserva/destinatário revistos e filas sem pendência incerta |
+
+Para T9, a autorização explícita acima permite ativar as três flags antes do
+teste manual. Conservar os gates técnicos e a guarda humana; não registrar o
+teste como aprovado por apenas observar as flagstrue. Habilitar o worker antes
+da API evita admitir checkout enquanto o consumidor ainda está em receive-only.
 
 O prefixo de todas as flags é `ORDER_BILLING_`. Na API, envio exige emissão
 habilitada e infraestrutura de autorização/outbox disponível; combinação

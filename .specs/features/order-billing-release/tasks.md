@@ -17,6 +17,7 @@ leituras técnicas, sem ensaio financeiro. Falhas não autorizam bypass de gate.
 | T4   | BREL-04/05 | credencial privada, referências e estado inativo              |
 | T7   | BREL-08/04 | versões publicadas, processos receive-only, saúde, filas e consultas técnicas |
 | T8   | BREL-09/04 | Basic legada exata, credenciais inválidas recusadas e regressões financeiras |
+| T9   | BREL-10/04 | três flags ativas, preflight preservado, processos saudáveis e teste manual pendente |
 
 ## Gate Check Commands
 
@@ -26,6 +27,7 @@ leituras técnicas, sem ensaio financeiro. Falhas não autorizam bypass de gate.
 - Credentials: export privado sem valores de segredo, referências corretas, emissão/envios desligados e entrada pessoal do proprietário.
 - ReceiveOnly: reexportar workflows, conferir contagens/checksums read-only, flags dos processos API/worker, health e GETs técnicos autenticados sem efeito financeiro.
 - CredentialCompatibility: node --test test/billing-worker-credentials.test.js test/billing-integration-worker.test.js test/order-billing-payment-check-worker.test.js test/order-billing-chat-wiring.test.js; npm run typecheck; lint/format focais; revisão independente e sensor de regressão.
+- ManualActivation: reexportar workflows, comparar versões/guards, conferir backlog e configuração sem valores de segredos, worker antes da API, flags nos processos reais, health/heartbeat e contagens depois, sem POST financeiro.
 
 ## Task Breakdown
 
@@ -173,3 +175,21 @@ invalidos recusados. RED2pass/7fail; GREEN37/37 focais; validate2427pass,
 52skips condicionais preexistentes,0fail. Revisao independente28/28,
 typecheck e sensor9/9 regressões detectadas. Ver validation-credential-compatibility.md.
 Ativação remota foi concluída em T7 após o deploy desta correção.
+
+### T9: Habilitar emissão e envios para teste manual posterior
+
+Depends on: T7, T8
+Where: docs/runbooks/order-billing-activation.md
+Tests: BREL-10/04; exports protegidos preservados, backlog financeiro previamente vazio, configuração técnica válida, três flagstrue nos processos API/worker, saúde/heartbeat e contagens depois, revisão independente das evidências sem comando financeiro de teste.
+Gate: ManualActivation
+Done when: todas as funções financeiras habilitadas por autorização explícita, proteção humana/ACL/idempotência preservadas, estado operacional documentado e nenhum checkout/envio/pagamento realizado pelo agente; teste manual do proprietário continua pendente.
+Status: Complete
+
+Autorização de10/11 dispensa homologação antes de ligar as flags; o teste será
+feito posteriormente pelo proprietário. Worker atualizado antes da API, ambos
+com três flagstrue nos processos corretos, quatro hashes de runtime exatos,
+health200 e scanner presente. Workflows144/19/11 ativos e integralmente exatos;
+71expand/checksums, seis tabelas financeiras e fila billing vazias antes/depois,
+heartbeat global5s. Nenhum checkout/envio/pagamento/probe de provedor executado.
+Revisão independente PASS em validation-manual-activation.md; configuração
+ativada não significa homologação real. Runbook e relatório QA atualizados.

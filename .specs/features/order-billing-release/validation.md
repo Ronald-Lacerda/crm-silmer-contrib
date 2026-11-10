@@ -79,3 +79,12 @@ ENABLEDfalse e CHAT_SENDfalse. Nenhuma credencial foi alterada e nenhum teste
 financeiro real foi executado. Isso encerra T7/T8/BREL-08/09, preservando os
 vereditos históricos e os limites sobre autenticação externa, image ID completo
 da API, heartbeat dedicado, homologação InfinitePay e entrega WhatsApp.
+
+## Addendum — ativação completa para teste manual posterior (10/11/2026)
+
+O proprietário autorizou ligar emissão/envio antes de testar pessoalmente.
+A [revisão independente T9](validation-manual-activation.md) registra PASS
+somente para BREL-10/04: três flagstrue nos processos API/worker, workflows
+protegidos preservados, saúde aprovada e ausência de registros/filas financeiros.
+Esse estado substitui o receive-only de T7, preservado como histórico. Nenhum
+ensaio financeiro foi executado pelo agente e a homologação real continua pendente.

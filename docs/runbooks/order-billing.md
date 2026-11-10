@@ -1,20 +1,22 @@
 # Cobranças InfinitePay — operação e recuperação
 
-Estado conferido em10/11/2026: workflows financeiros publicados e recebimento/
+Estado atual conferido em10/11/2026, T9: emissão, envio pelo chat, recebimento e
 conferência habilitados na API e no worker, com ORDER_BILLING_RECEIVE_ENABLED=true,
-ORDER_BILLING_ENABLED=false e ORDER_BILLING_CHAT_SEND_ENABLED=false nos processos
-reais. Proteção de envio preservada no atendimento. A Basic existente foi mantida;
-os clientes financeiros aceitam a credencial legada sem exigir32caracteres.
-Seguir o [roteiro de ativação coordenada](order-billing-activation.md) antes de
-habilitar emissão/envio. Nenhum checkout ou pagamento real foi ensaiado, nem
-mensagem enviada como teste. [Evidência operacional](../qa/order-billing-receive-only-2026-11-10.md).
+ORDER_BILLING_ENABLED=true e ORDER_BILLING_CHAT_SEND_ENABLED=true nos processos
+reais. O proprietário autorizou ativar tudo antes de seu teste manual posterior.
+Proteção de envio preservada no atendimento; Basic existente mantida. Nenhum
+checkout, pagamento ou envio real foi ensaiado pelo agente. A ativação não
+constitui homologação e alcança todos os operadores com as capacidades existentes.
+[Evidência atual](../qa/order-billing-manual-activation-2026-11-10.md),
+[janela anterior de recebimento](../qa/order-billing-receive-only-2026-11-10.md) e
+[ativação/recuperação](order-billing-activation.md).
 
 Integração para implantação em09/11/2026: migrações inéditas de cobrança
 renumeradas de0063/0064/0065 para0073/0074/0075, preservando todas as migrações
 da master/Olist. ADR066/067 desta branch passam a076/077 e RFC053 para060;
 as decisões publicadas da master com os números antigos não mudam.
-Implantar não habilita emissão ou envio: essas flags permanecem desligadas
-até o ensaio financeiro especificamente autorizado.
+Implantar código não habilita emissão ou envio por si só. As flags foram
+habilitadas depois, na janela T9 explicitamente autorizada acima, sem ensaio financeiro.
 
 Preparação técnica de produção em08/11/2026:
 [diagnóstico, candidatos inativos e pendências de implantação](../qa/order-billing-production-preparation-2026-11-08.md).
@@ -40,9 +42,11 @@ mensagem, comando, auditoria e invalidação da Inbox na mesma transação.
 Não alterar migrações anteriores; aplicar todas as migrações da versão antes
 de futura ativação, incluindo as entregas da master incorporadas em 08/11/2026.
 
-O backend foi validado com PostgreSQL e dados sintéticos; emissão e envio real
-continuam desligados. Não configurar `ORDER_BILLING_CHAT_SEND_ENABLED=true`
-no ambiente remoto antes da homologação. A interface integrada ainda depende
+No encerramento histórico B01–B05, o backend foi validado com PostgreSQL e dados
+sintéticos e emissão/envio real estavam desligados. A orientação original de
+ligar `ORDER_BILLING_CHAT_SEND_ENABLED=true` somente após homologação foi
+substituída pela autorização explícita de T9 registrada no início deste runbook.
+A interface integrada ainda dependia
 do protótipo/design; contrato e implementação estão na
 [ADR 076](../adr/076-intencoes-de-cobranca-e-envio-transacional.md) e na
 [API de intenções](../api/order-billing-chat.md).
