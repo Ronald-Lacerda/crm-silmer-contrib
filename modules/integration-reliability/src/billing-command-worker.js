@@ -32,9 +32,11 @@ export function createBillingCommandJobHandler(options) {
   if (
     typeof options.clientId !== 'string' ||
     !options.clientId.trim() ||
+    options.clientId.length > 256 ||
     /[:\r\n]/u.test(options.clientId) ||
     typeof options.clientSecret !== 'string' ||
-    options.clientSecret.length < 32 ||
+    !options.clientSecret.trim() ||
+    options.clientSecret.length > 1024 ||
     /[\r\n]/u.test(options.clientSecret)
   ) {
     throw new TypeError('Valid billing workflow credentials are required');
